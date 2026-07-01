@@ -1,0 +1,17 @@
+projects/
+projects.json
+.jobs-log.json
+.jobs-archive/
+.hook-trigger-errors.log
+_backup/
+tasks/
+
+# Local AI config with API keys; never publish. The package ships
+# without it; the server creates an empty default on first start and
+# the user configures their own profile via the dashboard.
+ai-profiles.json
+
+_site/_test/ui-screenshots/
+_site/_test/screenshots/
+_site/_test/ui-test-report.json
+_site/_test/TEST-REPORT.md

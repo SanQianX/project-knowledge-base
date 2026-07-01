@@ -1,0 +1,56 @@
+{
+  "name": "project-knowledge",
+  "version": "2.4.7",
+  "description": "Knowledge base manager with Git integration, AI-driven analysis, and bilingual (zh-CN/en-US) knowledge output",
+  "main": "_site/server.js",
+  "scripts": {
+    "start": "node _site/server.js",
+    "test": "node _site/_test/run-all-tests.js"
+  },
+  "bin": {
+    "project-knowledge": "bin/project-knowledge.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "_site/server.js",
+    "_site/index.html",
+    "_site/favicon.svg",
+    "_site/lib/",
+    "_site/scripts/",
+    "_site/vendor/",
+    "_site/_test/*.js",
+    "_site/_test/fixtures/",
+    "_site/start.bat",
+    "_site/stop.bat",
+    "claude-prompts.json",
+    "bin/",
+    "templates/",
+    "scripts/register-scheduled-task.bat",
+    "docs/",
+    "README.md",
+    "NOTICE",
+    "CHANGELOG.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SanQianX/project-knowledge-base.git"
+  },
+  "keywords": [
+    "knowledge-base",
+    "git",
+    "ai",
+    "claude",
+    "documentation",
+    "scanner",
+    "context-pack",
+    "post-commit-hook"
+  ],
+  "author": "SanQianX",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.141",
+    "ws": "^8.21.0"
+  }
+}

@@ -1,0 +1,47 @@
+﻿_build/
+node_modules/
+.DS_Store
+Thumbs.db
+*.tmp
+*.bak
+.idea/
+.vscode/
+__pycache__/
+*.pyc
+dist/
+.venv/
+
+# Test artifacts and dev logs (regenerated on demand; do not push)
+_site/_test/ui-screenshots/
+_site/_test/screenshots/
+_site/_test/ui-test-report.json
+_site/_test/TEST-REPORT.md
+_site/_test/fixtures/
+.hook-trigger-errors.log
+.jobs-log.json
+.jobs-archive/
+
+# Runtime state (regenerated on each run; do not push)
+logs/
+_site/_ai/
+knowledge-store.json
+logging.json
+projects.json
+projects/
+projects/*/_ai/runs/
+projects/*/_ai/context-packs/
+projects/*/_ai/drafts/
+projects/*/_ai/claude-workbench/
+
+# Local AI config contains API keys; never commit or publish.
+# Users create their own profile via the dashboard after install.
+ai-profiles.json
+
+# Local backups
+_backup/
+
+# Local-only notes and maintenance scripts are not part of the public package.
+CLAUDE.md
+tasks/
+scripts/*.js
+scripts/*.ps1

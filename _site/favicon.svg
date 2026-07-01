@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="AI knowledge automation">
+  <defs>
+    <linearGradient id="bg" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1f3148"/>
+      <stop offset=".54" stop-color="#111827"/>
+      <stop offset="1" stop-color="#06111f"/>
+    </linearGradient>
+    <linearGradient id="core" x1="21" y1="16" x2="45" y2="44" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#dff8ff"/>
+      <stop offset=".48" stop-color="#7dd3fc"/>
+      <stop offset="1" stop-color="#2f7d64"/>
+    </linearGradient>
+    <linearGradient id="book" x1="18" y1="35" x2="48" y2="54" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#b8c6d8"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="1.8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="15" fill="url(#bg)"/>
+  <path d="M16 42c-6-9-3-22 7-28 9-6 21-4 28 5" fill="none" stroke="#38bdf8" stroke-width="3.5" stroke-linecap="round" opacity=".82"/>
+  <path d="M48 18h-8l5 6" fill="none" stroke="#38bdf8" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" opacity=".82"/>
+  <path d="M50 25c4 10-1 23-12 27-9 4-20 1-25-8" fill="none" stroke="#75b798" stroke-width="3.5" stroke-linecap="round" opacity=".86"/>
+  <path d="M13 44h8l-5-6" fill="none" stroke="#75b798" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" opacity=".86"/>
+  <path d="M32 13 45 21v15l-13 8-13-8V21z" fill="url(#core)" filter="url(#glow)"/>
+  <path d="M32 18v21M23 24l9-6 9 6M23 33l9 6 9-6" fill="none" stroke="#0f1724" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>
+  <circle cx="16" cy="20" r="4" fill="#c5a15d"/>
+  <circle cx="49" cy="43" r="4" fill="#38bdf8"/>
+  <path d="M20 42h25l5 5-6 6H19l-5-5z" fill="url(#book)"/>
+  <path d="M20 42 14 48l25 1 6-7" fill="#e2e8f0"/>
+  <path d="M19 53h25l6-6" fill="none" stroke="#64748b" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M24 47h14" stroke="#4f6f8f" stroke-width="3" stroke-linecap="round"/>
+</svg>
