@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.4.7] - 2026-07-01
+## [3.0.0] - 2026-07-01
 
 - Initial public Apache-2.0 release of the local-first `project-knowledge`
   core.
