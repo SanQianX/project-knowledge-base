@@ -27,6 +27,7 @@ const kbFramework = require('./lib/kb-framework');
 const {
   normalizeAutomationConfig,
   normalizeClaudeWorkbenchConfig,
+  pathsReferToSameLocation,
 } = require('./lib/automation-config');
 const postCommitAutomation = require('./lib/post-commit-automation');
 
@@ -49,6 +50,7 @@ dataDir.migrateFromLegacy({
 });
 const DATA_DIR = dataDir.getDataDir();
 const PROJECTS_PATH = path.join(DATA_DIR, 'projects.json');
+const REMOVED_PROJECTS_PATH = path.join(DATA_DIR, 'removed-projects.json');
 const AI_PROFILES_PATH = path.join(DATA_DIR, 'ai-profiles.json');
 const JOBS_LOG_PATH = path.join(DATA_DIR, '.jobs-log.json');
 const KNOWLEDGE_STORE_PATH = path.join(DATA_DIR, 'knowledge-store.json');
@@ -322,6 +324,8 @@ function normalizeProjectConfig(slug, input, options = {}) {
   if (!Object.prototype.hasOwnProperty.call(cfg, 'headCommit')) cfg.headCommit = null;
   if (!Object.prototype.hasOwnProperty.call(cfg, 'lastSeenCommit')) cfg.lastSeenCommit = null;
   if (!Object.prototype.hasOwnProperty.call(cfg, 'lastAnalyzedCommit')) cfg.lastAnalyzedCommit = null;
+  if (!Object.prototype.hasOwnProperty.call(cfg, 'trackingStartCommit')) cfg.trackingStartCommit = null;
+  if (!Object.prototype.hasOwnProperty.call(cfg, 'trackingStartedAt')) cfg.trackingStartedAt = null;
   if (!cfg.aiProfileId) cfg.aiProfileId = defaultAiProfileId;
   cfg.knowledgeLanguage = normalizeKnowledgeLanguage(cfg.knowledgeLanguage);
   if (cfg.kbSchemaVersion !== PROJECT_SCHEMA_VERSION) cfg.kbSchemaVersion = PROJECT_SCHEMA_VERSION;
@@ -399,6 +403,76 @@ function readProjects(options = {}) {
     writeJson(PROJECTS_PATH, result.projects);
   }
   return result.projects;
+}
+
+function readRemovedProjects() {
+  const raw = readJsonOrDefault(REMOVED_PROJECTS_PATH, { schema: 'removed-projects/v1', projects: {} }, {
+    persistDefault: false,
+    backupInvalid: true,
+  });
+  if (raw && raw.projects && typeof raw.projects === 'object') return raw.projects;
+  if (raw && typeof raw === 'object') return raw;
+  return {};
+}
+
+function writeRemovedProjects(projects) {
+  writeJson(REMOVED_PROJECTS_PATH, { schema: 'removed-projects/v1', projects: projects || {} });
+}
+
+function projectRepoPath(cfg) {
+  return cfg && (cfg.gitPath || cfg.localPath || '');
+}
+
+function findRemovedProject({ slug = '', repoPath = '' } = {}) {
+  const removed = readRemovedProjects();
+  if (slug && removed[slug]) {
+    const cfg = removed[slug] && (removed[slug].config || removed[slug]);
+    const candidate = removed[slug].repoPath || projectRepoPath(cfg);
+    if (!repoPath || !candidate || pathsReferToSameLocation(candidate, repoPath)) {
+      return { slug, entry: removed[slug], removed };
+    }
+  }
+  for (const [entrySlug, entry] of Object.entries(removed)) {
+    const cfg = entry && (entry.config || entry);
+    const candidate = entry.repoPath || projectRepoPath(cfg);
+    if (candidate && repoPath && pathsReferToSameLocation(candidate, repoPath)) {
+      return { slug: entrySlug, entry, removed };
+    }
+  }
+  return null;
+}
+
+function rememberRemovedProject(slug, cfg, reason = '') {
+  const removed = readRemovedProjects();
+  const config = { ...(cfg || {}) };
+  removed[slug] = {
+    slug,
+    repoPath: projectRepoPath(config),
+    kbPath: config.kbPath || defaultProjectKbPath(slug),
+    removedAt: new Date().toISOString(),
+    reason,
+    config,
+  };
+  writeRemovedProjects(removed);
+  return removed[slug];
+}
+
+function forgetRemovedProject(slug) {
+  const removed = readRemovedProjects();
+  if (!removed[slug]) return false;
+  delete removed[slug];
+  writeRemovedProjects(removed);
+  return true;
+}
+
+function mergeRecoveredProjectConfig(recoveredCfg, nextCfg = {}) {
+  const recovered = recoveredCfg && typeof recoveredCfg === 'object' ? recoveredCfg : {};
+  const next = nextCfg && typeof nextCfg === 'object' ? nextCfg : {};
+  const merged = { ...recovered, ...next };
+  for (const key of ['trackingStartCommit', 'trackingStartedAt', 'lastAnalyzedCommit', 'lastSeenCommit']) {
+    if (next[key] == null && recovered[key] != null) merged[key] = recovered[key];
+  }
+  return merged;
 }
 
 function listSubTree(root, prefix, depth, max) {
@@ -652,6 +726,7 @@ function automationDeps(projects) {
     // post-commit-automation can de-dupe registrations across dispatches.
     onSessionEnded: claudeCliRunner.onSessionEnded,
     readProjects: () => readProjects({ persistMigrations: false }),
+    writeProjects: (nextProjects) => writeJson(PROJECTS_PATH, nextProjects || projects),
   };
 }
 
@@ -753,6 +828,10 @@ function applyGitInspection(project, inspection) {
   project.defaultBranch = inspection.defaultBranch;
   project.remoteUrl = inspection.remoteUrl;
   project.gitPath = inspection.gitPath || project.gitPath;
+  if (!project.trackingStartCommit && !project.lastAnalyzedCommit && inspection.headCommit) {
+    project.trackingStartCommit = inspection.headCommit;
+    project.trackingStartedAt = project.trackingStartedAt || new Date().toISOString();
+  }
   return project;
 }
 
@@ -924,10 +1003,17 @@ async function importProjectFromLocalPath({ localPath, knowledgeLanguage = DEFAU
   }
   const repoPath = inspection.gitPath || resolvedLocalPath;
   const displayName = basenameFromPath(resolvedLocalPath);
-  const slug = uniqueProjectSlug(displayName, projects);
-  const kbPath = defaultProjectKbPath(slug);
-  const initResult = initProjectDirs(slug, kbPath);
+  const recovered = findRemovedProject({ repoPath });
+  const recoveredCfg = recovered && recovered.entry && (recovered.entry.config || recovered.entry);
+  const recoveredSlug = recovered && isSafeSlug(recovered.slug) && !projects[recovered.slug] ? recovered.slug : '';
+  const slug = recoveredSlug || uniqueProjectSlug(displayName, projects);
+  const kbPath = recoveredCfg && recoveredCfg.kbPath ? recoveredCfg.kbPath : defaultProjectKbPath(slug);
+  const kbAlreadyInitialized = fs.existsSync(path.join(kbPath, 'README.md')) || kbFramework.isCurrentKb(kbPath);
+  const initResult = kbAlreadyInitialized
+    ? { created: [], basePath: path.resolve(kbPath), reusedExisting: true, kbSchemaVersion: PROJECT_SCHEMA_VERSION }
+    : initProjectDirs(slug, kbPath);
   const config = normalizeProjectConfig(slug, {
+    ...(recoveredCfg || {}),
     displayName,
     localPath: resolvedLocalPath,
     gitPath: repoPath,
@@ -937,16 +1023,17 @@ async function importProjectFromLocalPath({ localPath, knowledgeLanguage = DEFAU
     docConvention: 'frontmatter-relations',
     kbPath,
     enabled: true,
-    aiProfileId: selectedProfileId,
-    knowledgeLanguage,
+    aiProfileId: recoveredCfg && recoveredCfg.aiProfileId || selectedProfileId,
+    knowledgeLanguage: recoveredCfg && recoveredCfg.knowledgeLanguage || knowledgeLanguage,
     kbSchemaVersion: PROJECT_SCHEMA_VERSION,
-    goalStatus: 'not-created',
-    automation: defaultProjectAutomationConfig(),
-    claudeWorkbench: defaultClaudeWorkbenchConfig(),
+    goalStatus: recoveredCfg && recoveredCfg.goalStatus || 'not-created',
+    automation: recoveredCfg && recoveredCfg.automation || defaultProjectAutomationConfig(),
+    claudeWorkbench: recoveredCfg && recoveredCfg.claudeWorkbench || defaultClaudeWorkbenchConfig(),
   }).config;
   applyGitInspection(config, inspection);
   projects[slug] = config;
   writeJson(PROJECTS_PATH, projects);
+  if (recovered) forgetRemovedProject(recovered.slug);
 
   let hookResult = null;
   try {
@@ -965,10 +1052,14 @@ async function importProjectFromLocalPath({ localPath, knowledgeLanguage = DEFAU
   }
 
   let initAutomation = null;
-  try {
-    initAutomation = await postCommitAutomation.dispatchProjectInit({ slug, cfg: config }, automationDeps(projects));
-  } catch (e) {
-    initAutomation = { ok: false, error: e.message };
+  if (kbAlreadyInitialized) {
+    initAutomation = { ok: true, skipped: true, reason: 'existing KB reconnected' };
+  } else {
+    try {
+      initAutomation = await postCommitAutomation.dispatchProjectInit({ slug, cfg: config }, automationDeps(projects));
+    } catch (e) {
+      initAutomation = { ok: false, error: e.message };
+    }
   }
 
   logEvent('info', 'project_imported', `Project imported: ${slug}`, {
@@ -989,6 +1080,7 @@ async function importProjectFromLocalPath({ localPath, knowledgeLanguage = DEFAU
     initResult,
     hookResult,
     initAutomation,
+    reconnected: !!recovered,
   };
 }
 
@@ -1328,12 +1420,18 @@ const server = http.createServer(async (req, res) => {
           });
           if (!gitInit.ok) return send(res, 400, { ok: false, error: gitInit.error, gitInit });
         }
-        projects[body.slug] = normalizeProjectConfig(body.slug, body.config).config;
+        const recovered = findRemovedProject({ slug: body.slug, repoPath: body.config.gitPath || body.config.localPath || '' });
+        const recoveredCfg = recovered && recovered.entry && (recovered.entry.config || recovered.entry);
+        const nextConfig = recoveredCfg
+          ? mergeRecoveredProjectConfig(recoveredCfg, body.config)
+          : body.config;
+        projects[body.slug] = normalizeProjectConfig(body.slug, nextConfig).config;
         // Auto-validate git on add/update — populates repoStatus, headCommit, etc.
         const targetPath = projects[body.slug].gitPath || projects[body.slug].localPath;
         const inspection = await inspectGit(targetPath);
         applyGitInspection(projects[body.slug], inspection);
         writeJson(PROJECTS_PATH, projects);
+        if (recovered) forgetRemovedProject(recovered.slug);
         return send(res, 200, { ok: true, slug: body.slug, repoStatus: inspection.repoStatus });
       }
       if (body.projects && typeof body.projects === 'object') {
@@ -1376,6 +1474,8 @@ const server = http.createServer(async (req, res) => {
       } catch (e) {
         hookResult = { ok: false, warning: e.message };
       }
+      if (deleteKb) forgetRemovedProject(slug);
+      else rememberRemovedProject(slug, cfg, parsed.reason || '');
       delete projects[slug];
       writeJson(PROJECTS_PATH, projects);
       removeKnowledgeStoreProjectOverride(slug);

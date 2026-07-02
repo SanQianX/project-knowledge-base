@@ -5,7 +5,7 @@
 // Run `project-knowledge --help` for usage.
 
 const path = require('path');
-const { spawn, exec } = require('child_process');
+const { spawn, exec, execSync } = require('child_process');
 const { existsSync, readFileSync, writeFileSync, unlinkSync } = require('fs');
 const net = require('net');
 const os = require('os');
@@ -90,42 +90,121 @@ async function findFreePort(start) {
   throw new Error(`No free port found in range ${start}-${start + PORT_RANGE - 1}`);
 }
 
+// Find PIDs whose TCP socket is LISTENING on `port`. Cross-platform wrapper
+// around netstat / lsof / ss. Returns a deduped list, possibly empty.
+function findListeningPids(port) {
+  try {
+    let cmd;
+    if (process.platform === 'win32') {
+      cmd = `netstat -ano | findstr ":${port} " | findstr "LISTENING"`;
+    } else if (process.platform === 'darwin') {
+      cmd = `lsof -nP -iTCP:${port} -sTCP:LISTEN -t 2>/dev/null`;
+    } else {
+      cmd = `ss -tlnpH 'sport = :${port}' 2>/dev/null | grep -oP 'pid=\\K[0-9]+'`;
+    }
+    const stdout = execSync(cmd, { windowsHide: true, encoding: 'utf8', timeout: 3000 });
+    const pids = stdout.split(/\r?\n/).map((line) => {
+      const nums = line.match(/\d+/g);
+      return nums && nums.length ? parseInt(nums[nums.length - 1], 10) : null;
+    }).filter(Boolean);
+    return Array.from(new Set(pids));
+  } catch {
+    return [];
+  }
+}
+
+// Read another process's command line so we can verify it's ours before
+// killing it. Returns '' on any failure (permissions, process gone, etc).
+function getProcessCommandLine(pid) {
+  try {
+    let cmd, stdout;
+    if (process.platform === 'win32') {
+      stdout = execSync(`wmic process where "ProcessId=${pid}" get CommandLine /value`,
+        { windowsHide: true, encoding: 'utf8', timeout: 3000 });
+      const m = stdout.match(/CommandLine=(.+)/);
+      return m ? m[1].trim() : '';
+    }
+    stdout = execSync(`ps -p ${pid} -o args= 2>/dev/null`,
+      { encoding: 'utf8', timeout: 3000 });
+    return stdout.trim();
+  } catch {
+    return '';
+  }
+}
+
+// Scan DEFAULT_PORT..+PORT_RANGE for a LISTENING PID whose command line looks
+// like our server. Used as a fallback when the PID file is missing/stale so the
+// CLI isn't blind to long-running orphans.
+function findOrphanProcess() {
+  const startPort = readPort() || DEFAULT_PORT;
+  for (let offset = 0; offset < PORT_RANGE; offset++) {
+    const port = startPort + offset;
+    for (const candidate of findListeningPids(port)) {
+      const cmdline = getProcessCommandLine(candidate).toLowerCase();
+      if (cmdline.includes('project-knowledge') && cmdline.includes('node')) {
+        return { pid: candidate, port };
+      }
+    }
+  }
+  return null;
+}
+
 // ── Subcommands ──
 function cmdStop() {
   const pid = readPid();
-  if (!pid) {
-    console.log('No background process found.');
+  if (pid && isProcessAlive(pid)) {
+    try {
+      process.kill(pid);
+      removePid();
+      console.log(`project-knowledge stopped (PID ${pid}).`);
+    } catch {
+      console.error(`Failed to stop process ${pid}`);
+      process.exit(1);
+    }
     process.exit(0);
   }
-  if (!isProcessAlive(pid)) {
+  if (pid) {
+    // Stale PID file — record pointed at a dead process. Drop it so the
+    // orphan-scan below can take over without being misled.
     removePid();
     console.log('Process already stopped.');
-    process.exit(0);
   }
-  try {
-    process.kill(pid);
-    removePid();
-    console.log(`project-knowledge stopped (PID ${pid}).`);
-  } catch {
-    console.error(`Failed to stop process ${pid}`);
-    process.exit(1);
+
+  // Fallback: the PID file can disappear (manual cleanup, antivirus, OS temp
+  // cleanup) while the server keeps running. Without this scan the CLI has no
+  // way to stop an orphan whose PID it never recorded.
+  const orphan = findOrphanProcess();
+  if (orphan) {
+    try {
+      process.kill(orphan.pid);
+      console.log(`Stopped orphan project-knowledge (PID ${orphan.pid}) on port ${orphan.port}.`);
+      process.exit(0);
+    } catch {
+      console.error(`Found PID ${orphan.pid} on port ${orphan.port} but failed to stop it.`);
+      process.exit(1);
+    }
   }
-  // process.exit never returns — guarantees we don't fall through to the
-  // background-launch branch below, which would otherwise re-spawn the server
-  // we just killed (console.log writes synchronously to stdout, so the
-  // "stopped" line above is flushed before exit).
+  console.log('No background process found.');
   process.exit(0);
 }
 
 function cmdStatus() {
   const pid = readPid();
-  if (!pid || !isProcessAlive(pid)) {
-    removePid();
-    console.log('project-knowledge is not running.');
+  if (pid && isProcessAlive(pid)) {
+    const port = readPort() || DEFAULT_PORT;
+    console.log(`project-knowledge is running (PID ${pid}) at http://localhost:${port}`);
     process.exit(0);
   }
-  const port = readPort() || DEFAULT_PORT;
-  console.log(`project-knowledge is running (PID ${pid}) at http://localhost:${port}`);
+  if (pid) removePid();
+
+  // PID file is gone or stale — check the port directly.
+  const orphan = findOrphanProcess();
+  if (orphan) {
+    console.log(`project-knowledge is running (orphan, PID ${orphan.pid}) at http://localhost:${orphan.port}`);
+    console.log('(No PID file on disk — recovered via port scan. Run "project-knowledge stop" to clean up.)');
+    process.exit(0);
+  }
+  console.log('project-knowledge is not running.');
   process.exit(0);
 }
 

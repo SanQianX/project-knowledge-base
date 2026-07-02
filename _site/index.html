@@ -4148,12 +4148,24 @@ const app = createApp({
 
     async function setProjectAiProfile(slug, aiProfileId) {
       try {
-        await api("PUT", `/api/projects/${slug}/ai-profile`, { aiProfileId });
+        const data = await api("PUT", `/api/projects/${slug}/ai-profile`, { aiProfileId });
+        if (projects.value && projects.value[slug]) {
+          projects.value = {
+            ...projects.value,
+            [slug]: {
+              ...projects.value[slug],
+              aiProfileId: data.aiProfileId || null,
+            },
+          };
+        }
+        if (selectedSlug.value === slug && terminalSession.value && terminalSession.value.state === 'idle') {
+          terminalSession.value = { ...terminalSession.value, aiProfileId: data.aiProfileId || null, model: null };
+        }
         setAiMessage(t("assignProjectOk", { slug }), "success");
       } catch (e) {
         setAiMessage(t("assignProjectFailed", { slug, error: e.message }), "error");
       }
-      await refreshAll();
+      await refreshAll({ force: true });
     }
 
     async function validateGit(slug) {

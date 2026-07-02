@@ -51,6 +51,7 @@ function project(overrides = {}) {
     gitPath: TEMP_REPO,
     kbPath: TEMP_KB,
     aiProfileId: 'test-profile',
+    trackingStartCommit: git(TEMP_REPO, ['rev-list', '--max-parents=0', 'HEAD']),
     automation: {
       enabled: true,
       postCommitEnabled: true,
@@ -105,6 +106,8 @@ function project(overrides = {}) {
   });
   assert(rendered.prompt.includes(SLUG), 'prompt should include slug');
   assert(rendered.prompt.includes('feature.txt'), 'prompt should include changed file');
+  assert(rendered.metadata.pendingCommitCount === 1, 'render should include only commits after trackingStartCommit');
+  assert(rendered.metadata.commitRange.includes('..'), 'render should include a commit range');
   assert(rendered.workbench.permissionMode === 'bypassPermissions', 'render should keep project permission mode');
 
   const disabled = await automation.handlePostCommitEvent({ repoPath: TEMP_REPO, commitHash: 'HEAD' }, {
@@ -114,6 +117,16 @@ function project(overrides = {}) {
     startAutomationSession: () => { throw new Error('should not start'); },
   });
   assert(disabled.ok && disabled.skipped, 'disabled automation should skip');
+
+  const currentHead = git(TEMP_REPO, ['rev-parse', 'HEAD']);
+  const noPending = await automation.handlePostCommitEvent({ repoPath: TEMP_REPO, commitHash: 'HEAD' }, {
+    projects: { [SLUG]: project({ trackingStartCommit: currentHead }) },
+    defaultProjectKbPath: () => TEMP_KB,
+    validateUsableAiProfile: () => ({ ok: true, profile: { id: 'test-profile' } }),
+    startAutomationSession: () => { throw new Error('should not start when there are no pending commits'); },
+    writeProjects: () => {},
+  });
+  assert(noPending.ok && noPending.skipped && /no pending/.test(noPending.reason), 'no pending commits should skip automation');
 
   const startedCalls = [];
   const dispatched = await automation.handlePostCommitEvent({ repoPath: TEMP_REPO, commitHash: 'HEAD' }, {

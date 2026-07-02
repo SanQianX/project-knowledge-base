@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { execGit } = require('./git-runner');
+const { scanProject, applyScanResult } = require('./scanner');
 const aiWorkspace = require('./ai-workspace');
 const {
   normalizeAutomationConfig,
@@ -59,16 +60,27 @@ async function gitText(repoPath, args, fallback = '') {
 
 async function collectCommitMetadata(project, event = {}) {
   const repoPath = projectRepoPath(project);
-  const requestedHash = event.commitHash || 'HEAD';
+  const hadTrackingBaseline = !!(project.lastAnalyzedCommit || project.trackingStartCommit);
+  const scan = await scanProject(project, { maxCommits: 200 });
+  if (scan && scan.repoStatus === 'ok') {
+    await applyScanResult(project, scan);
+  }
+  const requestedHash = scan && scan.headCommit || event.commitHash || 'HEAD';
   const fullHash = await gitText(repoPath, ['rev-parse', requestedHash], requestedHash);
   const shortHash = await gitText(repoPath, ['rev-parse', '--short', fullHash], String(fullHash).slice(0, 7));
   const branch = event.branch || await gitText(repoPath, ['branch', '--show-current'], '');
   const raw = await gitText(repoPath, ['show', '-s', '--date=iso-strict', '--pretty=format:%H%n%h%n%an%n%ad%n%s', fullHash], '');
   const lines = raw.split(/\r?\n/);
   const subject = lines.slice(4).join('\n').trim();
-  const changedFilesRaw = await gitText(repoPath, ['show', '--name-only', '--pretty=format:', '--no-renames', fullHash], '');
+  const pendingCommits = scan && Array.isArray(scan.commits) ? scan.commits : [];
+  const range = scan && scan.range || '';
+  const changedFilesRaw = pendingCommits.length && range
+    ? await gitText(repoPath, ['diff', '--name-only', '--no-renames', range], '')
+    : await gitText(repoPath, ['show', '--name-only', '--pretty=format:', '--no-renames', fullHash], '');
   const changedFiles = changedFilesRaw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-  const diffSummary = await gitText(repoPath, ['show', '--stat', '--oneline', '--no-renames', '--format=short', fullHash], '');
+  const diffSummary = pendingCommits.length && range
+    ? await gitText(repoPath, ['log', '--stat', '--oneline', '--no-renames', range], '')
+    : await gitText(repoPath, ['show', '--stat', '--oneline', '--no-renames', '--format=short', fullHash], '');
 
   return {
     repoPath,
@@ -77,9 +89,17 @@ async function collectCommitMetadata(project, event = {}) {
     shortHash: lines[1] || shortHash,
     commitAuthor: lines[2] || '',
     commitDate: lines[3] || '',
-    commitSubject: subject || '',
+    commitSubject: pendingCommits.length > 1 ? `${pendingCommits.length} pending commits through ${shortHash}` : subject || '',
     changedFiles,
     diffSummary,
+    repoStatus: scan && scan.repoStatus || 'unknown',
+    commitRange: range,
+    pendingCommitCount: pendingCommits.length,
+    pendingCommits: pendingCommits.map(c => `${c.short || String(c.hash || '').slice(0, 7)} ${c.date || ''} ${c.author || ''} ${c.subject || ''}`.trim()),
+    headCommitAtRun: scan && scan.headCommit || lines[0] || fullHash,
+    lastAnalyzedCommitBefore: project.lastAnalyzedCommit || null,
+    trackingStartCommit: project.trackingStartCommit || scan && scan.trackingStartCommit || null,
+    baselineWasMissing: !hadTrackingBaseline,
   };
 }
 
@@ -97,6 +117,13 @@ function buildPromptVars({ slug, cfg, kbPath, automation, workbench, metadata })
     commitDate: metadata.commitDate || '',
     changedFiles: (metadata.changedFiles || []).join('\n'),
     diffSummary: metadata.diffSummary || '',
+    repoStatus: metadata.repoStatus || '',
+    commitRange: metadata.commitRange || '',
+    pendingCommitCount: metadata.pendingCommitCount || 0,
+    pendingCommits: (metadata.pendingCommits || []).join('\n'),
+    trackingStartCommit: metadata.trackingStartCommit || '',
+    lastAnalyzedCommitBefore: metadata.lastAnalyzedCommitBefore || '',
+    baselineWasMissing: metadata.baselineWasMissing ? 'true' : 'false',
     remoteUrl: metadata.remoteUrl || cfg.remoteUrl || '',
     primaryLanguage: cfg.primaryLanguage || '',
     tags: Array.isArray(cfg.tags) ? cfg.tags.join(', ') : String(cfg.tags || ''),
@@ -216,6 +243,16 @@ async function dispatchAutomation({ slug, cfg, event = {}, source = 'git-hook' }
   }
 
   const rendered = await renderAutomationPrompt({ slug, cfg, event, defaultProjectKbPath: deps.defaultProjectKbPath });
+  if (typeof deps.writeProjects === 'function') {
+    try { deps.writeProjects(deps.projects); } catch {}
+  }
+  if (rendered.metadata.repoStatus === 'ok' && !rendered.metadata.baselineWasMissing && (rendered.metadata.pendingCommitCount || 0) === 0) {
+    return { ok: true, skipped: true, reason: 'no pending commits', slug, scan: {
+      range: rendered.metadata.commitRange || '',
+      headCommit: rendered.metadata.headCommitAtRun || null,
+      trackingStartCommit: rendered.metadata.trackingStartCommit || null,
+    } };
+  }
   return dispatchRenderedAutomation({ slug, cfg, rendered, source }, deps);
 }
 
@@ -251,6 +288,11 @@ async function dispatchRenderedAutomation({ slug, cfg, rendered, source }, deps)
     startedAt,
     endedAt: null,
     error: null,
+    commitRange: rendered.metadata.commitRange || '',
+    pendingCommitCount: rendered.metadata.pendingCommitCount || 0,
+    headCommitAtRun: rendered.metadata.headCommitAtRun || rendered.metadata.commitHash || null,
+    lastAnalyzedCommitBefore: rendered.metadata.lastAnalyzedCommitBefore || null,
+    trackingStartCommit: rendered.metadata.trackingStartCommit || null,
     promptPreview: rendered.prompt.slice(0, 2000),
     allowedTools: policy.allowedTools,
   };
@@ -309,6 +351,8 @@ function _startRun(ctx, deps) {
         automation: true,
         automationRunId: ctx.runId,
         commitHash: ctx.rendered.metadata.commitHash,
+        headCommitAtRun: ctx.rendered.metadata.headCommitAtRun || ctx.rendered.metadata.commitHash,
+        commitRange: ctx.rendered.metadata.commitRange || '',
         knowledgeMode: ctx.automation.knowledgeMode,
       },
     });
@@ -350,6 +394,17 @@ async function _resumeQueuedRun(slug, runId, deps) {
           event: { commitHash: record.commitHash, branch: record.branch },
           defaultProjectKbPath: deps.defaultProjectKbPath,
         });
+    if (typeof deps.writeProjects === 'function') {
+      try { deps.writeProjects(projects); } catch {}
+    }
+    if (record.source !== 'project-init' && rendered.metadata.repoStatus === 'ok' && !rendered.metadata.baselineWasMissing && (rendered.metadata.pendingCommitCount || 0) === 0) {
+      record.status = 'succeeded';
+      record.endedAt = new Date().toISOString();
+      record.error = 'no pending commits';
+      writeAutomationRun(slug, record);
+      _advanceAfter(slug, deps, runId);
+      return;
+    }
   } catch (e) {
     record.status = 'failed';
     record.endedAt = new Date().toISOString();
@@ -401,7 +456,7 @@ function _readAutomationRun(slug, runId) {
   }
 }
 
-function _markRunEnded(slug, runId, session) {
+function _markRunEnded(slug, runId, session, deps) {
   const r = _readAutomationRun(slug, runId);
   if (!r) return;
   r.sessionId = session.sessionId || r.sessionId;
@@ -418,6 +473,21 @@ function _markRunEnded(slug, runId, session) {
     if (r.status === 'failed' && !r.error) r.error = `non-zero exitCode (${session.exitCode})`;
   }
   writeAutomationRun(slug, r);
+  if (r.status === 'succeeded' && r.source !== 'project-init' && r.headCommitAtRun && ['autoApply', 'directWriteKb'].includes(r.knowledgeMode)) {
+    try {
+      const projects = typeof deps.readProjects === 'function' ? deps.readProjects() : deps.projects;
+      if (projects && projects[slug]) {
+        projects[slug].lastAnalyzedCommit = r.headCommitAtRun;
+        projects[slug].lastSeenCommit = r.headCommitAtRun;
+        projects[slug].headCommit = r.headCommitAtRun;
+        if (!projects[slug].trackingStartCommit && r.trackingStartCommit) {
+          projects[slug].trackingStartCommit = r.trackingStartCommit;
+          projects[slug].trackingStartedAt = projects[slug].trackingStartedAt || r.startedAt || new Date().toISOString();
+        }
+        if (typeof deps.writeProjects === 'function') deps.writeProjects(projects);
+      }
+    } catch {}
+  }
 }
 
 let _currentDepsRef = null;
@@ -436,7 +506,7 @@ function _ensureEndHook(deps) {
     const slug = session && session.projectSlug;
     const runId = session && session.metadata && session.metadata.automationRunId;
     if (!slug || !runId) return;
-    _markRunEnded(slug, runId, session);
+    _markRunEnded(slug, runId, session, d);
     _advanceAfter(slug, d, runId);
   });
   _registeredOnEnded = deps.onSessionEnded;

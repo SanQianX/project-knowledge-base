@@ -11,6 +11,7 @@ async function scanProject(project, options = {}) {
     headCommit: null,
     lastSeenCommit: project ? project.lastSeenCommit : null,
     lastAnalyzedCommit: project ? project.lastAnalyzedCommit : null,
+    trackingStartCommit: project ? project.trackingStartCommit : null,
     pendingCount: 0,
     mode: null,
     range: null,
@@ -45,23 +46,15 @@ async function scanProject(project, options = {}) {
   result.headCommit = (head.stdout || '').trim() || null;
   result.repoStatus = 'ok';
 
-  if (!project.lastAnalyzedCommit) {
-    result.mode = 'initial';
-    const logArgs = ['log', '--no-merges', `--max-count=${maxCommits}`, '--pretty=format:%H|%h|%ad|%an|%s', '--date=short'];
-    const log = await execGit(targetPath, logArgs);
-    if (log.ok) {
-      const lines = (log.stdout || '').split('\n').filter(l => l.includes('|'));
-      for (const line of lines) {
-        const [hash, short, date, author, ...rest] = line.split('|');
-        result.commits.push({ hash, short, date, author, subject: rest.join('|') });
-      }
-    } else {
-      result.error = (log.stderr || log.error || 'git log failed').toString();
-    }
-    result.range = `HEAD~${result.commits.length}..HEAD`;
+  const rangeStart = project.lastAnalyzedCommit || project.trackingStartCommit || null;
+  if (!rangeStart) {
+    result.mode = 'tracking-start';
+    result.trackingStartCommit = result.headCommit;
+    result.range = `${result.headCommit}..${result.headCommit}`;
   } else {
-    result.mode = 'incremental';
-    const range = `${project.lastAnalyzedCommit}..${result.headCommit}`;
+    result.mode = project.lastAnalyzedCommit ? 'incremental' : 'tracked';
+    result.trackingStartCommit = project.trackingStartCommit || result.trackingStartCommit || rangeStart;
+    const range = `${rangeStart}..${result.headCommit}`;
     result.range = range;
     const logArgs = ['log', '--no-merges', range, '--pretty=format:%H|%h|%ad|%an|%s', '--date=short'];
     const log = await execGit(targetPath, logArgs);
@@ -83,6 +76,10 @@ async function scanProject(project, options = {}) {
 async function applyScanResult(project, scan) {
   project.headCommit = scan.headCommit;
   project.repoStatus = scan.repoStatus;
+  if (!project.trackingStartCommit && scan.trackingStartCommit) {
+    project.trackingStartCommit = scan.trackingStartCommit;
+    project.trackingStartedAt = project.trackingStartedAt || new Date().toISOString();
+  }
   project.lastSeenCommit = scan.headCommit || project.lastSeenCommit;
   project.lastScanAt = new Date().toISOString();
   project.lastScanPendingCount = scan.pendingCount;

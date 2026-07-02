@@ -106,6 +106,8 @@ async function removeTempProject() {
       assert(Object.prototype.hasOwnProperty.call(cfg, 'headCommit'), `${slug} missing headCommit`);
       assert(Object.prototype.hasOwnProperty.call(cfg, 'lastSeenCommit'), `${slug} missing lastSeenCommit`);
       assert(Object.prototype.hasOwnProperty.call(cfg, 'lastAnalyzedCommit'), `${slug} missing lastAnalyzedCommit`);
+      assert(Object.prototype.hasOwnProperty.call(cfg, 'trackingStartCommit'), `${slug} missing trackingStartCommit`);
+      assert(Object.prototype.hasOwnProperty.call(cfg, 'trackingStartedAt'), `${slug} missing trackingStartedAt`);
       // v2.0.0: aiProfileId defaults to null (user must select one).
       assert(Object.prototype.hasOwnProperty.call(cfg, 'aiProfileId'), `${slug} missing aiProfileId property`);
       assert(cfg.kbSchemaVersion === 'minimal', `${slug} missing current kbSchemaVersion`);

@@ -102,13 +102,14 @@ async function getProject(slug) {
 
     r = await json('POST', `/api/projects/${TEMP_SLUG}/scan`);
     assert(r.res.ok, 'scan should succeed');
-    assert(r.data.mode === 'initial', `first scan should be initial mode, got ${r.data.mode}`);
-    assert(r.data.pendingCount === multi.commits.length, `pendingCount should be ${multi.commits.length}, got ${r.data.pendingCount}`);
+    assert(['tracking-start', 'tracked'].includes(r.data.mode), `first scan should establish tracking, got ${r.data.mode}`);
+    assert(r.data.pendingCount === 0, `pre-import history should not be pending, got ${r.data.pendingCount}`);
     assert(r.data.headCommit === multi.headCommit, 'headCommit should match fixture');
 
     cfg = await getProject(TEMP_SLUG);
     assert(cfg.lastSeenCommit === multi.headCommit, 'lastSeenCommit should equal head');
     assert(cfg.lastAnalyzedCommit === null, 'lastAnalyzedCommit must NOT be updated by scan');
+    assert(cfg.trackingStartCommit === multi.headCommit, 'trackingStartCommit should equal first imported head');
 
     // 3. Add new commits → second scan should detect 2 new pending
     const fs2 = require('fs');
@@ -168,8 +169,8 @@ async function getProject(slug) {
     fs.writeFileSync(PROJECTS_JSON, JSON.stringify(cur2, null, 2) + '\n', 'utf-8');
 
     r = await json('POST', `/api/projects/${TEMP_SLUG}/scan`);
-    assert(r.data.mode === 'initial', 'cleared lastAnalyzedCommit should switch back to initial mode');
-    assert(r.data.pendingCount > 0, 'initial mode should report all commits');
+    assert(r.data.mode === 'tracked', 'cleared lastAnalyzedCommit should fall back to trackingStartCommit');
+    assert(r.data.pendingCount === 2, 'tracking start should report only commits after first import');
 
     // 8. /api/scan-all scans every enabled project
     const enabledFixture = makeRepo({ kind: 'one-commit' });
