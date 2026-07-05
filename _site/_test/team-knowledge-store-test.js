@@ -59,6 +59,24 @@ function startMockGithub(manifest) {
   }];
   const server = http.createServer((req, res) => {
     res.setHeader('Content-Type', 'application/json');
+    if (req.url === '/login/device/code' && req.method === 'POST') {
+      res.end(JSON.stringify({
+        device_code: 'device-123',
+        user_code: 'ABCD-1234',
+        verification_uri: 'https://github.com/login/device',
+        expires_in: 900,
+        interval: 1,
+      }));
+      return;
+    }
+    if (req.url === '/login/oauth/access_token' && req.method === 'POST') {
+      res.end(JSON.stringify({
+        access_token: 'oauth-token',
+        token_type: 'bearer',
+        scope: 'repo,read:org',
+      }));
+      return;
+    }
     if (req.url === '/user') {
       res.end(JSON.stringify({ login: 'alice' }));
       return;
@@ -113,6 +131,11 @@ function startMockGithub(manifest) {
   }, null, 2) + '\n', 'utf-8');
 
   try {
+    const deviceFlow = await githubTeamStore.startDeviceFlow({ clientId: 'client-id', webBaseUrl: mock.apiBaseUrl });
+    assert(deviceFlow.ok && deviceFlow.userCode === 'ABCD-1234', 'mock GitHub OAuth device flow should start');
+    const oauth = await githubTeamStore.pollDeviceFlow({ clientId: 'client-id', deviceCode: deviceFlow.deviceCode, webBaseUrl: mock.apiBaseUrl });
+    assert(oauth.ok && oauth.token === 'oauth-token', 'mock GitHub OAuth device flow should return a token');
+
     const validation = await githubTeamStore.validateToken({ token: 'token', apiBaseUrl: mock.apiBaseUrl });
     assert(validation.ok && validation.login === 'alice', 'mock GitHub token should validate');
     const discovered = await githubTeamStore.discoverStores({ token: 'token', apiBaseUrl: mock.apiBaseUrl, dataDir: DATA_DIR });

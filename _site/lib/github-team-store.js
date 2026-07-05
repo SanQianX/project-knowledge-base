@@ -8,6 +8,7 @@ const { execGit } = require('./git-runner');
 const SCHEMA = 'github-team/v1';
 const STORE_SCHEMA = 'project-knowledge/team-store/v1';
 const DEFAULT_API_BASE_URL = 'https://api.github.com';
+const DEFAULT_WEB_BASE_URL = 'https://github.com';
 const MANIFEST_PATHS = [
   '.project-knowledge/team-store.json',
   'project-knowledge-store.json',
@@ -121,12 +122,87 @@ function requestJson({ method = 'GET', url, token = '', body = null, headers = {
   });
 }
 
+function requestFormJson({ method = 'POST', url, form = {}, headers = {}, timeoutMs = 20000 }) {
+  return new Promise((resolve) => {
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch (e) {
+      resolve({ ok: false, status: 400, error: e.message, data: null, headers: {} });
+      return;
+    }
+    const transport = parsed.protocol === 'http:' ? http : https;
+    const payload = Buffer.from(new URLSearchParams(form).toString());
+    const req = transport.request({
+      method,
+      protocol: parsed.protocol,
+      hostname: parsed.hostname,
+      port: parsed.port,
+      path: `${parsed.pathname}${parsed.search}`,
+      timeout: timeoutMs,
+      headers: {
+        'User-Agent': 'project-knowledge',
+        'Accept': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': payload.length,
+        ...headers,
+      },
+    }, (res) => {
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => {
+        const text = Buffer.concat(chunks).toString('utf-8');
+        let data = null;
+        if (text.trim()) {
+          try { data = JSON.parse(text); } catch { data = { raw: text }; }
+        }
+        const ok = res.statusCode >= 200 && res.statusCode < 300;
+        resolve({
+          ok,
+          status: res.statusCode,
+          data,
+          headers: res.headers || {},
+          error: ok ? null : ((data && (data.error_description || data.message || data.error)) || text || `HTTP ${res.statusCode}`),
+        });
+      });
+    });
+    req.on('timeout', () => {
+      req.destroy(new Error(`request timed out after ${timeoutMs}ms`));
+    });
+    req.on('error', e => resolve({ ok: false, status: 0, error: e.message, data: null, headers: {} }));
+    req.write(payload);
+    req.end();
+  });
+}
+
 function apiUrl(apiBaseUrl, pathname, query = {}) {
   const url = new URL(pathname.replace(/^\/?/, '/'), normalizeConfig({ apiBaseUrl }).apiBaseUrl);
   for (const [key, value] of Object.entries(query || {})) {
     if (value != null && value !== '') url.searchParams.set(key, String(value));
   }
   return url.toString();
+}
+
+function webUrl(webBaseUrl, pathname) {
+  const base = typeof webBaseUrl === 'string' && webBaseUrl.trim()
+    ? webBaseUrl.trim().replace(/\/+$/, '')
+    : DEFAULT_WEB_BASE_URL;
+  return new URL(pathname.replace(/^\/?/, '/'), base).toString();
+}
+
+function oauthClientIdFromEnv(env = process.env) {
+  return String(env.KB_GITHUB_OAUTH_CLIENT_ID || env.GITHUB_OAUTH_CLIENT_ID || '').trim();
+}
+
+function oauthWebBaseUrlFromEnv(env = process.env) {
+  return String(env.KB_GITHUB_OAUTH_WEB_BASE_URL || env.GITHUB_OAUTH_WEB_BASE_URL || DEFAULT_WEB_BASE_URL).trim().replace(/\/+$/, '') || DEFAULT_WEB_BASE_URL;
+}
+
+function oauthPublicConfig(env = process.env) {
+  return {
+    available: !!oauthClientIdFromEnv(env),
+    webBaseUrl: oauthWebBaseUrlFromEnv(env),
+  };
 }
 
 async function validateToken({ token, apiBaseUrl = DEFAULT_API_BASE_URL }) {
@@ -137,6 +213,63 @@ async function validateToken({ token, apiBaseUrl = DEFAULT_API_BASE_URL }) {
     ok: true,
     user: result.data,
     login: result.data && result.data.login || '',
+  };
+}
+
+async function startDeviceFlow({ clientId, scope = 'repo read:org', webBaseUrl = DEFAULT_WEB_BASE_URL }) {
+  const id = String(clientId || '').trim();
+  if (!id) return { ok: false, status: 501, code: 'oauth_client_missing', error: 'GitHub OAuth client is not configured' };
+  const result = await requestFormJson({
+    url: webUrl(webBaseUrl, '/login/device/code'),
+    form: { client_id: id, scope },
+  });
+  if (!result.ok) return { ok: false, status: result.status || 400, error: result.error || 'GitHub device flow failed' };
+  const data = result.data || {};
+  if (!data.device_code || !data.user_code || !data.verification_uri) {
+    return { ok: false, status: 502, error: 'GitHub device flow response was incomplete', data };
+  }
+  return {
+    ok: true,
+    deviceCode: data.device_code,
+    userCode: data.user_code,
+    verificationUri: data.verification_uri,
+    expiresIn: Number(data.expires_in || 900),
+    interval: Number(data.interval || 5),
+  };
+}
+
+async function pollDeviceFlow({ clientId, deviceCode, webBaseUrl = DEFAULT_WEB_BASE_URL }) {
+  const id = String(clientId || '').trim();
+  if (!id) return { ok: false, status: 501, code: 'oauth_client_missing', error: 'GitHub OAuth client is not configured' };
+  const code = String(deviceCode || '').trim();
+  if (!code) return { ok: false, status: 400, error: 'deviceCode is required' };
+  const result = await requestFormJson({
+    url: webUrl(webBaseUrl, '/login/oauth/access_token'),
+    form: {
+      client_id: id,
+      device_code: code,
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+    },
+  });
+  const data = result.data || {};
+  if (data.error === 'authorization_pending') return { ok: true, pending: true, interval: 5 };
+  if (data.error === 'slow_down') return { ok: true, pending: true, interval: 10 };
+  if (data.error) {
+    return {
+      ok: false,
+      status: data.error === 'expired_token' ? 410 : 400,
+      code: data.error,
+      error: data.error_description || data.error,
+    };
+  }
+  if (!result.ok) return { ok: false, status: result.status || 400, error: result.error || 'GitHub OAuth polling failed' };
+  if (!data.access_token) return { ok: false, status: 502, error: 'GitHub OAuth response did not include an access token', data };
+  return {
+    ok: true,
+    pending: false,
+    token: data.access_token,
+    tokenType: data.token_type || 'bearer',
+    scope: data.scope || '',
   };
 }
 
@@ -294,12 +427,19 @@ module.exports = {
   STORE_SCHEMA,
   MANIFEST_PATHS,
   DEFAULT_API_BASE_URL,
+  DEFAULT_WEB_BASE_URL,
   defaultConfig,
   normalizeConfig,
   readConfig,
   writeConfig,
   publicConfig,
   requestJson,
+  requestFormJson,
+  oauthClientIdFromEnv,
+  oauthWebBaseUrlFromEnv,
+  oauthPublicConfig,
+  startDeviceFlow,
+  pollDeviceFlow,
   validateToken,
   normalizeManifest,
   discoverStores,

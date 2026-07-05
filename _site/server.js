@@ -1431,7 +1431,45 @@ const server = http.createServer(async (req, res) => {
     // GET /api/team/github/status
     if (m === 'GET' && p === '/api/team/github/status') {
       const cfg = readGithubTeamConfig();
-      return send(res, 200, { ok: true, config: githubTeamStore.publicConfig(cfg) });
+      return send(res, 200, { ok: true, config: githubTeamStore.publicConfig(cfg), oauth: githubTeamStore.oauthPublicConfig(process.env) });
+    }
+
+    // POST /api/team/github/oauth/device/start
+    if (m === 'POST' && p === '/api/team/github/oauth/device/start') {
+      const body = await readBody(req).catch(() => '{}');
+      const parsed = (() => { try { return JSON.parse(body); } catch { return {}; } })();
+      const result = await githubTeamStore.startDeviceFlow({
+        clientId: githubTeamStore.oauthClientIdFromEnv(process.env),
+        webBaseUrl: githubTeamStore.oauthWebBaseUrlFromEnv(process.env),
+        scope: parsed.scope || 'repo read:org',
+      });
+      return send(res, result.ok ? 200 : (result.status || 400), result);
+    }
+
+    // POST /api/team/github/oauth/device/poll { deviceCode }
+    if (m === 'POST' && p === '/api/team/github/oauth/device/poll') {
+      const body = await readBody(req).catch(() => '{}');
+      const parsed = (() => { try { return JSON.parse(body); } catch { return {}; } })();
+      const result = await githubTeamStore.pollDeviceFlow({
+        clientId: githubTeamStore.oauthClientIdFromEnv(process.env),
+        webBaseUrl: githubTeamStore.oauthWebBaseUrlFromEnv(process.env),
+        deviceCode: parsed.deviceCode,
+      });
+      if (!result.ok) return send(res, result.status || 400, result);
+      if (result.pending) return send(res, 202, result);
+      const validation = await githubTeamStore.validateToken({ token: result.token, apiBaseUrl: githubTeamStore.DEFAULT_API_BASE_URL });
+      if (!validation.ok) return send(res, validation.status || 400, validation);
+      const cfg = writeGithubTeamConfig({
+        token: result.token,
+        apiBaseUrl: githubTeamStore.DEFAULT_API_BASE_URL,
+        login: validation.login,
+      });
+      logEvent('info', 'github_team_oauth_saved', 'GitHub team knowledge OAuth login saved.', {
+        source: 'github-team',
+        login: cfg.login,
+        scope: result.scope,
+      });
+      return send(res, 200, { ok: true, config: githubTeamStore.publicConfig(cfg), user: validation.user, scope: result.scope });
     }
 
     // PUT /api/team/github/auth { token, apiBaseUrl? }

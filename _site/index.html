@@ -233,6 +233,7 @@
                   @click="setNarrowPane(narrowPane.runs === 'detail' ? 'list' : 'detail')">
             {{ narrowPane.runs === 'detail' ? t('narrowShowRunsList') : t('narrowBackToDetail') }}
           </button>
+          <button @click="openGithubAuthModal" class="btn" :title="githubStatusText">{{ githubHeaderLabel }}</button>
           <select v-model="uiLanguage" class="input py-2 text-sm">
             <option value="zh">{{ t("chinese") }}</option>
             <option value="en">{{ t("english") }}</option>
@@ -594,17 +595,9 @@
                 </div>
                 <div class="text-xs muted sm:text-right">{{ githubStatusText }}</div>
               </div>
-
-              <div class="mt-3 grid gap-2">
-                <label class="grid gap-1">{{ t("githubToken") }}
-                  <input v-model="githubAuthForm.token" type="password" class="input font-mono text-xs" autocomplete="off" @keydown.enter.prevent="saveGithubAuth" />
-                </label>
-                <div class="flex flex-wrap gap-2">
-                  <button type="button" @click="saveGithubAuth" :disabled="githubBusy || !githubAuthForm.token.trim()" class="btn-primary">{{ githubBusy ? t("loading") : t("loginGithub") }}</button>
-                  <button type="button" @click="loadGithubStores" :disabled="githubBusy || !githubStatus.configured" class="btn">{{ t("refreshTeamKbStores") }}</button>
-                  <button type="button" @click="logoutGithub" :disabled="githubBusy || !githubStatus.configured" class="btn">{{ t("logout") }}</button>
-                </div>
-                <div class="text-xs muted">{{ t("githubLoginHelp") }}</div>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <button type="button" @click="openGithubAuthModal" class="btn-primary">{{ githubStatus.configured ? t("githubAccount") : t("loginGithub") }}</button>
+                <button type="button" @click="loadGithubStores" :disabled="githubBusy || !githubStatus.configured" class="btn">{{ t("refreshTeamKbStores") }}</button>
               </div>
 
               <label class="mt-4 flex items-center gap-2 font-medium">
@@ -1317,6 +1310,49 @@
         </section>
       </div>
     </aside>
+    <div v-if="githubAuthModal.open" class="settings-backdrop" @click="closeGithubAuthModal"></div>
+    <aside v-if="githubAuthModal.open" class="settings-drawer panel border-l p-5">
+      <div class="mb-5 flex items-start justify-between gap-4 border-b pb-4 line">
+        <div>
+          <h2 class="text-lg font-semibold">{{ t("githubAccount") }}</h2>
+          <p class="mt-1 text-sm muted">{{ t("githubAccountHelp") }}</p>
+        </div>
+        <button @click="closeGithubAuthModal" class="btn">×</button>
+      </div>
+      <div class="grid gap-3">
+        <section class="panel2 rounded-xl border p-4">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <div class="font-medium">{{ githubStatus.configured ? t("githubConnected") : t("githubNotConnected") }}</div>
+              <div class="mt-1 text-sm muted">{{ githubStatusText }}</div>
+            </div>
+            <span :class="['dot', githubStatus.configured ? 'good' : 'idle']"></span>
+          </div>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button v-if="!githubStatus.configured" type="button" @click="startGithubOAuth" :disabled="githubBusy" class="btn-primary">{{ githubBusy ? t("loading") : t("loginGithub") }}</button>
+            <button v-if="githubStatus.configured" type="button" @click="loadGithubStores" :disabled="githubBusy" class="btn">{{ t("refreshTeamKbStores") }}</button>
+            <button v-if="githubStatus.configured" type="button" @click="logoutGithub" :disabled="githubBusy" class="btn">{{ t("logout") }}</button>
+          </div>
+          <div v-if="!githubOAuth.available && !githubStatus.configured" class="mt-3 rounded-lg border border-amber-500/25 bg-amber-500/10 p-3 text-sm" style="color: var(--warn)">
+            {{ t("githubOAuthMissing") }}
+          </div>
+        </section>
+
+        <section v-if="githubAuthModal.userCode" class="panel2 rounded-xl border p-4">
+          <div class="font-medium">{{ t("githubDeviceCodeTitle") }}</div>
+          <div class="mt-2 text-sm muted">{{ t("githubDeviceCodeHelp") }}</div>
+          <div class="mt-3 rounded-lg border p-3 text-center font-mono text-2xl tracking-widest panel">{{ githubAuthModal.userCode }}</div>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button type="button" @click="openGithubVerification" class="btn-primary">{{ t("openGithubAuthPage") }}</button>
+            <button type="button" @click="copyGithubDeviceCode" class="btn">{{ t("copyCode") }}</button>
+          </div>
+          <div class="mt-2 text-xs muted">{{ githubAuthModal.message || t("waitingGithubAuthorization") }}</div>
+        </section>
+
+        <div v-if="githubAuthModal.error" class="rounded-lg border border-red-500/25 bg-red-500/10 p-3 text-sm" style="color: var(--bad)">{{ githubAuthModal.error }}</div>
+        <div v-if="githubAuthModal.message && !githubAuthModal.userCode" class="rounded-lg border border-emerald-500/25 bg-emerald-500/10 p-3 text-sm" style="color: var(--good)">{{ githubAuthModal.message }}</div>
+      </div>
+    </aside>
   </div>
 </div>
 </div>
@@ -1349,13 +1385,25 @@ const I18N = {
     importProject: "Import Project",
     teamKbMode: "Bind to GitHub team knowledge base",
     githubTeamKbTitle: "GitHub team knowledge base",
-    githubTeamKbHelp: "Log in first, then select an accessible knowledge repository and bind one KB folder to this local project.",
+    githubTeamKbHelp: "Log in from the top-right GitHub button, then bind an accessible knowledge repository to this local project.",
     bindTeamKbOnImport: "Bind a team knowledge base when importing",
     githubToken: "GitHub token",
     saveGithubLogin: "Save GitHub login",
     loginGithub: "Log in with GitHub",
-    githubLoginHelp: "Use a GitHub personal access token with access to the team knowledge repository.",
+    githubLoginHelp: "Use GitHub OAuth to connect this local app to repositories you can access.",
     githubLoginRequiredForTeamKb: "Log in with GitHub before enabling team knowledge binding.",
+    githubAccount: "GitHub account",
+    githubAccountHelp: "Connect GitHub once, then team knowledge repositories can be discovered and bound from the import flow.",
+    githubConnected: "Connected",
+    githubNotConnected: "Not connected",
+    githubOAuthMissing: "GitHub OAuth is not configured for this local app. Set KB_GITHUB_OAUTH_CLIENT_ID to the Client ID of a GitHub OAuth App with Device Flow enabled.",
+    githubDeviceCodeTitle: "Authorize in GitHub",
+    githubDeviceCodeHelp: "A GitHub page has opened. Enter this code there to authorize this local app.",
+    openGithubAuthPage: "Open GitHub authorization",
+    copyCode: "Copy code",
+    waitingGithubAuthorization: "Waiting for GitHub authorization...",
+    githubLoginComplete: "GitHub login completed.",
+    githubOAuthExpired: "GitHub authorization expired. Start login again.",
     refreshTeamKbStores: "Refresh team KB stores",
     githubLoggedInAs: "GitHub connected as {login}",
     githubNotLoggedIn: "GitHub is not connected.",
@@ -1729,13 +1777,25 @@ const I18N = {
     importProject: "导入项目",
     teamKbMode: "绑定 GitHub 团队知识库",
     githubTeamKbTitle: "GitHub 团队知识库",
-    githubTeamKbHelp: "先登录 GitHub，再选择你有权限访问的知识库总仓库，并把其中一个知识库目录绑定到当前本地项目。",
+    githubTeamKbHelp: "先从右上角 GitHub 按钮登录，再选择你有权限访问的知识库总仓库并绑定到当前本地项目。",
     bindTeamKbOnImport: "导入时绑定团队知识库",
     githubToken: "GitHub token",
     saveGithubLogin: "保存 GitHub 登录",
     loginGithub: "登录 GitHub",
-    githubLoginHelp: "请填写有团队知识库仓库访问权限的 GitHub personal access token。",
+    githubLoginHelp: "通过 GitHub OAuth 连接当前本地应用，之后可以发现并绑定你有权限访问的仓库。",
     githubLoginRequiredForTeamKb: "请先登录 GitHub，登录后才能启用团队知识库绑定。",
+    githubAccount: "GitHub 账号",
+    githubAccountHelp: "先连接 GitHub，之后导入项目时就能发现并绑定团队知识库仓库。",
+    githubConnected: "已连接",
+    githubNotConnected: "未连接",
+    githubOAuthMissing: "当前本地应用还没有配置 GitHub OAuth。请设置 KB_GITHUB_OAUTH_CLIENT_ID 为已启用 Device Flow 的 GitHub OAuth App Client ID。",
+    githubDeviceCodeTitle: "在 GitHub 中授权",
+    githubDeviceCodeHelp: "GitHub 授权页面已经打开，请在页面中输入这个授权码完成登录。",
+    openGithubAuthPage: "打开 GitHub 授权页",
+    copyCode: "复制授权码",
+    waitingGithubAuthorization: "正在等待 GitHub 授权...",
+    githubLoginComplete: "GitHub 登录完成。",
+    githubOAuthExpired: "GitHub 授权已过期，请重新登录。",
     refreshTeamKbStores: "刷新团队知识库仓库",
     githubLoggedInAs: "GitHub 已连接：{login}",
     githubNotLoggedIn: "GitHub 未连接",
@@ -2584,12 +2644,15 @@ const app = createApp({
     let loadingAutomationForm = false;
     let loadingProjectGoal = false;
     let projectGoalDragState = null;
+    let githubOAuthPollTimer = null;
     const actionMessage = ref("");
     const importPreflight = ref(null);
 
     const form = reactive({ slug: "", displayName: "", localPath: "", gitPath: "", primaryLanguage: "", tagsStr: "", isReference: false, initNow: true, initGit: false, createInitialCommit: false, remoteUrl: "", knowledgeLanguage: "zh-CN", aiProfileId: "", useTeamKnowledge: false });
     const githubAuthForm = reactive({ token: "", apiBaseUrl: "https://api.github.com" });
     const githubStatus = reactive({ configured: false, login: "", apiBaseUrl: "https://api.github.com", updatedAt: null });
+    const githubOAuth = reactive({ available: false, webBaseUrl: "https://github.com" });
+    const githubAuthModal = reactive({ open: false, deviceCode: "", userCode: "", verificationUri: "", expiresAt: 0, message: "", error: "" });
     const githubStores = ref([]);
     const githubBusy = ref(false);
     const selectedTeamStoreKey = ref("");
@@ -2614,6 +2677,7 @@ const app = createApp({
       if (githubStatus.configured) return t("githubLoggedInAs", { login: githubStatus.login || "GitHub" });
       return t("githubNotLoggedIn");
     });
+    const githubHeaderLabel = computed(() => githubStatus.configured ? `GitHub: ${githubStatus.login || t("githubConnected")}` : t("loginGithub"));
     const usableAiProfiles = computed(() => (aiConfig.profiles || []).filter(isUsableAiProfile));
     const defaultAiProfile = computed(() => usableAiProfiles.value[0] || null);
     const defaultAiProfileLabel = computed(() => defaultAiProfile.value ? profileOptionLabel(defaultAiProfile.value) : t("noProfilesAvailable"));
@@ -4727,8 +4791,109 @@ const app = createApp({
       try {
         const data = await api("GET", "/api/team/github/status");
         if (data && data.config) Object.assign(githubStatus, data.config);
+        if (data && data.oauth) Object.assign(githubOAuth, data.oauth);
         if (githubStatus.apiBaseUrl) githubAuthForm.apiBaseUrl = githubStatus.apiBaseUrl;
       } catch {}
+    }
+
+    function clearGithubOAuthPoll() {
+      if (githubOAuthPollTimer) {
+        clearTimeout(githubOAuthPollTimer);
+        githubOAuthPollTimer = null;
+      }
+    }
+
+    function openGithubAuthModal() {
+      githubAuthModal.open = true;
+      githubAuthModal.error = "";
+      githubAuthModal.message = "";
+      loadGithubStatus();
+    }
+
+    function closeGithubAuthModal() {
+      githubAuthModal.open = false;
+      githubAuthModal.error = "";
+      if (!githubStatus.configured) githubAuthModal.message = "";
+    }
+
+    function resetGithubDeviceFlow() {
+      clearGithubOAuthPoll();
+      Object.assign(githubAuthModal, {
+        deviceCode: "",
+        userCode: "",
+        verificationUri: "",
+        expiresAt: 0,
+      });
+    }
+
+    function openGithubVerification() {
+      if (githubAuthModal.verificationUri) window.open(githubAuthModal.verificationUri, "_blank", "noopener,noreferrer");
+    }
+
+    async function copyGithubDeviceCode() {
+      try {
+        if (navigator.clipboard && githubAuthModal.userCode) await navigator.clipboard.writeText(githubAuthModal.userCode);
+      } catch {}
+    }
+
+    function scheduleGithubOAuthPoll(intervalSeconds) {
+      clearGithubOAuthPoll();
+      const delay = Math.max(3, Number(intervalSeconds || 5)) * 1000;
+      githubOAuthPollTimer = setTimeout(() => {
+        pollGithubOAuth().catch(() => {});
+      }, delay);
+    }
+
+    async function startGithubOAuth() {
+      githubAuthModal.error = "";
+      githubAuthModal.message = "";
+      resetGithubDeviceFlow();
+      githubBusy.value = true;
+      try {
+        const data = await api("POST", "/api/team/github/oauth/device/start", {});
+        Object.assign(githubAuthModal, {
+          deviceCode: data.deviceCode || "",
+          userCode: data.userCode || "",
+          verificationUri: data.verificationUri || "",
+          expiresAt: Date.now() + Number(data.expiresIn || 900) * 1000,
+          message: t("waitingGithubAuthorization"),
+        });
+        openGithubVerification();
+        scheduleGithubOAuthPoll(data.interval || 5);
+      } catch (e) {
+        githubAuthModal.error = e.message;
+      } finally {
+        githubBusy.value = false;
+      }
+    }
+
+    async function pollGithubOAuth() {
+      if (!githubAuthModal.deviceCode) return;
+      if (githubAuthModal.expiresAt && Date.now() > githubAuthModal.expiresAt) {
+        githubAuthModal.error = t("githubOAuthExpired");
+        resetGithubDeviceFlow();
+        return;
+      }
+      try {
+        const data = await api("POST", "/api/team/github/oauth/device/poll", {
+          deviceCode: githubAuthModal.deviceCode,
+        });
+        if (data.pending) {
+          githubAuthModal.message = t("waitingGithubAuthorization");
+          scheduleGithubOAuthPoll(data.interval || 5);
+          return;
+        }
+        if (data.config) Object.assign(githubStatus, data.config);
+        resetGithubDeviceFlow();
+        githubAuthModal.message = t("githubLoginComplete");
+        if (activeView.value === "import") {
+          form.useTeamKnowledge = true;
+          await loadGithubStores();
+        }
+      } catch (e) {
+        githubAuthModal.error = e.message;
+        resetGithubDeviceFlow();
+      }
     }
 
     async function saveGithubAuth() {
@@ -4752,6 +4917,8 @@ const app = createApp({
 
     async function logoutGithub() {
       formError.value = "";
+      githubAuthModal.error = "";
+      resetGithubDeviceFlow();
       githubBusy.value = true;
       try {
         const data = await api("DELETE", "/api/team/github/auth");
@@ -4760,8 +4927,10 @@ const app = createApp({
         selectedTeamStoreKey.value = "";
         selectedTeamKbKey.value = "";
         form.useTeamKnowledge = false;
+        githubAuthModal.message = "";
       } catch (e) {
         formError.value = e.message;
+        githubAuthModal.error = e.message;
       } finally {
         githubBusy.value = false;
       }
@@ -4935,14 +5104,15 @@ const app = createApp({
       clearInterval(pollTimer);
       closeClaudeSessionsStream();
       stopProjectGoalDrag();
+      clearGithubOAuthPoll();
     });
 
     return {
       kbRoot, projects, schedule, lastRun, runningJobs, jobHistory, selectedJob, logOutput, logTitle,
       summaryPanel, pendingCommitItems, supervisionIssues, issuesByProject, structuredLogs, selectedLog, logFilters,
       knowledgeStoreConfig, knowledgeMigrationPlan, loggingConfig,
-      githubAuthForm, githubStatus, githubStores, githubBusy, selectedTeamStoreKey, selectedTeamKbKey, teamKbStorePath,
-      selectedTeamStore, selectedTeamStoreKnowledgeBases, selectedTeamKb, githubStatusText,
+      githubAuthForm, githubStatus, githubOAuth, githubAuthModal, githubStores, githubBusy, selectedTeamStoreKey, selectedTeamKbKey, teamKbStorePath,
+      selectedTeamStore, selectedTeamStoreKnowledgeBases, selectedTeamKb, githubStatusText, githubHeaderLabel,
       loading, pollError, activeView, selectedSlug, selectedProject, settingsProjectSlug, settingsProject, pageTitle, projectList, summaryCards, navItems, settingsDrawerOpen, setup,
       onboardingModalOpen, onboardingSteps, currentOnboardingStep, dismissOnboarding, runOnboardingAction,
       theme, uiLanguage, t, toggleTheme, form, importSlugPreview, submitting, formError, formOk, pickingFolder, pickProjectFolder, addProject, resetForm, busySlug, initProject,
@@ -4961,7 +5131,7 @@ const app = createApp({
       openSummaryPanel, loadPendingCommits, loadIssues, loadStructuredLogs,
       loadKnowledgeStoreConfig, saveKnowledgeStoreConfig, previewKnowledgeMigration, executeKnowledgeMigration, loadLoggingConfig, saveLoggingConfig,
       validateGit, scanProject, validateKb, migrateFramework, runKnowledgeUpdate, runImportPreflight, runJob, loadHookStatus, loadSettingsProject, changeSettingsProject, loadProjectGoal, saveProjectGoal, openProjectGoalModal, closeProjectGoalModal, saveProjectGoalAndClose, startProjectGoalDrag, installHook, uninstallHook,
-      saveGithubAuth, logoutGithub, loadGithubStores, checkoutTeamStore, onTeamStoreChanged,
+      saveGithubAuth, openGithubAuthModal, closeGithubAuthModal, startGithubOAuth, openGithubVerification, copyGithubDeviceCode, logoutGithub, loadGithubStores, checkoutTeamStore, onTeamStoreChanged,
       saveAutomationSettings, previewAutomationPrompt, simulateAutomation, loadAutomationRuns,
       openRemoveProject, closeRemoveProject, confirmRemoveProject,
       loadRuns, selectRun, loadRunDetail, loadDraftPreview, applySelectedDrafts, rejectRun,
