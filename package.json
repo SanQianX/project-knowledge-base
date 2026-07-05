@@ -1,6 +1,6 @@
 {
   "name": "project-knowledge",
-  "version": "3.0.2",
+  "version": "3.0.3",
   "description": "Knowledge base manager with Git integration, AI-driven analysis, and bilingual (zh-CN/en-US) knowledge output",
   "main": "_site/server.js",
   "scripts": {

@@ -587,22 +587,33 @@
               </div>
             </div>
             <div class="rounded-lg border p-3 text-sm panel2">
-              <label class="flex items-center gap-2 font-medium">
-                <input type="checkbox" v-model="form.useTeamKnowledge" />
-                {{ t("teamKbMode") }}
-              </label>
-              <div v-if="form.useTeamKnowledge" class="mt-3 grid gap-3">
-                <div class="grid gap-2">
-                  <label class="grid gap-1">{{ t("githubToken") }}
-                    <input v-model="githubAuthForm.token" type="password" class="input font-mono text-xs" autocomplete="off" />
-                  </label>
-                  <div class="flex flex-wrap gap-2">
-                    <button type="button" @click="saveGithubAuth" :disabled="githubBusy" class="btn">{{ githubBusy ? t("loading") : t("saveGithubLogin") }}</button>
-                    <button type="button" @click="loadGithubStores" :disabled="githubBusy || !githubStatus.configured" class="btn">{{ t("refreshTeamKbStores") }}</button>
-                    <button type="button" @click="logoutGithub" :disabled="githubBusy || !githubStatus.configured" class="btn">{{ t("logout") }}</button>
-                  </div>
-                  <div class="text-xs muted">{{ githubStatusText }}</div>
+              <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <div class="font-medium">{{ t("githubTeamKbTitle") }}</div>
+                  <div class="mt-1 text-xs muted">{{ t("githubTeamKbHelp") }}</div>
                 </div>
+                <div class="text-xs muted sm:text-right">{{ githubStatusText }}</div>
+              </div>
+
+              <div class="mt-3 grid gap-2">
+                <label class="grid gap-1">{{ t("githubToken") }}
+                  <input v-model="githubAuthForm.token" type="password" class="input font-mono text-xs" autocomplete="off" @keydown.enter.prevent="saveGithubAuth" />
+                </label>
+                <div class="flex flex-wrap gap-2">
+                  <button type="button" @click="saveGithubAuth" :disabled="githubBusy || !githubAuthForm.token.trim()" class="btn-primary">{{ githubBusy ? t("loading") : t("loginGithub") }}</button>
+                  <button type="button" @click="loadGithubStores" :disabled="githubBusy || !githubStatus.configured" class="btn">{{ t("refreshTeamKbStores") }}</button>
+                  <button type="button" @click="logoutGithub" :disabled="githubBusy || !githubStatus.configured" class="btn">{{ t("logout") }}</button>
+                </div>
+                <div class="text-xs muted">{{ t("githubLoginHelp") }}</div>
+              </div>
+
+              <label class="mt-4 flex items-center gap-2 font-medium">
+                <input type="checkbox" v-model="form.useTeamKnowledge" :disabled="!githubStatus.configured" />
+                {{ t("bindTeamKbOnImport") }}
+              </label>
+              <div v-if="!githubStatus.configured" class="mt-2 text-xs muted">{{ t("githubLoginRequiredForTeamKb") }}</div>
+
+              <div v-if="form.useTeamKnowledge" class="mt-3 grid gap-3">
                 <label class="grid gap-1">{{ t("teamKbStore") }}
                   <select v-model="selectedTeamStoreKey" @change="onTeamStoreChanged" class="input">
                     <option value="">{{ t("selectTeamKbStore") }}</option>
@@ -1319,6 +1330,7 @@ const I18N = {
     controlCenter: "Control Center",
     connecting: "connecting...",
     close: "Close",
+    logout: "Log out",
     projects: "Projects",
     dashboard: "Dashboard",
     import: "Import",
@@ -1336,8 +1348,14 @@ const I18N = {
     refresh: "Refresh",
     importProject: "Import Project",
     teamKbMode: "Bind to GitHub team knowledge base",
+    githubTeamKbTitle: "GitHub team knowledge base",
+    githubTeamKbHelp: "Log in first, then select an accessible knowledge repository and bind one KB folder to this local project.",
+    bindTeamKbOnImport: "Bind a team knowledge base when importing",
     githubToken: "GitHub token",
     saveGithubLogin: "Save GitHub login",
+    loginGithub: "Log in with GitHub",
+    githubLoginHelp: "Use a GitHub personal access token with access to the team knowledge repository.",
+    githubLoginRequiredForTeamKb: "Log in with GitHub before enabling team knowledge binding.",
     refreshTeamKbStores: "Refresh team KB stores",
     githubLoggedInAs: "GitHub connected as {login}",
     githubNotLoggedIn: "GitHub is not connected.",
@@ -1697,6 +1715,7 @@ const I18N = {
     controlCenter: "控制中心",
     connecting: "连接中...",
     close: "关闭",
+    logout: "退出登录",
     projects: "项目",
     dashboard: "仪表盘",
     import: "导入",
@@ -1709,8 +1728,14 @@ const I18N = {
     refresh: "刷新",
     importProject: "导入项目",
     teamKbMode: "绑定 GitHub 团队知识库",
+    githubTeamKbTitle: "GitHub 团队知识库",
+    githubTeamKbHelp: "先登录 GitHub，再选择你有权限访问的知识库总仓库，并把其中一个知识库目录绑定到当前本地项目。",
+    bindTeamKbOnImport: "导入时绑定团队知识库",
     githubToken: "GitHub token",
     saveGithubLogin: "保存 GitHub 登录",
+    loginGithub: "登录 GitHub",
+    githubLoginHelp: "请填写有团队知识库仓库访问权限的 GitHub personal access token。",
+    githubLoginRequiredForTeamKb: "请先登录 GitHub，登录后才能启用团队知识库绑定。",
     refreshTeamKbStores: "刷新团队知识库仓库",
     githubLoggedInAs: "GitHub 已连接：{login}",
     githubNotLoggedIn: "GitHub 未连接",
@@ -4716,6 +4741,7 @@ const app = createApp({
         });
         if (data && data.config) Object.assign(githubStatus, data.config);
         githubAuthForm.token = "";
+        form.useTeamKnowledge = true;
         await loadGithubStores();
       } catch (e) {
         formError.value = e.message;
@@ -4733,6 +4759,7 @@ const app = createApp({
         githubStores.value = [];
         selectedTeamStoreKey.value = "";
         selectedTeamKbKey.value = "";
+        form.useTeamKnowledge = false;
       } catch (e) {
         formError.value = e.message;
       } finally {

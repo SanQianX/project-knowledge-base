@@ -133,7 +133,10 @@ function assert(cond, msg) {
         http.get(TARGET_URL, res => { res.resume(); resolve(res.statusCode < 500); }).on('error', () => resolve(false));
       }), 'site server');
     }
-    const pages = await waitFor(() => fetchJson(`http://127.0.0.1:${PORT}/json/list`), 'list');
+    const pages = await waitFor(async () => {
+      const list = await fetchJson(`http://127.0.0.1:${PORT}/json/list`);
+      return Array.isArray(list) && list.length ? list : null;
+    }, 'list');
     const page = pages.find(p => p.type === 'page') || pages[0];
     const ws = new WebSocket(page.webSocketDebuggerUrl);
     await new Promise((resolve, reject) => {
