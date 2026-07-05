@@ -225,7 +225,10 @@ async function waitFor(fn, label, ms = 20000) {
   let debugEval = null;
   try {
     await waitFor(() => fetchJson(`${BASE_URL}/api/state`), 'server state');
-    const pages = await waitFor(() => fetchJson(`http://127.0.0.1:${CHROME_PORT}/json/list`), 'chrome page list');
+    const pages = await waitFor(async () => {
+      const list = await fetchJson(`http://127.0.0.1:${CHROME_PORT}/json/list`);
+      return Array.isArray(list) && list.length ? list : null;
+    }, 'chrome page list');
     const page = pages.find(p => p.type === 'page') || pages[0];
     const ws = new WebSocket(page.webSocketDebuggerUrl);
     await new Promise((resolve, reject) => { ws.on('open', resolve); ws.on('error', reject); });

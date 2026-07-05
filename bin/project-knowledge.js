@@ -11,7 +11,7 @@ const net = require('net');
 const os = require('os');
 
 const pkg = require('../package.json');
-const DEFAULT_PORT = 5757;
+const DEFAULT_PORT = parseInt(process.env.KB_SITE_PORT || '5757', 10);
 const PORT_RANGE = 20;
 const PID_FILE = path.join(os.tmpdir(), '.project-knowledge.pid');
 
@@ -65,7 +65,7 @@ function openBrowser(url) {
   try { exec(cmd); } catch { /* best-effort */ }
 }
 
-function isPortFree(port) {
+function isPortFree(port, host = '127.0.0.1') {
   return new Promise((resolve) => {
     const tester = net.createServer();
     let settled = false;
@@ -77,15 +77,15 @@ function isPortFree(port) {
     };
     tester.once('error', () => finish(false));
     tester.once('listening', () => finish(true));
-    tester.listen(port);
+    tester.listen(port, host);
     setTimeout(() => finish(false), 1000);
   });
 }
 
-async function findFreePort(start) {
+async function findFreePort(start, host = '127.0.0.1') {
   for (let offset = 0; offset < PORT_RANGE; offset++) {
     const port = start + offset;
-    if (await isPortFree(port)) return port;
+    if (await isPortFree(port, host)) return port;
   }
   throw new Error(`No free port found in range ${start}-${start + PORT_RANGE - 1}`);
 }
@@ -313,7 +313,7 @@ if (!foreground) {
 process.env.KB_SITE_HOST = host;
 
 async function main() {
-  const actualPort = portExplicit ? port : await findFreePort(port);
+  const actualPort = portExplicit ? port : await findFreePort(port, host);
   process.env.KB_SITE_PORT = String(actualPort);
 
   writePid(process.pid, actualPort);

@@ -14,6 +14,7 @@ const { spawn, spawnSync } = require('child_process');
 const ROOT = path.resolve(__dirname, '..', '..');
 const BIN = path.join(ROOT, 'bin', 'project-knowledge.js');
 const PID_FILE = path.join(os.tmpdir(), '.project-knowledge.pid');
+const ISOLATED_STATUS_PORT = 19000 + (process.pid % 1000);
 
 function assert(cond, msg) { if (!cond) throw new Error(msg); }
 
@@ -101,13 +102,13 @@ async function waitForListening(port, deadlineMs = 8000) {
 
   // status when no PID file
   removePidFile();
-  const statusResult = run(['status']);
+  const statusResult = run(['status'], { env: { ...process.env, KB_SITE_PORT: String(ISOLATED_STATUS_PORT) } });
   assert(statusResult.status === 0, 'status should exit 0 when not running');
   assert(/not running/i.test(statusResult.stdout + statusResult.stderr),
     `status output should mention "not running", got: ${statusResult.stdout} ${statusResult.stderr}`);
 
   // stop when no PID file
-  const stopResult = run(['stop']);
+  const stopResult = run(['stop'], { env: { ...process.env, KB_SITE_PORT: String(ISOLATED_STATUS_PORT) } });
   assert(stopResult.status === 0, 'stop should exit 0 when no PID file');
   assert(/No background process/i.test(stopResult.stdout + stopResult.stderr),
     `stop output should mention "No background process", got: ${stopResult.stdout} ${stopResult.stderr}`);
@@ -146,14 +147,23 @@ async function waitForListening(port, deadlineMs = 8000) {
 
   // Port fallback: bind a port in 5757-5776 range, then start --fg without --port
   // → CLI should pick the next free port in that range.
-  const busyPort = await pickFreePort();
-  // Walk from 5757 upward and pick a free one in range; if busyPort already in range, use it.
-  let basePort = 5757;
-  if (busyPort >= 5757 && busyPort < 5757 + 20) basePort = busyPort;
+  let busyPort = null;
+  for (let candidate = 5757; candidate < 5757 + 19; candidate++) {
+    if (!(await isPortListening(candidate)) && !(await isPortListening(candidate + 1))) {
+      busyPort = candidate;
+      break;
+    }
+  }
+  assert(busyPort, 'should find a free port in fallback range');
+  const busyServer = net.createServer();
+  await new Promise((resolve, reject) => {
+    busyServer.once('error', reject);
+    busyServer.listen(busyPort, '127.0.0.1', resolve);
+  });
 
   const fallbackChild = spawn(process.execPath, [BIN, '--fg', '--no-open'], {
     cwd: ROOT,
-    env: { ...process.env },
+    env: { ...process.env, KB_SITE_PORT: String(busyPort) },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });
@@ -180,9 +190,7 @@ async function waitForListening(port, deadlineMs = 8000) {
 
   fallbackChild.kill('SIGTERM');
   await new Promise(resolve => setTimeout(resolve, 400));
-
-  // Release the busy port for any future tests.
-  // (No explicit close — we used a free-port probe, the listener already closed.)
+  await new Promise(resolve => busyServer.close(resolve));
 
   // Unknown flag should exit non-zero
   const unknown = run(['--bogus']);

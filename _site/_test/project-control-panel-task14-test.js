@@ -108,7 +108,7 @@ async function json(method, url, body) {
     assert(git(nonGit.path, 'rev-parse --is-inside-work-tree') === 'true', 'non-git dir should now be git');
     assert(git(nonGit.path, 'remote get-url origin') === 'https://example.invalid/task-014.git', 'remote origin should be set');
 
-    const firstCommit = repo.commits[repo.commits.length - 1].hash;
+    const firstCommit = repo.commits[0].hash;
     r = await json('PUT', '/api/projects', {
       slug: TEMP_SLUG,
       config: {

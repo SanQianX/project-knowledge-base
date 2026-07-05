@@ -16,7 +16,8 @@ _site/_test/ui-screenshots/
 _site/_test/screenshots/
 _site/_test/ui-test-report.json
 _site/_test/TEST-REPORT.md
-_site/_test/fixtures/
+_site/_test/fixtures/*
+!_site/_test/fixtures/make-git-repos.js
 .hook-trigger-errors.log
 .jobs-log.json
 .jobs-archive/

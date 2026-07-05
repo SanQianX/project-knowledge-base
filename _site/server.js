@@ -22,6 +22,7 @@ const knowledgeStore = require('./lib/knowledge-store');
 const structuredLogger = require('./lib/structured-logger');
 const supervision = require('./lib/supervision');
 const aiWorkspace = require('./lib/ai-workspace');
+const githubTeamStore = require('./lib/github-team-store');
 const { AI_VENDOR_PRESETS, listVendorPresetNames } = require('./lib/ai-vendor-presets');
 const kbFramework = require('./lib/kb-framework');
 const {
@@ -57,6 +58,7 @@ const KNOWLEDGE_STORE_PATH = path.join(DATA_DIR, 'knowledge-store.json');
 const LOGGING_CONFIG_PATH = path.join(DATA_DIR, 'logging.json');
 const CLAUDE_PROMPTS_PATH = path.join(DATA_DIR, 'claude-prompts.json');
 const HOOK_ERROR_LOG_PATH = path.join(DATA_DIR, '.hook-trigger-errors.log');
+const GITHUB_TEAM_PATH = path.join(DATA_DIR, 'github-team.json');
 
 // ---- state ----
 let lastRun = { time: null, status: null, slug: null, output: '' };
@@ -145,6 +147,14 @@ function defaultProjectKbPath(slug) {
 
 function readKnowledgeStore() {
   return knowledgeStore.readConfig(KNOWLEDGE_STORE_PATH, DATA_DIR);
+}
+
+function readGithubTeamConfig() {
+  return githubTeamStore.readConfig(GITHUB_TEAM_PATH);
+}
+
+function writeGithubTeamConfig(config) {
+  return githubTeamStore.writeConfig(GITHUB_TEAM_PATH, config);
 }
 
 function readLoggingConfig() {
@@ -374,6 +384,37 @@ function uniqueProjectSlug(base, projects) {
 
 function basenameFromPath(value) {
   return path.basename(path.resolve(String(value || '.'))) || '';
+}
+
+function normalizeTeamKnowledgeBinding(input) {
+  if (!input || typeof input !== 'object') return null;
+  const storeLocalPath = String(input.storeLocalPath || input.kbStorePath || '').trim();
+  const kbSubdir = githubTeamStore.normalizeKbPath(input.kbSubdir || input.path || input.kbPath);
+  if (!storeLocalPath || !kbSubdir) return { ok: false, error: 'teamKnowledgeBase.storeLocalPath and kbSubdir are required' };
+  const resolvedStorePath = path.resolve(storeLocalPath);
+  const resolvedKbPath = path.resolve(resolvedStorePath, kbSubdir);
+  if (!knowledgeStore.isInside(resolvedKbPath, resolvedStorePath)) {
+    return { ok: false, error: 'team knowledge base path must stay inside the selected store path' };
+  }
+  const kbSlug = String(input.kbSlug || input.slug || path.basename(kbSubdir)).trim() || path.basename(kbSubdir);
+  return {
+    ok: true,
+    binding: {
+      knowledgeMode: 'team',
+      teamProvider: 'github',
+      kbPath: resolvedKbPath,
+      kbId: String(input.kbId || kbSlug),
+      kbSlug,
+      kbSubdir,
+      kbDisplayName: String(input.displayName || input.kbDisplayName || kbSlug),
+      kbStoreId: String(input.storeId || input.kbStoreId || ''),
+      kbStoreFullName: String(input.storeFullName || input.fullName || ''),
+      kbStoreRemoteUrl: String(input.storeRemoteUrl || input.kbStoreRemoteUrl || input.cloneUrl || ''),
+      kbStoreBranch: String(input.branch || input.defaultBranch || 'main'),
+      kbStorePath: resolvedStorePath,
+      sourceProjectRemoteUrl: String(input.sourceProjectRemoteUrl || ''),
+    },
+  };
 }
 
 function defaultProjectAutomationConfig(input = {}) {
@@ -983,11 +1024,19 @@ async function pickLocalFolder() {
   return folder ? { ok: true, path: folder } : { ok: false, error: 'No native folder picker available. Enter the path manually.' };
 }
 
-async function importProjectFromLocalPath({ localPath, knowledgeLanguage = DEFAULT_KNOWLEDGE_LANGUAGE }) {
+async function importProjectFromLocalPath({ localPath, knowledgeLanguage = DEFAULT_KNOWLEDGE_LANGUAGE, teamKnowledgeBase = null }) {
   const projects = readProjects({ persistMigrations: true });
   const resolvedLocalPath = path.resolve(String(localPath || '').trim());
   if (!localPath || !fs.existsSync(resolvedLocalPath) || !fs.statSync(resolvedLocalPath).isDirectory()) {
     return { ok: false, status: 400, error: 'localPath must be an existing directory' };
+  }
+  const teamBindingResult = normalizeTeamKnowledgeBinding(teamKnowledgeBase);
+  if (teamBindingResult && !teamBindingResult.ok) {
+    return { ok: false, status: 400, error: teamBindingResult.error };
+  }
+  const teamBinding = teamBindingResult && teamBindingResult.binding || null;
+  if (teamBinding && !fs.existsSync(teamBinding.kbStorePath)) {
+    return { ok: false, status: 400, error: `team knowledge store path not found: ${teamBinding.kbStorePath}` };
   }
   const selectedProfileId = firstUsableAiProfileId();
   if (!selectedProfileId) return { ok: false, status: 400, error: 'No usable AI profile configured' };
@@ -1007,7 +1056,9 @@ async function importProjectFromLocalPath({ localPath, knowledgeLanguage = DEFAU
   const recoveredCfg = recovered && recovered.entry && (recovered.entry.config || recovered.entry);
   const recoveredSlug = recovered && isSafeSlug(recovered.slug) && !projects[recovered.slug] ? recovered.slug : '';
   const slug = recoveredSlug || uniqueProjectSlug(displayName, projects);
-  const kbPath = recoveredCfg && recoveredCfg.kbPath ? recoveredCfg.kbPath : defaultProjectKbPath(slug);
+  const kbPath = teamBinding
+    ? teamBinding.kbPath
+    : (recoveredCfg && recoveredCfg.kbPath ? recoveredCfg.kbPath : defaultProjectKbPath(slug));
   const kbAlreadyInitialized = fs.existsSync(path.join(kbPath, 'README.md')) || kbFramework.isCurrentKb(kbPath);
   const initResult = kbAlreadyInitialized
     ? { created: [], basePath: path.resolve(kbPath), reusedExisting: true, kbSchemaVersion: PROJECT_SCHEMA_VERSION }
@@ -1029,6 +1080,7 @@ async function importProjectFromLocalPath({ localPath, knowledgeLanguage = DEFAU
     goalStatus: recoveredCfg && recoveredCfg.goalStatus || 'not-created',
     automation: recoveredCfg && recoveredCfg.automation || defaultProjectAutomationConfig(),
     claudeWorkbench: recoveredCfg && recoveredCfg.claudeWorkbench || defaultClaudeWorkbenchConfig(),
+    ...(teamBinding || {}),
   }).config;
   applyGitInspection(config, inspection);
   projects[slug] = config;
@@ -1371,8 +1423,73 @@ const server = http.createServer(async (req, res) => {
       const result = await importProjectFromLocalPath({
         localPath: parsed.localPath,
         knowledgeLanguage: parsed.knowledgeLanguage || DEFAULT_KNOWLEDGE_LANGUAGE,
+        teamKnowledgeBase: parsed.teamKnowledgeBase || null,
       });
       return send(res, result.ok ? 200 : (result.status || 400), result);
+    }
+
+    // GET /api/team/github/status
+    if (m === 'GET' && p === '/api/team/github/status') {
+      const cfg = readGithubTeamConfig();
+      return send(res, 200, { ok: true, config: githubTeamStore.publicConfig(cfg) });
+    }
+
+    // PUT /api/team/github/auth { token, apiBaseUrl? }
+    if (m === 'PUT' && p === '/api/team/github/auth') {
+      const body = await readBody(req).catch(() => '{}');
+      const parsed = (() => { try { return JSON.parse(body); } catch { return {}; } })();
+      const token = String(parsed.token || '').trim();
+      const apiBaseUrl = String(parsed.apiBaseUrl || githubTeamStore.DEFAULT_API_BASE_URL).trim();
+      const validation = await githubTeamStore.validateToken({ token, apiBaseUrl });
+      if (!validation.ok) return send(res, validation.status || 400, validation);
+      const cfg = writeGithubTeamConfig({ token, apiBaseUrl, login: validation.login });
+      logEvent('info', 'github_team_auth_saved', 'GitHub team knowledge auth saved.', {
+        source: 'github-team',
+        login: cfg.login,
+        apiBaseUrl: cfg.apiBaseUrl,
+      });
+      return send(res, 200, { ok: true, config: githubTeamStore.publicConfig(cfg), user: validation.user });
+    }
+
+    // DELETE /api/team/github/auth
+    if (m === 'DELETE' && p === '/api/team/github/auth') {
+      const cfg = writeGithubTeamConfig(githubTeamStore.defaultConfig());
+      logEvent('info', 'github_team_auth_removed', 'GitHub team knowledge auth removed.', { source: 'github-team' });
+      return send(res, 200, { ok: true, config: githubTeamStore.publicConfig(cfg) });
+    }
+
+    // GET /api/team/github/stores
+    if (m === 'GET' && p === '/api/team/github/stores') {
+      const cfg = readGithubTeamConfig();
+      if (!cfg.token) return send(res, 401, { ok: false, error: 'GitHub auth is not configured' });
+      const result = await githubTeamStore.discoverStores({
+        token: cfg.token,
+        apiBaseUrl: cfg.apiBaseUrl,
+        dataDir: DATA_DIR,
+      });
+      return send(res, result.ok ? 200 : (result.status || 500), result);
+    }
+
+    // POST /api/team/github/stores/checkout { cloneUrl, branch?, localPath? }
+    if (m === 'POST' && p === '/api/team/github/stores/checkout') {
+      const cfg = readGithubTeamConfig();
+      if (!cfg.token) return send(res, 401, { ok: false, error: 'GitHub auth is not configured' });
+      const body = await readBody(req).catch(() => '{}');
+      const parsed = (() => { try { return JSON.parse(body); } catch { return {}; } })();
+      const result = await githubTeamStore.checkoutStore({
+        cloneUrl: parsed.cloneUrl,
+        branch: parsed.branch || parsed.defaultBranch || 'main',
+        localPath: parsed.localPath,
+        token: cfg.token,
+      });
+      if (result.ok) {
+        logEvent('info', 'github_team_store_checkout', `GitHub team knowledge store ${result.action}.`, {
+          source: 'github-team',
+          localPath: result.localPath,
+          cloneUrl: parsed.cloneUrl,
+        });
+      }
+      return send(res, result.ok ? 200 : (result.status || 500), result);
     }
 
     // POST /api/projects/import-preflight { localPath, gitPath? }

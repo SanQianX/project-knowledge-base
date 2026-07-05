@@ -185,7 +185,7 @@ async function cleanup() {
 
     r = await json('POST', `/api/projects/${slug}/context-pack`, { trigger: 'commits' });
     assert(r.res.ok, 'context-pack commits should succeed');
-    assert(r.data.contextPack.commitCount > 0, 'commits trigger should report commits');
+    assert(r.data.contextPack.commitCount === 0, 'commits trigger should not treat pre-import history as pending');
 
     // 7. Bad slug
     r = await json('POST', '/api/projects/INVALID../context-pack', {});

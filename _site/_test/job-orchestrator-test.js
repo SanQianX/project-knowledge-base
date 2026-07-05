@@ -141,7 +141,7 @@ function makeProjectsDir(slug) {
   assert(scanResult.summary && scanResult.summary.scanned === 1, `expected 1 scanned, got ${JSON.stringify(scanResult.summary)}`);
   assert(projectsMap[TEMP_SLUG].headCommit, 'scan should populate headCommit');
   assert(projectsMap[TEMP_SLUG].lastSeenCommit, 'scan should populate lastSeenCommit');
-  assert(projectsMap[TEMP_SLUG].lastScanPendingCount === 3, `expected 3 pending, got ${projectsMap[TEMP_SLUG].lastScanPendingCount}`);
+  assert(projectsMap[TEMP_SLUG].lastScanPendingCount === 0, `pre-import history should not be pending, got ${projectsMap[TEMP_SLUG].lastScanPendingCount}`);
 
   // 5. safe mode runs scan + analyze-commits. Without a configured profile,
   // analyze-commits will fail; we expect safe mode to surface that as a failed

@@ -117,7 +117,7 @@ async function json(method, url, body) {
     assert(r.res.ok, 'pending commits endpoint should succeed');
     const pendingItem = (r.data.items || []).find(item => item.slug === TEMP_SLUG);
     assert(pendingItem, 'pending commits should include temp project');
-    assert(pendingItem.pendingCount >= 1, 'temp project should have pending commits before analysis');
+    assert(pendingItem.pendingCount === 0, 'pre-import history should not be pending after tracking start');
 
     r = await json('GET', '/api/supervision/issues');
     assert(r.res.ok, 'issues endpoint should succeed');
