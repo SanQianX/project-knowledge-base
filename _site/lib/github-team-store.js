@@ -9,6 +9,7 @@ const SCHEMA = 'github-team/v1';
 const STORE_SCHEMA = 'project-knowledge/team-store/v1';
 const DEFAULT_API_BASE_URL = 'https://api.github.com';
 const DEFAULT_WEB_BASE_URL = 'https://github.com';
+const DEFAULT_OAUTH_CLIENT_ID = 'Ov23linBbfigq8AyCgxH';
 const MANIFEST_PATHS = [
   '.project-knowledge/team-store.json',
   'project-knowledge-store.json',
@@ -191,7 +192,7 @@ function webUrl(webBaseUrl, pathname) {
 }
 
 function oauthClientIdFromEnv(env = process.env) {
-  return String(env.KB_GITHUB_OAUTH_CLIENT_ID || env.GITHUB_OAUTH_CLIENT_ID || '').trim();
+  return String(env.KB_GITHUB_OAUTH_CLIENT_ID || env.GITHUB_OAUTH_CLIENT_ID || DEFAULT_OAUTH_CLIENT_ID).trim();
 }
 
 function oauthWebBaseUrlFromEnv(env = process.env) {
@@ -428,6 +429,7 @@ module.exports = {
   MANIFEST_PATHS,
   DEFAULT_API_BASE_URL,
   DEFAULT_WEB_BASE_URL,
+  DEFAULT_OAUTH_CLIENT_ID,
   defaultConfig,
   normalizeConfig,
   readConfig,
