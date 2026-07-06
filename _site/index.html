@@ -233,14 +233,13 @@
                   @click="setNarrowPane(narrowPane.runs === 'detail' ? 'list' : 'detail')">
             {{ narrowPane.runs === 'detail' ? t('narrowShowRunsList') : t('narrowBackToDetail') }}
           </button>
-          <button @click="openGithubAuthModal" class="btn" :title="githubStatusText">{{ githubHeaderLabel }}</button>
           <select v-model="uiLanguage" class="input py-2 text-sm">
             <option value="zh">{{ t("chinese") }}</option>
             <option value="en">{{ t("english") }}</option>
           </select>
           <button @click="toggleTheme" class="btn">{{ theme === "dark" ? t("lightMode") : t("darkMode") }}</button>
-          <button @click="activeView = 'logs'" class="btn">{{ t("logs") }}</button>
           <button @click="settingsDrawerOpen = true" class="btn">{{ t("settings") }}</button>
+          <button @click="openGithubAuthModal" class="btn" :title="githubStatusText">{{ githubHeaderLabel }}</button>
         </div>
       </header>
       <div class="mobile-project-strip">
@@ -596,7 +595,6 @@
                 <div class="text-xs muted sm:text-right">{{ githubStatusText }}</div>
               </div>
               <div class="mt-3 flex flex-wrap gap-2">
-                <button type="button" @click="openGithubAuthModal" class="btn-primary">{{ githubStatus.configured ? t("githubAccount") : t("loginGithub") }}</button>
                 <button type="button" @click="loadGithubStores" :disabled="githubBusy || !githubStatus.configured" class="btn">{{ t("refreshTeamKbStores") }}</button>
               </div>
 
@@ -1281,14 +1279,31 @@
       </div>
       <div class="grid gap-3">
         <section class="panel2 rounded-xl border p-4">
-          <div class="font-medium">{{ t("refresh") }}</div>
-          <p class="mt-1 text-sm muted">{{ t("refreshSettingsHelp") }}</p>
-          <button @click="refreshAll({ force: true }); settingsDrawerOpen = false" class="btn mt-3">{{ t("refresh") }}</button>
-        </section>
-        <section class="panel2 rounded-xl border p-4">
           <div class="font-medium">{{ t("aiProfiles") }}</div>
           <p class="mt-1 text-sm muted">{{ t("projectAssignmentsHelp") }}</p>
           <button @click="openAiSetup" class="btn mt-3">{{ t("aiProfiles") }}</button>
+        </section>
+        <section class="panel2 rounded-xl border p-4">
+          <div class="font-medium">{{ t("teamStoreOwnerSetup") }}</div>
+          <p class="mt-1 text-sm muted">{{ t("teamStoreOwnerSetupHelp") }}</p>
+          <div class="mt-3 flex gap-2">
+            <input v-model="teamStoreSetup.localPath" class="input min-w-0 flex-1" :placeholder="t('teamStoreLocalPathPlaceholder')" />
+            <button type="button" @click="pickTeamStoreFolder" :disabled="pickingTeamStoreFolder || teamStoreBusy" class="btn shrink-0">{{ pickingTeamStoreFolder ? t("opening") : t("chooseFolder") }}</button>
+          </div>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button type="button" @click="scanLocalTeamStore" :disabled="teamStoreBusy || !teamStoreSetup.localPath" class="btn">{{ t("scanTeamStore") }}</button>
+            <button type="button" @click="configureLocalTeamStore" :disabled="teamStoreBusy || !teamStoreSetup.localPath" class="btn-primary">{{ teamStoreBusy ? t("saving") : t("configureAndPushTeamStore") }}</button>
+          </div>
+          <div v-if="teamStorePreview" class="mt-3 rounded-lg border p-3 text-sm panel">
+            <div class="flex justify-between gap-3"><span class="muted">{{ t("remote") }}</span><span class="truncate text-xs">{{ teamStorePreview.remoteUrl || teamStorePreview.cloneUrl || "-" }}</span></div>
+            <div class="mt-1 flex justify-between gap-3"><span class="muted">{{ t("branch") }}</span><span>{{ teamStorePreview.branch || teamStorePreview.defaultBranch || "-" }}</span></div>
+            <div class="mt-3 text-xs muted">{{ t("teamStoreDetectedBases", { count: teamStorePreview.knowledgeBases.length }) }}</div>
+            <div class="mt-2 flex max-h-28 flex-wrap gap-2 overflow-auto">
+              <span v-for="kb in teamStorePreview.knowledgeBases" :key="kb.kbId" class="rounded-md border px-2 py-1 text-xs">{{ kb.path }}</span>
+            </div>
+          </div>
+          <div v-if="teamStoreMessage" class="mt-3 rounded-lg border border-emerald-500/25 bg-emerald-500/10 p-3 text-sm" style="color: var(--good)">{{ teamStoreMessage }}</div>
+          <div v-if="teamStoreError" class="mt-3 rounded-lg border border-red-500/25 bg-red-500/10 p-3 text-sm" style="color: var(--bad)">{{ teamStoreError }}</div>
         </section>
         <section class="panel2 rounded-xl border p-4">
           <div class="font-medium">{{ t("schedule") }}</div>
@@ -1323,18 +1338,33 @@
         <section class="panel2 rounded-xl border p-4">
           <div class="flex items-center justify-between gap-3">
             <div>
-              <div class="font-medium">{{ githubStatus.configured ? t("githubConnected") : t("githubNotConnected") }}</div>
-              <div class="mt-1 text-sm muted">{{ githubStatusText }}</div>
+              <div class="font-medium">{{ t("chooseGitLogin") }}</div>
+              <div class="mt-1 text-sm muted">{{ githubStatus.configured ? githubStatusText : t("chooseGitLoginHelp") }}</div>
             </div>
             <span :class="['dot', githubStatus.configured ? 'good' : 'idle']"></span>
           </div>
-          <div class="mt-3 flex flex-wrap gap-2">
-            <button v-if="!githubStatus.configured" type="button" @click="startGithubOAuth" :disabled="githubBusy" class="btn-primary">{{ githubBusy ? t("loading") : t("loginGithub") }}</button>
-            <button v-if="githubStatus.configured" type="button" @click="loadGithubStores" :disabled="githubBusy" class="btn">{{ t("refreshTeamKbStores") }}</button>
-            <button v-if="githubStatus.configured" type="button" @click="logoutGithub" :disabled="githubBusy" class="btn">{{ t("logout") }}</button>
+          <div class="mt-4 grid grid-cols-2 gap-2">
+            <button type="button" @click="selectGitLoginProvider('github')" :class="githubProviderForm.provider === 'github' ? 'btn-primary' : 'btn'">GitHub</button>
+            <button type="button" @click="selectGitLoginProvider('gitea')" :class="githubProviderForm.provider === 'gitea' ? 'btn-primary' : 'btn'">Gitea</button>
           </div>
-          <div v-if="!githubOAuth.available && !githubStatus.configured" class="mt-3 rounded-lg border border-amber-500/25 bg-amber-500/10 p-3 text-sm" style="color: var(--warn)">
-            {{ t("githubOAuthMissing") }}
+          <div v-if="githubProviderForm.provider === 'github'" class="mt-4 grid gap-3">
+            <p class="text-sm muted">{{ t("githubSimpleLoginHelp") }}</p>
+            <div class="flex flex-wrap gap-2">
+              <button v-if="!githubStatus.configured" type="button" @click="startGithubOAuth" :disabled="githubBusy" class="btn-primary">{{ githubBusy ? t("loading") : t("loginGithub") }}</button>
+              <button v-if="githubStatus.configured" type="button" @click="loadGithubStores" :disabled="githubBusy" class="btn">{{ t("refreshTeamKbStores") }}</button>
+              <button v-if="githubStatus.configured" type="button" @click="logoutGithub" :disabled="githubBusy" class="btn">{{ t("logout") }}</button>
+            </div>
+            <div v-if="!githubOAuth.available && !githubStatus.configured" class="rounded-lg border border-amber-500/25 bg-amber-500/10 p-3 text-sm" style="color: var(--warn)">
+              {{ t("githubOAuthMissing") }}
+            </div>
+          </div>
+          <div v-if="githubProviderForm.provider === 'gitea'" class="mt-4 grid gap-3">
+            <p class="text-sm muted">{{ giteaProvider.configured ? t("giteaOAuthLoginHelp") : t("giteaAdminMissing") }}</p>
+            <div class="flex flex-wrap gap-2">
+              <button v-if="giteaProvider.configured && !githubStatus.configured" type="button" @click="startGiteaOAuth" :disabled="githubBusy" class="btn-primary">{{ githubBusy ? t("loading") : t("loginGitea") }}</button>
+              <button v-if="githubStatus.configured" type="button" @click="loadGithubStores" :disabled="githubBusy" class="btn">{{ t("refreshTeamKbStores") }}</button>
+              <button v-if="githubStatus.configured" type="button" @click="logoutGithub" :disabled="githubBusy" class="btn">{{ t("logout") }}</button>
+            </div>
           </div>
         </section>
 
@@ -1389,11 +1419,12 @@ const I18N = {
     bindTeamKbOnImport: "Bind a team knowledge base when importing",
     githubToken: "GitHub token",
     saveGithubLogin: "Save GitHub login",
+    loginGit: "Log in to Git",
     loginGithub: "Log in with GitHub",
     githubLoginHelp: "Use GitHub OAuth to connect this local app to repositories you can access.",
     githubLoginRequiredForTeamKb: "Log in with GitHub before enabling team knowledge binding.",
-    githubAccount: "GitHub account",
-    githubAccountHelp: "Connect GitHub once, then team knowledge repositories can be discovered and bound from the import flow.",
+    githubAccount: "Git account",
+    githubAccountHelp: "Log in to GitHub or Gitea once, then team knowledge repositories can be discovered and bound from the import flow.",
     githubConnected: "Connected",
     githubNotConnected: "Not connected",
     githubOAuthMissing: "GitHub OAuth is not configured for this local app. Set KB_GITHUB_OAUTH_CLIENT_ID to the Client ID of a GitHub OAuth App with Device Flow enabled.",
@@ -1401,12 +1432,43 @@ const I18N = {
     githubDeviceCodeHelp: "A GitHub page has opened. Enter this code there to authorize this local app.",
     openGithubAuthPage: "Open GitHub authorization",
     copyCode: "Copy code",
+    chooseGitLogin: "Choose login method",
+    chooseGitLoginHelp: "Use GitHub for public GitHub, or Gitea for your company Git service.",
+    githubSimpleLoginHelp: "Use GitHub OAuth to sign in and discover team knowledge repositories.",
+    giteaServerUrl: "Gitea URL",
+    giteaServerUrlPlaceholder: "https://git.company.com",
+    enterpriseGitProvider: "Enterprise Git service",
+    enterpriseGitProviderHelp: "Use this when your team runs GitHub Enterprise or Gitea instead of github.com.",
+    gitProviderType: "Git provider",
+    gitWebBaseUrl: "Git web URL",
+    gitWebBaseUrlPlaceholder: "https://git.company.com",
+    gitApiBaseUrl: "Git API URL",
+    gitApiBaseUrlPlaceholder: "GitHub Enterprise: /api/v3, Gitea: /api/v1",
+    enterpriseOAuthClientId: "OAuth Client ID",
+    enterpriseOAuthClientIdPlaceholder: "Client ID from your company GitHub OAuth App",
+    enterpriseOAuthClientHelp: "GitHub Enterprise uses OAuth Device Flow. Gitea uses a personal access token from Settings / Applications.",
+    giteaToken: "Gitea access token",
+    giteaTokenPlaceholder: "Paste a Gitea token with repository read access",
+    loginGitea: "Connect Gitea",
+    giteaLoginHelp: "For Gitea, save the provider and paste an access token below instead of using GitHub OAuth.",
+    giteaOAuthLoginHelp: "Gitea will open in a browser window for authorization.",
+    giteaAdminMissing: "Gitea login is not configured by the team administrator yet.",
+    saveGitProvider: "Save Git service",
+    gitProviderSaved: "Git service settings saved.",
     waitingGithubAuthorization: "Waiting for GitHub authorization...",
     githubLoginComplete: "GitHub login completed.",
     githubOAuthExpired: "GitHub authorization expired. Start login again.",
     refreshTeamKbStores: "Refresh team KB stores",
     githubLoggedInAs: "GitHub connected as {login}",
     githubNotLoggedIn: "GitHub is not connected.",
+    teamStoreOwnerSetup: "Team knowledge repository",
+    teamStoreOwnerSetupHelp: "Choose your local knowledge repository, generate the team manifest, then commit and push it to GitHub.",
+    teamStoreLocalPathPlaceholder: "D:\\SanQian.Xu\\knowledge",
+    scanTeamStore: "Scan knowledge dirs",
+    configureAndPushTeamStore: "Generate manifest and push",
+    teamStoreDetectedBases: "{count} knowledge base directories detected.",
+    teamStoreScanned: "Scanned {count} knowledge base directories.",
+    teamStoreConfigured: "Team knowledge repository is ready. Manifest contains {count} directories.",
     teamKbStore: "Knowledge repository",
     selectTeamKbStore: "Select a knowledge repository",
     localKnowledgeStorePath: "Local knowledge repository path",
@@ -1781,11 +1843,12 @@ const I18N = {
     bindTeamKbOnImport: "导入时绑定团队知识库",
     githubToken: "GitHub token",
     saveGithubLogin: "保存 GitHub 登录",
+    loginGit: "登录 Git",
     loginGithub: "登录 GitHub",
     githubLoginHelp: "通过 GitHub OAuth 连接当前本地应用，之后可以发现并绑定你有权限访问的仓库。",
     githubLoginRequiredForTeamKb: "请先登录 GitHub，登录后才能启用团队知识库绑定。",
-    githubAccount: "GitHub 账号",
-    githubAccountHelp: "先连接 GitHub，之后导入项目时就能发现并绑定团队知识库仓库。",
+    githubAccount: "Git 账号",
+    githubAccountHelp: "选择 GitHub 或 Gitea 登录，之后导入项目时就能发现并绑定团队知识库仓库。",
     githubConnected: "已连接",
     githubNotConnected: "未连接",
     githubOAuthMissing: "当前本地应用还没有配置 GitHub OAuth。请设置 KB_GITHUB_OAUTH_CLIENT_ID 为已启用 Device Flow 的 GitHub OAuth App Client ID。",
@@ -1793,12 +1856,43 @@ const I18N = {
     githubDeviceCodeHelp: "GitHub 授权页面已经打开，请在页面中输入这个授权码完成登录。",
     openGithubAuthPage: "打开 GitHub 授权页",
     copyCode: "复制授权码",
+    chooseGitLogin: "选择登录方式",
+    chooseGitLoginHelp: "公网 GitHub 选择 GitHub，公司 Gitea 选择 Gitea。",
+    githubSimpleLoginHelp: "使用 GitHub OAuth 登录，然后发现你有权限访问的团队知识库仓库。",
+    giteaServerUrl: "Gitea 地址",
+    giteaServerUrlPlaceholder: "https://git.company.com",
+    enterpriseGitProvider: "企业 Git 服务",
+    enterpriseGitProviderHelp: "如果团队使用的是公司内网 GitHub Enterprise 或 Gitea，而不是 github.com，请在这里配置。",
+    gitProviderType: "Git 服务类型",
+    gitWebBaseUrl: "Git 网页地址",
+    gitWebBaseUrlPlaceholder: "https://git.company.com",
+    gitApiBaseUrl: "Git API 地址",
+    gitApiBaseUrlPlaceholder: "GitHub Enterprise: /api/v3，Gitea: /api/v1",
+    enterpriseOAuthClientId: "OAuth Client ID",
+    enterpriseOAuthClientIdPlaceholder: "公司 GitHub OAuth App 的 Client ID",
+    enterpriseOAuthClientHelp: "GitHub Enterprise 使用 OAuth Device Flow；Gitea 使用“设置 / 应用”里创建的个人访问令牌。",
+    giteaToken: "Gitea 访问令牌",
+    giteaTokenPlaceholder: "粘贴有仓库读取权限的 Gitea token",
+    loginGitea: "连接 Gitea",
+    giteaLoginHelp: "Gitea 不走 GitHub OAuth，请在下方保存服务地址并粘贴访问令牌。",
+    giteaOAuthLoginHelp: "会打开公司 Gitea 授权页面，授权完成后自动回到本地应用。",
+    giteaAdminMissing: "团队管理员还没有配置 Gitea 登录。",
+    saveGitProvider: "保存 Git 服务",
+    gitProviderSaved: "Git 服务配置已保存。",
     waitingGithubAuthorization: "正在等待 GitHub 授权...",
     githubLoginComplete: "GitHub 登录完成。",
     githubOAuthExpired: "GitHub 授权已过期，请重新登录。",
     refreshTeamKbStores: "刷新团队知识库仓库",
     githubLoggedInAs: "GitHub 已连接：{login}",
     githubNotLoggedIn: "GitHub 未连接",
+    teamStoreOwnerSetup: "团队知识库仓库",
+    teamStoreOwnerSetupHelp: "选择本地 knowledge 仓库，生成团队清单，然后提交并推送到 GitHub。",
+    teamStoreLocalPathPlaceholder: "D:\\SanQian.Xu\\knowledge",
+    scanTeamStore: "扫描知识库目录",
+    configureAndPushTeamStore: "生成清单并推送",
+    teamStoreDetectedBases: "已发现 {count} 个知识库目录。",
+    teamStoreScanned: "已扫描 {count} 个知识库目录。",
+    teamStoreConfigured: "团队知识库仓库已准备好，清单包含 {count} 个目录。",
     teamKbStore: "知识库总仓库",
     selectTeamKbStore: "选择知识库总仓库",
     localKnowledgeStorePath: "本地知识库总仓库路径",
@@ -2650,14 +2744,22 @@ const app = createApp({
 
     const form = reactive({ slug: "", displayName: "", localPath: "", gitPath: "", primaryLanguage: "", tagsStr: "", isReference: false, initNow: true, initGit: false, createInitialCommit: false, remoteUrl: "", knowledgeLanguage: "zh-CN", aiProfileId: "", useTeamKnowledge: false });
     const githubAuthForm = reactive({ token: "", apiBaseUrl: "https://api.github.com" });
-    const githubStatus = reactive({ configured: false, login: "", apiBaseUrl: "https://api.github.com", updatedAt: null });
+    const githubProviderForm = reactive({ provider: "github", oauthWebBaseUrl: "https://github.com", apiBaseUrl: "https://api.github.com", oauthClientId: "" });
+    const githubStatus = reactive({ provider: "github", configured: false, login: "", apiBaseUrl: "https://api.github.com", updatedAt: null });
     const githubOAuth = reactive({ available: false, webBaseUrl: "https://github.com" });
+    const gitProviders = reactive({ current: "github", github: { available: true, webBaseUrl: "https://github.com" }, gitea: { configured: false, webBaseUrl: "", apiBaseUrl: "", oauthClientId: "" } });
     const githubAuthModal = reactive({ open: false, deviceCode: "", userCode: "", verificationUri: "", expiresAt: 0, message: "", error: "" });
     const githubStores = ref([]);
     const githubBusy = ref(false);
     const selectedTeamStoreKey = ref("");
     const selectedTeamKbKey = ref("");
     const teamKbStorePath = ref("");
+    const teamStoreSetup = reactive({ localPath: "" });
+    const teamStorePreview = ref(null);
+    const teamStoreBusy = ref(false);
+    const teamStoreMessage = ref("");
+    const teamStoreError = ref("");
+    const pickingTeamStoreFolder = ref(false);
     const submitting = ref(false);
     const formError = ref("");
     const formOk = ref("");
@@ -2677,7 +2779,13 @@ const app = createApp({
       if (githubStatus.configured) return t("githubLoggedInAs", { login: githubStatus.login || "GitHub" });
       return t("githubNotLoggedIn");
     });
-    const githubHeaderLabel = computed(() => githubStatus.configured ? `GitHub: ${githubStatus.login || t("githubConnected")}` : t("loginGithub"));
+    const gitProviderLabel = computed(() => (githubProviderForm.provider === "gitea" || githubStatus.provider === "gitea") ? "Gitea" : "GitHub");
+    const githubHeaderLabel = computed(() => githubStatus.configured ? `${gitProviderLabel.value}: ${githubStatus.login || t("githubConnected")}` : t("loginGit"));
+    const giteaProvider = computed(() => gitProviders.gitea || { configured: false, webBaseUrl: "", apiBaseUrl: "", oauthClientId: "" });
+    const gitOAuthAvailable = computed(() => {
+      if (githubProviderForm.provider === "gitea") return giteaProvider.value.configured === true;
+      return githubOAuth.available;
+    });
     const usableAiProfiles = computed(() => (aiConfig.profiles || []).filter(isUsableAiProfile));
     const defaultAiProfile = computed(() => usableAiProfiles.value[0] || null);
     const defaultAiProfileLabel = computed(() => defaultAiProfile.value ? profileOptionLabel(defaultAiProfile.value) : t("noProfilesAvailable"));
@@ -4765,6 +4873,66 @@ const app = createApp({
       }
     }
 
+    async function pickTeamStoreFolder() {
+      teamStoreError.value = "";
+      pickingTeamStoreFolder.value = true;
+      try {
+        const data = await api("POST", "/api/system/pick-folder", {});
+        if (data && data.path) {
+          teamStoreSetup.localPath = data.path;
+          teamStorePreview.value = null;
+          teamStoreMessage.value = "";
+        } else if (!data || !data.cancelled) {
+          teamStoreError.value = data && data.error || t("folderPickerUnavailable");
+        }
+      } catch (e) {
+        teamStoreError.value = e.message || t("folderPickerUnavailable");
+      } finally {
+        pickingTeamStoreFolder.value = false;
+      }
+    }
+
+    async function scanLocalTeamStore() {
+      teamStoreError.value = "";
+      teamStoreMessage.value = "";
+      teamStoreBusy.value = true;
+      try {
+        const data = await api("POST", "/api/team/github/local-store/scan", {
+          localPath: teamStoreSetup.localPath,
+        });
+        teamStorePreview.value = data.store || null;
+        if (data.store && data.store.localPath) teamStoreSetup.localPath = data.store.localPath;
+        const count = data.store && data.store.knowledgeBases ? data.store.knowledgeBases.length : 0;
+        teamStoreMessage.value = t("teamStoreScanned", { count });
+      } catch (e) {
+        teamStoreError.value = e.message;
+      } finally {
+        teamStoreBusy.value = false;
+      }
+    }
+
+    async function configureLocalTeamStore() {
+      teamStoreError.value = "";
+      teamStoreMessage.value = "";
+      teamStoreBusy.value = true;
+      try {
+        const data = await api("POST", "/api/team/github/local-store/configure", {
+          localPath: teamStoreSetup.localPath,
+          knowledgeBases: teamStorePreview.value && teamStorePreview.value.knowledgeBases || null,
+          commit: true,
+          push: true,
+        });
+        teamStorePreview.value = data.store || teamStorePreview.value;
+        if (data.store && data.store.localPath) teamStoreSetup.localPath = data.store.localPath;
+        const count = data.manifest && data.manifest.knowledgeBases ? data.manifest.knowledgeBases.length : 0;
+        teamStoreMessage.value = t("teamStoreConfigured", { count });
+      } catch (e) {
+        teamStoreError.value = e.message;
+      } finally {
+        teamStoreBusy.value = false;
+      }
+    }
+
     async function runImportPreflight() {
       formError.value = "";
       importPreflight.value = null;
@@ -4792,8 +4960,80 @@ const app = createApp({
         const data = await api("GET", "/api/team/github/status");
         if (data && data.config) Object.assign(githubStatus, data.config);
         if (data && data.oauth) Object.assign(githubOAuth, data.oauth);
+        if (data && data.providers) Object.assign(gitProviders, data.providers);
         if (githubStatus.apiBaseUrl) githubAuthForm.apiBaseUrl = githubStatus.apiBaseUrl;
+        if (data && data.config) {
+          githubProviderForm.provider = data.config.provider || "github";
+          githubProviderForm.apiBaseUrl = data.config.apiBaseUrl || "https://api.github.com";
+          githubProviderForm.oauthWebBaseUrl = data.config.oauthWebBaseUrl || "https://github.com";
+          githubProviderForm.oauthClientId = data.config.oauthClientId || "";
+          githubAuthForm.apiBaseUrl = githubProviderForm.apiBaseUrl;
+        }
       } catch {}
+    }
+
+    function inferGithubApiBaseUrl() {
+      const webBase = String(githubProviderForm.oauthWebBaseUrl || "").trim().replace(/\/+$/, "");
+      if (!webBase) return;
+      githubProviderForm.oauthWebBaseUrl = webBase;
+      if (githubProviderForm.provider === "gitea") {
+        if (!githubProviderForm.apiBaseUrl || githubProviderForm.apiBaseUrl === "https://api.github.com" || /\/api\/v3$/i.test(githubProviderForm.apiBaseUrl)) {
+          githubProviderForm.apiBaseUrl = `${webBase}/api/v1`;
+        }
+      } else if (webBase.toLowerCase() === "https://github.com") {
+        githubProviderForm.apiBaseUrl = "https://api.github.com";
+      } else if (!githubProviderForm.apiBaseUrl || githubProviderForm.apiBaseUrl === "https://api.github.com") {
+        githubProviderForm.apiBaseUrl = `${webBase}/api/v3`;
+      }
+    }
+
+    function onGitProviderTypeChanged() {
+      if (githubProviderForm.provider === "gitea") {
+        githubProviderForm.oauthClientId = giteaProvider.value.oauthClientId || "";
+        githubProviderForm.oauthWebBaseUrl = giteaProvider.value.webBaseUrl || "";
+        githubProviderForm.apiBaseUrl = giteaProvider.value.apiBaseUrl || "";
+        if (!githubProviderForm.apiBaseUrl || githubProviderForm.apiBaseUrl === "https://api.github.com" || /\/api\/v3$/i.test(githubProviderForm.apiBaseUrl)) {
+          githubProviderForm.apiBaseUrl = githubProviderForm.oauthWebBaseUrl ? `${githubProviderForm.oauthWebBaseUrl.replace(/\/+$/, "")}/api/v1` : "";
+        }
+      } else {
+        if (!githubProviderForm.oauthWebBaseUrl) githubProviderForm.oauthWebBaseUrl = "https://github.com";
+        inferGithubApiBaseUrl();
+      }
+    }
+
+    function selectGitLoginProvider(provider) {
+      githubAuthModal.error = "";
+      githubAuthModal.message = "";
+      githubProviderForm.provider = provider === "gitea" ? "gitea" : "github";
+      onGitProviderTypeChanged();
+    }
+
+    async function saveGithubProvider() {
+      githubAuthModal.error = "";
+      githubAuthModal.message = "";
+      inferGithubApiBaseUrl();
+      githubBusy.value = true;
+      try {
+        const data = await api("PUT", "/api/team/github/provider", {
+          provider: githubProviderForm.provider,
+          oauthWebBaseUrl: githubProviderForm.oauthWebBaseUrl,
+          apiBaseUrl: githubProviderForm.apiBaseUrl,
+          oauthClientId: githubProviderForm.oauthClientId,
+        });
+        if (data && data.config) Object.assign(githubStatus, data.config);
+        if (data && data.oauth) Object.assign(githubOAuth, data.oauth);
+        if (data && data.config) githubAuthForm.apiBaseUrl = data.config.apiBaseUrl || githubAuthForm.apiBaseUrl;
+        githubAuthModal.message = t("gitProviderSaved");
+        if (data && data.authCleared) {
+          githubStores.value = [];
+          selectedTeamStoreKey.value = "";
+          selectedTeamKbKey.value = "";
+        }
+      } catch (e) {
+        githubAuthModal.error = e.message;
+      } finally {
+        githubBusy.value = false;
+      }
     }
 
     function clearGithubOAuthPoll() {
@@ -4867,6 +5107,37 @@ const app = createApp({
       }
     }
 
+    async function startGiteaOAuth() {
+      githubAuthModal.error = "";
+      githubAuthModal.message = "";
+      githubBusy.value = true;
+      try {
+        const data = await api("POST", "/api/team/gitea/oauth/start", {});
+        if (data.config) Object.assign(githubStatus, data.config);
+        if (data.authorizationUrl) window.open(data.authorizationUrl, "_blank", "noopener,noreferrer");
+        githubAuthModal.message = t("waitingGithubAuthorization");
+      } catch (e) {
+        githubAuthModal.error = e.message;
+      } finally {
+        githubBusy.value = false;
+      }
+    }
+
+    async function handleGiteaOAuthMessage(event) {
+      const data = event && event.data || {};
+      if (!data || data.type !== "project-knowledge:gitea-oauth-complete") return;
+      if (!data.ok) {
+        githubAuthModal.error = data.message || "Gitea login failed.";
+        return;
+      }
+      githubAuthModal.message = t("githubLoginComplete");
+      await loadGithubStatus();
+      if (activeView.value === "import") {
+        form.useTeamKnowledge = true;
+        await loadGithubStores();
+      }
+    }
+
     async function pollGithubOAuth() {
       if (!githubAuthModal.deviceCode) return;
       if (githubAuthModal.expiresAt && Date.now() > githubAuthModal.expiresAt) {
@@ -4898,18 +5169,31 @@ const app = createApp({
 
     async function saveGithubAuth() {
       formError.value = "";
+      githubAuthModal.error = "";
+      githubAuthModal.message = "";
+      inferGithubApiBaseUrl();
       githubBusy.value = true;
       try {
         const data = await api("PUT", "/api/team/github/auth", {
           token: githubAuthForm.token,
-          apiBaseUrl: githubAuthForm.apiBaseUrl || "https://api.github.com",
+          apiBaseUrl: githubProviderForm.apiBaseUrl || githubAuthForm.apiBaseUrl || "https://api.github.com",
+          oauthWebBaseUrl: githubProviderForm.oauthWebBaseUrl,
+          provider: githubProviderForm.provider,
         });
         if (data && data.config) Object.assign(githubStatus, data.config);
+        if (data && data.config) {
+          githubProviderForm.provider = data.config.provider || githubProviderForm.provider;
+          githubProviderForm.apiBaseUrl = data.config.apiBaseUrl || githubProviderForm.apiBaseUrl;
+          githubProviderForm.oauthWebBaseUrl = data.config.oauthWebBaseUrl || githubProviderForm.oauthWebBaseUrl;
+          githubProviderForm.oauthClientId = data.config.oauthClientId || githubProviderForm.oauthClientId;
+        }
         githubAuthForm.token = "";
         form.useTeamKnowledge = true;
+        githubAuthModal.message = t("githubLoginComplete");
         await loadGithubStores();
       } catch (e) {
         formError.value = e.message;
+        githubAuthModal.error = e.message;
       } finally {
         githubBusy.value = false;
       }
@@ -4986,6 +5270,7 @@ const app = createApp({
       if (!teamKbStorePath.value) throw new Error(t("localKnowledgeStorePathRequired"));
       return {
         storeLocalPath: teamKbStorePath.value,
+        provider: selectedTeamStore.value.provider || githubProviderForm.provider || "github",
         storeRemoteUrl: selectedTeamStore.value.cloneUrl || selectedTeamStore.value.htmlUrl || "",
         storeFullName: selectedTeamStore.value.fullName,
         storeId: selectedTeamStore.value.storeId,
@@ -5096,6 +5381,7 @@ const app = createApp({
 
     onMounted(() => {
       document.documentElement.lang = uiLanguage.value === "zh" ? "zh-CN" : "en";
+      window.addEventListener("message", handleGiteaOAuthMessage);
       refreshAll();
       openClaudeSessionsStream();
     });
@@ -5105,14 +5391,16 @@ const app = createApp({
       closeClaudeSessionsStream();
       stopProjectGoalDrag();
       clearGithubOAuthPoll();
+      window.removeEventListener("message", handleGiteaOAuthMessage);
     });
 
     return {
       kbRoot, projects, schedule, lastRun, runningJobs, jobHistory, selectedJob, logOutput, logTitle,
       summaryPanel, pendingCommitItems, supervisionIssues, issuesByProject, structuredLogs, selectedLog, logFilters,
       knowledgeStoreConfig, knowledgeMigrationPlan, loggingConfig,
-      githubAuthForm, githubStatus, githubOAuth, githubAuthModal, githubStores, githubBusy, selectedTeamStoreKey, selectedTeamKbKey, teamKbStorePath,
-      selectedTeamStore, selectedTeamStoreKnowledgeBases, selectedTeamKb, githubStatusText, githubHeaderLabel,
+      githubAuthForm, githubProviderForm, githubStatus, githubOAuth, gitProviders, githubAuthModal, githubStores, githubBusy, selectedTeamStoreKey, selectedTeamKbKey, teamKbStorePath,
+      teamStoreSetup, teamStorePreview, teamStoreBusy, teamStoreMessage, teamStoreError, pickingTeamStoreFolder,
+      selectedTeamStore, selectedTeamStoreKnowledgeBases, selectedTeamKb, githubStatusText, githubHeaderLabel, gitOAuthAvailable, giteaProvider,
       loading, pollError, activeView, selectedSlug, selectedProject, settingsProjectSlug, settingsProject, pageTitle, projectList, summaryCards, navItems, settingsDrawerOpen, setup,
       onboardingModalOpen, onboardingSteps, currentOnboardingStep, dismissOnboarding, runOnboardingAction,
       theme, uiLanguage, t, toggleTheme, form, importSlugPreview, submitting, formError, formOk, pickingFolder, pickProjectFolder, addProject, resetForm, busySlug, initProject,
@@ -5131,7 +5419,8 @@ const app = createApp({
       openSummaryPanel, loadPendingCommits, loadIssues, loadStructuredLogs,
       loadKnowledgeStoreConfig, saveKnowledgeStoreConfig, previewKnowledgeMigration, executeKnowledgeMigration, loadLoggingConfig, saveLoggingConfig,
       validateGit, scanProject, validateKb, migrateFramework, runKnowledgeUpdate, runImportPreflight, runJob, loadHookStatus, loadSettingsProject, changeSettingsProject, loadProjectGoal, saveProjectGoal, openProjectGoalModal, closeProjectGoalModal, saveProjectGoalAndClose, startProjectGoalDrag, installHook, uninstallHook,
-      saveGithubAuth, openGithubAuthModal, closeGithubAuthModal, startGithubOAuth, openGithubVerification, copyGithubDeviceCode, logoutGithub, loadGithubStores, checkoutTeamStore, onTeamStoreChanged,
+      pickTeamStoreFolder, scanLocalTeamStore, configureLocalTeamStore,
+      saveGithubAuth, saveGithubProvider, inferGithubApiBaseUrl, onGitProviderTypeChanged, selectGitLoginProvider, openGithubAuthModal, closeGithubAuthModal, startGithubOAuth, startGiteaOAuth, openGithubVerification, copyGithubDeviceCode, logoutGithub, loadGithubStores, checkoutTeamStore, onTeamStoreChanged,
       saveAutomationSettings, previewAutomationPrompt, simulateAutomation, loadAutomationRuns,
       openRemoveProject, closeRemoveProject, confirmRemoveProject,
       loadRuns, selectRun, loadRunDetail, loadDraftPreview, applySelectedDrafts, rejectRun,

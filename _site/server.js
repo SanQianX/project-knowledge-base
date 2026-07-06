@@ -59,15 +59,21 @@ const LOGGING_CONFIG_PATH = path.join(DATA_DIR, 'logging.json');
 const CLAUDE_PROMPTS_PATH = path.join(DATA_DIR, 'claude-prompts.json');
 const HOOK_ERROR_LOG_PATH = path.join(DATA_DIR, '.hook-trigger-errors.log');
 const GITHUB_TEAM_PATH = path.join(DATA_DIR, 'github-team.json');
+const TEAM_GIT_PROVIDERS_PATH = path.join(DATA_DIR, 'team-git-providers.json');
 
 // ---- state ----
 let lastRun = { time: null, status: null, slug: null, output: '' };
 const runningJobs = new Map();
+const giteaOAuthStates = new Map();
 
 // Read a fresh copy of projects.json (re-loaded on every dispatch so that
 // background jobs see the latest registry state).
 function readProjectsForJob() {
   return readProjects({ persistMigrations: true });
+}
+
+function readTeamGitProvidersConfig() {
+  return githubTeamStore.readProviderFileConfig(TEAM_GIT_PROVIDERS_PATH);
 }
 
 // ---- helpers ----
@@ -397,11 +403,12 @@ function normalizeTeamKnowledgeBinding(input) {
     return { ok: false, error: 'team knowledge base path must stay inside the selected store path' };
   }
   const kbSlug = String(input.kbSlug || input.slug || path.basename(kbSubdir)).trim() || path.basename(kbSubdir);
+  const teamProvider = githubTeamStore.normalizeProvider(input.provider || input.teamProvider || 'github');
   return {
     ok: true,
     binding: {
       knowledgeMode: 'team',
-      teamProvider: 'github',
+      teamProvider,
       kbPath: resolvedKbPath,
       kbId: String(input.kbId || kbSlug),
       kbSlug,
@@ -1431,16 +1438,131 @@ const server = http.createServer(async (req, res) => {
     // GET /api/team/github/status
     if (m === 'GET' && p === '/api/team/github/status') {
       const cfg = readGithubTeamConfig();
-      return send(res, 200, { ok: true, config: githubTeamStore.publicConfig(cfg), oauth: githubTeamStore.oauthPublicConfig(process.env) });
+      const providerConfig = readTeamGitProvidersConfig();
+      return send(res, 200, {
+        ok: true,
+        config: githubTeamStore.publicConfig(cfg),
+        oauth: githubTeamStore.oauthPublicConfig(cfg, process.env),
+        providers: githubTeamStore.providerPublicConfig(cfg, process.env, providerConfig),
+      });
+    }
+
+    // PUT /api/team/github/provider { provider?, oauthWebBaseUrl?, apiBaseUrl?, oauthClientId? }
+    if (m === 'PUT' && p === '/api/team/github/provider') {
+      const body = await readBody(req).catch(() => '{}');
+      const parsed = (() => { try { return JSON.parse(body); } catch { return {}; } })();
+      const current = readGithubTeamConfig();
+      const provider = githubTeamStore.normalizeProvider(parsed.provider || current.provider);
+      const webBaseUrl = String(parsed.oauthWebBaseUrl || parsed.webBaseUrl || '').trim();
+      const apiBaseUrl = String(parsed.apiBaseUrl || (webBaseUrl ? githubTeamStore.inferApiBaseUrlFromWebBaseUrl(webBaseUrl, provider) : current.apiBaseUrl)).trim();
+      const next = githubTeamStore.normalizeConfig({
+        ...current,
+        provider,
+        apiBaseUrl,
+        oauthWebBaseUrl: webBaseUrl || githubTeamStore.inferWebBaseUrlFromApiBaseUrl(apiBaseUrl, provider),
+        oauthClientId: String(parsed.oauthClientId || '').trim(),
+      });
+      const apiChanged = next.apiBaseUrl !== current.apiBaseUrl || next.provider !== current.provider;
+      const cfg = writeGithubTeamConfig({
+        ...next,
+        token: apiChanged ? '' : current.token,
+        login: apiChanged ? '' : current.login,
+      });
+      logEvent('info', 'github_team_provider_saved', 'GitHub team knowledge provider settings saved.', {
+        source: 'github-team',
+        provider: cfg.provider,
+        apiBaseUrl: cfg.apiBaseUrl,
+        oauthWebBaseUrl: cfg.oauthWebBaseUrl,
+        authCleared: apiChanged,
+      });
+      return send(res, 200, { ok: true, config: githubTeamStore.publicConfig(cfg), oauth: githubTeamStore.oauthPublicConfig(cfg, process.env), authCleared: apiChanged });
+    }
+
+    // POST /api/team/gitea/oauth/start { oauthWebBaseUrl?, oauthClientId? }
+    if (m === 'POST' && p === '/api/team/gitea/oauth/start') {
+      const body = await readBody(req).catch(() => '{}');
+      const parsed = (() => { try { return JSON.parse(body); } catch { return {}; } })();
+      const current = readGithubTeamConfig();
+      const preset = githubTeamStore.giteaPresetFromEnv(process.env, readTeamGitProvidersConfig());
+      const webBaseUrl = String(parsed.oauthWebBaseUrl || (current.provider === 'gitea' ? current.oauthWebBaseUrl : '') || preset.webBaseUrl || '').trim();
+      const oauthClientId = String(parsed.oauthClientId || (current.provider === 'gitea' ? current.oauthClientId : '') || preset.oauthClientId || '').trim();
+      const cfg = githubTeamStore.normalizeConfig({
+        ...current,
+        provider: 'gitea',
+        oauthWebBaseUrl: webBaseUrl,
+        apiBaseUrl: parsed.apiBaseUrl || (webBaseUrl ? githubTeamStore.inferApiBaseUrlFromWebBaseUrl(webBaseUrl, 'gitea') : current.apiBaseUrl),
+        oauthClientId,
+      });
+      const host = req.headers.host || `${HOST}:${PORT}`;
+      const redirectUri = `http://${host}/api/team/gitea/oauth/callback`;
+      const started = githubTeamStore.startGiteaOAuth({ config: cfg, redirectUri, env: process.env });
+      if (!started.ok) return send(res, started.status || 400, started);
+      writeGithubTeamConfig({ ...cfg, token: '', login: '' });
+      giteaOAuthStates.set(started.state, {
+        codeVerifier: started.codeVerifier,
+        redirectUri: started.redirectUri,
+        config: cfg,
+        createdAt: Date.now(),
+      });
+      return send(res, 200, {
+        ok: true,
+        provider: 'gitea',
+        authorizationUrl: started.authorizationUrl,
+        expiresIn: 900,
+        config: githubTeamStore.publicConfig(cfg),
+      });
+    }
+
+    // GET /api/team/gitea/oauth/callback?code=...&state=...
+    if (m === 'GET' && p === '/api/team/gitea/oauth/callback') {
+      const state = String(url.searchParams.get('state') || '');
+      const code = String(url.searchParams.get('code') || '');
+      const oauthError = String(url.searchParams.get('error') || '');
+      const finishHtml = (title, message, ok) => `<!doctype html><meta charset="utf-8"><title>${title}</title><body style="font-family:system-ui;padding:24px;background:#111827;color:#e5e7eb"><h2>${title}</h2><p>${message}</p><script>try{window.opener&&window.opener.postMessage({type:'project-knowledge:gitea-oauth-complete',ok:${ok ? 'true' : 'false'},message:${JSON.stringify(message)}},'*')}catch(e){};setTimeout(()=>window.close(),900)</script></body>`;
+      if (oauthError) return send(res, 400, finishHtml('Gitea login failed', oauthError, false), 'text/html');
+      const entry = state && giteaOAuthStates.get(state);
+      if (!entry || !code) return send(res, 400, finishHtml('Gitea login failed', 'OAuth state expired or code is missing.', false), 'text/html');
+      giteaOAuthStates.delete(state);
+      if (Date.now() - entry.createdAt > 15 * 60 * 1000) {
+        return send(res, 410, finishHtml('Gitea login expired', 'Please start Gitea login again.', false), 'text/html');
+      }
+      const exchanged = await githubTeamStore.exchangeGiteaOAuthCode({
+        config: entry.config,
+        code,
+        codeVerifier: entry.codeVerifier,
+        redirectUri: entry.redirectUri,
+        env: process.env,
+      });
+      if (!exchanged.ok) return send(res, exchanged.status || 400, finishHtml('Gitea login failed', exchanged.error || 'Token exchange failed.', false), 'text/html');
+      const validation = await githubTeamStore.validateToken({
+        token: exchanged.token,
+        apiBaseUrl: entry.config.apiBaseUrl,
+        provider: 'gitea',
+      });
+      if (!validation.ok) return send(res, validation.status || 400, finishHtml('Gitea login failed', validation.error || 'Token validation failed.', false), 'text/html');
+      const cfg = writeGithubTeamConfig({
+        ...entry.config,
+        provider: 'gitea',
+        token: exchanged.token,
+        login: validation.login,
+      });
+      logEvent('info', 'gitea_team_oauth_saved', 'Gitea team knowledge OAuth login saved.', {
+        source: 'github-team',
+        provider: 'gitea',
+        login: cfg.login,
+        apiBaseUrl: cfg.apiBaseUrl,
+      });
+      return send(res, 200, finishHtml('Gitea login completed', 'You can return to Project Knowledge.', true), 'text/html');
     }
 
     // POST /api/team/github/oauth/device/start
     if (m === 'POST' && p === '/api/team/github/oauth/device/start') {
+      const cfg = readGithubTeamConfig();
       const body = await readBody(req).catch(() => '{}');
       const parsed = (() => { try { return JSON.parse(body); } catch { return {}; } })();
       const result = await githubTeamStore.startDeviceFlow({
-        clientId: githubTeamStore.oauthClientIdFromEnv(process.env),
-        webBaseUrl: githubTeamStore.oauthWebBaseUrlFromEnv(process.env),
+        clientId: githubTeamStore.oauthClientIdForConfig(cfg, process.env),
+        webBaseUrl: cfg.oauthWebBaseUrl || githubTeamStore.oauthWebBaseUrlFromEnv(process.env),
         scope: parsed.scope || 'repo read:org',
       });
       return send(res, result.ok ? 200 : (result.status || 400), result);
@@ -1448,20 +1570,22 @@ const server = http.createServer(async (req, res) => {
 
     // POST /api/team/github/oauth/device/poll { deviceCode }
     if (m === 'POST' && p === '/api/team/github/oauth/device/poll') {
+      const cfgBefore = readGithubTeamConfig();
       const body = await readBody(req).catch(() => '{}');
       const parsed = (() => { try { return JSON.parse(body); } catch { return {}; } })();
       const result = await githubTeamStore.pollDeviceFlow({
-        clientId: githubTeamStore.oauthClientIdFromEnv(process.env),
-        webBaseUrl: githubTeamStore.oauthWebBaseUrlFromEnv(process.env),
+        clientId: githubTeamStore.oauthClientIdForConfig(cfgBefore, process.env),
+        webBaseUrl: cfgBefore.oauthWebBaseUrl || githubTeamStore.oauthWebBaseUrlFromEnv(process.env),
         deviceCode: parsed.deviceCode,
       });
       if (!result.ok) return send(res, result.status || 400, result);
       if (result.pending) return send(res, 202, result);
-      const validation = await githubTeamStore.validateToken({ token: result.token, apiBaseUrl: githubTeamStore.DEFAULT_API_BASE_URL });
+      const validation = await githubTeamStore.validateToken({ token: result.token, apiBaseUrl: cfgBefore.apiBaseUrl || githubTeamStore.DEFAULT_API_BASE_URL, provider: cfgBefore.provider });
       if (!validation.ok) return send(res, validation.status || 400, validation);
       const cfg = writeGithubTeamConfig({
+        ...cfgBefore,
         token: result.token,
-        apiBaseUrl: githubTeamStore.DEFAULT_API_BASE_URL,
+        apiBaseUrl: cfgBefore.apiBaseUrl || githubTeamStore.DEFAULT_API_BASE_URL,
         login: validation.login,
       });
       logEvent('info', 'github_team_oauth_saved', 'GitHub team knowledge OAuth login saved.', {
@@ -1474,13 +1598,16 @@ const server = http.createServer(async (req, res) => {
 
     // PUT /api/team/github/auth { token, apiBaseUrl? }
     if (m === 'PUT' && p === '/api/team/github/auth') {
+      const current = readGithubTeamConfig();
       const body = await readBody(req).catch(() => '{}');
       const parsed = (() => { try { return JSON.parse(body); } catch { return {}; } })();
       const token = String(parsed.token || '').trim();
-      const apiBaseUrl = String(parsed.apiBaseUrl || githubTeamStore.DEFAULT_API_BASE_URL).trim();
-      const validation = await githubTeamStore.validateToken({ token, apiBaseUrl });
+      const provider = githubTeamStore.normalizeProvider(parsed.provider || current.provider);
+      const apiBaseUrl = String(parsed.apiBaseUrl || current.apiBaseUrl || githubTeamStore.DEFAULT_API_BASE_URL).trim();
+      const validation = await githubTeamStore.validateToken({ token, apiBaseUrl, provider });
       if (!validation.ok) return send(res, validation.status || 400, validation);
-      const cfg = writeGithubTeamConfig({ token, apiBaseUrl, login: validation.login });
+      const oauthWebBaseUrl = String(parsed.oauthWebBaseUrl || current.oauthWebBaseUrl || githubTeamStore.inferWebBaseUrlFromApiBaseUrl(apiBaseUrl, provider)).trim();
+      const cfg = writeGithubTeamConfig({ ...current, provider, token, apiBaseUrl, oauthWebBaseUrl, login: validation.login });
       logEvent('info', 'github_team_auth_saved', 'GitHub team knowledge auth saved.', {
         source: 'github-team',
         login: cfg.login,
@@ -1503,6 +1630,7 @@ const server = http.createServer(async (req, res) => {
       const result = await githubTeamStore.discoverStores({
         token: cfg.token,
         apiBaseUrl: cfg.apiBaseUrl,
+        provider: cfg.provider,
         dataDir: DATA_DIR,
       });
       return send(res, result.ok ? 200 : (result.status || 500), result);
@@ -1519,12 +1647,46 @@ const server = http.createServer(async (req, res) => {
         branch: parsed.branch || parsed.defaultBranch || 'main',
         localPath: parsed.localPath,
         token: cfg.token,
+        provider: cfg.provider,
+        username: cfg.login,
       });
       if (result.ok) {
         logEvent('info', 'github_team_store_checkout', `GitHub team knowledge store ${result.action}.`, {
           source: 'github-team',
           localPath: result.localPath,
           cloneUrl: parsed.cloneUrl,
+        });
+      }
+      return send(res, result.ok ? 200 : (result.status || 500), result);
+    }
+
+    // POST /api/team/github/local-store/scan { localPath }
+    if (m === 'POST' && p === '/api/team/github/local-store/scan') {
+      const body = await readBody(req).catch(() => '{}');
+      const parsed = (() => { try { return JSON.parse(body); } catch { return {}; } })();
+      const result = await githubTeamStore.scanLocalStore({ localPath: parsed.localPath });
+      return send(res, result.ok ? 200 : (result.status || 400), result);
+    }
+
+    // POST /api/team/github/local-store/configure { localPath, displayName?, knowledgeBases?, commit?, push? }
+    if (m === 'POST' && p === '/api/team/github/local-store/configure') {
+      const body = await readBody(req).catch(() => '{}');
+      const parsed = (() => { try { return JSON.parse(body); } catch { return {}; } })();
+      const result = await githubTeamStore.configureLocalStore({
+        localPath: parsed.localPath,
+        displayName: parsed.displayName,
+        knowledgeBases: parsed.knowledgeBases,
+        commit: parsed.commit !== false,
+        push: parsed.push !== false,
+      });
+      if (result.ok) {
+        logEvent('info', 'github_team_local_store_configured', 'Local knowledge repository configured as a GitHub team store.', {
+          source: 'github-team',
+          localPath: parsed.localPath,
+          manifestPath: result.manifestPath,
+          committed: result.committed,
+          pushed: result.pushed,
+          knowledgeBaseCount: result.manifest && result.manifest.knowledgeBases && result.manifest.knowledgeBases.length || 0,
         });
       }
       return send(res, result.ok ? 200 : (result.status || 500), result);

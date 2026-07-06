@@ -224,7 +224,8 @@ function assert(cond, msg) {
     assert(!navText.some(t => /^Dashboard|^仪表盘/.test(t)), 'Dashboard nav should not render as a standalone control');
     assert(navText.some(t => /^Import Project|^导入项目/.test(t)), 'Import project action missing');
     assert(navText.some(t => /^Runs \/ Drafts|^运行 \/ 草稿/.test(t)), 'Runs / Drafts nav missing');
-    assert(navText.some(t => /^Logs|^日志/.test(t)), 'Logs nav missing');
+    assert(!navText.some(t => /^Logs|^日志/.test(t)), 'Logs should live inside settings, not the top bar');
+    assert(navText.some(t => /^Log in to Git|^登录 Git|GitHub:|Gitea:/.test(t)), 'Git account trigger missing');
     assert(navText.some(t => /^Settings|^设置|^璁剧疆/.test(t)), 'Settings drawer trigger missing');
 
     r = await send('Runtime.evaluate', {
@@ -260,6 +261,11 @@ function assert(cond, msg) {
     });
     assert(r.result.value, 'Settings drawer trigger not found for Schedule');
     await new Promise(resolve => setTimeout(resolve, 300));
+    r = await send('Runtime.evaluate', {
+      expression: '(() => { const text = document.body.innerText; return /Logs|日志/.test(text) && !/^\\s*Refresh\\s*$/m.test(text) && !/^\\s*刷新\\s*$/m.test(text); })()',
+      returnByValue: true,
+    });
+    assert(r.result.value, 'Settings drawer should include Logs and omit the generic Refresh block');
     r = await send('Runtime.evaluate', {
       expression: '(() => { const btn = Array.from(document.querySelectorAll("button, a")).find(b => /^Schedule|^定时任务/.test(b.innerText)); if (btn) btn.click(); return btn ? btn.innerText : "NO BTN"; })()',
       returnByValue: true,
