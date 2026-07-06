@@ -1196,7 +1196,195 @@ function pruneOldSessions(maxAgeMs = 30 * 60 * 1000) {
 
 setInterval(pruneOldSessions, 5 * 60 * 1000).unref();
 
+// Sweep sessions that are still in an ACTIVE state but whose subprocess is
+// gone. Without this, three known failure modes strand sessions in
+// "running" forever:
+//   1. dashboard restart kills the SDK parent query → claude.exe is orphaned
+//      and no one calls setState(failed)
+//   2. SIGKILL of the dashboard (or OOM) before the SDK's for-await loop
+//      emitted its terminal message
+//   3. child Claude.exe dies under a permission denial or API outage but the
+//      parent query's error path never reaches setState(failed) (e.g. IPC
+//      connection drops silently after the dashboard process exits)
+//
+// Symptom in the UI: a project keeps showing the pulsing "running" badge,
+// and the embedded terminal view stays empty because no real subprocess is
+// streaming into it. The sweeper demotes these to `failed` with a reason
+// and emits a state-change event so subscribers (UI + automation queue)
+// stop waiting on a session that will never finish.
+//
+// Threshold: by default 5 minutes. Tunable via KB_STALE_ACTIVE_MS env var
+// for the test fixture to inject shorter windows.
+function readStaleThresholdMs() {
+  const raw = process.env.KB_STALE_ACTIVE_MS;
+  const n = raw == null || raw === '' ? 5 * 60 * 1000 : Number(raw);
+  if (!Number.isFinite(n)) return 5 * 60 * 1000;
+  return Math.max(1000, Math.floor(n));
+}
+
+function lastActivityAt(record) {
+  if (!record) return null;
+  return record.updatedAt || record.startedAt || null;
+}
+
+function isStaleActive(record, thresholdMs, now) {
+  if (!record) return false;
+  if (!ACTIVE_STATES.has(record.state)) return false;
+  const last = lastActivityAt(record);
+  if (!last) return false;
+  return now - new Date(last).getTime() > thresholdMs;
+}
+
+// Demote a session to `failed` with a clear reason. Reuses emit +
+// _broadcastSessionChange so the UI sees the same lifecycle shape as a
+// normal SDK-error end. Also fires onSessionEnded callbacks because
+// automation queue (post-commit dispatcher) treats `failed` as a release
+// signal for the next queued run.
+function demoteSessionToFailed(session, reason, source) {
+  session.state = 'failed';
+  session.endedAt = new Date().toISOString();
+  session.error = reason;
+  session.subprocess = null;
+  session.pendingToolApproval = null;
+  session.pendingPermission = null;
+  emit(session, {
+    type: 'claude/state',
+    state: 'failed',
+    reason,
+    source: source || 'stale-active-sweep',
+  });
+  _broadcastSessionChange(session, 'stale-active-sweep');
+  if (sessionEndedCallbacks.size > 0) {
+    const snapshot = session;
+    setImmediate(() => {
+      for (const cb of sessionEndedCallbacks) {
+        try { cb(snapshot); } catch {}
+      }
+    });
+  }
+  persistSession(session);
+}
+
+// Sweep stale ACTIVE sessions from two sources:
+//   * In-memory `sessions` Map: subprocess is null AND state stayed ACTIVE
+//     past the threshold (e.g. a runtime orphan; in-memory state cannot
+//     progress to terminal because the async loop is gone).
+//   * Persisted records on disk: state stayed ACTIVE through at least one
+//     dashboard restart cycle, and the corresponding live entry is not in
+//     the in-memory Map. We rehydrate a minimal session to drive the
+//     demotion emit + broadcast so the UI and any post-commit queue
+//     subscribers see the transition.
+//
+// Returns a list of demoted sessionIds and the source ('memory' or
+// 'persisted') for observability and for tests.
+function demoteStaleActiveSessions(opts = {}) {
+  const thresholdMs = opts.thresholdMs || readStaleThresholdMs();
+  const now = Date.now();
+  const demoted = [];
+
+  // 1. In-memory sweep.
+  for (const session of sessions.values()) {
+    if (!ACTIVE_STATES.has(session.state)) continue;
+    if (session.subprocess !== null) continue;
+    const last = lastActivityAt(session);
+    if (!last) continue;
+    if (now - new Date(last).getTime() <= thresholdMs) continue;
+    demoteSessionToFailed(
+      session,
+      'subprocess exited unexpectedly (subprocess=null while state=active)',
+      'memory'
+    );
+    demoted.push({ sessionId: session.sessionId, source: 'memory' });
+  }
+
+  // 2. Persisted records sweep (covers dashboard-restart orphans).
+  for (const record of scanPersistedRecords()) {
+    if (!isStaleActive(record, thresholdMs, now)) continue;
+    if (sessions.has(record.sessionId)) continue;
+    const rehydrated = {
+      sessionId: record.sessionId,
+      projectSlug: record.projectSlug,
+      projectPath: record.projectPath || null,
+      kbPath: record.kbPath || null,
+      promptKey: record.promptKey || null,
+      runner: record.runner || 'cli',
+      state: record.state,
+      model: record.model || null,
+      aiProfileId: record.aiProfileId || null,
+      claudeSessionId: record.claudeSessionId || null,
+      startedAt: record.startedAt || new Date().toISOString(),
+      endedAt: null,
+      exitCode: null,
+      listeners: new Set(),
+      outputBuffer: [],
+      subprocess: null,
+      turns: record.turns || 0,
+      error: null,
+      claudeEnv: {},
+      pendingPermission: null,
+      pendingTurn: null,
+      pendingToolApproval: null,
+      restored: true,
+      historyCleared: true,
+      source: record.source || 'manual',
+      metadata: record.metadata || {},
+      automation: !!record.automation,
+      automationRunId: record.automationRunId || null,
+      permissionMode: record.permissionMode || 'default',
+      safetyPolicy: null,
+    };
+    sessions.set(record.sessionId, rehydrated);
+    demoteSessionToFailed(
+      rehydrated,
+      'subprocess lost (server restart while session active)',
+      'persisted'
+    );
+    demoted.push({ sessionId: record.sessionId, source: 'persisted' });
+  }
+
+  if (demoted.length) {
+    if (typeof process !== 'undefined' && process.stderr) {
+      const summary = demoted
+        .map(d => `${d.sessionId}(${d.source})`)
+        .slice(0, 20)
+        .join(', ');
+      process.stderr.write(
+        `[claude-cli-runner] stale-active-sweep demoted ${demoted.length} session(s): ${summary}\n`
+      );
+    }
+  }
+  return demoted;
+}
+
+// Run once at module load (covers boot-time dashboard-restart orphans).
+// Don't crash if it throws — a sweeper that takes down the dashboard is
+// worse than the orphans it cleans up.
+try {
+  const bootDemoted = demoteStaleActiveSessions();
+  if (bootDemoted.length && typeof process !== 'undefined' && process.stderr) {
+    const summary = bootDemoted
+      .map(d => `${d.sessionId}(${d.source})`)
+      .slice(0, 10)
+      .join(', ');
+    process.stderr.write(
+      `[claude-cli-runner] boot sweep demoted ${bootDemoted.length} stale active session(s): ${summary}\n`
+    );
+  }
+} catch (e) {
+  if (typeof process !== 'undefined' && process.stderr) {
+    process.stderr.write(`[claude-cli-runner] boot sweep failed: ${e.message}\n`);
+  }
+}
+
+// Periodic sweep (covers runtime orphans and new starts). 30s gives a
+// reasonable tradeoff between responsiveness and noise.
+setInterval(() => {
+  try { demoteStaleActiveSessions(); }
+  catch {}
+}, 30 * 1000).unref();
+
 module.exports = {
+  createSession,
   startSession,
   startChatSession,
   startAutomationSession,
@@ -1216,6 +1404,8 @@ module.exports = {
   getSessionTokenUsage,
   findClaudeExecutableForSdk,
   isTransientClaudeError,
+  demoteStaleActiveSessions,
+  readStaleThresholdMs,
   ACTIVE_STATES,
   TERMINAL_STATES,
 };
