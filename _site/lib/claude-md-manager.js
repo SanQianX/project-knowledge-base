@@ -52,9 +52,18 @@ const DISCOVERY_RULE_BODY =
 // Reading procedure body, with `__PREFIX__` as a placeholder for the index
 // path prefix. The prefix depends on the form: `<resolved kbPath>/` for
 // registry modes, the absolute kbPath for the legacy direct mode.
+//
+// The trigger phrase is intentionally unconditional on session start and on
+// any recall/lookup question. claude-mem and auto-memory are always one tool
+// call away and tend to win by default if the rule only fires on heavy work;
+// listing those triggers explicitly closes that gap so the KB gets consulted
+// first for "what did we do before", "上次改动", "之前的实现", etc.
 const READING_PROCEDURE_BODY_TEMPLATE =
-  'Before answering questions about what changed, when, or why, AND before ' +
-  'implementing a non-trivial feature or fix in this repo, follow this procedure:\n\n' +
+  'At the start of every session, AND before answering any question about\n' +
+  'what changed, when, why, or what was previously developed in this repo\n' +
+  '(including "what did we work on before", "上次改动", "之前的实现", "what\n' +
+  'did you change last time"), AND before implementing a non-trivial feature\n' +
+  'or fix, follow this procedure:\n\n' +
   '1. **Read only the indexes first**:\n' +
   '   `__PREFIX__GOAL.md`, `__PREFIX__modules/00-index.md`,\n' +
   '   `__PREFIX__changes/00-index.md`.\n' +
@@ -64,9 +73,12 @@ const READING_PROCEDURE_BODY_TEMPLATE =
   '4. **No hits? Treat as a new feature area.** Propose a new module + change\n' +
   '   entry instead of patching unrelated knowledge.\n' +
   '5. **Do not load the whole KB** unless explicitly asked.\n\n' +
-  'The KB outranks auto-memory and conversational context for project facts. ' +
-  'If a memory record and a KB entry disagree, the KB wins — update or remove ' +
-  'the stale memory.';
+  'The KB outranks auto-memory, claude-mem, and conversational context for\n' +
+  "this project's facts. When the user asks about this project's history,\n" +
+  'decisions, architecture, prior work, or anything that could be answered\n' +
+  'from prior development, resolve from the KB first; only fall back to\n' +
+  'claude-mem or auto-memory if the KB has no answer. If a memory record and\n' +
+  'a KB entry disagree, the KB wins — update or remove the stale memory.';
 
 function buildReadingProcedure(prefix) {
   return READING_PROCEDURE_BODY_TEMPLATE.replace(/__PREFIX__/g, prefix);
