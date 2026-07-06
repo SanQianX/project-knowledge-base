@@ -65,6 +65,30 @@ function knowledgeLanguage(project) {
   return project && project.knowledgeLanguage === 'en-US' ? 'en-US' : 'zh-CN';
 }
 
+// Bilingual UI labels used by the change-draft proposal section.
+// zh-CN is the default for every project that does not opt into en-US.
+// English keys must be preserved; Chinese characters are the user-facing content.
+function labels(project) {
+  if (knowledgeLanguage(project) === 'en-US') {
+    return {
+      aiProposal: 'AI Analysis Proposal',
+      developmentIntent: 'Development Intent',
+      goalImpact: 'Goal Impact',
+      evidence: 'Evidence',
+      proposedOperations: 'Proposed Operations',
+      noEvidence: '(none)',
+    };
+  }
+  return {
+    aiProposal: 'AI 分析提案',
+    developmentIntent: '开发意图',
+    goalImpact: '目标影响',
+    evidence: '证据',
+    proposedOperations: '建议操作',
+    noEvidence: '（无）',
+  };
+}
+
 function sourceMeta(project, headCommitAtRun = null) {
   return {
     sourceBranch: project.currentBranch || null,
@@ -281,4 +305,5 @@ module.exports = {
   readRun,
   listRuns,
   listDrafts,
+  labels,
 };
