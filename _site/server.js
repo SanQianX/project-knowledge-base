@@ -1664,7 +1664,8 @@ const server = http.createServer(async (req, res) => {
     if (m === 'POST' && p === '/api/team/github/local-store/scan') {
       const body = await readBody(req).catch(() => '{}');
       const parsed = (() => { try { return JSON.parse(body); } catch { return {}; } })();
-      const result = await githubTeamStore.scanLocalStore({ localPath: parsed.localPath });
+      const current = readGithubTeamConfig();
+      const result = await githubTeamStore.scanLocalStore({ localPath: parsed.localPath, provider: current.provider });
       return send(res, result.ok ? 200 : (result.status || 400), result);
     }
 
@@ -1672,12 +1673,14 @@ const server = http.createServer(async (req, res) => {
     if (m === 'POST' && p === '/api/team/github/local-store/configure') {
       const body = await readBody(req).catch(() => '{}');
       const parsed = (() => { try { return JSON.parse(body); } catch { return {}; } })();
+      const current = readGithubTeamConfig();
       const result = await githubTeamStore.configureLocalStore({
         localPath: parsed.localPath,
         displayName: parsed.displayName,
         knowledgeBases: parsed.knowledgeBases,
         commit: parsed.commit !== false,
         push: parsed.push !== false,
+        provider: current.provider,
       });
       if (result.ok) {
         logEvent('info', 'github_team_local_store_configured', 'Local knowledge repository configured as a GitHub team store.', {

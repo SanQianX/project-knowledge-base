@@ -104,6 +104,46 @@ function startMockGithub(manifest) {
   });
 }
 
+function startMockGitea(manifest) {
+  const repos = [{
+    full_name: 'team/knowledge',
+    name: 'knowledge',
+    private: true,
+    html_url: 'http://gitea.local/team/knowledge',
+    clone_url: 'http://gitea.local/team/knowledge.git',
+    ssh_url: 'git@gitea.local:team/knowledge.git',
+    default_branch: 'main',
+    owner: { login: 'team' },
+  }];
+  const server = http.createServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url === '/api/v1/user') {
+      res.end(JSON.stringify({ login: 'alice' }));
+      return;
+    }
+    if (req.url.startsWith('/api/v1/user/repos')) {
+      res.end(JSON.stringify(repos));
+      return;
+    }
+    if (req.url.startsWith('/api/v1/repos/team/knowledge/contents/.project-knowledge/team-store.json')) {
+      res.end(JSON.stringify({
+        type: 'file',
+        encoding: 'base64',
+        content: Buffer.from(JSON.stringify(manifest), 'utf-8').toString('base64'),
+      }));
+      return;
+    }
+    res.statusCode = 404;
+    res.end(JSON.stringify({ message: 'not found' }));
+  });
+  return new Promise(resolve => {
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      resolve({ server, apiBaseUrl: `http://127.0.0.1:${address.port}/api/v1` });
+    });
+  });
+}
+
 (async () => {
   const manifest = {
     schema: 'project-knowledge/team-store/v1',
@@ -115,6 +155,19 @@ function startMockGithub(manifest) {
     ],
   };
   const mock = await startMockGithub(manifest);
+  const giteaMock = await startMockGitea(manifest);
+  const providerConfigPath = path.join(DATA_DIR, 'team-git-providers.json');
+  fs.writeFileSync(providerConfigPath, '\uFEFF' + JSON.stringify({
+    schema: 'project-knowledge/git-providers/v1',
+    gitea: {
+      webBaseUrl: 'http://gitea.example.test:3000',
+      oauthClientId: 'client-from-bom-file',
+    },
+  }, null, 2), 'utf-8');
+  const providerConfig = githubTeamStore.readProviderFileConfig(providerConfigPath);
+  const providerPublic = githubTeamStore.providerPublicConfig(githubTeamStore.defaultConfig(), {}, providerConfig);
+  assert(providerPublic.gitea.configured === true, 'BOM-prefixed provider config should configure Gitea');
+  assert(providerPublic.gitea.apiBaseUrl === 'http://gitea.example.test:3000/api/v1', 'Gitea API URL should be inferred from BOM config');
 
   fs.writeFileSync(path.join(DATA_DIR, 'projects.json'), '{}\n', 'utf-8');
   fs.writeFileSync(path.join(DATA_DIR, 'ai-profiles.json'), JSON.stringify({
@@ -142,6 +195,14 @@ function startMockGithub(manifest) {
     assert(discovered.ok, `store discovery should succeed: ${JSON.stringify(discovered)}`);
     assert(discovered.stores.length === 1, 'one manifest-backed store should be discovered');
     assert(discovered.stores[0].knowledgeBases.length === 2, 'manifest knowledge bases should be returned');
+
+    const giteaValidation = await githubTeamStore.validateToken({ token: 'gitea-token', apiBaseUrl: giteaMock.apiBaseUrl, provider: 'gitea' });
+    assert(giteaValidation.ok && giteaValidation.login === 'alice', 'mock Gitea token should validate');
+    const giteaDiscovered = await githubTeamStore.discoverStores({ token: 'gitea-token', apiBaseUrl: giteaMock.apiBaseUrl, provider: 'gitea', dataDir: DATA_DIR });
+    assert(giteaDiscovered.ok, `Gitea store discovery should succeed: ${JSON.stringify(giteaDiscovered)}`);
+    assert(giteaDiscovered.stores.length === 1, 'Gitea discovery should find one manifest-backed store');
+    assert(giteaDiscovered.stores[0].provider === 'gitea', 'Gitea discovery should preserve provider');
+    assert(giteaDiscovered.stores[0].knowledgeBases.length === 2, 'Gitea manifest knowledge bases should be returned');
 
     fs.mkdirSync(path.join(TEAM_STORE, 'acc'), { recursive: true });
     fs.writeFileSync(path.join(TEAM_STORE, 'acc', 'README.md'), '# ACC KB\n', 'utf-8');
@@ -197,6 +258,7 @@ function startMockGithub(manifest) {
     process.exitCode = 1;
   } finally {
     try { mock.server.close(); } catch {}
+    try { giteaMock.server.close(); } catch {}
     try { fs.rmSync(DATA_DIR, { recursive: true, force: true }); } catch {}
     try { fs.rmSync(SOURCE_REPO, { recursive: true, force: true }); } catch {}
     try { fs.rmSync(TEAM_STORE, { recursive: true, force: true }); } catch {}

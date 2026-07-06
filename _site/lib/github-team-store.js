@@ -101,10 +101,18 @@ function normalizeProviderFileConfig(input) {
   };
 }
 
+function parseJsonText(text) {
+  return JSON.parse(String(text || '').replace(/^\uFEFF/, ''));
+}
+
+function readJsonFile(filePath) {
+  return parseJsonText(fs.readFileSync(filePath, 'utf-8'));
+}
+
 function readProviderFileConfig(configPath) {
   if (!configPath || !fs.existsSync(configPath)) return normalizeProviderFileConfig({});
   try {
-    return normalizeProviderFileConfig(JSON.parse(fs.readFileSync(configPath, 'utf-8')));
+    return normalizeProviderFileConfig(readJsonFile(configPath));
   } catch {
     return normalizeProviderFileConfig({});
   }
@@ -113,7 +121,7 @@ function readProviderFileConfig(configPath) {
 function readConfig(configPath) {
   if (!fs.existsSync(configPath)) return defaultConfig();
   try {
-    return normalizeConfig(JSON.parse(fs.readFileSync(configPath, 'utf-8')));
+    return normalizeConfig(readJsonFile(configPath));
   } catch {
     return defaultConfig();
   }
@@ -517,12 +525,21 @@ function parseGithubFullName(remoteUrl) {
   return '';
 }
 
-function buildLocalRepoMeta(root, remoteUrl, branch) {
+function inferProviderFromRemoteUrl(remoteUrl, fallback = '') {
+  const preferred = String(fallback || '').trim();
+  if (preferred) return normalizeProvider(preferred);
+  const raw = String(remoteUrl || '').trim();
+  if (/github/i.test(raw)) return 'github';
+  if (/gitea/i.test(raw)) return 'gitea';
+  return 'github';
+}
+
+function buildLocalRepoMeta(root, remoteUrl, branch, provider = '') {
   const fullName = parseGithubFullName(remoteUrl);
   const repoName = fullName ? fullName.split('/').pop() : path.basename(root);
   const storeId = fullName || normalizeStoreSlug(repoName) || 'knowledge-store';
   return {
-    provider: 'github',
+    provider: inferProviderFromRemoteUrl(remoteUrl, provider),
     fullName,
     name: repoName,
     owner: fullName ? fullName.split('/')[0] : '',
@@ -563,7 +580,7 @@ function scanKnowledgeBaseDirs(root, storeId) {
   }).filter(item => item.slug);
 }
 
-async function inspectLocalStore(localPath) {
+async function inspectLocalStore(localPath, provider = '') {
   const rawPath = String(localPath || '').trim();
   if (!rawPath) return { ok: false, status: 400, error: 'localPath is required' };
   const inputPath = path.resolve(rawPath);
@@ -583,7 +600,7 @@ async function inspectLocalStore(localPath) {
   const branchResult = await execGit(root, ['branch', '--show-current']);
   const branch = branchResult.ok && String(branchResult.stdout || '').trim() || 'main';
   const status = await execGit(root, ['status', '--porcelain'], 15000);
-  const meta = buildLocalRepoMeta(root, remoteUrl, branch);
+  const meta = buildLocalRepoMeta(root, remoteUrl, branch, provider);
   return {
     ok: true,
     localPath: root,
@@ -595,8 +612,8 @@ async function inspectLocalStore(localPath) {
   };
 }
 
-async function scanLocalStore({ localPath }) {
-  const inspection = await inspectLocalStore(localPath);
+async function scanLocalStore({ localPath, provider = '' }) {
+  const inspection = await inspectLocalStore(localPath, provider);
   if (!inspection.ok) return inspection;
   const knowledgeBases = scanKnowledgeBaseDirs(inspection.localPath, inspection.storeId);
   const manifest = normalizeManifest({
@@ -608,7 +625,7 @@ async function scanLocalStore({ localPath }) {
   return {
     ok: true,
     store: {
-      provider: 'github',
+      provider: inspection.provider,
       fullName: inspection.fullName,
       name: inspection.name,
       owner: inspection.owner,
@@ -643,8 +660,8 @@ function normalizeKnowledgeBaseInput(items, storeId) {
   }).filter(Boolean);
 }
 
-async function configureLocalStore({ localPath, displayName = '', knowledgeBases = null, commit = true, push = true }) {
-  const scan = await scanLocalStore({ localPath });
+async function configureLocalStore({ localPath, displayName = '', knowledgeBases = null, commit = true, push = true, provider = '' }) {
+  const scan = await scanLocalStore({ localPath, provider });
   if (!scan.ok) return scan;
   const store = scan.store;
   const selectedKnowledgeBases = normalizeKnowledgeBaseInput(knowledgeBases, store.storeId);
@@ -753,7 +770,7 @@ async function readManifestFromRepo({ repo, token, apiBaseUrl, provider = 'githu
     const raw = decodeContentResponse(result.data);
     if (!raw) continue;
     try {
-      const manifest = normalizeManifest(JSON.parse(raw), repo);
+      const manifest = normalizeManifest(parseJsonText(raw), repo);
       if (manifest.knowledgeBases.length) return { ok: true, manifest, manifestPath };
     } catch {}
   }
