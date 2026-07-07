@@ -81,6 +81,7 @@ function normalizeConfig(input) {
     apiBaseUrl,
     oauthWebBaseUrl,
     oauthClientId: typeof source.oauthClientId === 'string' ? source.oauthClientId.trim() : '',
+    oauthClientSecret: typeof source.oauthClientSecret === 'string' ? source.oauthClientSecret.trim() : '',
     token: typeof source.token === 'string' ? source.token.trim() : '',
     login: typeof source.login === 'string' ? source.login : '',
     updatedAt: typeof source.updatedAt === 'string' ? source.updatedAt : null,
@@ -97,6 +98,7 @@ function normalizeProviderFileConfig(input) {
       webBaseUrl: giteaWebBaseUrl,
       apiBaseUrl: normalizeBaseUrl(gitea.apiBaseUrl || source.giteaApiBaseUrl || (giteaWebBaseUrl ? inferApiBaseUrlFromWebBaseUrl(giteaWebBaseUrl, 'gitea') : ''), ''),
       oauthClientId: String(gitea.oauthClientId || gitea.clientId || source.giteaOAuthClientId || '').trim(),
+      oauthClientSecret: String(gitea.oauthClientSecret || gitea.clientSecret || source.giteaOAuthClientSecret || '').trim(),
     },
   };
 }
@@ -299,6 +301,12 @@ function oauthClientIdForConfig(config, env = process.env) {
   return isDefaultGithubWebBaseUrl(cfg.oauthWebBaseUrl) ? DEFAULT_OAUTH_CLIENT_ID : '';
 }
 
+function oauthClientSecretForConfig(config, env = process.env) {
+  const cfg = normalizeConfig(config);
+  if (cfg.provider !== 'gitea') return '';
+  return cfg.oauthClientSecret || String(env.KB_GITEA_OAUTH_CLIENT_SECRET || env.GITEA_OAUTH_CLIENT_SECRET || '').trim();
+}
+
 function giteaWebBaseUrlFromEnv(env = process.env) {
   return String(env.KB_GITEA_WEB_BASE_URL || env.GITEA_WEB_BASE_URL || '').trim().replace(/\/+$/, '');
 }
@@ -307,6 +315,7 @@ function giteaPresetFromEnv(env = process.env, providerFileConfig = {}) {
   const fileConfig = normalizeProviderFileConfig(providerFileConfig);
   const webBaseUrl = giteaWebBaseUrlFromEnv(env) || fileConfig.gitea.webBaseUrl;
   const oauthClientId = String(env.KB_GITEA_OAUTH_CLIENT_ID || env.GITEA_OAUTH_CLIENT_ID || fileConfig.gitea.oauthClientId || '').trim();
+  const oauthClientSecret = String(env.KB_GITEA_OAUTH_CLIENT_SECRET || env.GITEA_OAUTH_CLIENT_SECRET || fileConfig.gitea.oauthClientSecret || '').trim();
   const apiBaseUrl = String(env.KB_GITEA_API_BASE_URL || env.GITEA_API_BASE_URL || fileConfig.gitea.apiBaseUrl || '').trim().replace(/\/+$/, '');
   return {
     provider: 'gitea',
@@ -314,6 +323,8 @@ function giteaPresetFromEnv(env = process.env, providerFileConfig = {}) {
     webBaseUrl,
     apiBaseUrl: apiBaseUrl || (webBaseUrl ? inferApiBaseUrlFromWebBaseUrl(webBaseUrl, 'gitea') : ''),
     oauthClientId,
+    oauthClientSecret,
+    oauthClientSecretConfigured: !!oauthClientSecret,
   };
 }
 
@@ -366,16 +377,19 @@ function startGiteaOAuth({ config, redirectUri, scope = 'read:repository', env =
 async function exchangeGiteaOAuthCode({ config, code, codeVerifier, redirectUri, env = process.env }) {
   const cfg = normalizeConfig({ ...config, provider: 'gitea' });
   const clientId = oauthClientIdForConfig(cfg, env);
+  const clientSecret = oauthClientSecretForConfig(cfg, env);
   if (!clientId) return { ok: false, status: 501, code: 'oauth_client_missing', error: 'Gitea OAuth Client ID is not configured' };
+  const form = {
+    client_id: clientId,
+    grant_type: 'authorization_code',
+    code,
+    redirect_uri: redirectUri,
+    code_verifier: codeVerifier,
+  };
+  if (clientSecret) form.client_secret = clientSecret;
   const result = await requestFormJson({
     url: webUrl(cfg.oauthWebBaseUrl, '/login/oauth/access_token'),
-    form: {
-      client_id: clientId,
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: redirectUri,
-      code_verifier: codeVerifier,
-    },
+    form,
   });
   if (!result.ok) return { ok: false, status: result.status || 400, error: result.error || 'Gitea OAuth token exchange failed', data: result.data };
   const data = result.data || {};
@@ -408,6 +422,7 @@ function oauthPublicConfig(configOrEnv = process.env, maybeEnv = process.env) {
 
 function providerPublicConfig(config, env = process.env, providerFileConfig = {}) {
   const cfg = normalizeConfig(config);
+  const giteaPreset = giteaPresetFromEnv(env, providerFileConfig);
   return {
     current: cfg.provider,
     github: {
@@ -415,7 +430,14 @@ function providerPublicConfig(config, env = process.env, providerFileConfig = {}
       available: !!oauthClientIdForConfig({ ...cfg, provider: 'github' }, env),
       webBaseUrl: cfg.provider === 'github' ? cfg.oauthWebBaseUrl : DEFAULT_WEB_BASE_URL,
     },
-    gitea: giteaPresetFromEnv(env, providerFileConfig),
+    gitea: {
+      provider: giteaPreset.provider,
+      configured: giteaPreset.configured,
+      webBaseUrl: giteaPreset.webBaseUrl,
+      apiBaseUrl: giteaPreset.apiBaseUrl,
+      oauthClientId: giteaPreset.oauthClientId,
+      oauthClientSecretConfigured: giteaPreset.oauthClientSecretConfigured,
+    },
   };
 }
 
@@ -882,6 +904,7 @@ module.exports = {
   requestFormJson,
   oauthClientIdFromEnv,
   oauthClientIdForConfig,
+  oauthClientSecretForConfig,
   oauthWebBaseUrlFromEnv,
   giteaPresetFromEnv,
   oauthPublicConfig,

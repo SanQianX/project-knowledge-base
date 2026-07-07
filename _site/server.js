@@ -1497,12 +1497,14 @@ const server = http.createServer(async (req, res) => {
       const preset = githubTeamStore.giteaPresetFromEnv(process.env, readTeamGitProvidersConfig());
       const webBaseUrl = String(parsed.oauthWebBaseUrl || (current.provider === 'gitea' ? current.oauthWebBaseUrl : '') || preset.webBaseUrl || '').trim();
       const oauthClientId = String(parsed.oauthClientId || (current.provider === 'gitea' ? current.oauthClientId : '') || preset.oauthClientId || '').trim();
+      const oauthClientSecret = String(parsed.oauthClientSecret || (current.provider === 'gitea' ? current.oauthClientSecret : '') || preset.oauthClientSecret || '').trim();
       const cfg = githubTeamStore.normalizeConfig({
         ...current,
         provider: 'gitea',
         oauthWebBaseUrl: webBaseUrl,
         apiBaseUrl: parsed.apiBaseUrl || (webBaseUrl ? githubTeamStore.inferApiBaseUrlFromWebBaseUrl(webBaseUrl, 'gitea') : current.apiBaseUrl),
         oauthClientId,
+        oauthClientSecret,
       });
       const redirectUri = buildGiteaOAuthRedirectUri();
       const started = githubTeamStore.startGiteaOAuth({ config: cfg, redirectUri, env: process.env });

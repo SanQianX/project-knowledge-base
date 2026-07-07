@@ -117,6 +117,24 @@ function startMockGitea(manifest) {
   }];
   const server = http.createServer((req, res) => {
     res.setHeader('Content-Type', 'application/json');
+    if (req.url === '/login/oauth/access_token' && req.method === 'POST') {
+      const chunks = [];
+      req.on('data', c => chunks.push(c));
+      req.on('end', () => {
+        const form = new URLSearchParams(Buffer.concat(chunks).toString('utf-8'));
+        if (form.get('client_secret') !== 'secret-from-bom-file') {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ error: 'invalid_client', error_description: 'invalid empty client secret' }));
+          return;
+        }
+        res.end(JSON.stringify({
+          access_token: 'gitea-oauth-token',
+          token_type: 'bearer',
+          scope: 'read:repository',
+        }));
+      });
+      return;
+    }
     if (req.url === '/api/v1/user') {
       res.end(JSON.stringify({ login: 'alice' }));
       return;
@@ -139,7 +157,7 @@ function startMockGitea(manifest) {
   return new Promise(resolve => {
     server.listen(0, '127.0.0.1', () => {
       const address = server.address();
-      resolve({ server, apiBaseUrl: `http://127.0.0.1:${address.port}/api/v1` });
+      resolve({ server, webBaseUrl: `http://127.0.0.1:${address.port}`, apiBaseUrl: `http://127.0.0.1:${address.port}/api/v1` });
     });
   });
 }
@@ -162,12 +180,16 @@ function startMockGitea(manifest) {
     gitea: {
       webBaseUrl: 'http://gitea.example.test:3000',
       oauthClientId: 'client-from-bom-file',
+      oauthClientSecret: 'secret-from-bom-file',
     },
   }, null, 2), 'utf-8');
   const providerConfig = githubTeamStore.readProviderFileConfig(providerConfigPath);
+  assert(providerConfig.gitea.oauthClientSecret === 'secret-from-bom-file', 'BOM-prefixed provider config should read the Gitea client secret');
   const providerPublic = githubTeamStore.providerPublicConfig(githubTeamStore.defaultConfig(), {}, providerConfig);
   assert(providerPublic.gitea.configured === true, 'BOM-prefixed provider config should configure Gitea');
   assert(providerPublic.gitea.apiBaseUrl === 'http://gitea.example.test:3000/api/v1', 'Gitea API URL should be inferred from BOM config');
+  assert(providerPublic.gitea.oauthClientSecret === undefined, 'Gitea client secret should not be exposed in public provider config');
+  assert(providerPublic.gitea.oauthClientSecretConfigured === true, 'Gitea public config should expose only whether a client secret exists');
 
   fs.writeFileSync(path.join(DATA_DIR, 'projects.json'), '{}\n', 'utf-8');
   fs.writeFileSync(path.join(DATA_DIR, 'ai-profiles.json'), JSON.stringify({
@@ -198,6 +220,18 @@ function startMockGitea(manifest) {
 
     const giteaValidation = await githubTeamStore.validateToken({ token: 'gitea-token', apiBaseUrl: giteaMock.apiBaseUrl, provider: 'gitea' });
     assert(giteaValidation.ok && giteaValidation.login === 'alice', 'mock Gitea token should validate');
+    const giteaOAuth = await githubTeamStore.exchangeGiteaOAuthCode({
+      config: {
+        provider: 'gitea',
+        oauthWebBaseUrl: giteaMock.webBaseUrl,
+        oauthClientId: 'client-from-bom-file',
+        oauthClientSecret: 'secret-from-bom-file',
+      },
+      code: 'oauth-code',
+      codeVerifier: 'verifier',
+      redirectUri: 'http://127.0.0.1:5757/api/team/gitea/oauth/callback',
+    });
+    assert(giteaOAuth.ok && giteaOAuth.token === 'gitea-oauth-token', 'Gitea OAuth exchange should include the configured client secret');
     const giteaDiscovered = await githubTeamStore.discoverStores({ token: 'gitea-token', apiBaseUrl: giteaMock.apiBaseUrl, provider: 'gitea', dataDir: DATA_DIR });
     assert(giteaDiscovered.ok, `Gitea store discovery should succeed: ${JSON.stringify(giteaDiscovered)}`);
     assert(giteaDiscovered.stores.length === 1, 'Gitea discovery should find one manifest-backed store');
