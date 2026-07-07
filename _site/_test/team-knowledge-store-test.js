@@ -221,6 +221,17 @@ function startMockGitea(manifest) {
 
     try {
       await waitForServer();
+      const status = await json('GET', '/api/team/github/status');
+      assert(status.res.ok, `team status should succeed: ${JSON.stringify(status.data)}`);
+      const expectedGiteaRedirect = `${BASE_URL}/api/team/gitea/oauth/callback`;
+      assert(status.data.providers.gitea.oauthRedirectUri === expectedGiteaRedirect, 'Gitea status should expose the stable OAuth redirect URI');
+
+      const giteaStart = await json('POST', '/api/team/gitea/oauth/start', {});
+      assert(giteaStart.res.ok, `Gitea OAuth start should succeed: ${JSON.stringify(giteaStart.data)}`);
+      assert(giteaStart.data.redirectUri === expectedGiteaRedirect, 'Gitea OAuth start should use the stable redirect URI');
+      const authUrl = new URL(giteaStart.data.authorizationUrl);
+      assert(authUrl.searchParams.get('redirect_uri') === expectedGiteaRedirect, 'Gitea authorization URL should include the stable redirect URI');
+
       const imported = await json('POST', '/api/projects/import', {
         localPath: SOURCE_REPO,
         teamKnowledgeBase: {

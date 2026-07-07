@@ -150,7 +150,8 @@ function installHook({
 
   let claudeMd;
   if (updateClaudeMd) {
-    claudeMd = ensureClaudeMdRule(abs, { kbPath, projectsPath, projectSlug });
+    const portableClaudeOptions = projectSlug ? { projectSlug } : {};
+    claudeMd = ensureClaudeMdRule(abs, portableClaudeOptions);
   } else {
     claudeMd = { ok: true, action: 'skipped', path: path.join(abs, 'CLAUDE.md') };
   }

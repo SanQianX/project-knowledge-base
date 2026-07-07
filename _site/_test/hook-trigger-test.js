@@ -138,6 +138,11 @@ async function waitForAutomationRun(slug, timeoutMs = 30000) {
   execGit(FIXTURE_REPO, ['config', 'core.hooksPath', '.githooks']);
   let r = installHook({ repoPath: FIXTURE_REPO, siteRoot: SITE_ROOT, host: '127.0.0.1', port: Number(PORT), kbPath: FIXTURE_KB_PATH });
   assert(r.ok, 'installHook with core.hooksPath failed: ' + r.error);
+  let legacyClaudeText = fs.readFileSync(path.join(FIXTURE_REPO, CLAUDE_MD_FILENAME), 'utf-8');
+  assert(!legacyClaudeText.includes(FIXTURE_KB_PATH.replace(/\\/g, '/')),
+    'installHook must not embed kbPath in CLAUDE.md even when legacy callers pass kbPath');
+  assert(!legacyClaudeText.includes('lives at:'),
+    'installHook must not write legacy direct-mode CLAUDE.md blocks');
   const customHookPath = path.join(FIXTURE_REPO, '.githooks', 'post-commit');
   assert(fs.existsSync(customHookPath), 'hook file not created under core.hooksPath');
   let customStatus = readHookStatus({ repoPath: FIXTURE_REPO });

@@ -4,7 +4,7 @@ const path = require('path');
 const { execGit } = require('./git-runner');
 
 async function scanProject(project, options = {}) {
-  const { maxCommits = 200 } = options;
+  const { maxCommits = 200, headCommit = null } = options;
   const result = {
     slug: project && project.slug,
     repoStatus: 'unknown',
@@ -37,7 +37,8 @@ async function scanProject(project, options = {}) {
     result.error = 'not a git repository';
     return result;
   }
-  const head = await execGit(targetPath, ['rev-parse', 'HEAD']);
+  const headRef = headCommit || 'HEAD';
+  const head = await execGit(targetPath, ['rev-parse', `${headRef}^{commit}`]);
   if (!head.ok) {
     result.repoStatus = 'empty';
     result.error = 'repository has no commits';

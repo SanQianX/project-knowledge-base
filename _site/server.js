@@ -76,6 +76,15 @@ function readTeamGitProvidersConfig() {
   return githubTeamStore.readProviderFileConfig(TEAM_GIT_PROVIDERS_PATH);
 }
 
+function buildGiteaOAuthRedirectUri() {
+  const explicit = String(process.env.KB_GITEA_OAUTH_REDIRECT_URI || process.env.GITEA_OAUTH_REDIRECT_URI || '').trim();
+  if (explicit) return explicit;
+  const callbackHost = String(process.env.KB_GITEA_OAUTH_CALLBACK_HOST || HOST || '127.0.0.1').trim();
+  const safeHost = (!callbackHost || callbackHost === '0.0.0.0' || callbackHost === '::') ? '127.0.0.1' : callbackHost;
+  const bracketedHost = safeHost.includes(':') && !safeHost.startsWith('[') ? `[${safeHost}]` : safeHost;
+  return `http://${bracketedHost}:${PORT}/api/team/gitea/oauth/callback`;
+}
+
 // ---- helpers ----
 function send(res, status, body, type) {
   type = type || 'application/json';
@@ -1439,11 +1448,13 @@ const server = http.createServer(async (req, res) => {
     if (m === 'GET' && p === '/api/team/github/status') {
       const cfg = readGithubTeamConfig();
       const providerConfig = readTeamGitProvidersConfig();
+      const providers = githubTeamStore.providerPublicConfig(cfg, process.env, providerConfig);
+      providers.gitea.oauthRedirectUri = buildGiteaOAuthRedirectUri();
       return send(res, 200, {
         ok: true,
         config: githubTeamStore.publicConfig(cfg),
         oauth: githubTeamStore.oauthPublicConfig(cfg, process.env),
-        providers: githubTeamStore.providerPublicConfig(cfg, process.env, providerConfig),
+        providers,
       });
     }
 
@@ -1493,8 +1504,7 @@ const server = http.createServer(async (req, res) => {
         apiBaseUrl: parsed.apiBaseUrl || (webBaseUrl ? githubTeamStore.inferApiBaseUrlFromWebBaseUrl(webBaseUrl, 'gitea') : current.apiBaseUrl),
         oauthClientId,
       });
-      const host = req.headers.host || `${HOST}:${PORT}`;
-      const redirectUri = `http://${host}/api/team/gitea/oauth/callback`;
+      const redirectUri = buildGiteaOAuthRedirectUri();
       const started = githubTeamStore.startGiteaOAuth({ config: cfg, redirectUri, env: process.env });
       if (!started.ok) return send(res, started.status || 400, started);
       writeGithubTeamConfig({ ...cfg, token: '', login: '' });
@@ -1508,6 +1518,7 @@ const server = http.createServer(async (req, res) => {
         ok: true,
         provider: 'gitea',
         authorizationUrl: started.authorizationUrl,
+        redirectUri: started.redirectUri,
         expiresIn: 900,
         config: githubTeamStore.publicConfig(cfg),
       });

@@ -61,8 +61,10 @@ async function gitText(repoPath, args, fallback = '') {
 async function collectCommitMetadata(project, event = {}) {
   const repoPath = projectRepoPath(project);
   const hadTrackingBaseline = !!(project.lastAnalyzedCommit || project.trackingStartCommit);
-  const scan = await scanProject(project, { maxCommits: 200 });
-  if (scan && scan.repoStatus === 'ok') {
+  const scanOptions = { maxCommits: 200 };
+  if (event.analysisHeadCommit) scanOptions.headCommit = event.analysisHeadCommit;
+  const scan = await scanProject(project, scanOptions);
+  if (scan && scan.repoStatus === 'ok' && !event.analysisHeadCommit) {
     await applyScanResult(project, scan);
   }
   const requestedHash = scan && scan.headCommit || event.commitHash || 'HEAD';
@@ -256,6 +258,76 @@ async function dispatchAutomation({ slug, cfg, event = {}, source = 'git-hook' }
   return dispatchRenderedAutomation({ slug, cfg, rendered, source }, deps);
 }
 
+async function dispatchPendingAutomations({ triggerSlug = null, triggerEvent = {} } = {}, deps) {
+  const projects = typeof deps.readProjects === 'function' ? deps.readProjects() : deps.projects;
+  const results = [];
+  const dispatchedSlugs = new Set();
+  if (!projects || typeof projects !== 'object') {
+    return { ok: true, dispatched: 0, results };
+  }
+
+  for (const [slug, cfg] of Object.entries(projects)) {
+    if (!cfg || cfg.enabled === false) continue;
+    const isTriggerProject = slug === triggerSlug;
+    const staleHead = cfg.headCommit || cfg.lastSeenCommit || null;
+    const triggerHead = triggerEvent.commitHash || '';
+    const hasConcreteTriggerHead = !!triggerHead && String(triggerHead) !== 'HEAD';
+    const hasKnownStalePending = isTriggerProject
+      && staleHead
+      && hasConcreteTriggerHead
+      && Number(cfg.lastScanPendingCount || 0) > 0
+      && String(triggerHead) !== String(staleHead);
+
+    if (hasKnownStalePending) {
+      const scan = await scanProject({ slug, ...cfg }, { maxCommits: 200, headCommit: staleHead });
+      if (scan.repoStatus === 'ok' && scan.pendingCount > 0) {
+        const result = await dispatchAutomation({
+          slug,
+          cfg,
+          event: {
+            ...triggerEvent,
+            commitHash: staleHead,
+            analysisHeadCommit: staleHead,
+          },
+          source: 'pending-sweep',
+        }, { ...deps, projects });
+        dispatchedSlugs.add(slug);
+        results.push({ slug, pendingCount: scan.pendingCount, headCommit: staleHead, result });
+      } else {
+        results.push({ slug, pendingCount: scan.pendingCount || 0, headCommit: staleHead, skipped: true, reason: scan.error || 'no stale pending commits' });
+      }
+      continue;
+    }
+
+    if (isTriggerProject) continue;
+
+    const scan = await scanProject({ slug, ...cfg }, { maxCommits: 200 });
+    if (scan.repoStatus === 'ok') {
+      await applyScanResult(cfg, scan);
+    }
+    if (scan.repoStatus === 'ok' && scan.pendingCount > 0) {
+      const result = await dispatchAutomation({
+        slug,
+        cfg,
+        event: {
+          commitHash: scan.headCommit || 'HEAD',
+          branch: cfg.currentBranch || '',
+        },
+        source: 'pending-sweep',
+      }, { ...deps, projects });
+      dispatchedSlugs.add(slug);
+      results.push({ slug, pendingCount: scan.pendingCount, headCommit: scan.headCommit || null, result });
+    } else {
+      results.push({ slug, pendingCount: scan.pendingCount || 0, headCommit: scan.headCommit || null, skipped: true, reason: scan.error || 'no pending commits' });
+    }
+  }
+
+  if (typeof deps.writeProjects === 'function') {
+    try { deps.writeProjects(projects); } catch {}
+  }
+  return { ok: true, dispatched: dispatchedSlugs.size, results };
+}
+
 async function dispatchProjectInit({ slug, cfg, source = 'project-init' }, deps) {
   const automation = normalizeAutomationConfig(cfg.automation);
   if (!automation.enabled) {
@@ -417,6 +489,19 @@ async function _resumeQueuedRun(slug, runId, deps) {
   const workbench = normalizeClaudeWorkbenchConfig(cfg.claudeWorkbench);
   const policy = buildAutomationToolPolicy({ automation, kbPath: rendered.kbPath });
   const profileCheck = deps.validateUsableAiProfile(cfg.aiProfileId);
+  record.repoPath = rendered.repoPath;
+  record.kbPath = rendered.kbPath;
+  record.commitHash = rendered.metadata.commitHash;
+  record.branch = rendered.metadata.branch;
+  record.knowledgeMode = automation.knowledgeMode;
+  record.permissionMode = workbench.permissionMode;
+  record.commitRange = rendered.metadata.commitRange || '';
+  record.pendingCommitCount = rendered.metadata.pendingCommitCount || 0;
+  record.headCommitAtRun = rendered.metadata.headCommitAtRun || rendered.metadata.commitHash || null;
+  record.lastAnalyzedCommitBefore = rendered.metadata.lastAnalyzedCommitBefore || null;
+  record.trackingStartCommit = rendered.metadata.trackingStartCommit || null;
+  record.promptPreview = rendered.prompt.slice(0, 2000);
+  record.allowedTools = policy.allowedTools;
   record.status = 'dispatching';
   writeAutomationRun(slug, record);
   if (!profileCheck.ok) {
@@ -478,8 +563,14 @@ function _markRunEnded(slug, runId, session, deps) {
       const projects = typeof deps.readProjects === 'function' ? deps.readProjects() : deps.projects;
       if (projects && projects[slug]) {
         projects[slug].lastAnalyzedCommit = r.headCommitAtRun;
-        projects[slug].lastSeenCommit = r.headCommitAtRun;
-        projects[slug].headCommit = r.headCommitAtRun;
+        const knownHead = projects[slug].headCommit || projects[slug].lastSeenCommit || null;
+        const shouldAdvanceVisibleHead = !knownHead
+          || knownHead === r.headCommitAtRun
+          || knownHead === r.lastAnalyzedCommitBefore;
+        if (shouldAdvanceVisibleHead) {
+          projects[slug].lastSeenCommit = r.headCommitAtRun;
+          projects[slug].headCommit = r.headCommitAtRun;
+        }
         if (!projects[slug].trackingStartCommit && r.trackingStartCommit) {
           projects[slug].trackingStartCommit = r.trackingStartCommit;
           projects[slug].trackingStartedAt = projects[slug].trackingStartedAt || r.startedAt || new Date().toISOString();
@@ -552,9 +643,23 @@ function cleanupOrphanedRuns(projects) {
 async function handlePostCommitEvent(event, deps) {
   const repoPath = event && event.repoPath;
   if (!repoPath) return { ok: false, status: 400, error: 'repoPath required' };
-  const hit = findProjectForRepo(deps.projects, repoPath);
+  const projects = typeof deps.readProjects === 'function' ? deps.readProjects() : deps.projects;
+  const hit = findProjectForRepo(projects, repoPath);
   if (!hit) return { ok: false, status: 404, error: `no project registered for repoPath: ${repoPath}` };
-  return dispatchAutomation({ slug: hit.slug, cfg: hit.cfg, event, source: event.source || 'git-hook' }, deps);
+  const nextDeps = { ...deps, projects };
+  const pendingSweep = await dispatchPendingAutomations({
+    triggerSlug: hit.slug,
+    triggerEvent: event,
+  }, nextDeps);
+  const latestProjects = typeof deps.readProjects === 'function' ? deps.readProjects() : projects;
+  const latestCfg = latestProjects && latestProjects[hit.slug] || hit.cfg;
+  const result = await dispatchAutomation({
+    slug: hit.slug,
+    cfg: latestCfg,
+    event,
+    source: event.source || 'git-hook',
+  }, { ...deps, projects: latestProjects || projects });
+  return { ...result, pendingSweep };
 }
 
 module.exports = {
@@ -569,6 +674,7 @@ module.exports = {
   listAutomationRuns,
   dispatchAutomation,
   dispatchProjectInit,
+  dispatchPendingAutomations,
   handlePostCommitEvent,
   cleanupOrphanedRuns,
   getQueueSize,

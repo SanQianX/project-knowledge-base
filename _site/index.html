@@ -1360,6 +1360,14 @@
           </div>
           <div v-if="githubProviderForm.provider === 'gitea'" class="mt-4 grid gap-3">
             <p class="text-sm muted">{{ giteaProvider.configured ? t("giteaOAuthLoginHelp") : t("giteaAdminMissing") }}</p>
+            <div v-if="giteaProvider.configured && giteaOAuthRedirectUri" class="rounded-lg border p-3 panel2">
+              <div class="text-xs muted">{{ t("giteaRedirectUriLabel") }}</div>
+              <div class="mt-2 flex flex-wrap items-center gap-2">
+                <code class="min-w-0 flex-1 break-all text-xs">{{ giteaOAuthRedirectUri }}</code>
+                <button type="button" @click="copyGiteaRedirectUri" class="btn">{{ t("copyCode") }}</button>
+              </div>
+              <div class="mt-2 text-xs muted">{{ t("giteaRedirectUriHelp") }}</div>
+            </div>
             <div class="flex flex-wrap gap-2">
               <button v-if="giteaProvider.configured && !githubStatus.configured" type="button" @click="startGiteaOAuth" :disabled="githubBusy" class="btn-primary">{{ githubBusy ? t("loading") : t("loginGitea") }}</button>
               <button v-if="githubStatus.configured" type="button" @click="loadGithubStores" :disabled="githubBusy" class="btn">{{ t("refreshTeamKbStores") }}</button>
@@ -1453,6 +1461,8 @@ const I18N = {
     giteaLoginHelp: "For Gitea, save the provider and paste an access token below instead of using GitHub OAuth.",
     giteaOAuthLoginHelp: "Gitea will open in a browser window for authorization.",
     giteaAdminMissing: "Gitea login is not configured by the team administrator yet.",
+    giteaRedirectUriLabel: "Gitea OAuth redirect URI",
+    giteaRedirectUriHelp: "This value must exactly match the Redirect URI in the Gitea OAuth application.",
     saveGitProvider: "Save Git service",
     gitProviderSaved: "Git service settings saved.",
     waitingGithubAuthorization: "Waiting for GitHub authorization...",
@@ -1877,6 +1887,8 @@ const I18N = {
     giteaLoginHelp: "Gitea 不走 GitHub OAuth，请在下方保存服务地址并粘贴访问令牌。",
     giteaOAuthLoginHelp: "会打开公司 Gitea 授权页面，授权完成后自动回到本地应用。",
     giteaAdminMissing: "团队管理员还没有配置 Gitea 登录。",
+    giteaRedirectUriLabel: "Gitea OAuth 重定向 URI",
+    giteaRedirectUriHelp: "这个值必须和 Gitea OAuth 应用里的重定向 URI 完全一致。",
     saveGitProvider: "保存 Git 服务",
     gitProviderSaved: "Git 服务配置已保存。",
     waitingGithubAuthorization: "正在等待 GitHub 授权...",
@@ -2747,7 +2759,7 @@ const app = createApp({
     const githubProviderForm = reactive({ provider: "github", oauthWebBaseUrl: "https://github.com", apiBaseUrl: "https://api.github.com", oauthClientId: "" });
     const githubStatus = reactive({ provider: "github", configured: false, login: "", apiBaseUrl: "https://api.github.com", updatedAt: null });
     const githubOAuth = reactive({ available: false, webBaseUrl: "https://github.com" });
-    const gitProviders = reactive({ current: "github", github: { available: true, webBaseUrl: "https://github.com" }, gitea: { configured: false, webBaseUrl: "", apiBaseUrl: "", oauthClientId: "" } });
+    const gitProviders = reactive({ current: "github", github: { available: true, webBaseUrl: "https://github.com" }, gitea: { configured: false, webBaseUrl: "", apiBaseUrl: "", oauthClientId: "", oauthRedirectUri: "" } });
     const githubAuthModal = reactive({ open: false, deviceCode: "", userCode: "", verificationUri: "", expiresAt: 0, message: "", error: "" });
     const githubStores = ref([]);
     const githubBusy = ref(false);
@@ -2781,7 +2793,8 @@ const app = createApp({
     });
     const gitProviderLabel = computed(() => (githubProviderForm.provider === "gitea" || githubStatus.provider === "gitea") ? "Gitea" : "GitHub");
     const githubHeaderLabel = computed(() => githubStatus.configured ? `${gitProviderLabel.value}: ${githubStatus.login || t("githubConnected")}` : t("loginGit"));
-    const giteaProvider = computed(() => gitProviders.gitea || { configured: false, webBaseUrl: "", apiBaseUrl: "", oauthClientId: "" });
+    const giteaProvider = computed(() => gitProviders.gitea || { configured: false, webBaseUrl: "", apiBaseUrl: "", oauthClientId: "", oauthRedirectUri: "" });
+    const giteaOAuthRedirectUri = computed(() => giteaProvider.value.oauthRedirectUri || "");
     const gitOAuthAvailable = computed(() => {
       if (githubProviderForm.provider === "gitea") return giteaProvider.value.configured === true;
       return githubOAuth.available;
@@ -5076,6 +5089,12 @@ const app = createApp({
       } catch {}
     }
 
+    async function copyGiteaRedirectUri() {
+      try {
+        if (navigator.clipboard && giteaOAuthRedirectUri.value) await navigator.clipboard.writeText(giteaOAuthRedirectUri.value);
+      } catch {}
+    }
+
     function scheduleGithubOAuthPoll(intervalSeconds) {
       clearGithubOAuthPoll();
       const delay = Math.max(3, Number(intervalSeconds || 5)) * 1000;
@@ -5114,6 +5133,7 @@ const app = createApp({
       try {
         const data = await api("POST", "/api/team/gitea/oauth/start", {});
         if (data.config) Object.assign(githubStatus, data.config);
+        if (data.redirectUri && gitProviders.gitea) gitProviders.gitea.oauthRedirectUri = data.redirectUri;
         if (data.authorizationUrl) window.open(data.authorizationUrl, "_blank", "noopener,noreferrer");
         githubAuthModal.message = t("waitingGithubAuthorization");
       } catch (e) {
@@ -5400,7 +5420,7 @@ const app = createApp({
       knowledgeStoreConfig, knowledgeMigrationPlan, loggingConfig,
       githubAuthForm, githubProviderForm, githubStatus, githubOAuth, gitProviders, githubAuthModal, githubStores, githubBusy, selectedTeamStoreKey, selectedTeamKbKey, teamKbStorePath,
       teamStoreSetup, teamStorePreview, teamStoreBusy, teamStoreMessage, teamStoreError, pickingTeamStoreFolder,
-      selectedTeamStore, selectedTeamStoreKnowledgeBases, selectedTeamKb, githubStatusText, githubHeaderLabel, gitOAuthAvailable, giteaProvider,
+      selectedTeamStore, selectedTeamStoreKnowledgeBases, selectedTeamKb, githubStatusText, githubHeaderLabel, gitOAuthAvailable, giteaProvider, giteaOAuthRedirectUri,
       loading, pollError, activeView, selectedSlug, selectedProject, settingsProjectSlug, settingsProject, pageTitle, projectList, summaryCards, navItems, settingsDrawerOpen, setup,
       onboardingModalOpen, onboardingSteps, currentOnboardingStep, dismissOnboarding, runOnboardingAction,
       theme, uiLanguage, t, toggleTheme, form, importSlugPreview, submitting, formError, formOk, pickingFolder, pickProjectFolder, addProject, resetForm, busySlug, initProject,
@@ -5420,7 +5440,7 @@ const app = createApp({
       loadKnowledgeStoreConfig, saveKnowledgeStoreConfig, previewKnowledgeMigration, executeKnowledgeMigration, loadLoggingConfig, saveLoggingConfig,
       validateGit, scanProject, validateKb, migrateFramework, runKnowledgeUpdate, runImportPreflight, runJob, loadHookStatus, loadSettingsProject, changeSettingsProject, loadProjectGoal, saveProjectGoal, openProjectGoalModal, closeProjectGoalModal, saveProjectGoalAndClose, startProjectGoalDrag, installHook, uninstallHook,
       pickTeamStoreFolder, scanLocalTeamStore, configureLocalTeamStore,
-      saveGithubAuth, saveGithubProvider, inferGithubApiBaseUrl, onGitProviderTypeChanged, selectGitLoginProvider, openGithubAuthModal, closeGithubAuthModal, startGithubOAuth, startGiteaOAuth, openGithubVerification, copyGithubDeviceCode, logoutGithub, loadGithubStores, checkoutTeamStore, onTeamStoreChanged,
+      saveGithubAuth, saveGithubProvider, inferGithubApiBaseUrl, onGitProviderTypeChanged, selectGitLoginProvider, openGithubAuthModal, closeGithubAuthModal, startGithubOAuth, startGiteaOAuth, openGithubVerification, copyGithubDeviceCode, copyGiteaRedirectUri, logoutGithub, loadGithubStores, checkoutTeamStore, onTeamStoreChanged,
       saveAutomationSettings, previewAutomationPrompt, simulateAutomation, loadAutomationRuns,
       openRemoveProject, closeRemoveProject, confirmRemoveProject,
       loadRuns, selectRun, loadRunDetail, loadDraftPreview, applySelectedDrafts, rejectRun,
