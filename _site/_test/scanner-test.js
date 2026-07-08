@@ -1,6 +1,7 @@
 // TASK-004: Analysis state and scanner test
 // Run: node _site/_test/scanner-test.js
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 const { spawnServer } = require('./helpers/spawn-server');
@@ -137,6 +138,36 @@ async function getProject(slug) {
     cfg = await getProject(TEMP_SLUG);
     assert(cfg.lastSeenCommit === newHead, 'lastSeenCommit should equal new HEAD');
     assert(cfg.lastAnalyzedCommit === multi.headCommit, 'lastAnalyzedCommit must NOT be updated by scan');
+
+    // 3b. Team KB mode should not re-analyze commits already present in shared changes/.
+    const teamKbRemote = makeRepo({ kind: 'one-commit' });
+    fixtures.push(teamKbRemote);
+    const teamKbPath = fs.mkdtempSync(path.join(os.tmpdir(), `kb-team-scan-clone-${process.pid}-`));
+    fs.rmSync(teamKbPath, { recursive: true, force: true });
+    git(DATA_DIR, ['clone', teamKbRemote.path, teamKbPath]);
+    fixtures.push({ cleanup: () => fs.rmSync(teamKbPath, { recursive: true, force: true }) });
+    fs.mkdirSync(path.join(teamKbRemote.path, 'changes'), { recursive: true });
+    fs.writeFileSync(path.join(teamKbRemote.path, 'changes', `${newHead.slice(0, 7)}.md`), `---\ncommit: ${newHead}\n---\n# already analyzed remotely\n`, 'utf-8');
+    git(teamKbRemote.path, ['add', '.']);
+    git(teamKbRemote.path, ['commit', '-q', '-m', 'docs: analyze teammate commit']);
+    const curTeam = JSON.parse(fs.readFileSync(PROJECTS_JSON, 'utf-8'));
+    curTeam[TEMP_SLUG].knowledgeMode = 'team';
+    curTeam[TEMP_SLUG].kbPath = teamKbPath;
+    curTeam[TEMP_SLUG].kbStorePath = teamKbPath;
+    curTeam[TEMP_SLUG].kbStoreBranch = 'main';
+    fs.writeFileSync(PROJECTS_JSON, JSON.stringify(curTeam, null, 2) + '\n', 'utf-8');
+
+    r = await json('POST', `/api/projects/${TEMP_SLUG}/scan`);
+    assert(r.res.ok, 'team scan should succeed');
+    assert(r.data.teamKnowledgeSync && r.data.teamKnowledgeSync.ok === true && r.data.teamKnowledgeSync.skipped === false, 'team scan should pull the team KB store before filtering');
+    assert(fs.existsSync(path.join(teamKbPath, 'changes', `${newHead.slice(0, 7)}.md`)), 'team scan should pull remote team KB changes');
+    assert(r.data.pendingCount === 1, `team scan should skip already-analyzed KB commits, got ${r.data.pendingCount}`);
+    assert(r.data.filteredTeamAnalyzedCount === 1, `team scan should report one filtered commit, got ${r.data.filteredTeamAnalyzedCount}`);
+    assert(!r.data.commits.some(c => c.hash === newHead), 'team scan should omit the commit already present in shared KB');
+
+    const curPersonal = JSON.parse(fs.readFileSync(PROJECTS_JSON, 'utf-8'));
+    curPersonal[TEMP_SLUG].knowledgeMode = 'personal';
+    fs.writeFileSync(PROJECTS_JSON, JSON.stringify(curPersonal, null, 2) + '\n', 'utf-8');
 
     // 4. No new commits since lastAnalyzedCommit → 0 pending.
     // (The scanner uses lastAnalyzedCommit as the range start, not lastSeenCommit.

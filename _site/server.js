@@ -60,6 +60,7 @@ const CLAUDE_PROMPTS_PATH = path.join(DATA_DIR, 'claude-prompts.json');
 const HOOK_ERROR_LOG_PATH = path.join(DATA_DIR, '.hook-trigger-errors.log');
 const GITHUB_TEAM_PATH = path.join(DATA_DIR, 'github-team.json');
 const TEAM_GIT_PROVIDERS_PATH = path.join(DATA_DIR, 'team-git-providers.json');
+const TEAM_STORES_CACHE_PATH = path.join(DATA_DIR, 'team-stores-cache.json');
 
 // ---- state ----
 let lastRun = { time: null, status: null, slug: null, output: '' };
@@ -74,6 +75,58 @@ function readProjectsForJob() {
 
 function readTeamGitProvidersConfig() {
   return githubTeamStore.readProviderFileConfig(TEAM_GIT_PROVIDERS_PATH);
+}
+
+function defaultTeamStoresCache() {
+  return {
+    schema: 'project-knowledge/team-stores-cache/v1',
+    provider: '',
+    apiBaseUrl: '',
+    login: '',
+    updatedAt: '',
+    scannedRepoCount: 0,
+    stores: [],
+  };
+}
+
+function readTeamStoresCache() {
+  return readJsonOrDefault(TEAM_STORES_CACHE_PATH, defaultTeamStoresCache(), { persistDefault: false, backupInvalid: false });
+}
+
+function writeTeamStoresCache(cfg, result) {
+  const cache = {
+    schema: 'project-knowledge/team-stores-cache/v1',
+    provider: githubTeamStore.normalizeProvider(cfg.provider),
+    apiBaseUrl: String(cfg.apiBaseUrl || ''),
+    login: String(cfg.login || ''),
+    updatedAt: new Date().toISOString(),
+    scannedRepoCount: Number(result && result.scannedRepoCount || 0),
+    stores: Array.isArray(result && result.stores) ? result.stores : [],
+  };
+  writeJson(TEAM_STORES_CACHE_PATH, cache);
+  return cache;
+}
+
+function clearTeamStoresCache() {
+  try { fs.rmSync(TEAM_STORES_CACHE_PATH, { force: true }); } catch {}
+}
+
+function teamStoresCacheMatches(cfg, cache) {
+  if (!cache || typeof cache !== 'object') return false;
+  if (!Array.isArray(cache.stores)) return false;
+  return githubTeamStore.normalizeProvider(cache.provider) === githubTeamStore.normalizeProvider(cfg.provider)
+    && String(cache.apiBaseUrl || '') === String(cfg.apiBaseUrl || '')
+    && String(cache.login || '') === String(cfg.login || '');
+}
+
+function publicTeamStoresCache(cfg) {
+  const cache = readTeamStoresCache();
+  if (!teamStoresCacheMatches(cfg, cache)) return null;
+  return {
+    updatedAt: cache.updatedAt || '',
+    scannedRepoCount: Number(cache.scannedRepoCount || 0),
+    stores: Array.isArray(cache.stores) ? cache.stores : [],
+  };
 }
 
 function buildGiteaOAuthRedirectUri() {
@@ -431,6 +484,54 @@ function normalizeTeamKnowledgeBinding(input) {
       sourceProjectRemoteUrl: String(input.sourceProjectRemoteUrl || ''),
     },
   };
+}
+
+async function syncTeamKnowledgeStoreForImport(teamBinding) {
+  if (!teamBinding) return { ok: true, skipped: true };
+  const storePath = teamBinding.kbStorePath;
+  const remoteUrl = String(teamBinding.kbStoreRemoteUrl || '').trim();
+  const storeExists = fs.existsSync(storePath);
+
+  if (!remoteUrl) {
+    if (!storeExists) return { ok: false, status: 400, error: `team knowledge store path not found: ${storePath}` };
+  } else if (storeExists) {
+    if (!fs.statSync(storePath).isDirectory()) {
+      return { ok: false, status: 400, error: `team knowledge store path is not a directory: ${storePath}` };
+    }
+    const storeInspection = await inspectGit(storePath);
+    if (storeInspection.repoStatus === 'not-git') {
+      if (!fs.existsSync(teamBinding.kbPath)) {
+        return { ok: false, status: 400, error: `team knowledge store path exists but is not a git repository: ${storePath}` };
+      }
+      return { ok: true, skipped: true, reason: 'existing non-git team knowledge store' };
+    }
+    const cfg = readGithubTeamConfig();
+    const checkout = await githubTeamStore.checkoutStore({
+      cloneUrl: remoteUrl,
+      branch: teamBinding.kbStoreBranch || 'main',
+      localPath: storePath,
+      token: cfg.token || '',
+      provider: teamBinding.teamProvider || cfg.provider || 'github',
+      username: cfg.login || '',
+    });
+    if (!checkout.ok) return { ok: false, status: checkout.status || 500, error: `failed to sync team knowledge store: ${checkout.error}` };
+  } else {
+    const cfg = readGithubTeamConfig();
+    const checkout = await githubTeamStore.checkoutStore({
+      cloneUrl: remoteUrl,
+      branch: teamBinding.kbStoreBranch || 'main',
+      localPath: storePath,
+      token: cfg.token || '',
+      provider: teamBinding.teamProvider || cfg.provider || 'github',
+      username: cfg.login || '',
+    });
+    if (!checkout.ok) return { ok: false, status: checkout.status || 500, error: `failed to clone team knowledge store: ${checkout.error}` };
+  }
+
+  if (!fs.existsSync(teamBinding.kbPath) || !fs.statSync(teamBinding.kbPath).isDirectory()) {
+    return { ok: false, status: 400, error: `selected team knowledge base path not found after sync: ${teamBinding.kbPath}` };
+  }
+  return { ok: true };
 }
 
 function defaultProjectAutomationConfig(input = {}) {
@@ -1051,8 +1152,9 @@ async function importProjectFromLocalPath({ localPath, knowledgeLanguage = DEFAU
     return { ok: false, status: 400, error: teamBindingResult.error };
   }
   const teamBinding = teamBindingResult && teamBindingResult.binding || null;
-  if (teamBinding && !fs.existsSync(teamBinding.kbStorePath)) {
-    return { ok: false, status: 400, error: `team knowledge store path not found: ${teamBinding.kbStorePath}` };
+  if (teamBinding) {
+    const syncResult = await syncTeamKnowledgeStoreForImport(teamBinding);
+    if (!syncResult.ok) return syncResult;
   }
   const selectedProfileId = firstUsableAiProfileId();
   if (!selectedProfileId) return { ok: false, status: 400, error: 'No usable AI profile configured' };
@@ -1076,7 +1178,12 @@ async function importProjectFromLocalPath({ localPath, knowledgeLanguage = DEFAU
     ? teamBinding.kbPath
     : (recoveredCfg && recoveredCfg.kbPath ? recoveredCfg.kbPath : defaultProjectKbPath(slug));
   const kbAlreadyInitialized = fs.existsSync(path.join(kbPath, 'README.md')) || kbFramework.isCurrentKb(kbPath);
-  const initResult = kbAlreadyInitialized
+  if (teamBinding && !kbAlreadyInitialized) {
+    return { ok: false, status: 400, error: `selected team knowledge base is not initialized: ${kbPath}` };
+  }
+  const initResult = teamBinding
+    ? { created: [], basePath: path.resolve(kbPath), reusedExisting: true, teamBinding: true, kbSchemaVersion: PROJECT_SCHEMA_VERSION }
+    : kbAlreadyInitialized
     ? { created: [], basePath: path.resolve(kbPath), reusedExisting: true, kbSchemaVersion: PROJECT_SCHEMA_VERSION }
     : initProjectDirs(slug, kbPath);
   const config = normalizeProjectConfig(slug, {
@@ -1120,7 +1227,9 @@ async function importProjectFromLocalPath({ localPath, knowledgeLanguage = DEFAU
   }
 
   let initAutomation = null;
-  if (kbAlreadyInitialized) {
+  if (teamBinding) {
+    initAutomation = { ok: true, skipped: true, reason: 'team KB binding uses existing remote knowledge base' };
+  } else if (kbAlreadyInitialized) {
     initAutomation = { ok: true, skipped: true, reason: 'existing KB reconnected' };
   } else {
     try {
@@ -1455,6 +1564,7 @@ const server = http.createServer(async (req, res) => {
         config: githubTeamStore.publicConfig(cfg),
         oauth: githubTeamStore.oauthPublicConfig(cfg, process.env),
         providers,
+        storesCache: publicTeamStoresCache(cfg),
       });
     }
 
@@ -1479,6 +1589,7 @@ const server = http.createServer(async (req, res) => {
         token: apiChanged ? '' : current.token,
         login: apiChanged ? '' : current.login,
       });
+      if (apiChanged) clearTeamStoresCache();
       logEvent('info', 'github_team_provider_saved', 'GitHub team knowledge provider settings saved.', {
         source: 'github-team',
         provider: cfg.provider,
@@ -1559,6 +1670,7 @@ const server = http.createServer(async (req, res) => {
         token: exchanged.token,
         login: validation.login,
       });
+      clearTeamStoresCache();
       logEvent('info', 'gitea_team_oauth_saved', 'Gitea team knowledge OAuth login saved.', {
         source: 'github-team',
         provider: 'gitea',
@@ -1601,6 +1713,7 @@ const server = http.createServer(async (req, res) => {
         apiBaseUrl: cfgBefore.apiBaseUrl || githubTeamStore.DEFAULT_API_BASE_URL,
         login: validation.login,
       });
+      clearTeamStoresCache();
       logEvent('info', 'github_team_oauth_saved', 'GitHub team knowledge OAuth login saved.', {
         source: 'github-team',
         login: cfg.login,
@@ -1621,6 +1734,7 @@ const server = http.createServer(async (req, res) => {
       if (!validation.ok) return send(res, validation.status || 400, validation);
       const oauthWebBaseUrl = String(parsed.oauthWebBaseUrl || current.oauthWebBaseUrl || githubTeamStore.inferWebBaseUrlFromApiBaseUrl(apiBaseUrl, provider)).trim();
       const cfg = writeGithubTeamConfig({ ...current, provider, token, apiBaseUrl, oauthWebBaseUrl, login: validation.login });
+      clearTeamStoresCache();
       logEvent('info', 'github_team_auth_saved', 'GitHub team knowledge auth saved.', {
         source: 'github-team',
         login: cfg.login,
@@ -1632,6 +1746,7 @@ const server = http.createServer(async (req, res) => {
     // DELETE /api/team/github/auth
     if (m === 'DELETE' && p === '/api/team/github/auth') {
       const cfg = writeGithubTeamConfig(githubTeamStore.defaultConfig());
+      clearTeamStoresCache();
       logEvent('info', 'github_team_auth_removed', 'GitHub team knowledge auth removed.', { source: 'github-team' });
       return send(res, 200, { ok: true, config: githubTeamStore.publicConfig(cfg) });
     }
@@ -1639,13 +1754,51 @@ const server = http.createServer(async (req, res) => {
     // GET /api/team/github/stores
     if (m === 'GET' && p === '/api/team/github/stores') {
       const cfg = readGithubTeamConfig();
-      if (!cfg.token) return send(res, 401, { ok: false, error: 'GitHub auth is not configured' });
+      if (!cfg.token) {
+        const label = cfg.provider === 'gitea' ? 'Gitea' : 'GitHub';
+        return send(res, 401, { ok: false, code: 'auth_required', error: `${label} auth is not configured` });
+      }
+      const forceRefresh = ['1', 'true', 'yes'].includes(String(url.searchParams.get('refresh') || '').toLowerCase());
+      const cache = readTeamStoresCache();
+      if (!forceRefresh && teamStoresCacheMatches(cfg, cache)) {
+        return send(res, 200, {
+          ok: true,
+          cached: true,
+          updatedAt: cache.updatedAt || '',
+          scannedRepoCount: Number(cache.scannedRepoCount || 0),
+          stores: Array.isArray(cache.stores) ? cache.stores : [],
+        });
+      }
       const result = await githubTeamStore.discoverStores({
         token: cfg.token,
         apiBaseUrl: cfg.apiBaseUrl,
         provider: cfg.provider,
         dataDir: DATA_DIR,
       });
+      if (!result.ok) {
+        if (teamStoresCacheMatches(cfg, cache)) {
+          return send(res, 200, {
+            ok: true,
+            cached: true,
+            stale: true,
+            warning: result.error || 'Failed to refresh team knowledge repositories; using cached results.',
+            updatedAt: cache.updatedAt || '',
+            scannedRepoCount: Number(cache.scannedRepoCount || 0),
+            stores: Array.isArray(cache.stores) ? cache.stores : [],
+          });
+        }
+        return send(res, result.status || 500, result);
+      }
+      const nextCache = writeTeamStoresCache(cfg, result);
+      logEvent('info', 'github_team_store_discovery_cached', 'Team knowledge store discovery cache updated.', {
+        source: 'github-team',
+        provider: cfg.provider,
+        apiBaseUrl: cfg.apiBaseUrl,
+        storeCount: result.stores.length,
+        scannedRepoCount: result.scannedRepoCount || 0,
+      });
+      result.cached = false;
+      result.updatedAt = nextCache.updatedAt;
       return send(res, result.ok ? 200 : (result.status || 500), result);
     }
 
@@ -1696,6 +1849,7 @@ const server = http.createServer(async (req, res) => {
         provider: current.provider,
       });
       if (result.ok) {
+        clearTeamStoresCache();
         logEvent('info', 'github_team_local_store_configured', 'Local knowledge repository configured as a GitHub team store.', {
           source: 'github-team',
           localPath: parsed.localPath,

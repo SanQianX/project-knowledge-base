@@ -2,6 +2,7 @@ const fs = require('fs');
 const http = require('http');
 const os = require('os');
 const path = require('path');
+const { execFileSync } = require('child_process');
 const { spawnServer } = require('./helpers/spawn-server');
 const githubTeamStore = require('../lib/github-team-store');
 
@@ -10,7 +11,12 @@ const PORT = Number(process.env.KB_TEAM_KNOWLEDGE_PORT || '7837');
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 const DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), `kb-data-team-kb-${process.pid}-`));
 const SOURCE_REPO = fs.mkdtempSync(path.join(os.tmpdir(), `kb-team-source-${process.pid}-`));
+const SOURCE_REPO_AUTO_CLONE = fs.mkdtempSync(path.join(os.tmpdir(), `kb-team-source-auto-${process.pid}-`));
 const TEAM_STORE = fs.mkdtempSync(path.join(os.tmpdir(), `kb-team-store-${process.pid}-`));
+const TEAM_REMOTE = fs.mkdtempSync(path.join(os.tmpdir(), `kb-team-remote-${process.pid}-`));
+const TEAM_SYNC_REMOTE = fs.mkdtempSync(path.join(os.tmpdir(), `kb-team-sync-remote-${process.pid}-`));
+const TEAM_SYNC_LOCAL = path.join(os.tmpdir(), `kb-team-sync-local-${process.pid}-${Date.now()}`);
+const TEAM_CLONE_TARGET = path.join(os.tmpdir(), `kb-team-cloned-${process.pid}-${Date.now()}`);
 
 function assert(cond, msg) {
   if (!cond) throw new Error(msg);
@@ -44,6 +50,16 @@ async function json(method, url, body) {
     try { data = JSON.parse(text); } catch { data = { raw: text }; }
   }
   return { res, data };
+}
+
+function git(cwd, args) {
+  return execFileSync('git', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString('utf-8').trim();
+}
+
+function initGitRepo(cwd) {
+  git(cwd, ['init']);
+  git(cwd, ['config', 'user.name', 'Test User']);
+  git(cwd, ['config', 'user.email', 'test@example.com']);
 }
 
 function startMockGithub(manifest) {
@@ -238,9 +254,43 @@ function startMockGitea(manifest) {
     assert(giteaDiscovered.stores[0].provider === 'gitea', 'Gitea discovery should preserve provider');
     assert(giteaDiscovered.stores[0].knowledgeBases.length === 2, 'Gitea manifest knowledge bases should be returned');
 
+    initGitRepo(TEAM_SYNC_REMOTE);
+    git(TEAM_SYNC_REMOTE, ['checkout', '-B', 'main']);
+    fs.mkdirSync(path.join(TEAM_SYNC_REMOTE, 'acc'), { recursive: true });
+    fs.writeFileSync(path.join(TEAM_SYNC_REMOTE, 'acc', 'README.md'), '# ACC KB\n', 'utf-8');
+    git(TEAM_SYNC_REMOTE, ['add', '.']);
+    git(TEAM_SYNC_REMOTE, ['commit', '-m', 'seed sync remote']);
+    git(path.dirname(TEAM_SYNC_LOCAL), ['clone', TEAM_SYNC_REMOTE, TEAM_SYNC_LOCAL]);
+    git(TEAM_SYNC_LOCAL, ['config', 'user.name', 'Test User']);
+    git(TEAM_SYNC_LOCAL, ['config', 'user.email', 'test@example.com']);
+    fs.mkdirSync(path.join(TEAM_SYNC_REMOTE, 'remote-only'), { recursive: true });
+    fs.writeFileSync(path.join(TEAM_SYNC_REMOTE, 'remote-only', 'README.md'), '# Remote Only KB\n', 'utf-8');
+    git(TEAM_SYNC_REMOTE, ['add', '.']);
+    git(TEAM_SYNC_REMOTE, ['commit', '-m', 'add remote knowledge base']);
+    const configuredBehindStore = await githubTeamStore.configureLocalStore({
+      localPath: TEAM_SYNC_LOCAL,
+      commit: false,
+      push: false,
+    });
+    assert(configuredBehindStore.ok, `configureLocalStore should pull before writing manifest: ${JSON.stringify(configuredBehindStore)}`);
+    assert(configuredBehindStore.syncResult && configuredBehindStore.syncResult.pulled === true, 'configureLocalStore should pull a behind local store before scanning');
+    assert(fs.existsSync(path.join(TEAM_SYNC_LOCAL, 'remote-only', 'README.md')), 'configureLocalStore should bring remote KB directories into the local store');
+    assert(
+      configuredBehindStore.manifest.knowledgeBases.some(kb => kb.path === 'remote-only'),
+      'configured manifest should include KB directories introduced by the remote pull'
+    );
+
     fs.mkdirSync(path.join(TEAM_STORE, 'acc'), { recursive: true });
     fs.writeFileSync(path.join(TEAM_STORE, 'acc', 'README.md'), '# ACC KB\n', 'utf-8');
     fs.writeFileSync(path.join(SOURCE_REPO, 'README.md'), '# BCC source\n', 'utf-8');
+    fs.writeFileSync(path.join(SOURCE_REPO_AUTO_CLONE, 'README.md'), '# BCC auto source\n', 'utf-8');
+
+    initGitRepo(TEAM_REMOTE);
+    git(TEAM_REMOTE, ['checkout', '-B', 'main']);
+    fs.mkdirSync(path.join(TEAM_REMOTE, 'acc'), { recursive: true });
+    fs.writeFileSync(path.join(TEAM_REMOTE, 'acc', 'README.md'), '# ACC KB from remote\n', 'utf-8');
+    git(TEAM_REMOTE, ['add', '.']);
+    git(TEAM_REMOTE, ['commit', '-m', 'seed team knowledge']);
 
     const spawned = spawnServer({
       root: ROOT,
@@ -259,6 +309,22 @@ function startMockGitea(manifest) {
       assert(status.res.ok, `team status should succeed: ${JSON.stringify(status.data)}`);
       const expectedGiteaRedirect = `${BASE_URL}/api/team/gitea/oauth/callback`;
       assert(status.data.providers.gitea.oauthRedirectUri === expectedGiteaRedirect, 'Gitea status should expose the stable OAuth redirect URI');
+
+      githubTeamStore.writeConfig(path.join(DATA_DIR, 'github-team.json'), {
+        provider: 'github',
+        token: 'token',
+        apiBaseUrl: mock.apiBaseUrl,
+        oauthWebBaseUrl: mock.apiBaseUrl,
+        login: 'alice',
+      });
+      const refreshedStores = await json('GET', '/api/team/github/stores?refresh=1');
+      assert(refreshedStores.res.ok, `team store refresh should succeed: ${JSON.stringify(refreshedStores.data)}`);
+      assert(refreshedStores.data.cached === false, 'forced team store refresh should return live results');
+      const cachedStatus = await json('GET', '/api/team/github/status');
+      assert(cachedStatus.data.storesCache && cachedStatus.data.storesCache.stores.length === 1, 'status should expose cached team stores');
+      const cachedStores = await json('GET', '/api/team/github/stores');
+      assert(cachedStores.res.ok, `cached team stores should succeed: ${JSON.stringify(cachedStores.data)}`);
+      assert(cachedStores.data.cached === true, 'default team store loading should use the local cache');
 
       const giteaStart = await json('POST', '/api/team/gitea/oauth/start', {});
       assert(giteaStart.res.ok, `Gitea OAuth start should succeed: ${JSON.stringify(giteaStart.data)}`);
@@ -285,11 +351,42 @@ function startMockGitea(manifest) {
       assert(imported.data.config.kbId === 'kb-acc', 'kbId should be persisted');
       assert(imported.data.config.kbSubdir === 'acc', 'kbSubdir should be persisted');
       assert(path.resolve(imported.data.config.kbPath) === path.resolve(TEAM_STORE, 'acc'), 'kbPath should point at the team subdirectory');
-      assert(imported.data.initAutomation && imported.data.initAutomation.skipped === true, 'existing team KB should reconnect without init automation');
+      assert(imported.data.initResult && imported.data.initResult.teamBinding === true, 'team KB import should be marked as an existing team binding');
+      assert(
+        imported.data.initAutomation && imported.data.initAutomation.skipped === true && /team KB binding/.test(imported.data.initAutomation.reason || ''),
+        'team KB import should never dispatch project-init automation'
+      );
 
       const projects = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'projects.json'), 'utf-8'));
       const saved = projects[imported.data.slug];
       assert(saved && saved.kbStoreRemoteUrl === 'https://github.com/org/knowledge.git', 'store remote should be saved');
+
+      const autoImported = await json('POST', '/api/projects/import', {
+        localPath: SOURCE_REPO_AUTO_CLONE,
+        teamKnowledgeBase: {
+          storeLocalPath: TEAM_CLONE_TARGET,
+          storeRemoteUrl: TEAM_REMOTE,
+          storeFullName: 'org/knowledge-auto',
+          storeId: 'team-store-auto',
+          branch: 'main',
+          kbId: 'kb-acc',
+          kbSlug: 'acc',
+          kbSubdir: 'acc',
+          displayName: 'ACC',
+        },
+      });
+      assert(autoImported.res.ok, `team KB import should auto-clone the store: ${JSON.stringify(autoImported.data)}`);
+      assert(fs.existsSync(path.join(TEAM_CLONE_TARGET, 'acc', 'README.md')), 'team KB import should clone remote KB contents before binding');
+      assert(
+        fs.readFileSync(path.join(TEAM_CLONE_TARGET, 'acc', 'README.md'), 'utf-8').includes('from remote'),
+        'cloned team KB should contain remote content, not an initialized empty KB'
+      );
+      assert(autoImported.data.initResult && autoImported.data.initResult.teamBinding === true, 'auto-cloned team KB import should be marked as an existing team binding');
+      assert(
+        autoImported.data.initAutomation && autoImported.data.initAutomation.skipped === true && /team KB binding/.test(autoImported.data.initAutomation.reason || ''),
+        'auto-cloned team KB import should never dispatch project-init automation'
+      );
+
       console.log('team knowledge store test passed');
     } catch (e) {
       console.error('team knowledge store integration failed:', e.message);
@@ -306,6 +403,11 @@ function startMockGitea(manifest) {
     try { giteaMock.server.close(); } catch {}
     try { fs.rmSync(DATA_DIR, { recursive: true, force: true }); } catch {}
     try { fs.rmSync(SOURCE_REPO, { recursive: true, force: true }); } catch {}
+    try { fs.rmSync(SOURCE_REPO_AUTO_CLONE, { recursive: true, force: true }); } catch {}
     try { fs.rmSync(TEAM_STORE, { recursive: true, force: true }); } catch {}
+    try { fs.rmSync(TEAM_REMOTE, { recursive: true, force: true }); } catch {}
+    try { fs.rmSync(TEAM_SYNC_REMOTE, { recursive: true, force: true }); } catch {}
+    try { fs.rmSync(TEAM_SYNC_LOCAL, { recursive: true, force: true }); } catch {}
+    try { fs.rmSync(TEAM_CLONE_TARGET, { recursive: true, force: true }); } catch {}
   }
 })();

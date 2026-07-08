@@ -682,8 +682,95 @@ function normalizeKnowledgeBaseInput(items, storeId) {
   }).filter(Boolean);
 }
 
+async function syncLocalStoreWithRemote(store) {
+  const root = store && store.localPath;
+  const branch = store && (store.branch || store.defaultBranch) || 'main';
+  if (!root) return { ok: false, status: 400, error: 'localPath is required' };
+  const result = {
+    ok: true,
+    branch,
+    fetched: false,
+    pulled: false,
+    ahead: false,
+    diverged: false,
+    remoteMissing: false,
+    localHeadBefore: '',
+    remoteHeadBefore: '',
+    localHeadAfter: '',
+    remoteHeadAfter: '',
+  };
+
+  const fetch = await execGit(root, ['fetch', 'origin', branch], 60000);
+  if (!fetch.ok) {
+    const fetchError = String(fetch.stderr || fetch.error || '');
+    if (/could(n't| not) find remote ref/i.test(fetchError)) {
+      result.remoteMissing = true;
+      result.ahead = true;
+      return result;
+    }
+    return {
+      ok: false,
+      status: 500,
+      error: fetchError || 'git fetch failed',
+      fetch,
+    };
+  }
+  result.fetched = true;
+
+  const remoteRef = `origin/${branch}`;
+  const localHead = await execGit(root, ['rev-parse', 'HEAD'], 15000);
+  const remoteHead = await execGit(root, ['rev-parse', remoteRef], 15000);
+  result.localHeadBefore = localHead.ok ? localHead.stdout.trim() : '';
+  result.remoteHeadBefore = remoteHead.ok ? remoteHead.stdout.trim() : '';
+
+  if (result.localHeadBefore && result.remoteHeadBefore && result.localHeadBefore !== result.remoteHeadBefore) {
+    const localContainsRemote = await execGit(root, ['merge-base', '--is-ancestor', remoteRef, 'HEAD'], 15000);
+    const remoteContainsLocal = await execGit(root, ['merge-base', '--is-ancestor', 'HEAD', remoteRef], 15000);
+
+    if (remoteContainsLocal.ok && !localContainsRemote.ok) {
+      const pull = await execGit(root, ['pull', '--ff-only', 'origin', branch], 120000);
+      if (!pull.ok) {
+        return {
+          ok: false,
+          status: 500,
+          error: pull.stderr || pull.error || 'git pull --ff-only failed',
+          fetch,
+          pull,
+        };
+      }
+      result.pulled = true;
+    } else if (localContainsRemote.ok && !remoteContainsLocal.ok) {
+      result.ahead = true;
+    } else {
+      result.diverged = true;
+      return {
+        ok: false,
+        status: 409,
+        error: 'Local team knowledge repository has diverged from origin. Please resolve it manually, then try again.',
+        fetch,
+        localHead: result.localHeadBefore,
+        remoteHead: result.remoteHeadBefore,
+      };
+    }
+  }
+
+  const finalLocalHead = await execGit(root, ['rev-parse', 'HEAD'], 15000);
+  const finalRemoteHead = await execGit(root, ['rev-parse', remoteRef], 15000);
+  result.localHeadAfter = finalLocalHead.ok ? finalLocalHead.stdout.trim() : result.localHeadBefore;
+  result.remoteHeadAfter = finalRemoteHead.ok ? finalRemoteHead.stdout.trim() : result.remoteHeadBefore;
+  if (result.localHeadAfter && result.remoteHeadAfter && result.localHeadAfter !== result.remoteHeadAfter) {
+    const localContainsRemote = await execGit(root, ['merge-base', '--is-ancestor', remoteRef, 'HEAD'], 15000);
+    result.ahead = localContainsRemote.ok;
+  }
+  return result;
+}
+
 async function configureLocalStore({ localPath, displayName = '', knowledgeBases = null, commit = true, push = true, provider = '' }) {
-  const scan = await scanLocalStore({ localPath, provider });
+  const initialScan = await scanLocalStore({ localPath, provider });
+  if (!initialScan.ok) return initialScan;
+  const syncResult = await syncLocalStoreWithRemote(initialScan.store);
+  if (!syncResult.ok) return syncResult;
+  const scan = await scanLocalStore({ localPath: initialScan.store.localPath, provider });
   if (!scan.ok) return scan;
   const store = scan.store;
   const selectedKnowledgeBases = normalizeKnowledgeBaseInput(knowledgeBases, store.storeId);
@@ -718,10 +805,10 @@ async function configureLocalStore({ localPath, displayName = '', knowledgeBases
       committed = true;
     }
   }
-  if (push && (committed || !commit)) {
+  if (push && (committed || !commit || syncResult.ahead)) {
     pushResult = await execGit(store.localPath, ['push', 'origin', store.branch || store.defaultBranch || 'main'], 120000);
     if (!pushResult.ok) {
-      return { ok: false, status: 500, error: pushResult.stderr || pushResult.error || 'git push failed', manifest, manifestPath, committed };
+      return { ok: false, status: 500, error: pushResult.stderr || pushResult.error || 'git push failed', manifest, manifestPath, committed, syncResult };
     }
     pushed = true;
   }
@@ -737,6 +824,7 @@ async function configureLocalStore({ localPath, displayName = '', knowledgeBases
     manifestPath,
     committed,
     pushed,
+    syncResult,
     commitResult,
     pushResult,
   };
@@ -823,14 +911,29 @@ async function listAccessibleRepos({ token, apiBaseUrl = DEFAULT_API_BASE_URL, p
   return { ok: true, repos };
 }
 
+async function mapWithConcurrency(items, limit, worker) {
+  const source = Array.isArray(items) ? items : [];
+  const results = new Array(source.length);
+  const workerCount = Math.max(1, Math.min(Number(limit) || 1, source.length || 1));
+  let nextIndex = 0;
+  async function runWorker() {
+    while (nextIndex < source.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await worker(source[index], index);
+    }
+  }
+  await Promise.all(Array.from({ length: workerCount }, runWorker));
+  return results;
+}
+
 async function discoverStores({ token, apiBaseUrl = DEFAULT_API_BASE_URL, provider = 'github', dataDir, maxRepos = 200 }) {
   const repoResult = await listAccessibleRepos({ token, apiBaseUrl, provider, maxRepos });
   if (!repoResult.ok) return repoResult;
-  const stores = [];
-  for (const repo of repoResult.repos) {
-    const manifestResult = await readManifestFromRepo({ repo, token, apiBaseUrl, provider });
-    if (!manifestResult.ok) continue;
-    stores.push({
+  const storeResults = await mapWithConcurrency(repoResult.repos, 8, async (repo) => {
+    const manifestResult = await readManifestFromRepo({ repo, token, apiBaseUrl, provider }).catch((error) => ({ ok: false, error: error && error.message || String(error) }));
+    if (!manifestResult.ok) return null;
+    return {
       provider: normalizeProvider(provider),
       fullName: repo.full_name,
       name: repo.name,
@@ -843,8 +946,9 @@ async function discoverStores({ token, apiBaseUrl = DEFAULT_API_BASE_URL, provid
       manifestPath: manifestResult.manifestPath,
       defaultLocalPath: defaultLocalPathForRepo(dataDir, repo),
       ...manifestResult.manifest,
-    });
-  }
+    };
+  });
+  const stores = storeResults.filter(Boolean);
   return { ok: true, stores, scannedRepoCount: repoResult.repos.length };
 }
 
