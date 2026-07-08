@@ -624,11 +624,13 @@
                 <div v-if="selectedTeamKb" class="rounded-md border p-2 text-xs muted">
                   {{ t("teamKbBindingPreview") }}:
                   <code>{{ teamKbStorePath }}\{{ selectedTeamKb.path }}</code>
+                  <div class="text-[11px] opacity-75 mt-1">{{ t("sparseHint") }}</div>
                 </div>
               </div>
             </div>
             <div v-if="formError" class="rounded-lg border border-red-500/25 bg-red-500/10 p-3 text-sm" style="color: var(--bad)">{{ formError }}</div>
             <div v-if="formOk" class="rounded-lg border border-emerald-500/25 bg-emerald-500/10 p-3 text-sm" style="color: var(--good)">{{ formOk }}</div>
+            <div v-if="importNotice" class="rounded-lg border border-amber-500/25 bg-amber-500/10 p-3 text-sm">{{ importNotice }}</div>
             <div class="flex gap-2">
               <button type="submit" :disabled="submitting" class="btn-primary disabled:opacity-50">{{ submitting ? t("saving") : t("import") }}</button>
               <button type="button" @click="resetForm" class="btn">{{ t("reset") }}</button>
@@ -1492,6 +1494,11 @@ const I18N = {
     selectTeamKnowledgeBase: "Select a team knowledge base",
     teamKbBindingPreview: "Binding preview",
     teamStoreSynced: "Team knowledge repository is synced.",
+    sparseHint: "Only the selected subdirectory will be downloaded (sparse-checkout, Git ≥ 2.25 required).",
+    sparseFallbackWarning: "Your Git version doesn't support sparse-checkout; the full repository will be downloaded. Reason: {reason}",
+    teamKbImportSparseApplied: "Sparse-checkout applied: only `{subdir}` is materialized locally.",
+    sparsePartialCloneSuccess: "Repository cloned with sparse-checkout.",
+    sparsePartialCloneFallback: "Sparse-checkout unavailable; cloned full repository.",
     projectSupervision: "Project Supervision",
     runsAndDrafts: "Runs and Drafts",
     selectProject: "Select a project from the left sidebar.",
@@ -1923,6 +1930,11 @@ const I18N = {
     selectTeamKnowledgeBase: "选择团队知识库",
     teamKbBindingPreview: "绑定预览",
     teamStoreSynced: "团队知识库总仓库已同步",
+    sparseHint: "仅会下载所选子目录（sparse-checkout 部分克隆，需 Git ≥ 2.25）。",
+    sparseFallbackWarning: "当前 Git 版本不支持 sparse-checkout，将下载完整仓库。原因：{reason}",
+    teamKbImportSparseApplied: "已应用 sparse-checkout：本地仅保留 `{subdir}`。",
+    sparsePartialCloneSuccess: "已通过 sparse-checkout 克隆仓库。",
+    sparsePartialCloneFallback: "sparse-checkout 不可用，已克隆完整仓库。",
     projectSupervision: "项目监督",
     runsAndDrafts: "运行与草稿",
     selectProject: "请从左侧选择一个项目。",
@@ -2786,6 +2798,8 @@ const app = createApp({
     const submitting = ref(false);
     const formError = ref("");
     const formOk = ref("");
+    const importNotice = ref("");
+    let importNoticeTimer = null;
     const busySlug = ref("");
     const settingsProjectSlug = ref("");
 
@@ -4868,10 +4882,17 @@ const app = createApp({
       }
     }
 
+    function clearImportNoticeTimer() {
+      if (importNoticeTimer) clearTimeout(importNoticeTimer);
+      importNoticeTimer = null;
+    }
+
     function resetForm() {
       Object.assign(form, { slug: "", displayName: "", localPath: "", gitPath: "", primaryLanguage: "", tagsStr: "", isReference: false, initNow: true, initGit: false, createInitialCommit: false, remoteUrl: "", knowledgeLanguage: "zh-CN", aiProfileId: usableAiProfiles.value[0] && usableAiProfiles.value[0].id || "", useTeamKnowledge: false });
       formError.value = "";
       formOk.value = "";
+      importNotice.value = "";
+      clearImportNoticeTimer();
       importPreflight.value = null;
       selectedTeamStoreKey.value = "";
       selectedTeamKbKey.value = "";
@@ -5385,6 +5406,8 @@ const app = createApp({
     async function addProject() {
       formError.value = "";
       formOk.value = "";
+      importNotice.value = "";
+      clearImportNoticeTimer();
       submitting.value = true;
       try {
         if (!usableAiProfiles.value.length) throw new Error(t("noProfilesToCreateProject"));
@@ -5396,6 +5419,16 @@ const app = createApp({
         });
         const slug = data.slug;
         formOk.value = t("importedProject", { name: data.config && data.config.displayName || slug });
+        if (data && data.syncNotice) {
+          if (data.syncNotice.kind === "sparse-applied") {
+            importNotice.value = t("sparsePartialCloneSuccess");
+          } else if (data.syncNotice.kind === "sparse-fallback") {
+            importNotice.value = t("sparsePartialCloneFallback") + (data.syncNotice.warning ? " " + data.syncNotice.warning : "");
+          }
+          if (importNotice.value) {
+            importNoticeTimer = setTimeout(() => { importNotice.value = ""; clearImportNoticeTimer(); }, 8000);
+          }
+        }
         await refreshAll();
         selectProject(slug);
         activeView.value = "dashboard";
@@ -5491,6 +5524,7 @@ const app = createApp({
       stopProjectGoalDrag();
       clearGithubOAuthPoll();
       clearGiteaOAuthPoll();
+      clearImportNoticeTimer();
       window.removeEventListener("message", handleGiteaOAuthMessage);
     });
 

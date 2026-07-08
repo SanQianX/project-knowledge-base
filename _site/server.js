@@ -491,6 +491,7 @@ async function syncTeamKnowledgeStoreForImport(teamBinding) {
   const storePath = teamBinding.kbStorePath;
   const remoteUrl = String(teamBinding.kbStoreRemoteUrl || '').trim();
   const storeExists = fs.existsSync(storePath);
+  let lastSync = null;
 
   if (!remoteUrl) {
     if (!storeExists) return { ok: false, status: 400, error: `team knowledge store path not found: ${storePath}` };
@@ -513,8 +514,11 @@ async function syncTeamKnowledgeStoreForImport(teamBinding) {
       token: cfg.token || '',
       provider: teamBinding.teamProvider || cfg.provider || 'github',
       username: cfg.login || '',
+      subdir: teamBinding.kbSubdir || '',
+      partialClone: !!teamBinding.kbSubdir,
     });
     if (!checkout.ok) return { ok: false, status: checkout.status || 500, error: `failed to sync team knowledge store: ${checkout.error}` };
+    lastSync = { action: checkout.action, sparseCheckedOut: !!checkout.sparseCheckedOut, warning: checkout.warning || null };
   } else {
     const cfg = readGithubTeamConfig();
     const checkout = await githubTeamStore.checkoutStore({
@@ -524,14 +528,17 @@ async function syncTeamKnowledgeStoreForImport(teamBinding) {
       token: cfg.token || '',
       provider: teamBinding.teamProvider || cfg.provider || 'github',
       username: cfg.login || '',
+      subdir: teamBinding.kbSubdir || '',
+      partialClone: !!teamBinding.kbSubdir,
     });
     if (!checkout.ok) return { ok: false, status: checkout.status || 500, error: `failed to clone team knowledge store: ${checkout.error}` };
+    lastSync = { action: checkout.action, sparseCheckedOut: !!checkout.sparseCheckedOut, warning: checkout.warning || null };
   }
 
   if (!fs.existsSync(teamBinding.kbPath) || !fs.statSync(teamBinding.kbPath).isDirectory()) {
     return { ok: false, status: 400, error: `selected team knowledge base path not found after sync: ${teamBinding.kbPath}` };
   }
-  return { ok: true };
+  return { ok: true, lastSync };
 }
 
 function defaultProjectAutomationConfig(input = {}) {
@@ -1152,9 +1159,13 @@ async function importProjectFromLocalPath({ localPath, knowledgeLanguage = DEFAU
     return { ok: false, status: 400, error: teamBindingResult.error };
   }
   const teamBinding = teamBindingResult && teamBindingResult.binding || null;
+  let syncNotice = null;
   if (teamBinding) {
     const syncResult = await syncTeamKnowledgeStoreForImport(teamBinding);
     if (!syncResult.ok) return syncResult;
+    if (syncResult.lastSync) {
+      syncNotice = { kind: syncResult.lastSync.warning ? 'sparse-fallback' : (syncResult.lastSync.sparseCheckedOut ? 'sparse-applied' : 'full-clone'), action: syncResult.lastSync.action, sparseCheckedOut: syncResult.lastSync.sparseCheckedOut, warning: syncResult.lastSync.warning };
+    }
   }
   const selectedProfileId = firstUsableAiProfileId();
   if (!selectedProfileId) return { ok: false, status: 400, error: 'No usable AI profile configured' };
@@ -1258,6 +1269,7 @@ async function importProjectFromLocalPath({ localPath, knowledgeLanguage = DEFAU
     hookResult,
     initAutomation,
     reconnected: !!recovered,
+    syncNotice,
   };
 }
 

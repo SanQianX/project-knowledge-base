@@ -4,7 +4,7 @@ const http = require('http');
 const https = require('https');
 const crypto = require('crypto');
 const { URL } = require('url');
-const { execGit } = require('./git-runner');
+const { execGit, getGitVersion } = require('./git-runner');
 
 const SCHEMA = 'github-team/v1';
 const STORE_SCHEMA = 'project-knowledge/team-store/v1';
@@ -682,10 +682,12 @@ function normalizeKnowledgeBaseInput(items, storeId) {
   }).filter(Boolean);
 }
 
-async function syncLocalStoreWithRemote(store) {
+async function syncLocalStoreWithRemote(store, options = {}) {
   const root = store && store.localPath;
   const branch = store && (store.branch || store.defaultBranch) || 'main';
   if (!root) return { ok: false, status: 400, error: 'localPath is required' };
+  const cleanSub = normalizeSparseCheckoutPath(options.subdir);
+  const wantPartial = !!options.partialClone && !!cleanSub;
   const result = {
     ok: true,
     branch,
@@ -751,6 +753,17 @@ async function syncLocalStoreWithRemote(store) {
         localHead: result.localHeadBefore,
         remoteHead: result.remoteHeadBefore,
       };
+    }
+  }
+
+  if (wantPartial) {
+    const sparse = await applySparseCheckout(root, cleanSub);
+    if (!sparse.ok) {
+      return { ok: false, status: 500, error: `failed to apply sparse-checkout: ${sparse.error}`, sparse };
+    }
+    const mat = await materializeSparseCheckout(root, branch);
+    if (!mat.ok) {
+      return { ok: false, status: 500, error: `failed to materialize sparse-checkout: ${mat.error}`, mat };
     }
   }
 
@@ -965,23 +978,92 @@ function authenticatedCloneUrl(cloneUrl, token, provider = 'github', username = 
   return url.toString();
 }
 
-async function checkoutStore({ cloneUrl, branch = 'main', localPath, token = '', provider = 'github', username = '' }) {
+function normalizeSparseCheckoutPath(value) {
+  const normalized = String(value || '')
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/^\/+|\/+$/g, '');
+  if (!normalized || normalized === '.' || normalized.includes('..') || path.isAbsolute(normalized)) return '';
+  return normalized;
+}
+
+async function readSparseCheckoutEntries(localPath) {
+  const list = await execGit(localPath, ['sparse-checkout', 'list'], 30000);
+  if (!list.ok) return [];
+  return String(list.stdout || '')
+    .split(/\r?\n/)
+    .map(normalizeSparseCheckoutPath)
+    .filter(Boolean);
+}
+
+async function applySparseCheckout(localPath, subdir) {
+  const target = path.resolve(String(localPath || '').trim());
+  const sub = normalizeSparseCheckoutPath(subdir);
+  if (!target) return { ok: false, error: 'localPath is required' };
+  if (!sub) return { ok: false, error: 'subdir is required' };
+  const init = await execGit(target, ['sparse-checkout', 'init', '--cone'], 30000);
+  if (!init.ok) return { ok: false, error: init.stderr || init.error || 'sparse-checkout init failed', init };
+  const entries = Array.from(new Set([...(await readSparseCheckoutEntries(target)), sub])).sort();
+  const set = await execGit(target, ['sparse-checkout', 'set', ...entries], 30000);
+  if (!set.ok) return { ok: false, error: set.stderr || set.error || 'sparse-checkout set failed', init, set };
+  return { ok: true, entries };
+}
+
+async function materializeSparseCheckout(localPath, branch) {
+  const checkout = await execGit(localPath, ['checkout', branch], 30000);
+  if (!checkout.ok && !/already on/i.test(String(checkout.stderr || ''))) {
+    return { ok: false, error: checkout.stderr || checkout.error || 'git checkout failed', checkout };
+  }
+  const readTree = await execGit(localPath, ['read-tree', '-mu', 'HEAD'], 30000);
+  if (!readTree.ok) return { ok: false, error: readTree.stderr || readTree.error || 'git read-tree -mu HEAD failed', readTree };
+  return { ok: true };
+}
+
+async function checkoutStore({ cloneUrl, branch = 'main', localPath, token = '', provider = 'github', username = '', subdir = '', partialClone = false }) {
   const target = path.resolve(String(localPath || '').trim());
   if (!target) return { ok: false, status: 400, error: 'localPath is required' };
   if (!cloneUrl || typeof cloneUrl !== 'string') return { ok: false, status: 400, error: 'cloneUrl is required' };
+  const cleanSub = normalizeSparseCheckoutPath(subdir);
+  const wantPartial = !!partialClone && !!cleanSub;
+
+  if (wantPartial) {
+    const v = await getGitVersion();
+    if (!v.ok || v.major < 2 || (v.major === 2 && v.minor < 25)) {
+      const reason = v.ok ? `git version ${v.major}.${v.minor} < 2.25` : `git --version unreadable (${v.raw || 'unknown'})`;
+      const fallback = await checkoutStore({ cloneUrl, branch, localPath, token, provider, username });
+      if (!fallback.ok) return fallback;
+      return { ...fallback, action: 'cloned-fallback', warning: `partial clone requires Git >= 2.25; performed full clone instead. ${reason}` };
+    }
+  }
+
   if (fs.existsSync(target)) {
     const inside = await execGit(target, ['rev-parse', '--is-inside-work-tree']);
     if (!inside.ok) return { ok: false, status: 400, error: `localPath exists but is not a git repository: ${target}` };
+    let warning = null;
     const fetch = await execGit(target, ['fetch', 'origin', branch], 60000);
     if (!fetch.ok) return { ok: false, status: 500, error: fetch.stderr || fetch.error || 'git fetch failed' };
     const pull = await execGit(target, ['pull', '--ff-only', 'origin', branch], 60000);
     if (!pull.ok) return { ok: false, status: 500, error: pull.stderr || pull.error || 'git pull failed' };
-    return { ok: true, action: 'pulled', localPath: target };
+    if (wantPartial) {
+      const sparse = await applySparseCheckout(target, cleanSub);
+      if (!sparse.ok) return { ok: false, status: 500, error: `failed to apply sparse-checkout: ${sparse.error}` };
+      const mat = await materializeSparseCheckout(target, branch);
+      if (!mat.ok) return { ok: false, status: 500, error: `failed to materialize sparse-checkout: ${mat.error}` };
+    }
+    return { ok: true, action: wantPartial ? 'pulled-partial' : 'pulled', localPath: target, sparseCheckedOut: wantPartial, warning };
   }
   fs.mkdirSync(path.dirname(target), { recursive: true });
-  const clone = await execGit(path.dirname(target), ['clone', '--branch', branch, authenticatedCloneUrl(cloneUrl, token, provider, username), target], 120000);
+  let cloneArgs = ['clone', '--branch', branch, authenticatedCloneUrl(cloneUrl, token, provider, username), target];
+  if (wantPartial) cloneArgs.splice(1, 0, '--filter=blob:none', '--sparse', '--no-checkout');
+  const clone = await execGit(path.dirname(target), cloneArgs, 120000);
   if (!clone.ok) return { ok: false, status: 500, error: clone.stderr || clone.error || 'git clone failed' };
-  return { ok: true, action: 'cloned', localPath: target };
+  if (wantPartial) {
+    const sparse = await applySparseCheckout(target, cleanSub);
+    if (!sparse.ok) return { ok: false, status: 500, error: `failed to apply sparse-checkout: ${sparse.error}` };
+    const mat = await materializeSparseCheckout(target, branch);
+    if (!mat.ok) return { ok: false, status: 500, error: `failed to materialize sparse-checkout: ${mat.error}` };
+  }
+  return { ok: true, action: wantPartial ? 'cloned-partial' : 'cloned', localPath: target, sparseCheckedOut: wantPartial };
 }
 
 module.exports = {
@@ -1020,6 +1102,8 @@ module.exports = {
   validateToken,
   normalizeManifest,
   discoverStores,
+  applySparseCheckout,
+  materializeSparseCheckout,
   checkoutStore,
   scanLocalStore,
   configureLocalStore,

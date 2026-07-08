@@ -23,4 +23,33 @@ function execGit(cwd, args, timeoutMs = 8000) {
   });
 }
 
-module.exports = { execGit };
+let _cachedGitVersion = null;
+async function getGitVersion() {
+  if (_cachedGitVersion !== null) return _cachedGitVersion;
+  try {
+    const r = await execGit(process.cwd(), ['--version'], 5000);
+    if (!r || !r.ok) {
+      return _cachedGitVersion = { ok: false, major: 0, minor: 0, raw: '' };
+    }
+    const raw = String(r.stdout || '').trim();
+    const m = raw.match(/(\d+)\.(\d+)/);
+    if (!m) return _cachedGitVersion = { ok: false, major: 0, minor: 0, raw };
+    return _cachedGitVersion = { ok: true, major: Number(m[1]), minor: Number(m[2]), raw };
+  } catch (_) {
+    return _cachedGitVersion = { ok: false, major: 0, minor: 0, raw: '' };
+  }
+}
+function _resetGitVersionCache() {
+  _cachedGitVersion = null;
+}
+
+function _setGitVersionForTests(value) {
+  if (value === null || value === undefined) {
+    _cachedGitVersion = null;
+    return;
+  }
+  _cachedGitVersion = value;
+}
+
+module.exports = { execGit, getGitVersion, _resetGitVersionCache, _setGitVersionForTests };
+
