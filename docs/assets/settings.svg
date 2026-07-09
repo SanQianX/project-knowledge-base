@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 800" role="img" aria-label="Settings drawer">
+  <defs>
+    <linearGradient id="page3" x1="0" y1="0" x2="0" y2="800" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0c1118"/>
+      <stop offset="1" stop-color="#0a0e14"/>
+    </linearGradient>
+    <linearGradient id="drawer" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#161e29"/>
+      <stop offset="1" stop-color="#121923"/>
+    </linearGradient>
+    <linearGradient id="backdrop" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.55"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="800" fill="url(#page3)"/>
+
+  <!-- Faded dashboard behind -->
+  <rect width="1280" height="800" fill="url(#backdrop)"/>
+
+  <!-- Faint sidebar + main content suggestion -->
+  <rect width="290" height="800" fill="#070b10" opacity="0.5"/>
+  <rect x="290" width="1" height="800" fill="rgba(255,255,255,0.04)" opacity="0.5"/>
+
+  <g opacity="0.35" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+    <text x="28" y="48" font-size="10" fill="#64748b" letter-spacing="2.5" font-weight="600">PROJECT-KNOWLEDGE</text>
+    <text x="28" y="72" font-size="17" font-weight="600" fill="#d7e0ea">Control Center</text>
+    <text x="330" y="62" font-size="11" fill="#94a3b8">Console</text>
+    <text x="330" y="84" font-size="20" font-weight="600" fill="#e3ebf5">Project Supervision</text>
+  </g>
+
+  <!-- Settings drawer -->
+  <g transform="translate(740,0)" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+    <!-- Drawer background -->
+    <rect width="540" height="800" fill="url(#drawer)"/>
+    <line x1="0" y1="0" x2="0" y2="800" stroke="rgba(255,255,255,0.06)"/>
+
+    <!-- Drawer header -->
+    <g transform="translate(28,32)">
+      <text x="0" y="0" font-size="11" fill="#94a3b8" letter-spacing="2.5" font-weight="600">SETTINGS</text>
+      <text x="0" y="24" font-size="20" font-weight="600" fill="#e3ebf5" letter-spacing="-0.2">Configuration</text>
+    </g>
+    <rect x="476" y="32" width="32" height="32" rx="7" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.06)"/>
+    <line x1="486" y1="42" x2="498" y2="54" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="498" y1="42" x2="486" y2="54" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/>
+
+    <line x1="20" y1="86" x2="520" y2="86" stroke="rgba(255,255,255,0.05)"/>
+
+    <!-- Section: AI Profiles -->
+    <g transform="translate(28,108)">
+      <text x="0" y="0" font-size="10.5" fill="#7492a5" font-weight="600" letter-spacing="2">AI PROFILES</text>
+      <text x="0" y="20" font-size="11" fill="#94a3b8">3 profiles · default: claude-opus-4-7</text>
+
+      <!-- Profile 1: default -->
+      <g transform="translate(0,38)">
+        <rect width="484" height="64" rx="9" fill="rgba(116,146,165,0.08)" stroke="#7492a5"/>
+        <rect x="14" y="14" width="44" height="36" rx="7" fill="rgba(125,211,252,0.10)"/>
+        <text x="36" y="34" font-size="11" fill="#7dd3fc" text-anchor="middle" font-weight="700">An</text>
+        <text x="70" y="22" font-size="13" font-weight="600" fill="#e3ebf5">claude-opus-4-7</text>
+        <rect x="200" y="13" width="58" height="16" rx="8" fill="rgba(117,183,152,0.16)"/>
+        <text x="229" y="24" font-size="9.5" fill="#75b798" text-anchor="middle" font-weight="600">default</text>
+        <rect x="266" y="13" width="46" height="16" rx="8" fill="rgba(255,255,255,0.05)"/>
+        <text x="289" y="24" font-size="9.5" fill="#94a3b8" text-anchor="middle" font-weight="500">Anthropic</text>
+        <text x="70" y="42" font-size="10.5" fill="#94a3b8" font-family="ui-monospace, Consolas, monospace">https://api.anthropic.com  ·  opus-4-7</text>
+        <text x="70" y="56" font-size="9.5" fill="#64748b">Key in ai-profiles.json · 3 projects using</text>
+
+        <rect x="424" y="22" width="46" height="22" rx="5" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)"/>
+        <text x="447" y="37" font-size="10" fill="#cbd5e1" text-anchor="middle">Test</text>
+      </g>
+
+      <!-- Profile 2 -->
+      <g transform="translate(0,114)">
+        <rect width="484" height="56" rx="9" fill="rgba(255,255,255,0.025)" stroke="rgba(255,255,255,0.05)"/>
+        <rect x="14" y="14" width="36" height="28" rx="6" fill="rgba(125,211,252,0.10)"/>
+        <text x="32" y="32" font-size="10" fill="#7dd3fc" text-anchor="middle" font-weight="700">GL</text>
+        <text x="60" y="20" font-size="13" font-weight="500" fill="#cbd5e1">glm-4.6 (Zhipu)</text>
+        <rect x="180" y="13" width="46" height="16" rx="8" fill="rgba(255,255,255,0.05)"/>
+        <text x="203" y="24" font-size="9.5" fill="#94a3b8" text-anchor="middle" font-weight="500">compat</text>
+        <text x="60" y="38" font-size="10.5" fill="#94a3b8" font-family="ui-monospace, Consolas, monospace">https://open.bigmodel.cn/api/anthropic</text>
+
+        <rect x="424" y="18" width="46" height="22" rx="5" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)"/>
+        <text x="447" y="33" font-size="10" fill="#cbd5e1" text-anchor="middle">Test</text>
+      </g>
+
+      <!-- Profile 3 -->
+      <g transform="translate(0,182)">
+        <rect width="484" height="56" rx="9" fill="rgba(255,255,255,0.025)" stroke="rgba(255,255,255,0.05)"/>
+        <rect x="14" y="14" width="36" height="28" rx="6" fill="rgba(125,211,252,0.10)"/>
+        <text x="32" y="32" font-size="10" fill="#7dd3fc" text-anchor="middle" font-weight="700">DS</text>
+        <text x="60" y="20" font-size="13" font-weight="500" fill="#cbd5e1">deepseek-chat</text>
+        <rect x="180" y="13" width="46" height="16" rx="8" fill="rgba(255,255,255,0.05)"/>
+        <text x="203" y="24" font-size="9.5" fill="#94a3b8" text-anchor="middle" font-weight="500">compat</text>
+        <text x="60" y="38" font-size="10.5" fill="#94a3b8" font-family="ui-monospace, Consolas, monospace">https://api.deepseek.com/anthropic</text>
+
+        <rect x="424" y="18" width="46" height="22" rx="5" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.08)"/>
+        <text x="447" y="33" font-size="10" fill="#cbd5e1" text-anchor="middle">Test</text>
+      </g>
+    </g>
+
+    <line x1="20" y1="424" x2="520" y2="424" stroke="rgba(255,255,255,0.05)"/>
+
+    <!-- Section: Git hooks -->
+    <g transform="translate(28,448)">
+      <text x="0" y="0" font-size="10.5" fill="#7492a5" font-weight="600" letter-spacing="2">GIT HOOKS</text>
+      <text x="0" y="20" font-size="11" fill="#94a3b8">post-commit hooks per registered project</text>
+
+      <g transform="translate(0,38)">
+        <rect width="484" height="52" rx="9" fill="rgba(255,255,255,0.025)" stroke="rgba(255,255,255,0.05)"/>
+        <text x="14" y="22" font-size="12.5" font-weight="500" fill="#cbd5e1">project-knowledge-base</text>
+        <text x="14" y="40" font-size="10" fill="#94a3b8" font-family="ui-monospace, Consolas, monospace">D:/SanQian.Xu/project-knowledge-base</text>
+        <circle cx="450" cy="26" r="4" fill="#75b798"/>
+        <text x="450" y="42" font-size="9.5" fill="#75b798" text-anchor="middle" font-weight="600">installed</text>
+      </g>
+
+      <g transform="translate(0,102)">
+        <rect width="484" height="52" rx="9" fill="rgba(255,255,255,0.025)" stroke="rgba(255,255,255,0.05)"/>
+        <text x="14" y="22" font-size="12.5" font-weight="500" fill="#cbd5e1">tokmeter</text>
+        <text x="14" y="40" font-size="10" fill="#94a3b8" font-family="ui-monospace, Consolas, monospace">D:/SanQian.Xu/Token Leaderboard</text>
+        <circle cx="450" cy="26" r="4" fill="#c5a15d"/>
+        <text x="450" y="42" font-size="9.5" fill="#c5a15d" text-anchor="middle" font-weight="600">pending</text>
+      </g>
+
+      <g transform="translate(0,166)">
+        <rect width="484" height="52" rx="9" fill="rgba(255,255,255,0.025)" stroke="rgba(255,255,255,0.05)"/>
+        <text x="14" y="22" font-size="12.5" font-weight="500" fill="#cbd5e1">esp-idf-fan-controller</text>
+        <text x="14" y="40" font-size="10" fill="#94a3b8" font-family="ui-monospace, Consolas, monospace">H:/esp/fan-controller</text>
+        <circle cx="450" cy="26" r="4" fill="#8794a6"/>
+        <text x="450" y="42" font-size="9.5" fill="#94a3b8" text-anchor="middle" font-weight="600">not installed</text>
+      </g>
+    </g>
+
+    <line x1="20" y1="720" x2="520" y2="720" stroke="rgba(255,255,255,0.05)"/>
+
+    <!-- Footer -->
+    <g transform="translate(28,740)" font-family="ui-monospace, Consolas, monospace" font-size="10">
+      <text x="0" y="0" fill="#64748b">~/.project-knowledge/</text>
+      <text x="0" y="16" fill="#94a3b8">v3.0.14  ·  127.0.0.1:5757</text>
+    </g>
+  </g>
+</svg>
