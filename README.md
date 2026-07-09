@@ -44,9 +44,23 @@ project-knowledge --no-open     # don't auto-open browser
 Requires **Node.js 18+** and **Git on `PATH`**. Optional: any
 Anthropic-compatible API profile for AI drafts.
 
-<p align="center">
-  <img src="docs/assets/terminal.svg" alt="project-knowledge CLI startup" width="1100">
-</p>
+Expected output on first launch:
+
+```text
+project-knowledge  ·  v3.0.14
+Local knowledge-base dashboard
+
+  ▸ Resolving data directory …      ~/.project-knowledge/
+  ▸ Migrating legacy state …        no legacy data found
+  ▸ Loading AI profiles …           3 profiles · default: claude-opus-4-7
+  ▸ Starting HTTP server …          listening on 127.0.0.1:5757
+  ▸ Watching 4 projects · 12 pending commits · 1 active run
+  ▸ Opening dashboard in browser …
+
+  → http://127.0.0.1:5757
+
+Ctrl+C in this window, or run `project-knowledge stop` elsewhere.
+```
 
 ---
 
@@ -129,39 +143,44 @@ only grows when you say so.
 ## Dashboard
 
 <p align="center">
-  <img src="docs/assets/dashboard.svg" alt="Dashboard" width="1280">
+  <img src="docs/assets/dashboard.png" alt="Project Supervision dashboard" width="1280">
 </p>
 
 The supervision view at a glance: pending-commit counts across every
 project, the selected project's status pill (repo / pending / goal / KB),
-the pending commits table, action buttons (`Analyze commits`, `Scan
-repository`, `Rebuild KB`), and a Claude workbench panel on the right
-for project-scoped conversation.
+the issues panel, and a Claude workbench on the right for project-scoped
+conversation.
 
 ---
 
 ## Review before it ships
 
 <p align="center">
-  <img src="docs/assets/runs-drafts.svg" alt="Runs / Drafts" width="1280">
+  <img src="docs/assets/runs-drafts.png" alt="Runs / Drafts" width="1280">
 </p>
 
-Each analysis run produces a list of drafts. Each draft opens in a
-side-by-side diff against the current KB — you see exactly what the AI
-wants to add or change before anything touches `modules/` or `changes/`.
+Each analysis run produces a list of drafts. Click a run to see its
+drafts — check the ones you want to apply, then **Apply selected**
+writes them into the KB. **Reject run** discards everything.
+
+<p align="center">
+  <img src="docs/assets/draft-review.png" alt="Draft review" width="1280">
+</p>
+
+For per-draft diffs, open a draft directly in the editor.
 
 ---
 
 ## Configuration
 
 <p align="center">
-  <img src="docs/assets/settings.svg" alt="Settings drawer" width="1280">
+  <img src="docs/assets/settings.png" alt="Settings drawer" width="1280">
 </p>
 
-The settings drawer manages AI profiles, post-commit hook installation
-per project, log retention, language/theme, and GitHub / Gitea team-store
-configuration. Every action is local; nothing leaves your machine except
-the AI request body itself.
+The settings drawer manages AI profiles, team-knowledge repository
+binding, Windows scheduled task, log retention, and language/theme.
+Every action is local; nothing leaves your machine except the AI
+request body itself.
 
 ---
 

@@ -44,9 +44,23 @@ project-knowledge --no-open     # 不自动打开浏览器
 需要 **Node.js 18+** 与 **Git（PATH 中可执行）**。可选：任一
 Anthropic 兼容 API Profile 用于生成 AI 草稿。
 
-<p align="center">
-  <img src="../assets/terminal.svg" alt="project-knowledge CLI 启动" width="1100">
-</p>
+首次启动的预期输出：
+
+```text
+project-knowledge  ·  v3.0.14
+Local knowledge-base dashboard
+
+  ▸ Resolving data directory …      ~/.project-knowledge/
+  ▸ Migrating legacy state …        no legacy data found
+  ▸ Loading AI profiles …           3 profiles · default: claude-opus-4-7
+  ▸ Starting HTTP server …          listening on 127.0.0.1:5757
+  ▸ Watching 4 projects · 12 pending commits · 1 active run
+  ▸ Opening dashboard in browser …
+
+  → http://127.0.0.1:5757
+
+Ctrl+C in this window, or run `project-knowledge stop` elsewhere.
+```
 
 ---
 
@@ -128,35 +142,40 @@ Anthropic 兼容 API Profile 用于生成 AI 草稿。
 ## 仪表盘
 
 <p align="center">
-  <img src="../assets/dashboard.svg" alt="仪表盘" width="1280">
+  <img src="../assets/dashboard.png" alt="项目监督仪表盘" width="1280">
 </p>
 
 项目监督视图一览：跨项目待提交统计、当前项目状态徽标（repo / pending /
-goal / KB）、待提交列表、动作按钮（`Analyze commits`、`Scan repository`、
-`Rebuild KB`），以及右侧 Claude 工作台，可针对该项目发起对话。
+goal / KB）、异常中心面板，以及右侧 Claude 工作台，可针对该项目发起对话。
 
 ---
 
 ## 审完再写入
 
 <p align="center">
-  <img src="../assets/runs-drafts.svg" alt="Run / Draft 审阅" width="1280">
+  <img src="../assets/runs-drafts.png" alt="Run / Draft" width="1280">
 </p>
 
-每次分析产出一组草稿。每条草稿打开 side-by-side diff，显示 AI 想新增
-或修改的具体行——在 `modules/` 或 `changes/` 被动之前你看得一清二楚。
+每次分析产出一组草稿。点击一次运行即可看到其草稿——勾选要写入的条目，
+然后 **Apply selected** 把它们写入 KB；**Reject run** 整批丢弃。
+
+<p align="center">
+  <img src="../assets/draft-review.png" alt="Draft 审阅" width="1280">
+</p>
+
+想看逐条 diff 时，直接在编辑器里打开单条草稿。
 
 ---
 
 ## 配置
 
 <p align="center">
-  <img src="../assets/settings.svg" alt="设置抽屉" width="1280">
+  <img src="../assets/settings.png" alt="设置抽屉" width="1280">
 </p>
 
-设置抽屉集中管理 AI Profile、每个项目的 `post-commit` 钩子安装、
-日志保留、语言 / 主题，以及 GitHub / Gitea team-store 配置。所有
-操作都在本地完成；除 AI 请求体本身外，没有任何数据离开你的机器。
+设置抽屉集中管理 AI Profile、team-knowledge 仓库绑定、Windows
+计划任务、日志保留，以及语言 / 主题。所有操作都在本地完成；除 AI
+请求体本身外，没有任何数据离开你的机器。
 
 ---
 
