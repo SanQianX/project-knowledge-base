@@ -86,7 +86,7 @@ Anthropic 兼容 API Profile 用于生成 AI 草稿。
 首次启动的预期输出：
 
 ```text
-project-knowledge  ·  v3.0.14
+project-knowledge  ·  v4.0.0
 Local knowledge-base dashboard
 
   ▸ Resolving data directory …      ~/.project-knowledge/

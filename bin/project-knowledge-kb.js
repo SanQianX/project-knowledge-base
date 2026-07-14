@@ -9,7 +9,8 @@ const { KnowledgeScopeRegistry } = require('../_site/lib/knowledge-scope-registr
 const { KnowledgeQueryService } = require('../_site/lib/knowledge-query-service');
 
 function options(args) {
-  const out = { command: args[0] || 'help' };
+  const first = args[0] || 'help';
+  const out = { command: first === '--help' || first === '-h' ? 'help' : first };
   for (let i = 1; i < args.length; i++) {
     const key = args[i];
     if (!key.startsWith('--')) continue;

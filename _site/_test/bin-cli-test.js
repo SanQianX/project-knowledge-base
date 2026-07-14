@@ -13,6 +13,7 @@ const { spawn, spawnSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const BIN = path.join(ROOT, 'bin', 'project-knowledge.js');
+const KB_BIN = path.join(ROOT, 'bin', 'project-knowledge-kb.js');
 const PID_FILE = path.join(os.tmpdir(), '.project-knowledge.pid');
 const ISOLATED_STATUS_PORT = 19000 + (process.pid % 1000);
 
@@ -99,6 +100,10 @@ async function waitForListening(port, deadlineMs = 8000) {
   assert(/--fg/.test(helpText), '--help should mention `--fg`');
   assert(/--no-open/.test(helpText), '--help should mention `--no-open`');
   assert(/5757/.test(helpText), '--help should mention default port 5757');
+
+  const kbHelp = spawnSync(process.execPath, [KB_BIN, '--help'], { cwd: ROOT, encoding: 'utf8', timeout: 15_000 });
+  assert(kbHelp.status === 0, `project-knowledge-kb --help should exit 0: ${kbHelp.stderr}`);
+  assert(/search/.test(kbHelp.stdout) && /history/.test(kbHelp.stdout), 'knowledge CLI help should list read-only commands');
 
   // status when no PID file
   removePidFile();
