@@ -53,7 +53,7 @@ async function stop(child) {
 async function withServer(fn) {
   const child = spawn(process.execPath, [BIN, '--fg', '--port', PORT, '--host', '127.0.0.1', '--no-open'], {
     cwd: ROOT,
-    env: { ...process.env, KB_DATA_DIR: TEST_DATA_DIR, KB_SKIP_MIGRATION: '1' },
+    env: { ...process.env, KB_DATA_DIR: TEST_DATA_DIR, KB_CLAUDE_RULES_DIR: TEST_DATA_DIR, KB_SKIP_MIGRATION: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });

@@ -20,6 +20,8 @@ const {
   CLAUDE_MD_FILENAME,
   SECTION_MARKER_START,
   SECTION_MARKER_END,
+  CENTRAL_RULE_REFERENCE,
+  PROJECT_GUIDANCE,
   readClaudeMdStatus,
 } = require('../lib/claude-md-manager');
 const { spawnServer } = require('./helpers/spawn-server');
@@ -170,28 +172,19 @@ async function waitForAutomationRun(slug, timeoutMs = 30000) {
   assert(hookText.includes('--kb-root'), 'hook missing --kb-root flag');
   assert(hookText.includes(FIXTURE_REPO.replace(/\\/g, '/')), 'hook missing repo path');
 
-  // installHook should also drop a KB-managed rule block into <repo>/CLAUDE.md.
-  // v2.4.2+ default form: discovery chain + slug only, no absolute path
-  // embedded — so cloning the repo to another machine never ships a
-  // baked-in user-specific path.
+  // installHook should also drop a one-line central rule import into CLAUDE.md.
   assert(r.claudeMd && r.claudeMd.ok, 'installHook should report claudeMd.ok=true: ' + JSON.stringify(r.claudeMd));
   const claudeMdPath = path.join(FIXTURE_REPO, CLAUDE_MD_FILENAME);
   assert(fs.existsSync(claudeMdPath), 'installHook should create CLAUDE.md in repo');
   const claudeMdText0 = fs.readFileSync(claudeMdPath, 'utf-8');
   assert(claudeMdText0.includes(SECTION_MARKER_START), 'CLAUDE.md missing start marker after install');
   assert(claudeMdText0.includes(SECTION_MARKER_END), 'CLAUDE.md missing end marker after install');
-  assert(claudeMdText0.includes('Knowledge Base Reading Rule'), 'CLAUDE.md missing rule heading after install');
+  assert(claudeMdText0.includes(PROJECT_GUIDANCE), 'CLAUDE.md missing central rule guidance after install');
+  assert(claudeMdText0.includes(`@${CENTRAL_RULE_REFERENCE}`), 'CLAUDE.md should use a home-relative import');
+  assert(!claudeMdText0.includes('Read-only boundary') && !claudeMdText0.includes('GOAL.md'),
+    'CLAUDE.md should not duplicate detailed central instructions');
   const expectedKbPath = FIXTURE_KB_PATH.replace(/\\/g, '/');
   const expectedProjectsPath = FIXTURE_PROJECTS_PATH.replace(/\\/g, '/');
-  // Default v2.4.2+ form embeds the discovery chain and the slug only.
-  assert(claudeMdText0.includes('$PROJECT_KNOWLEDGE_REGISTRY'),
-    'CLAUDE.md should declare $PROJECT_KNOWLEDGE_REGISTRY env-var discovery');
-  assert(claudeMdText0.includes('~/.project-knowledge/projects.json'),
-    'CLAUDE.md should declare tilde-fallback discovery');
-  assert(claudeMdText0.includes(`projectSlug: ${SLUG}`),
-    'CLAUDE.md should reference project slug');
-  assert(claudeMdText0.includes('<resolved kbPath>/GOAL.md'),
-    'CLAUDE.md should reference resolved GOAL.md path');
   // Hard guarantee: no absolute path embedded, no fixture paths leaking.
   assert(!claudeMdText0.includes(`projects.json: ${expectedProjectsPath}`),
     `CLAUDE.md must NOT embed projects.json path ${expectedProjectsPath}`);
@@ -204,7 +197,8 @@ async function waitForAutomationRun(slug, timeoutMs = 30000) {
   assert(s0.kbPath === null, `readClaudeMdStatus should not report direct kbPath, got ${s0.kbPath}`);
   assert(s0.projectsPath === null,
     `readClaudeMdStatus should not report projectsPath in default form, got ${s0.projectsPath}`);
-  assert(s0.projectSlug === SLUG, `readClaudeMdStatus should report projectSlug=${SLUG}, got ${s0.projectSlug}`);
+  assert(s0.projectSlug === null, `readClaudeMdStatus should not need a project slug, got ${s0.projectSlug}`);
+  assert(s0.state === 'current' && s0.current === true, 'readClaudeMdStatus should report central pointer as current');
 
   if (process.platform !== 'win32') {
     const st = fs.statSync(hookPath);
@@ -350,6 +344,16 @@ async function waitForAutomationRun(slug, timeoutMs = 30000) {
     r = installHook({ repoPath: FIXTURE_REPO, siteRoot: SITE_ROOT, host: '127.0.0.1', port: Number(PORT), kbPath: FIXTURE_KB_PATH });
     assert(r.ok, 'reinstall failed: ' + r.error);
 
+    const kbReadmeBeforeCommit = fs.readFileSync(path.join(projKb, 'README.md'), 'utf-8');
+    fs.writeFileSync(path.join(FIXTURE_REPO, 'staged-only.md'), 'not committed yet\n', 'utf-8');
+    execGit(FIXTURE_REPO, ['add', 'staged-only.md']);
+    await new Promise(resolve => setTimeout(resolve, 750));
+    const beforeCommitRuns = await json('GET', `/api/projects/${SLUG}/automation/runs`);
+    assert((beforeCommitRuns.data.runs || []).filter(item => item.source === 'git-hook').length === 0,
+      'editing or staging files must not dispatch post-commit automation');
+    assert(fs.readFileSync(path.join(projKb, 'README.md'), 'utf-8') === kbReadmeBeforeCommit,
+      'editing or staging files must not change the KB');
+
     makeCommit(FIXTURE_REPO, 'feat: add changelog entry to trigger hook');
 
     const run = await waitForAutomationRun(SLUG, 30000);
@@ -357,6 +361,10 @@ async function waitForAutomationRun(slug, timeoutMs = 30000) {
     assert(run.knowledgeMode === 'directWriteKb', 'wrong knowledge mode: ' + run.knowledgeMode);
     assert(run.permissionMode === 'bypassPermissions', 'wrong permission mode: ' + run.permissionMode);
     assert(run.allowedTools.includes('Write'), 'directWriteKb should allow Write in the automation policy');
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const afterCommitRuns = await json('GET', `/api/projects/${SLUG}/automation/runs`);
+    assert((afterCommitRuns.data.runs || []).filter(item => item.source === 'git-hook').length === 1,
+      'one git commit should dispatch exactly one git-hook automation run');
     console.log('hook automation observed:', run.runId, run.projectSlug, run.status);
 
     const logPath = path.join(serverDataDir, '.hook-trigger-errors.log');

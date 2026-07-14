@@ -15,6 +15,12 @@ const { applyDrafts, rejectDrafts, readDraftContent } = require('./lib/draft-app
 const { runJob, makeJob, readJobLog, KNOWN_MODES } = require('./lib/job-orchestrator');
 const { validateKb, buildPrContextPack } = require('./lib/kb-validator');
 const { installHook, uninstallHook, readHookStatus } = require('./lib/hook-manager');
+const {
+  CENTRAL_RULE_REFERENCE,
+  ensureCentralRulesFile,
+  refreshClaudeMdRule,
+  readClaudeMdStatus,
+} = require('./lib/claude-md-manager');
 const { completeText, readConfig: readLlmConfig } = require('./lib/llm-client');
 const claudeCliRunner = require('./lib/claude-cli-runner');
 const promptRegistry = require('./lib/prompt-registry');
@@ -66,6 +72,8 @@ const TEAM_STORES_CACHE_PATH = path.join(DATA_DIR, 'team-stores-cache.json');
 let lastRun = { time: null, status: null, slug: null, output: '' };
 const runningJobs = new Map();
 const giteaOAuthStates = new Map();
+let claudeMdAuditCache = null;
+let claudeMdRefreshRunning = false;
 
 // Read a fresh copy of projects.json (re-loaded on every dispatch so that
 // background jobs see the latest registry state).
@@ -568,6 +576,115 @@ function readProjects(options = {}) {
     writeJson(PROJECTS_PATH, result.projects);
   }
   return result.projects;
+}
+
+function ensureSharedClaudeRules() {
+  return ensureCentralRulesFile({ projectsPath: PROJECTS_PATH });
+}
+
+function normalizedRepoKey(repoPath) {
+  if (!repoPath) return '';
+  const resolved = path.resolve(repoPath).replace(/\\/g, '/').replace(/\/$/, '');
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+function auditClaudeMdProjects(projects = readProjects({ persistMigrations: false })) {
+  const entries = Object.entries(projects || {});
+  const repoOwners = new Map();
+  for (const [slug, cfg] of entries) {
+    const key = normalizedRepoKey(projectRepoPath(cfg));
+    if (!key) continue;
+    const owners = repoOwners.get(key) || [];
+    owners.push(slug);
+    repoOwners.set(key, owners);
+  }
+
+  const items = entries.map(([slug, cfg]) => {
+    const repoPath = projectRepoPath(cfg);
+    const key = normalizedRepoKey(repoPath);
+    if (key && (repoOwners.get(key) || []).length > 1) {
+      return {
+        slug,
+        displayName: cfg.displayName || slug,
+        repoPath,
+        path: path.join(repoPath, 'CLAUDE.md'),
+        state: 'duplicate-repo',
+        current: false,
+        needsRefresh: false,
+        reason: `same repository is registered by: ${repoOwners.get(key).join(', ')}`,
+      };
+    }
+    if (!repoPath || !fs.existsSync(repoPath)) {
+      return {
+        slug,
+        displayName: cfg.displayName || slug,
+        repoPath: repoPath || '',
+        path: repoPath ? path.join(repoPath, 'CLAUDE.md') : '',
+        state: 'unavailable',
+        current: false,
+        needsRefresh: false,
+        reason: repoPath ? 'project directory not found' : 'project directory is not configured',
+      };
+    }
+    const status = readClaudeMdStatus(repoPath);
+    return {
+      slug,
+      displayName: cfg.displayName || slug,
+      repoPath,
+      ...status,
+      reason: status.error || '',
+    };
+  });
+
+  const summary = {
+    total: items.length,
+    current: 0,
+    outdated: 0,
+    refreshable: 0,
+    missing: 0,
+    unmanaged: 0,
+    malformed: 0,
+    symlink: 0,
+    unavailable: 0,
+    duplicateRepo: 0,
+  };
+  for (const item of items) {
+    if (item.state === 'duplicate-repo') summary.duplicateRepo += 1;
+    else if (Object.prototype.hasOwnProperty.call(summary, item.state)) summary[item.state] += 1;
+  }
+  summary.refreshable = summary.outdated;
+  claudeMdAuditCache = {
+    ok: true,
+    scannedAt: new Date().toISOString(),
+    reference: CENTRAL_RULE_REFERENCE,
+    summary,
+    projects: items,
+  };
+  return claudeMdAuditCache;
+}
+
+function refreshManagedClaudeMd(projects, requestedSlugs = null) {
+  const before = auditClaudeMdProjects(projects);
+  const selected = requestedSlugs ? new Set(requestedSlugs) : null;
+  const results = [];
+  for (const item of before.projects) {
+    if (selected && !selected.has(item.slug)) continue;
+    if (item.state !== 'outdated') {
+      results.push({ slug: item.slug, ok: true, action: 'skipped', reason: item.state, path: item.path });
+      continue;
+    }
+    results.push({ slug: item.slug, ...refreshClaudeMdRule(item.repoPath) });
+  }
+  const audit = auditClaudeMdProjects(projects);
+  return {
+    ok: results.every(item => item.ok !== false),
+    updated: results.filter(item => item.action === 'updated').length,
+    unchanged: results.filter(item => item.action === 'unchanged').length,
+    skipped: results.filter(item => item.action === 'skipped').length,
+    failed: results.filter(item => item.ok === false).length,
+    results,
+    audit,
+  };
 }
 
 function readRemovedProjects() {
@@ -1414,6 +1531,37 @@ const server = http.createServer(async (req, res) => {
       const svg = fs.readFileSync(path.join(SITE_ROOT, 'favicon.svg'), 'utf-8');
       return send(res, 200, svg, 'image/svg+xml');
     }
+
+    // Global CLAUDE.md maintenance is deliberately independent from Hook
+    // installation. Auditing is read-only; only the POST replaces existing,
+    // well-formed KB-managed blocks.
+    if (m === 'GET' && p === '/api/claude-md/status') {
+      const projects = readProjects({ persistMigrations: false });
+      const audit = (url.searchParams.get('rescan') === '1' || !claudeMdAuditCache)
+        ? auditClaudeMdProjects(projects)
+        : claudeMdAuditCache;
+      return send(res, 200, { ...audit, centralRules: ensureSharedClaudeRules() });
+    }
+
+    if (m === 'POST' && p === '/api/claude-md/refresh-all') {
+      if (claudeMdRefreshRunning) return send(res, 409, { ok: false, error: 'CLAUDE.md refresh is already running' });
+      let body = {};
+      try { body = JSON.parse(await readBody(req).catch(() => '{}')); } catch {}
+      const requestedSlugs = Array.isArray(body.slugs)
+        ? body.slugs.filter(isSafeSlug)
+        : null;
+      claudeMdRefreshRunning = true;
+      try {
+        const centralRules = ensureSharedClaudeRules();
+        if (!centralRules.ok) return send(res, 500, { ok: false, error: centralRules.error, centralRules });
+        const projects = readProjects({ persistMigrations: false });
+        const result = refreshManagedClaudeMd(projects, requestedSlugs);
+        return send(res, result.ok ? 200 : 207, { ...result, centralRules });
+      } finally {
+        claudeMdRefreshRunning = false;
+      }
+    }
+
     // GET /api/state — aggregate (enriches projects with kbInitialized flag)
     if (m === 'GET' && p === '/api/state') {
       const projects = readProjects({ persistMigrations: true });
@@ -2198,10 +2346,8 @@ const server = http.createServer(async (req, res) => {
       const repoPath = cfg.gitPath || cfg.localPath;
       const body = JSON.parse(await readBody(req).catch(() => '{}'));
       const overwrite = !!(body && body.overwrite);
-      // Default v2.4.2+ behavior: emit the portable CLAUDE.md block (slug
-      // + discovery chain), no absolute path embedded. Callers that need
-      // the legacy explicit form can opt in by passing `projectsPath` /
-      // `kbPath` from a future API extension.
+      // The project file receives only the shared home-relative rule import;
+      // project identity and kbPath remain in the central registry.
       const result = installHook({
         repoPath,
         siteRoot: SITE_ROOT,
@@ -2933,6 +3079,14 @@ server.listen(PORT, HOST, () => {
   console.log(`[kb-site] KB root: ${KB_ROOT}`);
   console.log(`[kb-site] data dir: ${DATA_DIR}`);
   console.log(`[kb-site] task:    ${TASK_NAME}`);
+  try {
+    const centralRules = ensureSharedClaudeRules();
+    if (!centralRules.ok) throw new Error(centralRules.error || 'failed to prepare central Claude rules');
+    const audit = auditClaudeMdProjects(readProjects({ persistMigrations: false }));
+    console.log(`[kb-site] CLAUDE.md: ${audit.summary.current} current, ${audit.summary.refreshable} need refresh`);
+  } catch (e) {
+    console.error('[kb-site] CLAUDE.md startup check failed:', e.message);
+  }
   try {
     const orphanSummary = postCommitAutomation.cleanupOrphanedRuns(readProjects({ persistMigrations: false }));
     const orphanTotal = (orphanSummary.queued || 0) + (orphanSummary.dispatched || 0) + (orphanSummary.dispatching || 0);

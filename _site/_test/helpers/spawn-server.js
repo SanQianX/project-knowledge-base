@@ -45,6 +45,7 @@ function spawnServer({ root, port, host = '127.0.0.1', dataDir, extraEnv = {}, t
       KB_SITE_PORT: String(port),
       KB_SITE_HOST: host,
       KB_DATA_DIR: dir,
+      KB_CLAUDE_RULES_DIR: dir,
       ...extraEnv,
     },
     stdio,

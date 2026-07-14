@@ -107,8 +107,8 @@ Ctrl+C in this window, or run `project-knowledge stop` elsewhere.
 
 - 每个项目从 `git log` 扫描待提交。
 - `post-commit` 钩子在每次提交后自动触发。
-- 把"知识库读取规则"注入到每个项目的 `CLAUDE.md`，让 Claude Code
-  先读索引再打开模块。
+- 每个项目的 `CLAUDE.md` 只写入一句用户目录相对的中央规则引用；详细规则只在
+  `~/.project-knowledge/` 下维护一份。
 - 分支、远端、HEAD 元数据、reflog。
 
 </td>
@@ -217,35 +217,27 @@ CLI 在 `os.tmpdir()/.project-knowledge.pid` 写入 PID 文件。**关闭终端
 
 ## CLAUDE.md 读取规则
 
-在你导入的项目上安装 `post-commit` 钩子时，`project-knowledge` 会向
-该项目的 `CLAUDE.md` 写入一段托管块：
+导入后的每个项目只在 `CLAUDE.md` 托管块中保留一行导入：
 
 ```markdown
 <!-- KB-MANAGED:CLAUDE-MD:START — managed by project-knowledge -->
-## Knowledge Base Reading Rule
-
-This project's knowledge base lives at:
-  <absolute path registered in projects.json>
-
-Before implementing a non-trivial feature or fix in this repo:
-
-1. Read only the indexes: <kbPath>/GOAL.md, <kbPath>/modules/00-index.md,
-   <kbPath>/changes/00-index.md.
-2. Compare the request, changed files, API routes, symbols, and keywords
-   against the module and change indexes.
-3. Open only the top-relevant module and change docs based on the match.
-4. No hits? Treat as a new feature area — propose a new module + change
-   entry instead of patching unrelated knowledge.
-5. Do not load the whole KB unless explicitly asked.
-6. After implementation, summarize whether the KB needs an update.
+@~/.project-knowledge/claude-code-rules.md
 <!-- KB-MANAGED:CLAUDE-MD:END -->
 ```
 
-重复安装会原位替换该块（HTML 注释定界符保证幂等）；卸载只删除托管块，
-保留你自己的内容。给钩子调用传 `updateClaudeMd: false` 可跳过此行为。
+完整的“开发期只读、索引优先、成功提交后才允许自动化写入”规则统一保存在
+`~/.project-knowledge/claude-code-rules.md`。中央规则根据当前 Git 根目录匹配
+`~/.project-knowledge/projects.json`，项目的 `kbPath` 仍以该注册表为准。以后升级规则
+只更新这一份中央文件，不需要再逐个改项目。
+
+应用启动时会只读检测全部注册项目，不会静默修改项目文件。在“设置 → CLAUDE.md
+集中规则”中可一键刷新所有旧托管块。批量刷新只替换完整、唯一的托管块；纯用户内容、
+文件缺失、标记畸形、符号链接和不可用目录都会报告并跳过，也不会重装或改动 Git Hook。
+卸载仍只删除托管块并保留你自己的内容。
 
 这意味着 **Claude Code（或任何 Anthropic 兼容代理）会先读 KB 索引，
-再按相关性打开模块**，大幅减少上下文密集任务的 token 消耗。
+再按相关性打开模块**，大幅减少上下文密集任务的 token 消耗，同时不会把未提交的 WIP
+内容写进知识库。
 
 ---
 

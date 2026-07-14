@@ -108,8 +108,8 @@ only grows when you say so.
 
 - Per-project pending-commit scan from `git log`.
 - Post-commit hook auto-fires on every commit.
-- Inject a KB-reading rule into each project's `CLAUDE.md` so Claude Code
-  reads indexes before opening modules.
+- Add one home-relative shared-rule import to each project's `CLAUDE.md` so
+  detailed instructions are maintained once under `~/.project-knowledge/`.
 - Branches, remotes, HEAD metadata, reflog.
 
 </td>
@@ -225,39 +225,34 @@ Closing the original terminal does **not** stop the dashboard — use
 
 ## CLAUDE.md reading rule
 
-When you install the post-commit hook in an imported project,
-`project-knowledge` writes a managed block into that project's
-`CLAUDE.md`:
+Imported projects keep only one import line in their managed
+`CLAUDE.md` block:
 
 ```markdown
 <!-- KB-MANAGED:CLAUDE-MD:START — managed by project-knowledge -->
-## Knowledge Base Reading Rule
-
-This project's knowledge base lives at:
-  <absolute path registered in projects.json>
-
-Before implementing a non-trivial feature or fix in this repo:
-
-1. Read only the indexes: <kbPath>/GOAL.md, <kbPath>/modules/00-index.md,
-   <kbPath>/changes/00-index.md.
-2. Compare the request, changed files, API routes, symbols, and keywords
-   against the module and change indexes.
-3. Open only the top-relevant module and change docs based on the match.
-4. No hits? Treat as a new feature area — propose a new module + change
-   entry instead of patching unrelated knowledge.
-5. Do not load the whole KB unless explicitly asked.
-6. After implementation, summarize whether the KB needs an update.
+@~/.project-knowledge/claude-code-rules.md
 <!-- KB-MANAGED:CLAUDE-MD:END -->
 ```
 
-Re-installing the hook refreshes the absolute `kbPath` and replaces the
-block in place (HTML-comment markers keep it idempotent). Uninstall
-removes only the managed block — your own content is preserved. Pass
-`updateClaudeMd: false` to either hook call to skip this behavior.
+The detailed read-only, index-first, and post-commit ownership rules live in
+`~/.project-knowledge/claude-code-rules.md`. That file resolves the current
+Git root against `~/.project-knowledge/projects.json`, where the project's
+`kbPath` remains authoritative. Updating the application refreshes this one
+central file instead of rewriting every repository.
+
+At startup the dashboard audits all registered projects without modifying
+them. Settings → Central CLAUDE.md Rules shows outdated blocks and provides a
+single **Refresh all CLAUDE.md** action. It only replaces complete managed
+blocks; user-only, missing, malformed, symlinked, or unavailable files are
+reported and left untouched. The refresh does not reinstall or alter Git
+hooks. Uninstall still removes only the managed block and preserves your own
+content.
 
 This means **Claude Code (or any Anthropic-compatible agent) reads the
 KB indexes before opening modules**, drastically cutting token usage on
-context-heavy tasks.
+context-heavy tasks. It does not maintain the KB while code is still in
+progress; the managed `post-commit` worker performs that update from committed
+evidence.
 
 ---
 

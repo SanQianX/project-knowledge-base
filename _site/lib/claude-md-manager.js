@@ -1,283 +1,289 @@
-// _site/lib/claude-md-manager.js
-//
-// Install / uninstall a "Knowledge Base Reading Rule" block in an imported
-// project's CLAUDE.md so Claude Code automatically reads the project's KB
-// indexes before working in that repo. Hooked into hook-manager.js so the
-// block is added when a post-commit hook is installed and removed when the
-// hook is uninstalled.
-//
-// The default block (v2.4.2+) is fully portable: it embeds only the project
-// slug, and instructs Claude Code to discover the user's `projects.json`
-// registry at runtime via the $PROJECT_KNOWLEDGE_REGISTRY env var or the
-// `~/.project-knowledge/projects.json` convention. It does NOT embed any
-// absolute path — neither the developer's KB path nor the user's
-// projects.json path — so a shared repo CLAUDE.md can be cloned to any
-// developer without rewriting.
-//
-// Two back-compat forms remain supported for callers that explicitly opt in:
-//   * `projectsPath` (string) — the absolute path to the user's
-//     projects.json. Emitted only when the caller passes it; intended for
-//     tests and advanced single-machine setups.
-//   * `kbPath` (string) — the absolute path to the KB. Direct mode, only
-//     used when the caller does not know the registry. This form
-//     intentionally embeds an absolute path and is the only way to do so;
-//     treat it as deprecated for shared repos.
-//
-// Safety contract:
-//   * The block is bracketed by HTML-comment markers so we can replace or
-//     remove it without touching the rest of the user's CLAUDE.md.
-//   * ensureClaudeMdRule is idempotent: re-installing replaces the block
-//     in place (lets us update the rule text or slug without leaving
-//     duplicates).
-//   * removeClaudeMdRule only deletes the marked block; if CLAUDE.md was
-//     created by us and becomes empty, the file is also removed.
-//   * No function throws on filesystem errors — they return { ok: false, ... }
-//     so the caller (hook-manager) can still report a successful hook install
-//     even when CLAUDE.md write was denied.
+// Manage the small project-local CLAUDE.md pointer and the shared rule file.
+// Project files keep only a home-relative @import. Detailed instructions live
+// in ~/.project-knowledge so changing the rule never requires editing every
+// imported repository.
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const CLAUDE_MD_FILENAME = 'CLAUDE.md';
+// Keep these markers byte-for-byte compatible with already imported projects.
 const SECTION_MARKER_START = '<!-- KB-MANAGED:CLAUDE-MD:START — managed by project-knowledge -->';
 const SECTION_MARKER_END = '<!-- KB-MANAGED:CLAUDE-MD:END -->';
+const CENTRAL_MARKER_START = '<!-- KB-MANAGED:CENTRAL-RULES:START -->';
+const CENTRAL_MARKER_END = '<!-- KB-MANAGED:CENTRAL-RULES:END -->';
+const CENTRAL_RULE_FILENAME = 'claude-code-rules.md';
+const CENTRAL_RULE_REFERENCE = '~/.project-knowledge/claude-code-rules.md';
+const PROJECT_GUIDANCE = `@${CENTRAL_RULE_REFERENCE}`;
 
-const DISCOVERY_RULE_BODY =
-  "Resolve this project's knowledge base through the current user's project registry.\n\n" +
-  'Discovery order for the registry file\n' +
-  '  1. The $PROJECT_KNOWLEDGE_REGISTRY env var (if set)\n' +
-  '  2. ~/.project-knowledge/projects.json\n\n' +
-  'Read that JSON file and use `registry[projectSlug].kbPath` as `<resolved kbPath>`.';
-
-// Reading procedure body, with `__PREFIX__` as a placeholder for the index
-// path prefix. The prefix depends on the form: `<resolved kbPath>/` for
-// registry modes, the absolute kbPath for the legacy direct mode.
-//
-// The trigger phrase is intentionally unconditional on session start and on
-// any recall/lookup question. claude-mem and auto-memory are always one tool
-// call away and tend to win by default if the rule only fires on heavy work;
-// listing those triggers explicitly closes that gap so the KB gets consulted
-// first for "what did we do before", "上次改动", "之前的实现", etc.
-const READING_PROCEDURE_BODY_TEMPLATE =
-  'At the start of every session, AND before answering any question about\n' +
-  'what changed, when, why, or what was previously developed in this repo\n' +
-  '(including "what did we work on before", "上次改动", "之前的实现", "what\n' +
-  'did you change last time"), AND before implementing a non-trivial feature\n' +
-  'or fix, follow this procedure:\n\n' +
-  '1. **Read only the indexes first**:\n' +
-  '   `__PREFIX__GOAL.md`, `__PREFIX__modules/00-index.md`,\n' +
-  '   `__PREFIX__changes/00-index.md`.\n' +
-  "2. **Compare** the user request, changed files, API routes, symbols, and\n" +
-  '   keywords against the module and change indexes.\n' +
-  '3. **Open only the top-relevant** module and change docs based on the match.\n' +
-  '4. **No hits? Treat as a new feature area.** Propose a new module + change\n' +
-  '   entry instead of patching unrelated knowledge.\n' +
-  '5. **Do not load the whole KB** unless explicitly asked.\n\n' +
-  'The KB outranks auto-memory, claude-mem, and conversational context for\n' +
-  "this project's facts. When the user asks about this project's history,\n" +
-  'decisions, architecture, prior work, or anything that could be answered\n' +
-  'from prior development, resolve from the KB first; only fall back to\n' +
-  'claude-mem or auto-memory if the KB has no answer. If a memory record and\n' +
-  'a KB entry disagree, the KB wins — update or remove the stale memory.';
-
-function buildReadingProcedure(prefix) {
-  return READING_PROCEDURE_BODY_TEMPLATE.replace(/__PREFIX__/g, prefix);
+function normalizePath(value) {
+  return typeof value === 'string' ? value.replace(/\\/g, '/') : '';
 }
 
-function normalizePath(p) {
-  return typeof p === 'string' ? p.replace(/\\/g, '/') : '';
+function buildRuleBlock() {
+  return `${SECTION_MARKER_START}\n${PROJECT_GUIDANCE}\n${SECTION_MARKER_END}\n`;
 }
 
-function normalizeRuleOptions(input) {
-  if (typeof input === 'string') return { kbPath: input };
-  return input && typeof input === 'object' ? input : {};
-}
+const RULE_BLOCK = buildRuleBlock();
 
-function buildRuleBlock(input = {}) {
-  const opts = normalizeRuleOptions(input);
-  const kb = normalizePath(opts.kbPath);
-  const projectsPath = normalizePath(opts.projectsPath);
-  const projectSlug = typeof opts.projectSlug === 'string' ? opts.projectSlug.trim() : '';
-  const hasRegistry = !!(projectsPath && projectSlug);
-  const hasDirect = !!(kb && !projectSlug);
-  const hasSlugOnly = !!(projectSlug && !projectsPath);
+function buildCentralRules(input = {}) {
+  const projectsPath = normalizePath(input.projectsPath) || '~/.project-knowledge/projects.json';
+  return `# Project Knowledge Instructions
 
-  let location;
-  let prefix;
-  if (hasRegistry) {
-    // Back-compat explicit form: caller supplied a concrete projects.json
-    // path. Still includes the slug. This is the only form that embeds an
-    // absolute path and should not be used for shared-repo CLAUDE.md.
-    location =
-      `Resolve this project's knowledge base through the current user's project registry:\n\n` +
-      `  projects.json: ${projectsPath}\n` +
-      `  projectSlug: ${projectSlug}\n\n` +
-      `Read that JSON file and use \`registry[projectSlug].kbPath\` as \`<resolved kbPath>\`.`;
-    prefix = '<resolved kbPath>/';
-  } else if (hasSlugOnly) {
-    // Default portable form: discovery chain + slug. No absolute path.
-    location =
-      `${DISCOVERY_RULE_BODY}\n\n` +
-      `projectSlug: ${projectSlug}`;
-    prefix = '<resolved kbPath>/';
-  } else if (hasDirect) {
-    // Legacy direct form. Caller does not know the registry. Embeds the
-    // absolute kbPath. Kept for back-compat with single-machine callers.
-    location = `This project's knowledge base lives at:\n\n  ${kb}\n`;
-    prefix = `${kb}/`;
-  } else {
-    // Nothing supplied: give Claude a discoverable instruction but no path.
-    location = 'Locate the project knowledge base (registered with the project-knowledge manager).';
-    prefix = '<resolved kbPath>/';
-  }
+${CENTRAL_MARKER_START}
+This managed section is shared by every project imported into project-knowledge.
 
-  return `${SECTION_MARKER_START}
-## Knowledge Base Reading Rule
+## Resolve the current project's knowledge base
 
-${location}
+1. Resolve the current Git root with \`git rev-parse --show-toplevel\`.
+2. Read the project registry at \`${projectsPath}\`. Its top-level keys are project slugs.
+3. Normalize path separators and case as appropriate for the operating system, then match the Git root against each entry's \`gitPath\` or \`localPath\`.
+4. Continue only when exactly one enabled entry matches and its \`kbPath\` exists. That entry's \`kbPath\` is the resolved knowledge-base path. If there is no unique match, do not guess and do not read another project's knowledge base.
 
-${buildReadingProcedure(prefix)}
-${SECTION_MARKER_END}
+## Read-only boundary
+
+During ordinary interactive Claude Code development, the resolved knowledge base is strictly read-only. Do not create, edit, rename, move, or delete files under it, and do not update it at the end of an implementation task. Routine knowledge-base writes belong exclusively to project-knowledge post-commit automation after a successful Git commit. The only exception is an explicit user request to edit the knowledge base itself.
+
+At the start of every session, before answering questions about prior work, and before implementing a non-trivial feature or fix:
+
+1. Read only \`GOAL.md\`, \`modules/00-index.md\`, and \`changes/00-index.md\` under the resolved knowledge-base path.
+2. Compare the request, changed files, routes, symbols, and keywords with those indexes.
+3. Open only the most relevant module and change documents.
+4. If there is no match, continue from source evidence without creating knowledge-base files during development.
+5. Do not load the whole knowledge base unless the user explicitly asks.
+
+For this project's facts, the knowledge base outranks auto-memory, claude-mem, and conversational context. If they disagree, rely on the knowledge base and report the discrepancy when useful; do not resolve it by changing the knowledge base during ordinary development.
+${CENTRAL_MARKER_END}
 `;
 }
 
-// Back-compat constant. Existing callers and tests that imported
-// RULE_BLOCK without a kbPath still get a sensible (no-path) block.
-const RULE_BLOCK = buildRuleBlock();
-
-function escapeRegExp(s) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function blockRegex() {
-  return new RegExp(
-    `${escapeRegExp(SECTION_MARKER_START)}[\\s\\S]*?${escapeRegExp(SECTION_MARKER_END)}\\n*`
-  );
+function managedBlockRegex(start = SECTION_MARKER_START, end = SECTION_MARKER_END) {
+  return new RegExp(`${escapeRegExp(start)}[\\s\\S]*?${escapeRegExp(end)}\\n*`);
+}
+
+function countOccurrences(text, needle) {
+  if (typeof text !== 'string') return 0;
+  let count = 0;
+  let offset = 0;
+  while ((offset = text.indexOf(needle, offset)) !== -1) {
+    count += 1;
+    offset += needle.length;
+  }
+  return count;
+}
+
+function blockShape(text, start = SECTION_MARKER_START, end = SECTION_MARKER_END) {
+  const starts = countOccurrences(text, start);
+  const ends = countOccurrences(text, end);
+  const startIndex = typeof text === 'string' ? text.indexOf(start) : -1;
+  const endIndex = typeof text === 'string' ? text.indexOf(end) : -1;
+  return {
+    starts,
+    ends,
+    valid: starts === 1 && ends === 1 && startIndex >= 0 && endIndex > startIndex,
+    malformed: starts !== ends || starts > 1 || ends > 1 || (starts === 1 && endIndex < startIndex),
+  };
+}
+
+function normalizeBlock(text) {
+  return String(text || '').replace(/\r\n/g, '\n').trim();
+}
+
+function inspectText(text) {
+  const shape = blockShape(text);
+  if (shape.malformed) return { managed: false, state: 'malformed', current: false, needsRefresh: false };
+  if (!shape.valid) return { managed: false, state: 'unmanaged', current: false, needsRefresh: false };
+  const match = text.match(managedBlockRegex());
+  const current = !!match && normalizeBlock(match[0]) === normalizeBlock(RULE_BLOCK);
+  return {
+    managed: true,
+    state: current ? 'current' : 'outdated',
+    current,
+    needsRefresh: !current,
+  };
 }
 
 function hasManagedBlock(text) {
-  return typeof text === 'string'
-    && text.includes(SECTION_MARKER_START)
-    && text.includes(SECTION_MARKER_END);
+  return inspectText(text).managed;
 }
 
-function ensureClaudeMdRule(repoPath, opts = {}) {
+function ensureClaudeMdRule(repoPath) {
   const filePath = path.join(repoPath, CLAUDE_MD_FILENAME);
-  const ruleBlock = buildRuleBlock(opts);
   let existing = null;
   try {
     if (fs.existsSync(filePath)) existing = fs.readFileSync(filePath, 'utf-8');
-  } catch (err) {
-    return { ok: false, action: 'read-failed', path: filePath, error: err.message };
+  } catch (error) {
+    return { ok: false, action: 'read-failed', path: filePath, error: error.message };
   }
 
   try {
-    if (existing && hasManagedBlock(existing)) {
-      const next = existing.replace(blockRegex(), ruleBlock);
-      fs.writeFileSync(filePath, next, 'utf-8');
-      return { ok: true, action: 'updated', path: filePath };
+    if (existing != null) {
+      const inspection = inspectText(existing);
+      if (inspection.state === 'malformed') {
+        return { ok: false, action: 'malformed', path: filePath, error: 'CLAUDE.md contains malformed or duplicate managed markers' };
+      }
+      if (inspection.managed) {
+        const next = existing.replace(managedBlockRegex(), RULE_BLOCK);
+        if (next === existing) return { ok: true, action: 'unchanged', path: filePath };
+        fs.writeFileSync(filePath, next, 'utf-8');
+        return { ok: true, action: inspection.current ? 'unchanged' : 'updated', path: filePath };
+      }
     }
-    const prefix = existing
-      ? (existing.endsWith('\n') ? existing : existing + '\n')
-      : '';
+    const prefix = existing ? (existing.endsWith('\n') ? existing : `${existing}\n`) : '';
     const separator = existing ? '\n' : '';
-    fs.writeFileSync(filePath, `${prefix}${separator}${ruleBlock}`, 'utf-8');
-    return {
-      ok: true,
-      action: existing ? 'appended' : 'created',
-      path: filePath,
-    };
-  } catch (err) {
-    return { ok: false, action: 'write-failed', path: filePath, error: err.message };
+    fs.mkdirSync(repoPath, { recursive: true });
+    fs.writeFileSync(filePath, `${prefix}${separator}${RULE_BLOCK}`, 'utf-8');
+    return { ok: true, action: existing ? 'appended' : 'created', path: filePath };
+  } catch (error) {
+    return { ok: false, action: 'write-failed', path: filePath, error: error.message };
+  }
+}
+
+// Strict migration path used by the bulk refresh endpoint. It only replaces
+// an existing, uniquely marked block and never appends to user-owned files.
+function refreshClaudeMdRule(repoPath) {
+  const status = readClaudeMdStatus(repoPath);
+  if (!status.ok) return { ok: false, action: 'failed', path: status.path, error: status.error };
+  if (status.state !== 'outdated') {
+    return { ok: true, action: status.state === 'current' ? 'unchanged' : 'skipped', reason: status.state, path: status.path };
+  }
+  try {
+    const text = fs.readFileSync(status.path, 'utf-8');
+    if (inspectText(text).state !== 'outdated') {
+      return { ok: true, action: 'skipped', reason: 'changed-during-refresh', path: status.path };
+    }
+    fs.writeFileSync(status.path, text.replace(managedBlockRegex(), RULE_BLOCK), 'utf-8');
+    return { ok: true, action: 'updated', path: status.path };
+  } catch (error) {
+    return { ok: false, action: 'failed', path: status.path, error: error.message };
   }
 }
 
 function removeClaudeMdRule(repoPath) {
   const filePath = path.join(repoPath, CLAUDE_MD_FILENAME);
-  let existing = null;
+  let existing;
   try {
-    if (!fs.existsSync(filePath)) {
-      return { ok: true, removed: false, reason: 'no CLAUDE.md', path: filePath };
-    }
+    if (!fs.existsSync(filePath)) return { ok: true, removed: false, reason: 'no CLAUDE.md', path: filePath };
     existing = fs.readFileSync(filePath, 'utf-8');
-  } catch (err) {
-    return { ok: false, removed: false, path: filePath, error: err.message };
+  } catch (error) {
+    return { ok: false, removed: false, path: filePath, error: error.message };
   }
-
-  if (!hasManagedBlock(existing)) {
-    return { ok: true, removed: false, reason: 'no KB-managed block', path: filePath };
+  const inspection = inspectText(existing);
+  if (!inspection.managed) {
+    return { ok: true, removed: false, reason: inspection.state === 'malformed' ? 'malformed managed block' : 'no KB-managed block', path: filePath };
   }
-
   try {
-    const next = existing.replace(blockRegex(), '').replace(/^\s+|\s+$/g, '');
-    if (next.length === 0) {
+    const next = existing.replace(managedBlockRegex(), '').trim();
+    if (!next) {
       fs.unlinkSync(filePath);
       return { ok: true, removed: true, fileDeleted: true, path: filePath };
     }
     fs.writeFileSync(filePath, `${next}\n`, 'utf-8');
     return { ok: true, removed: true, fileDeleted: false, path: filePath };
-  } catch (err) {
-    return { ok: false, removed: false, path: filePath, error: err.message };
+  } catch (error) {
+    return { ok: false, removed: false, path: filePath, error: error.message };
   }
 }
 
 function readClaudeMdStatus(repoPath) {
-  const filePath = path.join(repoPath, CLAUDE_MD_FILENAME);
-  if (!fs.existsSync(filePath)) {
-    return { ok: true, present: false, managed: false, path: filePath };
-  }
+  const filePath = path.join(repoPath || '', CLAUDE_MD_FILENAME);
   try {
+    if (!repoPath || !fs.existsSync(filePath)) {
+      return { ok: true, present: false, managed: false, current: false, needsRefresh: false, state: 'missing', path: filePath };
+    }
+    const stat = fs.lstatSync(filePath);
+    if (stat.isSymbolicLink()) {
+      return { ok: true, present: true, managed: false, current: false, needsRefresh: false, state: 'symlink', path: filePath };
+    }
     const text = fs.readFileSync(filePath, 'utf-8');
-    const kbPath = extractKbPath(text);
-    const registry = extractRegistryMeta(text);
+    const inspection = inspectText(text);
+    const legacy = extractLegacyMeta(text);
     return {
       ok: true,
       present: true,
-      managed: hasManagedBlock(text),
-      kbPath: kbPath || null,
-      projectsPath: registry.projectsPath || null,
-      projectSlug: registry.projectSlug || null,
+      ...inspection,
+      format: inspection.current ? 'central-v1' : (inspection.managed ? 'legacy-inline' : null),
+      rulesReference: inspection.current ? CENTRAL_RULE_REFERENCE : null,
+      kbPath: legacy.kbPath,
+      projectsPath: legacy.projectsPath,
+      projectSlug: legacy.projectSlug,
       path: filePath,
       bytes: Buffer.byteLength(text, 'utf-8'),
     };
-  } catch (err) {
-    return { ok: false, present: true, managed: false, path: filePath, error: err.message };
+  } catch (error) {
+    return { ok: false, present: true, managed: false, current: false, needsRefresh: false, state: 'unavailable', path: filePath, error: error.message };
   }
 }
 
-function extractKbPath(text) {
-  // Recover the kbPath from a managed block so readClaudeMdStatus can echo
-  // back what ensureClaudeMdRule wrote. Looks for the line "lives at:"
-  // followed by an indented path on the next line.
-  if (typeof text !== 'string') return null;
-  const m = /lives at:\s*\n\s*(\S[^\n]*)/.exec(text);
-  return m ? normalizePath(m[1].trim()) : null;
+function extractLegacyMeta(text) {
+  if (typeof text !== 'string') return { kbPath: null, projectsPath: null, projectSlug: null };
+  const kb = /lives at:\s*\n\s*(\S[^\n]*)/.exec(text);
+  const projects = /projects\.json:\s+((?:\/(?!\d)|~\/|[A-Za-z]:)[^\s\n]*)/.exec(text);
+  const slug = /projectSlug:\s*([a-zA-Z0-9_-]+)/.exec(text);
+  return {
+    kbPath: kb ? normalizePath(kb[1].trim()) : null,
+    projectsPath: projects ? normalizePath(projects[1].trim()) : null,
+    projectSlug: slug ? slug[1].trim() : null,
+  };
 }
 
-function extractRegistryMeta(text) {
-  // The default v2.4.2+ block only embeds `projectSlug:`. The legacy
-  // v2.4.1 registry-mode block additionally embeds `projects.json: <path>`.
-  // Both forms are parsed here for back-compat with already-installed blocks.
-  if (typeof text !== 'string') return {};
-  // The projects.json path must look like a path (start with `/`, `~`, or a
-  // drive letter) — this rules out prose like "Discovery order for the
-  // registry file" lines that happen to mention the filename. The capture
-  // extends over the rest of the path (anything up to whitespace or newline).
-  const projectsPathMatch = /projects\.json:\s+((?:\/(?!\d)|~\/|[A-Za-z]:)[^\s\n]*)/.exec(text);
-  const projectSlugMatch = /projectSlug:\s*([a-zA-Z0-9_-]+)/.exec(text);
-  return {
-    projectsPath: projectsPathMatch ? normalizePath(projectsPathMatch[1].trim()) : null,
-    projectSlug: projectSlugMatch ? projectSlugMatch[1].trim() : null,
-  };
+function defaultCentralRulesDir() {
+  return process.env.KB_CLAUDE_RULES_DIR
+    ? path.resolve(process.env.KB_CLAUDE_RULES_DIR)
+    : path.join(os.homedir(), '.project-knowledge');
+}
+
+function ensureCentralRulesFile(input = {}) {
+  const rulesDir = input.rulesDir ? path.resolve(input.rulesDir) : defaultCentralRulesDir();
+  const filePath = path.join(rulesDir, CENTRAL_RULE_FILENAME);
+  const canonical = buildCentralRules(input);
+  let existing = '';
+  try {
+    if (fs.existsSync(filePath)) existing = fs.readFileSync(filePath, 'utf-8');
+    let next;
+    const shape = blockShape(existing, CENTRAL_MARKER_START, CENTRAL_MARKER_END);
+    if (shape.malformed) {
+      return { ok: false, action: 'malformed', path: filePath, error: 'central rules file contains malformed managed markers' };
+    }
+    if (shape.valid) {
+      const match = canonical.match(managedBlockRegex(CENTRAL_MARKER_START, CENTRAL_MARKER_END));
+      next = existing.replace(managedBlockRegex(CENTRAL_MARKER_START, CENTRAL_MARKER_END), match[0]);
+    } else if (existing) {
+      next = `${existing.trimEnd()}\n\n${canonical}`;
+    } else {
+      next = canonical;
+    }
+    if (normalizeBlock(existing) === normalizeBlock(next)) return { ok: true, action: 'unchanged', path: filePath, reference: CENTRAL_RULE_REFERENCE };
+    fs.mkdirSync(rulesDir, { recursive: true });
+    const tempPath = `${filePath}.${process.pid}.tmp`;
+    fs.writeFileSync(tempPath, next, 'utf-8');
+    fs.renameSync(tempPath, filePath);
+    return { ok: true, action: existing ? 'updated' : 'created', path: filePath, reference: CENTRAL_RULE_REFERENCE };
+  } catch (error) {
+    return { ok: false, action: 'write-failed', path: filePath, reference: CENTRAL_RULE_REFERENCE, error: error.message };
+  }
 }
 
 module.exports = {
   CLAUDE_MD_FILENAME,
   SECTION_MARKER_START,
   SECTION_MARKER_END,
+  CENTRAL_MARKER_START,
+  CENTRAL_MARKER_END,
+  CENTRAL_RULE_FILENAME,
+  CENTRAL_RULE_REFERENCE,
+  PROJECT_GUIDANCE,
   RULE_BLOCK,
   buildRuleBlock,
+  buildCentralRules,
+  ensureCentralRulesFile,
   ensureClaudeMdRule,
+  refreshClaudeMdRule,
   removeClaudeMdRule,
   readClaudeMdStatus,
 };

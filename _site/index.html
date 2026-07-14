@@ -1041,6 +1041,31 @@
             <button @click="saveLoggingConfig" class="btn-primary">{{ t("save") }}</button>
           </div>
         </div>
+        <div class="panel rounded-xl border p-5 xl:col-span-2" data-claude-md-maintenance>
+          <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h2 class="text-lg font-semibold">{{ t("centralClaudeRules") }}</h2>
+              <p class="mt-1 text-sm muted">{{ t("centralClaudeRulesHelp") }}</p>
+              <div class="mt-2 font-mono text-xs muted"><span>@</span>{{ claudeMdAudit.reference || "~/.project-knowledge/claude-code-rules.md" }}</div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button @click="loadClaudeMdAudit(true)" class="btn" :disabled="claudeMdRefreshing">{{ t("rescanClaudeMd") }}</button>
+              <button data-claude-md-refresh-all @click="refreshAllClaudeMd" class="btn-primary" :disabled="claudeMdRefreshing || !claudeMdAudit.summary.refreshable">
+                {{ claudeMdRefreshing ? t("refreshingClaudeMd") : t("refreshAllClaudeMd") }}
+              </button>
+            </div>
+          </div>
+          <div class="mt-4 grid gap-3 sm:grid-cols-3">
+            <div class="panel2 rounded-lg border p-3"><div class="text-xs muted">{{ t("claudeMdCurrent") }}</div><div class="mt-1 text-xl font-semibold">{{ claudeMdAudit.summary.current || 0 }}</div></div>
+            <div class="panel2 rounded-lg border p-3"><div class="text-xs muted">{{ t("claudeMdNeedsRefresh") }}</div><div class="mt-1 text-xl font-semibold">{{ claudeMdAudit.summary.refreshable || 0 }}</div></div>
+            <div class="panel2 rounded-lg border p-3"><div class="text-xs muted">{{ t("claudeMdSkipped") }}</div><div class="mt-1 text-xl font-semibold">{{ claudeMdSkippedCount }}</div></div>
+          </div>
+          <p v-if="claudeMdMessage" class="mt-3 text-sm muted">{{ claudeMdMessage }}</p>
+          <p class="mt-2 text-xs muted">{{ t("claudeMdApprovalHint") }}</p>
+          <div v-if="claudeMdAudit.projects.some(item => item.state === 'outdated')" class="mt-3 flex flex-wrap gap-2">
+            <span v-for="item in claudeMdAudit.projects.filter(item => item.state === 'outdated')" :key="item.slug" class="chip">{{ item.displayName || item.slug }}</span>
+          </div>
+        </div>
         <div class="panel rounded-xl border p-5 xl:col-span-2">
           <div class="flex flex-col gap-2 border-b pb-4 line md:flex-row md:items-start md:justify-between">
             <div>
@@ -1549,7 +1574,17 @@ const I18N = {
     hook: "Hook",
     projectGitSettings: "Project Git / Hook Settings",
     projectGitSettingsHelp: "Optional maintenance for the KB storage path, Git metadata, and commit automation.",
-    hookSettingsHelp: "Imported projects install this automatically. Adjust it only when you need a custom prompt or policy.",
+    centralClaudeRules: "Central CLAUDE.md Rules",
+    centralClaudeRulesHelp: "Every project keeps one home-relative import line. Detailed rules and the project-to-KB mapping stay under .project-knowledge.",
+    rescanClaudeMd: "Check again",
+    refreshAllClaudeMd: "Refresh all CLAUDE.md",
+    refreshingClaudeMd: "Refreshing...",
+    claudeMdCurrent: "Current",
+    claudeMdNeedsRefresh: "Needs refresh",
+    claudeMdSkipped: "Skipped / unavailable",
+    claudeMdApprovalHint: "Claude Code may ask once per project to approve this external import. New sessions then read the shared rule automatically.",
+    claudeMdRefreshDone: "Updated {updated} project(s); {failed} failed.",
+    hookSettingsHelp: "Imported projects install this automatically. Claude Code only reads the KB during development; routine writes start after a successful commit.",
     installed: "installed",
     notInstalled: "not installed",
     checkHook: "Check hook",
@@ -1697,7 +1732,7 @@ const I18N = {
     autoImportGit: "Create a local Git repository if the folder is not already a Git repo; existing remote URLs are detected.",
     autoImportHook: "Install the managed post-commit Hook and enable commit automation with read-only Bash.",
     autoImportKb: "Create the default KB files and start one initial KB update.",
-    hookAutoSetupPreview: "Hook automation and the first KB initialization are configured during import.",
+    hookAutoSetupPreview: "Import configures a read-only CLAUDE.md context rule, post-commit automation, and the first KB initialization.",
     folderPickerUnavailable: "Native folder picker is unavailable. Enter the path manually.",
     importedProject: "Imported {name}.",
     importTarget: "Import target",
@@ -1977,7 +2012,17 @@ const I18N = {
     hook: "Hook",
     projectGitSettings: "项目 Git / Hook 设置",
     projectGitSettingsHelp: "知识库保存地址、Git 元数据和提交自动化的可选维护设置。",
-    hookSettingsHelp: "导入项目时会自动安装并启用；只有需要自定义提示词或策略时再调整。",
+    centralClaudeRules: "CLAUDE.md 集中规则",
+    centralClaudeRulesHelp: "每个项目只保留一行用户目录相对导入；详细规则和项目到知识库的映射都放在 .project-knowledge 下。",
+    rescanClaudeMd: "重新检测",
+    refreshAllClaudeMd: "一键刷新全部 CLAUDE.md",
+    refreshingClaudeMd: "刷新中...",
+    claudeMdCurrent: "已是最新",
+    claudeMdNeedsRefresh: "需要刷新",
+    claudeMdSkipped: "跳过 / 不可用",
+    claudeMdApprovalHint: "Claude Code 可能会为每个项目首次询问一次外部导入授权；之后新会话会自动读取中央规则。",
+    claudeMdRefreshDone: "已更新 {updated} 个项目，失败 {failed} 个。",
+    hookSettingsHelp: "导入项目时会自动安装并启用。开发期间 Claude Code 只读知识库；常规写入只在成功提交后开始。",
     installed: "已安装",
     notInstalled: "未安装",
     checkHook: "检查 Hook",
@@ -2125,7 +2170,7 @@ const I18N = {
     autoImportGit: "如果目录还不是 Git 仓库，会创建本地 Git 仓库；已有远程地址会自动读取。",
     autoImportHook: "安装项目管理的 post-commit Hook，并启用提交后自动更新和只读 Bash。",
     autoImportKb: "创建默认知识库文件，并立即启动一次项目知识库初始化。",
-    hookAutoSetupPreview: "Hook 自动化和首次知识库初始化会在导入时配置好。",
+    hookAutoSetupPreview: "导入时会配置只读 CLAUDE.md 上下文规则、提交后自动化和首次知识库初始化。",
     folderPickerUnavailable: "当前环境无法打开本地目录选择器，请手动输入路径。",
     importedProject: "已导入 {name}。",
     importTarget: "导入目标",
@@ -2691,6 +2736,7 @@ const app = createApp({
       if (v === 'settings') {
         loadKnowledgeStoreConfig().catch(() => {});
         loadLoggingConfig().catch(() => {});
+        loadClaudeMdAudit(true).catch(() => {});
         ensureSettingsProjectSlug();
       }
     });
@@ -2746,6 +2792,17 @@ const app = createApp({
     const vendorPresetsCache = ref([]);
 
     const hookStatus = reactive({ installed: false, path: "", hookPath: "", message: "", reason: "" });
+    const claudeMdAudit = reactive({
+      reference: "~/.project-knowledge/claude-code-rules.md",
+      summary: { total: 0, current: 0, outdated: 0, refreshable: 0, missing: 0, unmanaged: 0, malformed: 0, symlink: 0, unavailable: 0, duplicateRepo: 0 },
+      projects: [],
+    });
+    const claudeMdRefreshing = ref(false);
+    const claudeMdMessage = ref("");
+    const claudeMdSkippedCount = computed(() => {
+      const s = claudeMdAudit.summary || {};
+      return (s.missing || 0) + (s.unmanaged || 0) + (s.malformed || 0) + (s.symlink || 0) + (s.unavailable || 0) + (s.duplicateRepo || 0);
+    });
     const settingsAutomationForm = reactive({
       enabled: false,
       postCommitEnabled: false,
@@ -4767,11 +4824,41 @@ const app = createApp({
       await loadSettingsProject(nextSlug);
     }
 
+    async function loadClaudeMdAudit(rescan = false) {
+      try {
+        const data = await api("GET", `/api/claude-md/status${rescan ? "?rescan=1" : ""}`);
+        Object.assign(claudeMdAudit, data, {
+          summary: data.summary || claudeMdAudit.summary,
+          projects: Array.isArray(data.projects) ? data.projects : [],
+        });
+        return data;
+      } catch (e) {
+        claudeMdMessage.value = e.message;
+        throw e;
+      }
+    }
+
+    async function refreshAllClaudeMd() {
+      if (claudeMdRefreshing.value) return;
+      claudeMdRefreshing.value = true;
+      claudeMdMessage.value = "";
+      try {
+        const data = await api("POST", "/api/claude-md/refresh-all", {});
+        if (data.audit) Object.assign(claudeMdAudit, data.audit);
+        claudeMdMessage.value = t("claudeMdRefreshDone", { updated: data.updated || 0, failed: data.failed || 0 });
+      } catch (e) {
+        claudeMdMessage.value = e.message;
+      } finally {
+        claudeMdRefreshing.value = false;
+      }
+    }
+
     async function installHook(slug) {
       if (!slug) return;
       try {
         const data = await api("POST", `/api/projects/${slug}/hook-install`, { overwrite: false });
         updateHookStatus(data, { installed: data.installed !== false });
+        await loadClaudeMdAudit(true).catch(() => {});
       } catch (e) {
         updateHookStatus({ installed: false, path: "", hookPath: "", message: e.message });
       }
@@ -4782,6 +4869,7 @@ const app = createApp({
       try {
         const data = await api("POST", `/api/projects/${slug}/hook-uninstall`);
         updateHookStatus(data, { installed: false });
+        await loadClaudeMdAudit(true).catch(() => {});
       } catch (e) {
         updateHookStatus({ installed: false, message: e.message });
       }
@@ -5515,6 +5603,7 @@ const app = createApp({
       document.documentElement.lang = uiLanguage.value === "zh" ? "zh-CN" : "en";
       window.addEventListener("message", handleGiteaOAuthMessage);
       refreshAll();
+      loadClaudeMdAudit(true).catch(() => {});
       openClaudeSessionsStream();
     });
     const pollTimer = setInterval(refreshAll, 30000);
@@ -5544,6 +5633,7 @@ const app = createApp({
       removeDialog, removeProjectDisabled,
       aiConfig, aiProfilesText, adapters, aiMessage, aiMessageStyle, selectedConfigProfileId, profileForm, testPrompt, testResult, testingProfile, vendorPresetNames, usableAiProfiles, defaultAiProfile, defaultAiProfileLabel, nonDefaultAiProfiles,
       hookStatus, settingsAutomationForm, settingsAutomationLoaded, settingsAutomationDirty, settingsAutomationSaving,
+      claudeMdAudit, claudeMdRefreshing, claudeMdMessage, claudeMdSkippedCount, loadClaudeMdAudit, refreshAllClaudeMd,
       projectGoalForm, projectGoalLoaded, projectGoalDirty, projectGoalSaving, projectGoalMessage, projectGoalModal, projectGoalModalStyle,
       automationRuns, automationPromptPreview, automationMessage, actionMessage, importPreflight,
       selectProject, isKbInit, isProjectRunning, repoStatusLevel, projectStatusClass, projectIssues,

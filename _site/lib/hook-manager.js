@@ -150,8 +150,9 @@ function installHook({
 
   let claudeMd;
   if (updateClaudeMd) {
-    const portableClaudeOptions = projectSlug ? { projectSlug } : {};
-    claudeMd = ensureClaudeMdRule(abs, portableClaudeOptions);
+    // Project-specific paths and slugs live in the central registry. Every
+    // repo receives the same one-line, home-relative shared-rule import.
+    claudeMd = ensureClaudeMdRule(abs);
   } else {
     claudeMd = { ok: true, action: 'skipped', path: path.join(abs, 'CLAUDE.md') };
   }
