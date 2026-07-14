@@ -8,6 +8,8 @@ class LocalEmbeddingService {
   constructor(options = {}) {
     this.modelId = options.modelId || DEFAULT_MODEL_ID;
     this.cacheDir = options.cacheDir ? path.resolve(options.cacheDir) : null;
+    this.remoteHost = String(options.remoteHost || process.env.KB_EMBEDDING_REMOTE_HOST || process.env.HF_ENDPOINT || 'https://huggingface.co/').trim();
+    this.localModelPath = options.localModelPath || process.env.KB_EMBEDDING_LOCAL_PATH || '';
     this.localFilesOnly = options.localFilesOnly === true;
     this.pipelineFactory = options.pipelineFactory || null;
     this.extractor = null;
@@ -22,6 +24,8 @@ class LocalEmbeddingService {
       if (!pipelineFactory) {
         const transformers = await import('@huggingface/transformers');
         if (this.cacheDir) transformers.env.cacheDir = this.cacheDir;
+        if (this.remoteHost) transformers.env.remoteHost = `${this.remoteHost.replace(/\/+$/, '')}/`;
+        if (this.localModelPath) transformers.env.localModelPath = path.resolve(this.localModelPath);
         transformers.env.allowRemoteModels = !this.localFilesOnly;
         pipelineFactory = transformers.pipeline;
       }
@@ -34,6 +38,11 @@ class LocalEmbeddingService {
     })();
     try {
       return await this.loading;
+    } catch (error) {
+      const hint = this.localFilesOnly
+        ? `Local model files were not found. Set KB_EMBEDDING_LOCAL_PATH to a directory containing ${this.modelId}.`
+        : `Could not load ${this.modelId} from ${this.remoteHost}. Check the network, or set KB_EMBEDDING_REMOTE_HOST / KB_EMBEDDING_LOCAL_PATH.`;
+      throw new Error(`${hint} ${error.message}`, { cause: error });
     } finally {
       this.loading = null;
     }
@@ -65,6 +74,8 @@ class LocalEmbeddingService {
       modelId: this.modelId,
       dimensions: EMBEDDING_DIMENSIONS,
       cacheDir: this.cacheDir,
+      remoteHost: this.remoteHost,
+      localModelPath: this.localModelPath || null,
       loaded: !!this.extractor,
       localFilesOnly: this.localFilesOnly,
     };

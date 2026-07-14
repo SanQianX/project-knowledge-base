@@ -79,6 +79,7 @@ function vectorAt(index) {
     let seenInput = null;
     let seenOptions = null;
     const embeddings = new LocalEmbeddingService({
+      remoteHost: 'https://models.example.test/',
       pipelineFactory: async (task, model, options) => {
         assert.equal(task, 'feature-extraction');
         assert.equal(model, 'Xenova/bge-small-zh-v1.5');
@@ -95,6 +96,7 @@ function vectorAt(index) {
     assert.equal(seenInput, `${QUERY_PREFIX}登录怎么做`);
     assert.deepEqual(seenOptions, { pooling: 'cls', normalize: true });
     assert.equal(embeddings.status().loaded, true);
+    assert.equal(embeddings.status().remoteHost, 'https://models.example.test/');
 
     const sections = chunkMarkdown('# 标题\n\n第一段。\n\n## 细节\n\n第二段。', { maxChars: 20, overlapChars: 2 });
     assert.ok(sections.length >= 2);
