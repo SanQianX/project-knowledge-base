@@ -2924,6 +2924,7 @@ const app = createApp({
     const automationMessage = ref("");
     const pickingFolder = ref(false);
     let automationActionSeq = 0;
+    let settingsProjectChangeSeq = 0;
     let loadingAutomationForm = false;
     let loadingProjectGoal = false;
     let projectGoalDragState = null;
@@ -4981,6 +4982,7 @@ const app = createApp({
     }
 
     async function changeSettingsProject() {
+      const changeSeq = ++settingsProjectChangeSeq;
       const nextSlug = settingsProjectSlug.value;
       const previousSlug = settingsAutomationProjectSlug.value;
       if (settingsAutomationDirty.value && previousSlug && previousSlug !== nextSlug) {
@@ -4992,6 +4994,10 @@ const app = createApp({
           return;
         }
       }
+      // The save above is asynchronous. If the user selected another project
+      // while it was running, the newer selection owns the form and this
+      // stale change must not overwrite it.
+      if (changeSeq !== settingsProjectChangeSeq || settingsProjectSlug.value !== nextSlug) return;
       await loadSettingsProject(nextSlug);
     }
 

@@ -77,7 +77,8 @@ function initFixture() {
   fs.mkdirSync(TEMP_KB, { recursive: true });
   fs.mkdirSync(TEMP_REPO2, { recursive: true });
   fs.mkdirSync(TEMP_KB2, { recursive: true });
-  git(TEMP_REPO, ['init', '--initial-branch=main']);
+  git(TEMP_REPO, ['init']);
+  git(TEMP_REPO, ['checkout', '-b', 'main']);
   git(TEMP_REPO, ['config', 'user.email', 'automation-ui@example.com']);
   git(TEMP_REPO, ['config', 'user.name', 'Automation UI']);
   git(TEMP_REPO, ['config', 'commit.gpgsign', 'false']);
@@ -89,7 +90,8 @@ function initFixture() {
   git(TEMP_REPO, ['commit', '-m', 'feat: add ui automation feature']);
   fs.writeFileSync(path.join(TEMP_KB, 'README.md'), '# automation kb\n', 'utf-8');
   fs.writeFileSync(path.join(TEMP_KB, 'GOAL.md'), '# goal\n', 'utf-8');
-  git(TEMP_REPO2, ['init', '--initial-branch=main']);
+  git(TEMP_REPO2, ['init']);
+  git(TEMP_REPO2, ['checkout', '-b', 'main']);
   git(TEMP_REPO2, ['config', 'user.email', 'automation-ui@example.com']);
   git(TEMP_REPO2, ['config', 'user.name', 'Automation UI']);
   git(TEMP_REPO2, ['config', 'commit.gpgsign', 'false']);
@@ -387,6 +389,13 @@ async function waitFor(fn, label, ms = 20000) {
         && state[SLUG].automation.knowledgeMode === 'directWriteKb'
         && state[SLUG].automation.hookPromptTemplate.includes('UI automation');
     }, 'automation draft autosaved on project switch');
+    await waitFor(() => evalJs(`(() => {
+      const root = document.querySelector('[data-automation-settings]');
+      const enabled = root?.querySelector('[data-automation-field="enabled"]');
+      const mode = root?.querySelector('[data-automation-field="knowledgeMode"]');
+      const ta = root?.querySelector('[data-automation-field="hookPromptTemplate"]');
+      return !!(enabled && !enabled.checked && mode?.value === 'requestApproval' && ta?.value.includes('Other automation'));
+    })()`), 'new settings project loaded after autosave');
     await evalJs(`(() => {
       const select = [...document.querySelectorAll('select')].find(s => [...s.options].some(o => o.value === '${SLUG}'));
       if (!select) return false;
