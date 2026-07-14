@@ -100,6 +100,11 @@ function fakeVector(text) {
       const savedProjects = await request('GET', '/api/projects');
       assert.equal(savedProjects.api.knowledgeBackend, 'lancedb');
       assert.equal(savedProjects.api.legacyKbPath, apiKb);
+      const searched = await request('POST', '/api/knowledge/search', { projectSlug: 'api', query: '迁移接口', limit: 5 });
+      assert.equal(searched.results[0].space_id, savedProjects.api.primarySpaceId);
+      assert.match(searched.results[0].chunk_text, /迁移接口测试/);
+      const asked = await request('POST', '/api/knowledge/ask', { projectSlug: 'api', query: '迁移接口', limit: 5 });
+      assert.match(asked.answer, /相关知识记录/);
       const rolledBack = await request('POST', '/api/projects/api/knowledge-migration/rollback', {});
       assert.equal(rolledBack.knowledgeBackend, 'markdown');
       assert.equal(rolledBack.retainedDatabase, true);

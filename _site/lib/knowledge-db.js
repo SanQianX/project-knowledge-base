@@ -68,6 +68,32 @@ class KnowledgeDatabase {
     return Array.from(new Set(rows.map(row => String(row.entry_id)))).sort();
   }
 
+  async getEntry(entryId, options = {}) {
+    await this.open();
+    const predicates = [inPredicate('space_id', options.spaceIds || []), `entry_id = ${sqlString(entryId)}`];
+    if (options.spaceId) predicates.push(`space_id = ${sqlString(options.spaceId)}`);
+    const rows = await this.table.query().where(predicates.join(' AND ')).toArray();
+    return rows.map(decodeKnowledgeChunk).sort((a, b) => a.chunk_order - b.chunk_order);
+  }
+
+  async history(options = {}) {
+    await this.open();
+    const limit = Math.max(1, Math.min(Number(options.limit || 20), 100));
+    const rows = await this.table.query()
+      .where(`${inPredicate('space_id', options.spaceIds || [])} AND entry_type = 'change'`)
+      .limit(limit * 4)
+      .toArray();
+    const entries = new Map();
+    for (const row of rows.map(decodeKnowledgeChunk)) {
+      const current = entries.get(row.record_id) || row;
+      if (String(row.updated_at) > String(current.updated_at)) entries.set(row.record_id, row);
+      else if (!entries.has(row.record_id)) entries.set(row.record_id, row);
+    }
+    return Array.from(entries.values())
+      .sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)))
+      .slice(0, limit);
+  }
+
   async replaceEntry(spaceId, entryId, chunks) {
     await this.open();
     if (!Array.isArray(chunks) || chunks.length === 0) {

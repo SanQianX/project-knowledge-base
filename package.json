@@ -8,7 +8,8 @@
     "test": "node _site/_test/run-all-tests.js"
   },
   "bin": {
-    "project-knowledge": "bin/project-knowledge.js"
+    "project-knowledge": "bin/project-knowledge.js",
+    "project-knowledge-kb": "bin/project-knowledge-kb.js"
   },
   "engines": {
     "node": ">=18"

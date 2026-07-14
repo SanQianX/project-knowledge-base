@@ -43,6 +43,7 @@ const { LocalEmbeddingService, DEFAULT_MODEL_ID } = require('./lib/embedding-ser
 const { MarkdownKnowledgeIndexer } = require('./lib/markdown-knowledge-indexer');
 const { KnowledgeMigrationManager } = require('./lib/knowledge-migration');
 const { EMBEDDING_DIMENSIONS } = require('./lib/knowledge-schema');
+const { KnowledgeQueryService } = require('./lib/knowledge-query-service');
 
 const KB_ROOT = path.resolve(__dirname, '..');
 const SITE_ROOT = __dirname;
@@ -138,6 +139,16 @@ function createKnowledgeMigrationManager() {
       writeJson(PROJECTS_PATH, latest);
       readKnowledgeScopes(latest);
     },
+  });
+}
+
+function createKnowledgeQueryService() {
+  const runtime = knowledgeRuntime();
+  return new KnowledgeQueryService({
+    database: runtime.database,
+    embedder: runtime.embedder,
+    scopeRegistry: new KnowledgeScopeRegistry({ filePath: KNOWLEDGE_SCOPES_PATH }),
+    readProjects: () => readProjects({ persistMigrations: true }),
   });
 }
 
@@ -2185,6 +2196,44 @@ const server = http.createServer(async (req, res) => {
       };
       walk(EMBEDDING_CACHE_PATH);
       return send(res, 200, { ok: true, ...status, modelId: status.modelId || DEFAULT_MODEL_ID, installed: status.loaded || bytes > 1024 * 1024, bytes });
+    }
+
+    if (m === 'POST' && (p === '/api/knowledge/search' || p === '/api/knowledge/ask')) {
+      const body = JSON.parse(await readBody(req));
+      try {
+        const service = createKnowledgeQueryService();
+        const result = p.endsWith('/ask')
+          ? await service.ask({ projectSlug: body.projectSlug, query: body.query, limit: body.limit })
+          : await service.search({ projectSlug: body.projectSlug, query: body.query, limit: body.limit });
+        return send(res, 200, result);
+      } catch (error) {
+        return send(res, /not been migrated/.test(error.message) ? 409 : 400, { ok: false, error: error.message });
+      }
+    }
+
+    if (m === 'GET' && p === '/api/knowledge/entry') {
+      try {
+        const result = await createKnowledgeQueryService().get({
+          projectSlug: url.searchParams.get('projectSlug'),
+          entryId: url.searchParams.get('entryId'),
+          spaceId: url.searchParams.get('spaceId') || undefined,
+        });
+        return send(res, 200, result);
+      } catch (error) {
+        return send(res, 400, { ok: false, error: error.message });
+      }
+    }
+
+    if (m === 'GET' && p === '/api/knowledge/history') {
+      try {
+        const result = await createKnowledgeQueryService().history({
+          projectSlug: url.searchParams.get('projectSlug'),
+          limit: url.searchParams.get('limit'),
+        });
+        return send(res, 200, result);
+      } catch (error) {
+        return send(res, 400, { ok: false, error: error.message });
+      }
     }
 
     // PUT /api/projects/:slug/knowledge-relations { relatedProjectSlugs, bidirectional? }
