@@ -11,7 +11,7 @@
   <a href="https://www.npmjs.com/package/project-knowledge"><img src="https://img.shields.io/npm/v/project-knowledge.svg?style=flat-square" alt="npm"></a>
   <img src="https://img.shields.io/node/v/project-knowledge.svg?style=flat-square" alt="Node 18+">
   <img src="https://img.shields.io/github/license/SanQianX/project-knowledge-base?style=flat-square" alt="Apache-2.0">
-  <a href="https://github.com/SanQianX/project-knowledge-base/actions"><img src="https://img.shields.io/badge/tests-36%20passed-2f7d64?style=flat-square" alt="Tests"></a>
+  <a href="https://github.com/SanQianX/project-knowledge-base/actions"><img src="https://img.shields.io/badge/tests-41%20passed-2f7d64?style=flat-square" alt="Tests"></a>
   <a href="#star-history"><img src="https://img.shields.io/badge/star_history-⬇-7492a5?style=flat-square" alt="Star history"></a>
 </p>
 
@@ -117,12 +117,12 @@ only grows when you say so.
   <tr>
     <td valign="top">
 
-**Reviewable AI drafts**
+**Vector knowledge search (v4.0+)**
 
-- Every AI change lands in `drafts/` first, never the KB.
-- Browser diff view with apply / edit / reject.
-- Bilingual (zh-CN / en-US) module + change docs by default.
-- Provider-agnostic: Claude, GLM, DeepSeek, Kimi, self-hosted.
+- Original text + 512-dimensional local embeddings in LanceDB.
+- Chinese semantic search plus n-gram/BM25 keyword retrieval.
+- Incremental upsert removes stale chunks instead of accumulating duplicates.
+- Read-only `search`, `get`, `ask`, and `history` tools for Claude Code.
 
 </td>
     <td valign="top">
@@ -137,6 +137,65 @@ only grows when you say so.
 </td>
   </tr>
 </table>
+
+---
+
+## Vector knowledge and one-click upgrade
+
+Version 4 stores the complete human-readable knowledge text, metadata, and
+`Xenova/bge-small-zh-v1.5` vectors in
+`~/.project-knowledge/knowledge.lancedb`. Vectors are retrieval indexes — they
+cannot be decoded back into prose. `project-knowledge-kb` retrieves the
+original `chunk_text`, and Claude uses that source text to answer.
+
+Open **Settings → One-click vector knowledge migration** after upgrading:
+
+1. Every registered legacy Markdown KB is discovered.
+2. Markdown is copied to `_backup/vector-migration/`; the source is untouched.
+3. Files are split by Markdown headings and embedded locally.
+4. File, entry, chunk, content-hash, and vector-search probes are verified.
+5. Only the verified project is atomically switched to `knowledgeBackend:
+   "lancedb"`. Failed projects remain on Markdown and can be retried.
+
+The migration is resumable and idempotent. **Roll back to Markdown** changes
+the project backend without deleting either the original files or LanceDB.
+Post-commit automation incrementally re-indexes migrated projects: unchanged
+files are skipped, changed chunks are replaced, and chunks from deleted files
+are removed.
+
+The model downloads on first use (about 100 MB). For restricted networks or
+offline installations:
+
+```bash
+# Alternative Hugging Face-compatible endpoint
+KB_EMBEDDING_REMOTE_HOST=https://your-model-mirror.example/ project-knowledge
+
+# Pre-downloaded model tree
+KB_EMBEDDING_LOCAL_PATH=D:/models project-knowledge
+```
+
+### Related projects and team knowledge
+
+Each Git project has one primary write space. In project settings you can
+explicitly select related projects; search then covers the primary, shared,
+and selected spaces with source labels and weights. Relationships are
+non-transitive, and post-commit updates still write only to the current
+project's primary space.
+
+Team Knowledge Mode remains compatible. GitHub/Gitea Markdown v1 stays the
+portable, reviewable sync transport, while every teammate generates vectors
+locally. LanceDB directories and model files are never committed to the team
+repository. Projects bound to the same stable team `kbId` resolve to the same
+local `space_id`.
+
+Read-only CLI examples:
+
+```bash
+project-knowledge-kb search --project my-api --query "how are refresh tokens rotated?" --json
+project-knowledge-kb ask --project my-api --query "what did we decide about login?"
+project-knowledge-kb get --project my-api --entry "modules/auth.md" --json
+project-knowledge-kb history --project my-api --json
+```
 
 ---
 
@@ -216,6 +275,10 @@ linear with task size, not with KB size.
 | `project-knowledge --no-open` | Don't open the browser |
 | `project-knowledge -v` / `--version` | Print version and exit |
 | `project-knowledge -h` / `--help` | Print full help |
+| `project-knowledge-kb search …` | Scoped semantic + keyword knowledge search |
+| `project-knowledge-kb ask …` | Human-readable answer with source citations |
+| `project-knowledge-kb get …` | Read one stored entry's original chunks |
+| `project-knowledge-kb history …` | Read scoped change history |
 
 The CLI writes a PID file at `os.tmpdir()/.project-knowledge.pid`.
 Closing the original terminal does **not** stop the dashboard — use

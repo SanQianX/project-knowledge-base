@@ -11,7 +11,7 @@
   <a href="https://www.npmjs.com/package/project-knowledge"><img src="https://img.shields.io/npm/v/project-knowledge.svg?style=flat-square" alt="npm"></a>
   <img src="https://img.shields.io/node/v/project-knowledge.svg?style=flat-square" alt="Node 18+">
   <img src="https://img.shields.io/github/license/SanQianX/project-knowledge-base?style=flat-square" alt="Apache-2.0">
-  <a href="https://github.com/SanQianX/project-knowledge-base/actions"><img src="https://img.shields.io/badge/tests-36%20passed-2f7d64?style=flat-square" alt="Tests"></a>
+  <a href="https://github.com/SanQianX/project-knowledge-base/actions"><img src="https://img.shields.io/badge/tests-41%20passed-2f7d64?style=flat-square" alt="Tests"></a>
   <a href="#star-history"><img src="https://img.shields.io/badge/star_history-⬇-7492a5?style=flat-square" alt="Star history"></a>
 </p>
 
@@ -26,6 +26,45 @@
 ```bash
 npm install -g project-knowledge
 project-knowledge
+```
+
+## v4 向量知识库与一键升级
+
+v4 在 `~/.project-knowledge/knowledge.lancedb` 中同时保存完整自然语言原文、
+元数据和 `Xenova/bge-small-zh-v1.5` 的 512 维向量。向量只负责召回，不能反向
+“翻译”为文本；`search/get/ask/history` 工具返回的是数据库中保存的原始
+`chunk_text`，再由 Claude 根据原文回答。
+
+升级后打开“设置 → 一键迁移全部向量知识库”：
+
+1. 自动发现全部已注册的旧 Markdown 知识库；
+2. 先备份到 `_backup/vector-migration/`，不修改、不删除原文件；
+3. 按 Markdown 标题分块，在本机生成向量；
+4. 校验文件数、条目数、分块数、内容哈希，并执行真实向量检索探针；
+5. 只有校验成功的项目才原子切换到 LanceDB，失败项目继续使用 Markdown。
+
+迁移可恢复、可重复执行，并提供“回退到 Markdown”。提交后的自动化采用增量更新：
+未变化文件不重新向量化，变化内容替换旧分块，已删除文件对应的旧记录会删除，
+不会无限追加重复内容。
+
+首次使用会下载约 100 MB 的本地模型。受限网络或离线环境可配置：
+
+```bash
+KB_EMBEDDING_REMOTE_HOST=https://your-model-mirror.example/ project-knowledge
+KB_EMBEDDING_LOCAL_PATH=D:/models project-knowledge
+```
+
+每个项目只有一个主写入空间。你可以在项目设置中显式勾选关联项目；检索会覆盖
+当前、共享及已勾选的空间，但不会传递扩散，提交后的更新也只写当前项目主空间。
+团队模式继续以 GitHub/Gitea Markdown v1 作为可审计同步层，每台机器在本地生成
+向量，不会把 LanceDB 二进制或模型提交到团队仓库；相同稳定 `kbId` 会映射到相同
+`space_id`。
+
+```bash
+project-knowledge-kb search --project my-api --query "刷新令牌如何轮换" --json
+project-knowledge-kb ask --project my-api --query "登录方案以前怎么决定的"
+project-knowledge-kb get --project my-api --entry "modules/auth.md" --json
+project-knowledge-kb history --project my-api --json
 ```
 
 仪表盘自动打开 **http://127.0.0.1:5757**。5757 被占时 CLI 会在
