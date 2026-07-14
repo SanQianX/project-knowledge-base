@@ -578,6 +578,19 @@ function _markRunEnded(slug, runId, session, deps) {
         if (typeof deps.writeProjects === 'function') deps.writeProjects(projects);
       }
     } catch {}
+    if (typeof deps.onKnowledgeUpdated === 'function') {
+      Promise.resolve(deps.onKnowledgeUpdated(slug, r)).then(result => {
+        const latest = _readAutomationRun(slug, runId);
+        if (!latest) return;
+        latest.vectorIndex = { status: 'succeeded', endedAt: new Date().toISOString(), result: result || null };
+        writeAutomationRun(slug, latest);
+      }).catch(error => {
+        const latest = _readAutomationRun(slug, runId);
+        if (!latest) return;
+        latest.vectorIndex = { status: 'failed', endedAt: new Date().toISOString(), error: error.message };
+        writeAutomationRun(slug, latest);
+      });
+    }
   }
 }
 

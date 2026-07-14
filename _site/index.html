@@ -1041,6 +1041,37 @@
             <button @click="saveLoggingConfig" class="btn-primary">{{ t("save") }}</button>
           </div>
         </div>
+        <div class="panel rounded-xl border p-5 xl:col-span-2" data-vector-migration>
+          <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h2 class="text-lg font-semibold">{{ t("vectorMigrationTitle") }}</h2>
+              <p class="mt-1 text-sm muted">{{ t("vectorMigrationHelp") }}</p>
+              <p class="mt-1 text-xs muted">{{ t("embeddingModel") }}: <code>{{ vectorModelStatus.modelId || "Xenova/bge-small-zh-v1.5" }}</code></p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button @click="loadVectorMigration" class="btn">{{ t("refresh") }}</button>
+              <button @click="startVectorMigration" class="btn-primary" :disabled="vectorMigrationBusy || !vectorMigration.eligible">
+                {{ vectorMigrationBusy || vectorMigration.running ? t("migrating") : t("migrateAllKnowledge") }}
+              </button>
+            </div>
+          </div>
+          <div class="mt-4 grid gap-3 sm:grid-cols-3">
+            <div class="panel2 rounded-lg border p-3"><div class="text-xs muted">{{ t("legacyProjects") }}</div><div class="mt-1 text-xl font-semibold">{{ vectorMigration.eligible || 0 }}</div></div>
+            <div class="panel2 rounded-lg border p-3"><div class="text-xs muted">{{ t("migratedProjects") }}</div><div class="mt-1 text-xl font-semibold">{{ vectorMigration.migratedProjects || 0 }}</div></div>
+            <div class="panel2 rounded-lg border p-3"><div class="text-xs muted">{{ t("migrationStatus") }}</div><div class="mt-1 text-sm font-semibold">{{ vectorMigration.status || "idle" }}</div></div>
+          </div>
+          <div class="mt-4 grid gap-2">
+            <div v-for="item in vectorMigration.items || []" :key="item.slug" class="flex flex-col gap-2 rounded-lg border p-3 text-sm panel2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <span class="font-medium">{{ item.displayName }}</span>
+                <span class="ml-2 font-mono text-xs muted">{{ item.primarySpaceId }}</span>
+                <div class="mt-1 text-xs muted">{{ item.files }} Markdown · {{ item.knowledgeMode }} · {{ item.migrated ? "LanceDB" : "Markdown" }}</div>
+              </div>
+              <button v-if="item.migrated" @click="rollbackVectorMigration(item.slug)" class="btn text-xs">{{ t("rollbackToMarkdown") }}</button>
+            </div>
+          </div>
+          <p class="mt-3 text-xs muted">{{ vectorMigrationMessage || t("vectorMigrationSafety") }}</p>
+        </div>
         <div class="panel rounded-xl border p-5 xl:col-span-2" data-claude-md-maintenance>
           <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
@@ -1631,6 +1662,16 @@ const I18N = {
     simulateTrigger: "Init project KB",
     recentAutomationRuns: "Recent automation runs",
     noAutomationRuns: "No automation runs yet.",
+    vectorMigrationTitle: "One-click vector knowledge migration",
+    vectorMigrationHelp: "Back up and import every legacy Markdown knowledge base into one local LanceDB, verify it, then switch each project atomically.",
+    embeddingModel: "Local embedding model",
+    migrateAllKnowledge: "Migrate all legacy knowledge",
+    migrating: "Migrating…",
+    legacyProjects: "Legacy projects",
+    migratedProjects: "Migrated projects",
+    migrationStatus: "Migration status",
+    rollbackToMarkdown: "Roll back to Markdown",
+    vectorMigrationSafety: "Original Markdown and a migration backup are retained. Team Git remains the sync transport; vectors are generated locally.",
     knowledgeRelations: "Related project knowledge",
     knowledgeRelationsHelp: "Select projects whose knowledge may be searched together with this project. Relationships are explicit and bidirectional.",
     primaryKnowledgeSpace: "Primary write space",
@@ -2075,6 +2116,16 @@ const I18N = {
     simulateTrigger: "初始化项目知识库",
     recentAutomationRuns: "最近自动化运行",
     noAutomationRuns: "暂无自动化运行记录。",
+    vectorMigrationTitle: "一键迁移全部向量知识库",
+    vectorMigrationHelp: "备份并导入全部旧 Markdown 知识库到本地 LanceDB，逐项目校验成功后再原子切换。",
+    embeddingModel: "本地嵌入模型",
+    migrateAllKnowledge: "一键迁移全部旧知识库",
+    migrating: "正在迁移…",
+    legacyProjects: "待迁移项目",
+    migratedProjects: "已迁移项目",
+    migrationStatus: "迁移状态",
+    rollbackToMarkdown: "回退到 Markdown",
+    vectorMigrationSafety: "原 Markdown 和迁移备份都会保留；团队 Git 继续负责同步，向量只在每台机器本地生成。",
     knowledgeRelations: "关联项目知识库",
     knowledgeRelationsHelp: "选择可与当前项目一起检索的项目知识库；关联关系显式保存并默认双向生效。",
     primaryKnowledgeSpace: "主写入空间",
@@ -2563,6 +2614,11 @@ const app = createApp({
     const logFilters = reactive({ dateFrom: new Date().toISOString().slice(0, 10), level: "all", projectSlug: "all", source: "all", q: "" });
     const knowledgeStoreConfig = reactive({ schema: "knowledge-store/v1", rootPath: "", git: { enabled: false, remoteUrl: "", branch: "main", autoCommit: false, autoPush: false } });
     const knowledgeMigrationPlan = ref([]);
+    const vectorMigration = ref({ status: "idle", eligible: 0, migratedProjects: 0, items: [], projects: {} });
+    const vectorMigrationBusy = ref(false);
+    const vectorMigrationMessage = ref("");
+    const vectorModelStatus = ref({ modelId: "Xenova/bge-small-zh-v1.5", installed: false, bytes: 0 });
+    let vectorMigrationTimer = null;
     const loggingConfig = reactive({ schema: "logging/v1", rootPath: "", retentionDays: 30, levels: ["info", "warn", "error"] });
     const loading = ref(false);
     const pollError = ref("");
@@ -2775,6 +2831,7 @@ const app = createApp({
         loadKnowledgeStoreConfig().catch(() => {});
         loadLoggingConfig().catch(() => {});
         loadClaudeMdAudit(true).catch(() => {});
+        loadVectorMigration().catch(() => {});
         ensureSettingsProjectSlug();
       }
     });
@@ -4853,6 +4910,46 @@ const app = createApp({
       ]);
     }
 
+    async function loadVectorMigration() {
+      const [migration, model] = await Promise.all([
+        api("GET", "/api/knowledge/migration"),
+        api("GET", "/api/knowledge/model/status").catch(() => vectorModelStatus.value),
+      ]);
+      vectorMigration.value = migration;
+      vectorModelStatus.value = model;
+      vectorMigrationBusy.value = migration.running === true;
+      if (vectorMigrationTimer) { clearTimeout(vectorMigrationTimer); vectorMigrationTimer = null; }
+      if (migration.running) {
+        vectorMigrationTimer = setTimeout(() => loadVectorMigration().catch(() => {}), 1000);
+      } else if (migration.status === "completed" || migration.status === "completed-with-errors") {
+        await refreshAll({ force: true });
+      }
+      return migration;
+    }
+
+    async function startVectorMigration() {
+      vectorMigrationBusy.value = true;
+      vectorMigrationMessage.value = "";
+      try {
+        await api("POST", "/api/knowledge/migration/start", {});
+        vectorMigrationMessage.value = t("migrating");
+        await loadVectorMigration();
+      } catch (e) {
+        vectorMigrationMessage.value = e.message;
+        vectorMigrationBusy.value = false;
+      }
+    }
+
+    async function rollbackVectorMigration(slug) {
+      try {
+        await api("POST", `/api/projects/${slug}/knowledge-migration/rollback`, {});
+        await refreshAll({ force: true });
+        await loadVectorMigration();
+      } catch (e) {
+        vectorMigrationMessage.value = e.message;
+      }
+    }
+
     async function loadKnowledgeRelations(slug) {
       if (!slug) return;
       try {
@@ -5055,6 +5152,7 @@ const app = createApp({
       formOk.value = "";
       importNotice.value = "";
       clearImportNoticeTimer();
+      if (vectorMigrationTimer) clearTimeout(vectorMigrationTimer);
       importPreflight.value = null;
       selectedTeamStoreKey.value = "";
       selectedTeamKbKey.value = "";
@@ -5695,6 +5793,7 @@ const app = createApp({
       kbRoot, projects, schedule, lastRun, runningJobs, jobHistory, selectedJob, logOutput, logTitle,
       summaryPanel, pendingCommitItems, supervisionIssues, issuesByProject, structuredLogs, selectedLog, logFilters,
       knowledgeStoreConfig, knowledgeMigrationPlan, loggingConfig,
+      vectorMigration, vectorMigrationBusy, vectorMigrationMessage, vectorModelStatus, loadVectorMigration, startVectorMigration, rollbackVectorMigration,
       githubAuthForm, githubProviderForm, githubStatus, githubOAuth, gitProviders, githubAuthModal, githubStores, githubStoresMessage, githubBusy, selectedTeamStoreKey, selectedTeamKbKey, teamKbStorePath,
       teamStoreSetup, teamStorePreview, teamStoreBusy, teamStoreMessage, teamStoreError, pickingTeamStoreFolder,
       selectedTeamStore, selectedTeamStoreKnowledgeBases, selectedTeamKb, githubStatusText, githubHeaderLabel, gitOAuthAvailable, giteaProvider, giteaOAuthRedirectUri,

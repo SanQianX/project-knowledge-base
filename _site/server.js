@@ -38,6 +38,11 @@ const {
 } = require('./lib/automation-config');
 const postCommitAutomation = require('./lib/post-commit-automation');
 const { KnowledgeScopeRegistry, defaultPrimarySpaceId } = require('./lib/knowledge-scope-registry');
+const { KnowledgeDatabase } = require('./lib/knowledge-db');
+const { LocalEmbeddingService, DEFAULT_MODEL_ID } = require('./lib/embedding-service');
+const { MarkdownKnowledgeIndexer } = require('./lib/markdown-knowledge-indexer');
+const { KnowledgeMigrationManager } = require('./lib/knowledge-migration');
+const { EMBEDDING_DIMENSIONS } = require('./lib/knowledge-schema');
 
 const KB_ROOT = path.resolve(__dirname, '..');
 const SITE_ROOT = __dirname;
@@ -69,6 +74,8 @@ const GITHUB_TEAM_PATH = path.join(DATA_DIR, 'github-team.json');
 const TEAM_GIT_PROVIDERS_PATH = path.join(DATA_DIR, 'team-git-providers.json');
 const TEAM_STORES_CACHE_PATH = path.join(DATA_DIR, 'team-stores-cache.json');
 const KNOWLEDGE_SCOPES_PATH = path.join(DATA_DIR, 'knowledge-scopes.json');
+const KNOWLEDGE_DB_PATH = path.join(DATA_DIR, 'knowledge.lancedb');
+const EMBEDDING_CACHE_PATH = path.join(DATA_DIR, 'models');
 
 // ---- state ----
 let lastRun = { time: null, status: null, slug: null, output: '' };
@@ -76,6 +83,63 @@ const runningJobs = new Map();
 const giteaOAuthStates = new Map();
 let claudeMdAuditCache = null;
 let claudeMdRefreshRunning = false;
+let knowledgeRuntimeCache = null;
+let knowledgeMigrationRunning = null;
+
+function fakeEmbedding(text) {
+  const vector = new Array(EMBEDDING_DIMENSIONS).fill(0);
+  const value = String(text || '');
+  for (let i = 0; i < value.length; i++) vector[value.charCodeAt(i) % vector.length] += 1;
+  const norm = Math.sqrt(vector.reduce((sum, item) => sum + item * item, 0)) || 1;
+  return vector.map(item => item / norm);
+}
+
+function knowledgeRuntime() {
+  if (knowledgeRuntimeCache) return knowledgeRuntimeCache;
+  const database = new KnowledgeDatabase({ dbPath: KNOWLEDGE_DB_PATH });
+  const embedder = process.env.KB_EMBEDDING_FAKE === '1'
+    ? {
+        modelId: 'test/fake-embedding',
+        embedPassage: async text => fakeEmbedding(text),
+        embedQuery: async text => fakeEmbedding(text),
+        load: async () => true,
+        status: () => ({ modelId: 'test/fake-embedding', dimensions: EMBEDDING_DIMENSIONS, loaded: true, cacheDir: EMBEDDING_CACHE_PATH }),
+      }
+    : new LocalEmbeddingService({ cacheDir: EMBEDDING_CACHE_PATH });
+  const indexer = new MarkdownKnowledgeIndexer({ database, embedder });
+  knowledgeRuntimeCache = { database, embedder, indexer };
+  return knowledgeRuntimeCache;
+}
+
+async function indexMigratedProject(slug, run = {}) {
+  const projects = readProjects({ persistMigrations: false });
+  const project = projects[slug];
+  if (!project || project.knowledgeBackend !== 'lancedb') return { ok: true, skipped: true, reason: 'project is not using LanceDB' };
+  const runtime = knowledgeRuntime();
+  return runtime.indexer.indexDirectory({
+    kbPath: project.kbPath || project.legacyKbPath,
+    spaceId: project.primarySpaceId,
+    sourceProjectId: slug,
+    sourceCommit: run.headCommitAtRun || project.headCommit || project.lastAnalyzedCommit || '',
+  });
+}
+
+function createKnowledgeMigrationManager() {
+  const runtime = knowledgeRuntime();
+  return new KnowledgeMigrationManager({
+    dataDir: DATA_DIR,
+    database: runtime.database,
+    embedder: runtime.embedder,
+    indexer: runtime.indexer,
+    onProjectMigrated: async (slug, patch) => {
+      const latest = readProjects({ persistMigrations: false });
+      if (!latest[slug]) throw new Error(`project disappeared during migration: ${slug}`);
+      Object.assign(latest[slug], patch);
+      writeJson(PROJECTS_PATH, latest);
+      readKnowledgeScopes(latest);
+    },
+  });
+}
 
 // Read a fresh copy of projects.json (re-loaded on every dispatch so that
 // background jobs see the latest registry state).
@@ -1017,6 +1081,7 @@ function automationDeps(projects) {
     onSessionEnded: claudeCliRunner.onSessionEnded,
     readProjects: () => readProjects({ persistMigrations: false }),
     writeProjects: (nextProjects) => writeJson(PROJECTS_PATH, nextProjects || projects),
+    onKnowledgeUpdated: indexMigratedProject,
   };
 }
 
@@ -2065,6 +2130,61 @@ const server = http.createServer(async (req, res) => {
         resolved[slug] = new KnowledgeScopeRegistry({ filePath: KNOWLEDGE_SCOPES_PATH }).resolveProjectScope(projects, slug);
       }
       return send(res, 200, { ok: true, ...registry, resolved });
+    }
+
+    // GET /api/knowledge/migration - startup-safe discovery; does not download the model.
+    if (m === 'GET' && p === '/api/knowledge/migration') {
+      const projects = readProjects({ persistMigrations: true });
+      const manager = createKnowledgeMigrationManager();
+      return send(res, 200, { ok: true, running: !!knowledgeMigrationRunning, ...manager.inspect(projects) });
+    }
+
+    // POST /api/knowledge/migration/start - resumable batch migration in the background.
+    if (m === 'POST' && p === '/api/knowledge/migration/start') {
+      if (knowledgeMigrationRunning) return send(res, 409, { ok: false, error: 'knowledge migration is already running' });
+      const body = await readBody(req).catch(() => '{}');
+      const parsed = (() => { try { return JSON.parse(body); } catch { return {}; } })();
+      const projects = readProjects({ persistMigrations: true });
+      const manager = createKnowledgeMigrationManager();
+      knowledgeMigrationRunning = manager.migrateAll(projects, {
+        slugs: Array.isArray(parsed.slugs) ? parsed.slugs : null,
+        force: parsed.force === true,
+      }).then(result => {
+        logEvent(result.failed ? 'warn' : 'info', 'knowledge_migration_finished', 'Knowledge migration batch finished.', {
+          source: 'knowledge-migration', completed: result.completed, failed: result.failed,
+        });
+        return result;
+      }).catch(error => {
+        logEvent('error', 'knowledge_migration_failed', error.message, { source: 'knowledge-migration' });
+      }).finally(() => { knowledgeMigrationRunning = null; });
+      return send(res, 202, { ok: true, started: true, status: manager.state() });
+    }
+
+    if (m === 'POST' && p.startsWith('/api/projects/') && p.endsWith('/knowledge-migration/rollback')) {
+      const slug = p.split('/')[3];
+      if (!isSafeSlug(slug)) return send(res, 400, { error: 'Invalid slug' });
+      const projects = readProjects({ persistMigrations: true });
+      if (!projects[slug]) return send(res, 404, { error: 'Slug not in projects.json' });
+      projects[slug].knowledgeBackend = 'markdown';
+      projects[slug].vectorRolledBackAt = new Date().toISOString();
+      writeJson(PROJECTS_PATH, projects);
+      return send(res, 200, { ok: true, slug, knowledgeBackend: 'markdown', retainedDatabase: true, kbPath: projects[slug].kbPath });
+    }
+
+    if (m === 'GET' && p === '/api/knowledge/model/status') {
+      const runtime = knowledgeRuntime();
+      const status = runtime.embedder.status();
+      let bytes = 0;
+      const walk = dir => {
+        if (!fs.existsSync(dir)) return;
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          const abs = path.join(dir, entry.name);
+          if (entry.isDirectory()) walk(abs);
+          else if (entry.isFile()) bytes += fs.statSync(abs).size;
+        }
+      };
+      walk(EMBEDDING_CACHE_PATH);
+      return send(res, 200, { ok: true, ...status, modelId: status.modelId || DEFAULT_MODEL_ID, installed: status.loaded || bytes > 1024 * 1024, bytes });
     }
 
     // PUT /api/projects/:slug/knowledge-relations { relatedProjectSlugs, bidirectional? }
