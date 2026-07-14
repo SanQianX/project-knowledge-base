@@ -37,6 +37,7 @@ const {
   pathsReferToSameLocation,
 } = require('./lib/automation-config');
 const postCommitAutomation = require('./lib/post-commit-automation');
+const { KnowledgeScopeRegistry, defaultPrimarySpaceId } = require('./lib/knowledge-scope-registry');
 
 const KB_ROOT = path.resolve(__dirname, '..');
 const SITE_ROOT = __dirname;
@@ -67,6 +68,7 @@ const HOOK_ERROR_LOG_PATH = path.join(DATA_DIR, '.hook-trigger-errors.log');
 const GITHUB_TEAM_PATH = path.join(DATA_DIR, 'github-team.json');
 const TEAM_GIT_PROVIDERS_PATH = path.join(DATA_DIR, 'team-git-providers.json');
 const TEAM_STORES_CACHE_PATH = path.join(DATA_DIR, 'team-stores-cache.json');
+const KNOWLEDGE_SCOPES_PATH = path.join(DATA_DIR, 'knowledge-scopes.json');
 
 // ---- state ----
 let lastRun = { time: null, status: null, slug: null, output: '' };
@@ -414,6 +416,8 @@ function normalizeProjectConfig(slug, input, options = {}) {
   if (!Object.prototype.hasOwnProperty.call(cfg, 'trackingStartedAt')) cfg.trackingStartedAt = null;
   if (!cfg.aiProfileId) cfg.aiProfileId = defaultAiProfileId;
   cfg.knowledgeLanguage = normalizeKnowledgeLanguage(cfg.knowledgeLanguage);
+  if (!['markdown', 'lancedb'].includes(cfg.knowledgeBackend)) cfg.knowledgeBackend = 'markdown';
+  cfg.primarySpaceId = defaultPrimarySpaceId(slug, cfg);
   if (cfg.kbSchemaVersion !== PROJECT_SCHEMA_VERSION) cfg.kbSchemaVersion = PROJECT_SCHEMA_VERSION;
   if (!cfg.goalStatus) cfg.goalStatus = 'not-created';
   cfg.automation = normalizeAutomationConfig(cfg.automation);
@@ -576,6 +580,10 @@ function readProjects(options = {}) {
     writeJson(PROJECTS_PATH, result.projects);
   }
   return result.projects;
+}
+
+function readKnowledgeScopes(projects = readProjects({ persistMigrations: true })) {
+  return new KnowledgeScopeRegistry({ filePath: KNOWLEDGE_SCOPES_PATH }).synchronizeProjects(projects);
 }
 
 function ensureSharedClaudeRules() {
@@ -2048,6 +2056,38 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, readProjects({ persistMigrations: true }));
     }
 
+    // GET /api/knowledge/scopes - explicit, non-transitive project search relationships.
+    if (m === 'GET' && p === '/api/knowledge/scopes') {
+      const projects = readProjects({ persistMigrations: true });
+      const registry = readKnowledgeScopes(projects);
+      const resolved = {};
+      for (const slug of Object.keys(projects)) {
+        resolved[slug] = new KnowledgeScopeRegistry({ filePath: KNOWLEDGE_SCOPES_PATH }).resolveProjectScope(projects, slug);
+      }
+      return send(res, 200, { ok: true, ...registry, resolved });
+    }
+
+    // PUT /api/projects/:slug/knowledge-relations { relatedProjectSlugs, bidirectional? }
+    if (m === 'PUT' && p.startsWith('/api/projects/') && p.endsWith('/knowledge-relations')) {
+      const slug = p.split('/')[3];
+      if (!isSafeSlug(slug)) return send(res, 400, { error: 'Invalid slug' });
+      const body = JSON.parse(await readBody(req));
+      if (!Array.isArray(body.relatedProjectSlugs)) return send(res, 400, { error: 'relatedProjectSlugs must be an array' });
+      const projects = readProjects({ persistMigrations: true });
+      if (!projects[slug]) return send(res, 404, { error: 'Slug not in projects.json' });
+      try {
+        const registryService = new KnowledgeScopeRegistry({ filePath: KNOWLEDGE_SCOPES_PATH });
+        const registry = registryService.setProjectRelations(projects, slug, body.relatedProjectSlugs, { bidirectional: body.bidirectional !== false });
+        const scope = registryService.resolveProjectScope(projects, slug);
+        logEvent('info', 'knowledge_relations_updated', 'Project knowledge search relationships updated.', {
+          source: 'knowledge-scopes', projectSlug: slug, relatedProjectSlugs: registry.projectBindings[slug].relatedProjectSlugs,
+        });
+        return send(res, 200, { ok: true, binding: registry.projectBindings[slug], scope });
+      } catch (error) {
+        return send(res, 400, { ok: false, error: error.message });
+      }
+    }
+
     // PUT /api/projects — replace or upsert one
     if (m === 'PUT' && p === '/api/projects') {
       const body = JSON.parse(await readBody(req));
@@ -2078,12 +2118,14 @@ const server = http.createServer(async (req, res) => {
         const inspection = await inspectGit(targetPath);
         applyGitInspection(projects[body.slug], inspection);
         writeJson(PROJECTS_PATH, projects);
+        readKnowledgeScopes(projects);
         if (recovered) forgetRemovedProject(recovered.slug);
         return send(res, 200, { ok: true, slug: body.slug, repoStatus: inspection.repoStatus });
       }
       if (body.projects && typeof body.projects === 'object') {
         const normalized = normalizeProjects(body.projects).projects;
         writeJson(PROJECTS_PATH, normalized);
+        readKnowledgeScopes(normalized);
         return send(res, 200, { ok: true });
       }
       return send(res, 400, { error: 'Need { slug, config } or { projects }' });
@@ -2125,6 +2167,7 @@ const server = http.createServer(async (req, res) => {
       else rememberRemovedProject(slug, cfg, parsed.reason || '');
       delete projects[slug];
       writeJson(PROJECTS_PATH, projects);
+      readKnowledgeScopes(projects);
       removeKnowledgeStoreProjectOverride(slug);
       if (deleteKb && fs.existsSync(kbPath)) {
         fs.rmSync(kbPath, { recursive: true, force: true });

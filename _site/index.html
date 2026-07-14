@@ -1144,6 +1144,32 @@
                 </div>
               </div>
             </div>
+            <div class="panel2 rounded-xl border p-4 xl:col-span-2" data-knowledge-relations>
+              <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <h3 class="font-medium">{{ t("knowledgeRelations") }}</h3>
+                  <p class="mt-1 text-xs muted">{{ t("knowledgeRelationsHelp") }}</p>
+                </div>
+                <button type="button" @click="saveKnowledgeRelations(settingsProjectSlug)" class="btn-primary" :disabled="knowledgeRelationsSaving">
+                  {{ knowledgeRelationsSaving ? t("saving") : t("saveRelations") }}
+                </button>
+              </div>
+              <div class="mt-3 rounded-lg border p-3 text-xs panel">
+                <span class="muted">{{ t("primaryKnowledgeSpace") }}:</span>
+                <code class="ml-1">{{ settingsProject.primarySpaceId || "-" }}</code>
+              </div>
+              <div v-if="!knowledgeRelationCandidates.length" class="mt-3 text-sm muted">{{ t("noRelatedProjects") }}</div>
+              <div v-else class="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                <label v-for="item in knowledgeRelationCandidates" :key="item.slug" class="flex items-start gap-2 rounded-lg border p-3 text-sm panel">
+                  <input type="checkbox" :value="item.slug" v-model="knowledgeRelationSelection" />
+                  <span>
+                    <span class="block font-medium">{{ item.cfg.displayName || item.slug }}</span>
+                    <span class="block text-xs muted">{{ item.slug }} · {{ item.cfg.primarySpaceId || "-" }}</span>
+                  </span>
+                </label>
+              </div>
+              <p class="mt-3 text-xs muted">{{ knowledgeRelationsMessage || t("knowledgeRelationsBoundary") }}</p>
+            </div>
           </div>
         </div>
       </section>
@@ -1605,6 +1631,12 @@ const I18N = {
     simulateTrigger: "Init project KB",
     recentAutomationRuns: "Recent automation runs",
     noAutomationRuns: "No automation runs yet.",
+    knowledgeRelations: "Related project knowledge",
+    knowledgeRelationsHelp: "Select projects whose knowledge may be searched together with this project. Relationships are explicit and bidirectional.",
+    primaryKnowledgeSpace: "Primary write space",
+    noRelatedProjects: "No other projects are available.",
+    saveRelations: "Save relationships",
+    knowledgeRelationsBoundary: "Search includes only the selected spaces; updates still write only to this project's primary space.",
     runningJobs: "Running Jobs",
     noRunningJob: "No running job.",
     lastResult: "Last Result",
@@ -2043,6 +2075,12 @@ const I18N = {
     simulateTrigger: "初始化项目知识库",
     recentAutomationRuns: "最近自动化运行",
     noAutomationRuns: "暂无自动化运行记录。",
+    knowledgeRelations: "关联项目知识库",
+    knowledgeRelationsHelp: "选择可与当前项目一起检索的项目知识库；关联关系显式保存并默认双向生效。",
+    primaryKnowledgeSpace: "主写入空间",
+    noRelatedProjects: "当前没有其他可关联项目。",
+    saveRelations: "保存关联关系",
+    knowledgeRelationsBoundary: "检索只覆盖明确勾选的空间；提交后的更新仍只写入当前项目的主空间。",
     runningJobs: "运行中的任务",
     noRunningJob: "当前没有运行中的任务。",
     lastResult: "最近结果",
@@ -2814,6 +2852,10 @@ const app = createApp({
     const settingsAutomationDirty = ref(false);
     const settingsAutomationSaving = ref(false);
     const settingsAutomationProjectSlug = ref("");
+    const knowledgeScopes = ref({ spaces: {}, projectBindings: {}, resolved: {} });
+    const knowledgeRelationSelection = ref([]);
+    const knowledgeRelationsSaving = ref(false);
+    const knowledgeRelationsMessage = ref("");
     const projectGoalForm = reactive({ path: "", kbPath: "", content: "", exists: false, goalStatus: "not-created" });
     const projectGoalLoaded = ref(false);
     const projectGoalDirty = ref(false);
@@ -2866,6 +2908,7 @@ const app = createApp({
     const projectList = computed(() => Object.entries(projects.value || {}).map(([slug, cfg]) => ({ slug, cfg })));
     const selectedProject = computed(() => selectedSlug.value && projects.value ? projects.value[selectedSlug.value] : null);
     const settingsProject = computed(() => settingsProjectSlug.value && projects.value ? projects.value[settingsProjectSlug.value] : null);
+    const knowledgeRelationCandidates = computed(() => projectList.value.filter(item => item.slug !== settingsProjectSlug.value && item.cfg.enabled !== false));
     const selectedTeamStore = computed(() => githubStores.value.find(store => store.fullName === selectedTeamStoreKey.value) || null);
     const selectedTeamStoreKnowledgeBases = computed(() => selectedTeamStore.value && Array.isArray(selectedTeamStore.value.knowledgeBases) ? selectedTeamStore.value.knowledgeBases : []);
     const selectedTeamKb = computed(() => selectedTeamStoreKnowledgeBases.value.find(kb => kb.kbId === selectedTeamKbKey.value) || null);
@@ -4806,7 +4849,38 @@ const app = createApp({
         loadProjectGoal(slug),
         loadHookStatus(slug),
         loadAutomationRuns(slug),
+        loadKnowledgeRelations(slug),
       ]);
+    }
+
+    async function loadKnowledgeRelations(slug) {
+      if (!slug) return;
+      try {
+        const data = await api("GET", "/api/knowledge/scopes");
+        knowledgeScopes.value = data;
+        knowledgeRelationSelection.value = [...((data.projectBindings && data.projectBindings[slug] && data.projectBindings[slug].relatedProjectSlugs) || [])];
+        knowledgeRelationsMessage.value = "";
+      } catch (e) {
+        knowledgeRelationsMessage.value = e.message;
+      }
+    }
+
+    async function saveKnowledgeRelations(slug) {
+      if (!slug) return;
+      knowledgeRelationsSaving.value = true;
+      knowledgeRelationsMessage.value = "";
+      try {
+        await api("PUT", `/api/projects/${slug}/knowledge-relations`, {
+          relatedProjectSlugs: [...knowledgeRelationSelection.value],
+          bidirectional: true,
+        });
+        await loadKnowledgeRelations(slug);
+        knowledgeRelationsMessage.value = "saved.";
+      } catch (e) {
+        knowledgeRelationsMessage.value = e.message;
+      } finally {
+        knowledgeRelationsSaving.value = false;
+      }
     }
 
     async function changeSettingsProject() {
@@ -5633,6 +5707,7 @@ const app = createApp({
       removeDialog, removeProjectDisabled,
       aiConfig, aiProfilesText, adapters, aiMessage, aiMessageStyle, selectedConfigProfileId, profileForm, testPrompt, testResult, testingProfile, vendorPresetNames, usableAiProfiles, defaultAiProfile, defaultAiProfileLabel, nonDefaultAiProfiles,
       hookStatus, settingsAutomationForm, settingsAutomationLoaded, settingsAutomationDirty, settingsAutomationSaving,
+      knowledgeScopes, knowledgeRelationSelection, knowledgeRelationCandidates, knowledgeRelationsSaving, knowledgeRelationsMessage, loadKnowledgeRelations, saveKnowledgeRelations,
       claudeMdAudit, claudeMdRefreshing, claudeMdMessage, claudeMdSkippedCount, loadClaudeMdAudit, refreshAllClaudeMd,
       projectGoalForm, projectGoalLoaded, projectGoalDirty, projectGoalSaving, projectGoalMessage, projectGoalModal, projectGoalModalStyle,
       automationRuns, automationPromptPreview, automationMessage, actionMessage, importPreflight,
