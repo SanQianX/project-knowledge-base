@@ -59,6 +59,15 @@ class KnowledgeDatabase {
     return rows.map(decodeKnowledgeChunk);
   }
 
+  async entryIds(spaceId) {
+    await this.open();
+    const rows = await this.table.query()
+      .where(`space_id = ${sqlString(spaceId)}`)
+      .select(['entry_id'])
+      .toArray();
+    return Array.from(new Set(rows.map(row => String(row.entry_id)))).sort();
+  }
+
   async replaceEntry(spaceId, entryId, chunks) {
     await this.open();
     if (!Array.isArray(chunks) || chunks.length === 0) {
@@ -121,6 +130,71 @@ class KnowledgeDatabase {
       .limit(limit);
     const rows = await query.toArray();
     return rows.map(decodeKnowledgeChunk);
+  }
+
+  async ensureSearchIndexes() {
+    await this.open();
+    if (await this.table.countRows() === 0) return { ok: true, created: [], skipped: 'empty-table' };
+    const existing = new Set((await this.table.listIndices()).map(index => index.name));
+    const created = [];
+    const definitions = [
+      ['space_id', 'space_id_idx', lancedb.Index.bitmap()],
+      ['entry_id', 'entry_id_idx', lancedb.Index.btree()],
+      ['search_text', 'search_text_idx', lancedb.Index.fts({
+        baseTokenizer: 'ngram',
+        ngramMinLength: 2,
+        ngramMaxLength: 4,
+        withPosition: false,
+        stem: false,
+        removeStopWords: false,
+      })],
+    ];
+    for (const [column, name, config] of definitions) {
+      if (existing.has(name)) continue;
+      await this.table.createIndex(column, { name, config, replace: false, waitTimeoutSeconds: 60 });
+      created.push(name);
+    }
+    return { ok: true, created };
+  }
+
+  async optimize() {
+    await this.open();
+    return this.table.optimize();
+  }
+
+  async fullTextSearch(text, options = {}) {
+    await this.open();
+    const queryText = String(text || '').trim();
+    if (!queryText) throw new Error('search text is required');
+    const limit = Math.max(1, Math.min(Number(options.limit || 10), 100));
+    const rows = await this.table.query()
+      .fullTextSearch(queryText)
+      .where(inPredicate('space_id', options.spaceIds || []))
+      .limit(limit)
+      .toArray();
+    return rows.map(decodeKnowledgeChunk);
+  }
+
+  async hybridSearch(input = {}) {
+    const limit = Math.max(1, Math.min(Number(input.limit || 10), 50));
+    const candidates = Math.max(limit, Math.min(Number(input.candidates || limit * 4), 200));
+    const [semantic, keyword] = await Promise.all([
+      this.vectorSearch(input.vector, { spaceIds: input.spaceIds, limit: candidates }),
+      this.fullTextSearch(input.text, { spaceIds: input.spaceIds, limit: candidates }),
+    ]);
+    const scores = new Map();
+    const add = (rows, channel, weight) => rows.forEach((row, rank) => {
+      const current = scores.get(row.record_id) || { row, score: 0, channels: [] };
+      current.score += weight / (60 + rank + 1);
+      current.channels.push(channel);
+      scores.set(row.record_id, current);
+    });
+    add(semantic, 'semantic', Number(input.semanticWeight || 0.65));
+    add(keyword, 'keyword', Number(input.keywordWeight || 0.35));
+    return Array.from(scores.values())
+      .sort((a, b) => b.score - a.score || a.row.record_id.localeCompare(b.row.record_id))
+      .slice(0, limit)
+      .map(item => ({ ...item.row, relevance_score: item.score, match_channels: item.channels }));
   }
 }
 

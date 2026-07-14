@@ -5,6 +5,7 @@ const path = require('path');
 const { KnowledgeDatabase, sqlString, inPredicate } = require('../lib/knowledge-db');
 const { LocalEmbeddingService, QUERY_PREFIX } = require('../lib/embedding-service');
 const { EMBEDDING_DIMENSIONS, sha256 } = require('../lib/knowledge-schema');
+const { MarkdownKnowledgeIndexer, chunkMarkdown } = require('../lib/markdown-knowledge-indexer');
 
 function vectorAt(index) {
   const vector = new Array(EMBEDDING_DIMENSIONS).fill(0);
@@ -64,6 +65,13 @@ function vectorAt(index) {
     assert.deepEqual(scoped[0].tags, []);
     assert.equal(scoped[0].content_hash, sha256('系统使用短期访问令牌。'));
 
+    await db.ensureSearchIndexes();
+    const keyword = await db.fullTextSearch('短期访问令牌', { spaceIds: ['personal:alpha'], limit: 5 });
+    assert.equal(keyword.length, 1);
+    const hybrid = await db.hybridSearch({ text: '短期访问令牌', vector: vectorAt(0), spaceIds: ['personal:alpha'], limit: 5 });
+    assert.equal(hybrid.length, 1);
+    assert.deepEqual(hybrid[0].match_channels.sort(), ['keyword', 'semantic']);
+
     assert.equal((await db.deleteEntry('personal:alpha', 'modules/auth.md')).deleted, 1);
     assert.equal((await db.deleteSpace('personal:beta')).deleted, 1);
     assert.equal(await db.count(), 0);
@@ -87,6 +95,28 @@ function vectorAt(index) {
     assert.equal(seenInput, `${QUERY_PREFIX}登录怎么做`);
     assert.deepEqual(seenOptions, { pooling: 'cls', normalize: true });
     assert.equal(embeddings.status().loaded, true);
+
+    const sections = chunkMarkdown('# 标题\n\n第一段。\n\n## 细节\n\n第二段。', { maxChars: 20, overlapChars: 2 });
+    assert.ok(sections.length >= 2);
+    assert.deepEqual(sections.at(-1).headingPath, ['标题', '细节']);
+
+    const markdownRoot = path.join(temp, 'legacy-markdown');
+    fs.mkdirSync(path.join(markdownRoot, 'modules'), { recursive: true });
+    fs.writeFileSync(path.join(markdownRoot, 'GOAL.md'), '# 项目目标\n\n建立可靠的支付知识库。\n', 'utf8');
+    fs.writeFileSync(path.join(markdownRoot, 'modules', 'pay.md'), '# 支付模块\n\n对账任务每天运行。\n', 'utf8');
+    const deterministicEmbedder = {
+      embedPassage: async text => text.includes('对账') ? vectorAt(3) : vectorAt(4),
+    };
+    const indexer = new MarkdownKnowledgeIndexer({ database: db, embedder: deterministicEmbedder });
+    const firstIndex = await indexer.indexDirectory({ kbPath: markdownRoot, spaceId: 'personal:migrated', sourceProjectId: 'pay' });
+    assert.equal(firstIndex.files, 2);
+    assert.equal(firstIndex.indexed, 2);
+    const secondIndex = await indexer.indexDirectory({ kbPath: markdownRoot, spaceId: 'personal:migrated', sourceProjectId: 'pay' });
+    assert.equal(secondIndex.unchanged, 2);
+    fs.unlinkSync(path.join(markdownRoot, 'GOAL.md'));
+    const thirdIndex = await indexer.indexDirectory({ kbPath: markdownRoot, spaceId: 'personal:migrated', sourceProjectId: 'pay' });
+    assert.equal(thirdIndex.deletedEntries, 1);
+    assert.deepEqual(await db.entryIds('personal:migrated'), ['modules/pay.md']);
 
     console.log('knowledge-db-test: PASS');
   } finally {
