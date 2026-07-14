@@ -8,6 +8,7 @@ const path = require('path');
 const os = require('os');
 const http = require('http');
 const WebSocket = require('ws');
+const { findChrome } = require('./helpers/find-chrome');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const SERVER = path.join(ROOT, '_site', 'server.js');
@@ -35,7 +36,7 @@ const BASELINE_AI_PROFILES = {
   }],
 };
 fs.writeFileSync(path.join(DATA_DIR, 'ai-profiles.json'), JSON.stringify(BASELINE_AI_PROFILES, null, 2) + '\n', 'utf-8');
-const CHROME = 'C:\\Users\\SanQian\\AppData\\Local\\ms-playwright\\chromium-1223\\chrome-win64\\chrome.exe';
+const CHROME = findChrome();
 const OUT_DIR = path.join(__dirname, 'ui-screenshots');
 const PROFILE = path.join(OUT_DIR, `automation-profile-${process.pid}`);
 const SERVER_PORT = process.env.KB_AUTOMATION_UI_PORT || '7813';

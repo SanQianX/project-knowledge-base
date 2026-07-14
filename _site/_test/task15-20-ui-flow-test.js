@@ -8,8 +8,9 @@ const os = require('os');
 const http = require('http');
 const WebSocket = require('ws');
 const { spawnServer } = require('./helpers/spawn-server');
+const { findChrome } = require('./helpers/find-chrome');
 
-const CHROME = 'C:\\Users\\SanQian\\AppData\\Local\\ms-playwright\\chromium-1223\\chrome-win64\\chrome.exe';
+const CHROME = findChrome();
 const ROOT = path.resolve(__dirname, '..', '..');
 const SERVER = path.join(ROOT, '_site', 'server.js');
 const SITE_PORT = process.env.KB_TASK15_UI_SITE_PORT || '7815';

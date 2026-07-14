@@ -13,20 +13,7 @@ const os = require('os');
 const http = require('http');
 const WebSocket = require('ws');
 const { spawnServer } = require('./helpers/spawn-server');
-
-function findChrome() {
-  const candidates = [
-    process.env.KB_CHROME_PATH,
-    'C:\\Users\\SanQian\\AppData\\Local\\ms-playwright\\chromium-1223\\chrome-win64\\chrome.exe',
-    process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Google', 'Chrome', 'Application', 'chrome.exe'),
-    '/usr/bin/google-chrome',
-    '/usr/bin/google-chrome-stable',
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser',
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  ].filter(Boolean);
-  return candidates.find(candidate => fs.existsSync(candidate)) || candidates[0];
-}
+const { findChrome } = require('./helpers/find-chrome');
 
 const CHROME = findChrome();
 const ROOT = path.resolve(__dirname, '..', '..');

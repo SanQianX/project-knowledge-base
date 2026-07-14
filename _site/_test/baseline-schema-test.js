@@ -120,7 +120,7 @@ async function removeTempProject() {
     const temp = projectsResult.data[TEMP_SLUG];
     assert(temp, 'temp project should exist');
     assert(!String(temp.kbPath || '').includes('\\SanQian.Xu\\kb\\'), 'legacy kbPath should be normalized');
-    assert(String(temp.kbPath || '').endsWith(`\\${TEMP_SLUG}`), 'normalized kbPath should end with the slug');
+    assert(path.basename(String(temp.kbPath || '')) === TEMP_SLUG, 'normalized kbPath should end with the slug');
     assert(temp.enabled === true, 'temp project should default enabled=true');
     // repoStatus is auto-validated on upsert; ROOT may or may not be a git repo.
     // Accept any of the well-defined statuses that prove normalization ran.
