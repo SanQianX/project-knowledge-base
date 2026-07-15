@@ -80,6 +80,8 @@ async function json(method, url, body) {
     });
     assert(r.res.ok, 'knowledge store config save should succeed');
     assert(r.data.config.rootPath === path.resolve(storeRoot), 'knowledge store root should persist');
+    assert(r.data.storage.databasePath === path.join(storeRoot, '.project-knowledge', 'knowledge.lancedb'), 'vector database path should follow configured knowledge root');
+    assert(r.data.storage.followsConfiguredRoot === true, 'database location should report configured-root ownership');
 
     repo = makeRepo({ kind: 'multi-commit' });
     r = await json('PUT', '/api/projects', {

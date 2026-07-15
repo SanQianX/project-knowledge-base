@@ -131,6 +131,7 @@ function migrateProjects({ projects, appRoot, storeConfig, overwrite = false, mo
 module.exports = {
   SCHEMA,
   defaultConfig,
+  normalizeConfig,
   readConfig,
   writeConfig,
   validateRoot,

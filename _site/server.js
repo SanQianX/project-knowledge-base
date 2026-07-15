@@ -43,6 +43,7 @@ const { LocalEmbeddingService, DEFAULT_MODEL_ID } = require('./lib/embedding-ser
 const { MarkdownKnowledgeIndexer } = require('./lib/markdown-knowledge-indexer');
 const { KnowledgeMigrationManager } = require('./lib/knowledge-migration');
 const { KnowledgeMaintenanceManager } = require('./lib/knowledge-maintenance');
+const knowledgeStorageLocation = require('./lib/knowledge-storage-location');
 const { EMBEDDING_DIMENSIONS } = require('./lib/knowledge-schema');
 const { KnowledgeQueryService } = require('./lib/knowledge-query-service');
 
@@ -76,8 +77,22 @@ const GITHUB_TEAM_PATH = path.join(DATA_DIR, 'github-team.json');
 const TEAM_GIT_PROVIDERS_PATH = path.join(DATA_DIR, 'team-git-providers.json');
 const TEAM_STORES_CACHE_PATH = path.join(DATA_DIR, 'team-stores-cache.json');
 const KNOWLEDGE_SCOPES_PATH = path.join(DATA_DIR, 'knowledge-scopes.json');
-const KNOWLEDGE_DB_PATH = path.join(DATA_DIR, 'knowledge.lancedb');
 const EMBEDDING_CACHE_PATH = path.join(DATA_DIR, 'models');
+
+function initializeKnowledgeStorageLayout() {
+  const config = knowledgeStore.readConfig(KNOWLEDGE_STORE_PATH, DATA_DIR);
+  const desired = knowledgeStorageLocation.configuredLayout(config.rootPath);
+  const legacy = knowledgeStorageLocation.legacyLayout(DATA_DIR);
+  if (fs.existsSync(legacy.dbPath) && !fs.existsSync(desired.dbPath)) {
+    try {
+      knowledgeStorageLocation.relocateLayout(legacy, desired);
+      knowledgeStorageLocation.rebaseMaintenanceState(legacy, desired);
+    } catch (error) {
+      console.error(`[knowledge-storage] ${error.message}`);
+    }
+  }
+  return knowledgeStorageLocation.resolveActiveLayout(config.rootPath, DATA_DIR);
+}
 
 // ---- state ----
 let lastRun = { time: null, status: null, slug: null, output: '' };
@@ -88,8 +103,10 @@ let claudeMdRefreshRunning = false;
 let knowledgeRuntimeCache = null;
 let knowledgeMigrationRunning = null;
 let knowledgeMaintenanceRunning = null;
+let knowledgeStorageRelocationRunning = null;
 let knowledgeActiveQueries = 0;
 let knowledgeActiveUpdates = 0;
+let knowledgeStorageLayout = initializeKnowledgeStorageLayout();
 
 function fakeEmbedding(text) {
   const vector = new Array(EMBEDDING_DIMENSIONS).fill(0);
@@ -101,7 +118,10 @@ function fakeEmbedding(text) {
 
 function knowledgeRuntime() {
   if (knowledgeRuntimeCache) return knowledgeRuntimeCache;
-  const database = new KnowledgeDatabase({ dbPath: KNOWLEDGE_DB_PATH });
+  const database = new KnowledgeDatabase({
+    dbPath: knowledgeStorageLayout.dbPath,
+    maintenancePath: knowledgeStorageLayout.databaseMaintenancePath,
+  });
   const embedder = process.env.KB_EMBEDDING_FAKE === '1'
     ? {
         modelId: 'test/fake-embedding',
@@ -117,6 +137,7 @@ function knowledgeRuntime() {
 }
 
 async function indexMigratedProject(slug, run = {}) {
+  if (knowledgeStorageRelocationRunning) await knowledgeStorageRelocationRunning.catch(() => {});
   if (knowledgeMaintenanceRunning) await knowledgeMaintenanceRunning.catch(() => {});
   const projects = readProjects({ persistMigrations: false });
   const project = projects[slug];
@@ -138,10 +159,77 @@ async function indexMigratedProject(slug, run = {}) {
 function createKnowledgeMaintenanceManager() {
   const runtime = knowledgeRuntime();
   return new KnowledgeMaintenanceManager({
-    dataDir: DATA_DIR,
-    dbPath: KNOWLEDGE_DB_PATH,
+    dataDir: knowledgeStorageLayout.storageRoot,
+    dbPath: knowledgeStorageLayout.dbPath,
     database: runtime.database,
+    statePath: knowledgeStorageLayout.maintenanceStatePath,
+    backupRoot: knowledgeStorageLayout.backupRoot,
   });
+}
+
+function knowledgeStorageInfo(config = readKnowledgeStore()) {
+  return knowledgeStorageLocation.publicStorageInfo(knowledgeStorageLayout, config.rootPath);
+}
+
+function knowledgeStorageBusy() {
+  return knowledgeMigrationRunning
+    || knowledgeMaintenanceRunning
+    || knowledgeStorageRelocationRunning
+    || knowledgeActiveQueries > 0
+    || knowledgeActiveUpdates > 0
+    || [...runningJobs.values()].some(job => job?.status === 'running');
+}
+
+async function applyKnowledgeStoreConfig(body) {
+  const previousConfig = readKnowledgeStore();
+  const nextConfig = knowledgeStore.normalizeConfig({ ...body, configured: true }, DATA_DIR);
+  const sourceLayout = knowledgeStorageLayout;
+  const destinationLayout = knowledgeStorageLocation.configuredLayout(nextConfig.rootPath);
+  if (knowledgeStorageLocation.samePath(sourceLayout.dbPath, destinationLayout.dbPath)) {
+    const config = knowledgeStore.writeConfig(KNOWLEDGE_STORE_PATH, DATA_DIR, nextConfig);
+    return { config, relocation: { ok: true, moved: false, reason: 'database path unchanged' } };
+  }
+
+  const oldRuntime = knowledgeRuntime();
+  await oldRuntime.database.close();
+  let relocation = null;
+  let destinationDatabase = null;
+  try {
+    relocation = knowledgeStorageLocation.relocateLayout(sourceLayout, destinationLayout);
+    const rebasedMaintenance = knowledgeStorageLocation.rebaseMaintenanceState(sourceLayout, destinationLayout);
+    destinationDatabase = new KnowledgeDatabase({
+      dbPath: destinationLayout.dbPath,
+      maintenancePath: destinationLayout.databaseMaintenancePath,
+    });
+    await destinationDatabase.open();
+    const rows = await destinationDatabase.count();
+    const config = knowledgeStore.writeConfig(KNOWLEDGE_STORE_PATH, DATA_DIR, nextConfig);
+    knowledgeStorageLayout = destinationLayout;
+    knowledgeRuntimeCache = {
+      database: destinationDatabase,
+      embedder: oldRuntime.embedder,
+      indexer: new MarkdownKnowledgeIndexer({ database: destinationDatabase, embedder: oldRuntime.embedder }),
+    };
+    destinationDatabase = null;
+    return { config, relocation: { ...relocation, rebasedMaintenance, verifiedRows: rows } };
+  } catch (error) {
+    if (destinationDatabase) await destinationDatabase.close().catch(() => {});
+    if (relocation?.moved) {
+      try {
+        knowledgeStorageLocation.relocateLayout(destinationLayout, sourceLayout);
+        knowledgeStorageLocation.rebaseMaintenanceState(destinationLayout, sourceLayout);
+      } catch {}
+    }
+    knowledgeStorageLayout = sourceLayout;
+    knowledgeRuntimeCache = oldRuntime;
+    await oldRuntime.database.open().catch(() => {});
+    // The config write is deliberately last. If anything above fails, the
+    // previous root remains authoritative and no half-moved path is saved.
+    if (previousConfig.rootPath !== readKnowledgeStore().rootPath) {
+      knowledgeStore.writeConfig(KNOWLEDGE_STORE_PATH, DATA_DIR, previousConfig);
+    }
+    throw error;
+  }
 }
 
 function createKnowledgeMigrationManager() {
@@ -1705,7 +1793,7 @@ const server = http.createServer(async (req, res) => {
     if (m === 'GET' && p === '/api/knowledge-store/config') {
       const cfg = readKnowledgeStore();
       const validation = knowledgeStore.validateRoot(cfg.rootPath);
-      return send(res, 200, { ok: validation.ok, config: cfg, validation });
+      return send(res, 200, { ok: validation.ok, config: cfg, validation, storage: knowledgeStorageInfo(cfg), relocating: !!knowledgeStorageRelocationRunning });
     }
 
     // PUT /api/knowledge-store/config
@@ -1713,9 +1801,19 @@ const server = http.createServer(async (req, res) => {
       const body = JSON.parse(await readBody(req));
       const validation = knowledgeStore.validateRoot(body.rootPath);
       if (!validation.ok) return send(res, 400, { ok: false, error: validation.error, validation });
-      const cfg = knowledgeStore.writeConfig(KNOWLEDGE_STORE_PATH, DATA_DIR, body);
-      logEvent('info', 'knowledge_store_config_updated', 'Knowledge store configuration updated.', { source: 'knowledge-store', rootPath: cfg.rootPath });
-      return send(res, 200, { ok: true, config: cfg, validation });
+      if (knowledgeStorageBusy()) return send(res, 409, { ok: false, error: 'wait for active knowledge operations and jobs to finish' });
+      try {
+        knowledgeStorageRelocationRunning = applyKnowledgeStoreConfig(body);
+        const result = await knowledgeStorageRelocationRunning;
+        logEvent('info', 'knowledge_store_config_updated', 'Knowledge store configuration and vector database location updated.', {
+          source: 'knowledge-store', rootPath: result.config.rootPath, databasePath: knowledgeStorageLayout.dbPath,
+        });
+        return send(res, 200, { ok: true, ...result, storage: knowledgeStorageInfo(result.config), validation });
+      } catch (error) {
+        return send(res, 400, { ok: false, error: error.message, config: readKnowledgeStore(), storage: knowledgeStorageInfo() });
+      } finally {
+        knowledgeStorageRelocationRunning = null;
+      }
     }
 
     // POST /api/knowledge-store/migrate { execute?, overwrite?, move? }
@@ -2173,6 +2271,7 @@ const server = http.createServer(async (req, res) => {
     if (m === 'POST' && p === '/api/knowledge/migration/start') {
       if (knowledgeMigrationRunning) return send(res, 409, { ok: false, error: 'knowledge migration is already running' });
       if (knowledgeMaintenanceRunning) return send(res, 409, { ok: false, error: 'knowledge database maintenance is running' });
+      if (knowledgeStorageRelocationRunning) return send(res, 409, { ok: false, error: 'knowledge database relocation is running' });
       const body = await readBody(req).catch(() => '{}');
       const parsed = (() => { try { return JSON.parse(body); } catch { return {}; } })();
       const projects = readProjects({ persistMigrations: true });
@@ -2193,6 +2292,7 @@ const server = http.createServer(async (req, res) => {
 
     // GET /api/knowledge/maintenance - disk usage and rebuild status.
     if (m === 'GET' && p === '/api/knowledge/maintenance') {
+      if (knowledgeStorageRelocationRunning) return send(res, 503, { ok: false, error: 'knowledge database relocation is running' });
       const manager = createKnowledgeMaintenanceManager();
       const status = await manager.inspect({ openDatabase: !knowledgeMaintenanceRunning });
       return send(res, 200, { ...status, running: !!knowledgeMaintenanceRunning || status.running === true });
@@ -2203,6 +2303,7 @@ const server = http.createServer(async (req, res) => {
     if (m === 'POST' && p === '/api/knowledge/maintenance/rebuild') {
       if (knowledgeMaintenanceRunning) return send(res, 409, { ok: false, error: 'knowledge database maintenance is already running' });
       if (knowledgeMigrationRunning) return send(res, 409, { ok: false, error: 'knowledge migration is running' });
+      if (knowledgeStorageRelocationRunning) return send(res, 409, { ok: false, error: 'knowledge database relocation is running' });
       if (knowledgeActiveQueries > 0 || knowledgeActiveUpdates > 0 || [...runningJobs.values()].some(job => job?.status === 'running')) {
         return send(res, 409, { ok: false, error: 'wait for active knowledge queries and jobs to finish' });
       }
@@ -2225,7 +2326,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (m === 'POST' && p === '/api/knowledge/maintenance/rollback') {
-      if (knowledgeMaintenanceRunning || knowledgeMigrationRunning) return send(res, 409, { ok: false, error: 'knowledge database is busy' });
+      if (knowledgeMaintenanceRunning || knowledgeMigrationRunning || knowledgeStorageRelocationRunning) return send(res, 409, { ok: false, error: 'knowledge database is busy' });
       if (knowledgeActiveQueries > 0 || knowledgeActiveUpdates > 0 || [...runningJobs.values()].some(job => job?.status === 'running')) {
         return send(res, 409, { ok: false, error: 'wait for active knowledge queries and jobs to finish' });
       }
@@ -2265,6 +2366,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (m === 'POST' && (p === '/api/knowledge/search' || p === '/api/knowledge/ask')) {
+      if (knowledgeStorageRelocationRunning) return send(res, 503, { ok: false, error: 'knowledge database relocation is running' });
       if (knowledgeMaintenanceRunning) return send(res, 503, { ok: false, error: 'knowledge database maintenance is running' });
       const body = JSON.parse(await readBody(req));
       knowledgeActiveQueries += 1;
@@ -2282,6 +2384,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (m === 'GET' && p === '/api/knowledge/entry') {
+      if (knowledgeStorageRelocationRunning) return send(res, 503, { ok: false, error: 'knowledge database relocation is running' });
       if (knowledgeMaintenanceRunning) return send(res, 503, { ok: false, error: 'knowledge database maintenance is running' });
       knowledgeActiveQueries += 1;
       try {
@@ -2299,6 +2402,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (m === 'GET' && p === '/api/knowledge/history') {
+      if (knowledgeStorageRelocationRunning) return send(res, 503, { ok: false, error: 'knowledge database relocation is running' });
       if (knowledgeMaintenanceRunning) return send(res, 503, { ok: false, error: 'knowledge database maintenance is running' });
       knowledgeActiveQueries += 1;
       try {

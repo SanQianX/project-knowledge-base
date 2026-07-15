@@ -1010,6 +1010,11 @@
             <label class="grid gap-1 text-sm">{{ t("knowledgeStoreRoot") }}
               <input v-model="knowledgeStoreConfig.rootPath" class="input font-mono text-xs" />
             </label>
+            <div class="rounded-lg border p-3 panel2">
+              <div class="text-xs muted">{{ t("vectorDatabasePath") }}</div>
+              <div class="mt-1 break-all font-mono text-xs">{{ knowledgeStorage.databasePath || "-" }}</div>
+              <div class="mt-1 text-xs muted">{{ t("vectorDatabaseFollowsRoot") }}</div>
+            </div>
             <label class="grid gap-1 text-sm">{{ t("remote") }}
               <input v-model="knowledgeStoreConfig.git.remoteUrl" class="input font-mono text-xs" />
             </label>
@@ -1977,6 +1982,8 @@ const I18N = {
     logDetail: "Log detail",
     knowledgeStoreSettings: "Knowledge Store",
     knowledgeStoreRoot: "Knowledge store root",
+    vectorDatabasePath: "Vector database path",
+    vectorDatabaseFollowsRoot: "The database and its maintenance backups follow the knowledge store root. Changing the root safely relocates and verifies the database before saving.",
     loggingSettings: "Logging",
     logDirectory: "Log directory",
     retentionDays: "Retention days",
@@ -2401,6 +2408,8 @@ Object.assign(I18N.zh, {
   logDetail: "日志详情",
   knowledgeStoreSettings: "知识库存储",
   knowledgeStoreRoot: "知识库根目录",
+  vectorDatabasePath: "向量数据库路径",
+  vectorDatabaseFollowsRoot: "数据库及其维护备份会跟随知识库根目录；修改根目录时会先安全搬迁并验证数据库，再保存设置。",
   loggingSettings: "日志设置",
   logDirectory: "日志目录",
   retentionDays: "保留天数",
@@ -2658,6 +2667,7 @@ const app = createApp({
     const selectedLog = ref(null);
     const logFilters = reactive({ dateFrom: new Date().toISOString().slice(0, 10), level: "all", projectSlug: "all", source: "all", q: "" });
     const knowledgeStoreConfig = reactive({ schema: "knowledge-store/v1", rootPath: "", git: { enabled: false, remoteUrl: "", branch: "main", autoCommit: false, autoPush: false } });
+    const knowledgeStorage = ref({ storagePath: "", databasePath: "", followsConfiguredRoot: false, legacyLocation: false });
     const knowledgeMigrationPlan = ref([]);
     const vectorMigration = ref({ status: "idle", eligible: 0, migratedProjects: 0, items: [], projects: {} });
     const vectorMigrationBusy = ref(false);
@@ -4289,6 +4299,7 @@ const app = createApp({
     async function loadKnowledgeStoreConfig() {
       const data = await api("GET", "/api/knowledge-store/config");
       if (data.config) Object.assign(knowledgeStoreConfig, data.config);
+      if (data.storage) knowledgeStorage.value = data.storage;
       if (!knowledgeStoreConfig.git) knowledgeStoreConfig.git = { enabled: false, remoteUrl: "", branch: "main", autoCommit: false, autoPush: false };
       return data;
     }
@@ -4296,6 +4307,7 @@ const app = createApp({
     async function saveKnowledgeStoreConfig() {
       const data = await api("PUT", "/api/knowledge-store/config", knowledgeStoreConfig);
       if (data.config) Object.assign(knowledgeStoreConfig, data.config);
+      if (data.storage) knowledgeStorage.value = data.storage;
       await refreshAll();
       return data;
     }
@@ -5873,7 +5885,7 @@ const app = createApp({
     return {
       kbRoot, projects, schedule, lastRun, runningJobs, jobHistory, selectedJob, logOutput, logTitle,
       summaryPanel, pendingCommitItems, supervisionIssues, issuesByProject, structuredLogs, selectedLog, logFilters,
-      knowledgeStoreConfig, knowledgeMigrationPlan, loggingConfig,
+      knowledgeStoreConfig, knowledgeStorage, knowledgeMigrationPlan, loggingConfig,
       vectorMigration, vectorMigrationBusy, vectorMigrationMessage, vectorModelStatus, knowledgeMaintenance, keepDatabaseBackup, loadVectorMigration, startVectorMigration, rollbackVectorMigration, startKnowledgeMaintenance, rollbackKnowledgeMaintenance,
       githubAuthForm, githubProviderForm, githubStatus, githubOAuth, gitProviders, githubAuthModal, githubStores, githubStoresMessage, githubBusy, selectedTeamStoreKey, selectedTeamKbKey, teamKbStorePath,
       teamStoreSetup, teamStorePreview, teamStoreBusy, teamStoreMessage, teamStoreError, pickingTeamStoreFolder,

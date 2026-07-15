@@ -111,7 +111,8 @@ function fakeVector(text) {
       const maintenanceBefore = await request('GET', '/api/knowledge/maintenance');
       assert.equal(maintenanceBefore.rows, 1);
       assert.equal(maintenanceBefore.exists, true);
-      const rebuildStarted = await request('POST', '/api/knowledge/maintenance/rebuild', { keepBackup: false });
+      assert.equal(maintenanceBefore.dbPath, path.join(runtime.dataDir, 'projects', '.project-knowledge', 'knowledge.lancedb'));
+      const rebuildStarted = await request('POST', '/api/knowledge/maintenance/rebuild', { keepBackup: true });
       assert.equal(rebuildStarted.started, true);
       let maintenanceAfter;
       for (let i = 0; i < 100; i++) {
@@ -122,9 +123,25 @@ function fakeVector(text) {
       assert.equal(maintenanceAfter.status, 'completed');
       assert.equal(maintenanceAfter.rows, 1);
       assert.equal(maintenanceAfter.ftsSchemaVersion, 2);
-      assert.equal(maintenanceAfter.backupRetained, false);
+      assert.equal(maintenanceAfter.backupRetained, true);
+      assert.ok(fs.existsSync(maintenanceAfter.lastBackupPath));
       const searchedAfterRebuild = await request('POST', '/api/knowledge/search', { projectSlug: 'api', query: 'migration API', limit: 5 });
       assert.equal(searchedAfterRebuild.results[0].space_id, savedProjects.api.primarySpaceId);
+      const relocatedRoot = path.join(runtime.dataDir, 'external-knowledge-root');
+      const relocated = await request('PUT', '/api/knowledge-store/config', { rootPath: relocatedRoot });
+      const relocatedDb = path.join(relocatedRoot, '.project-knowledge', 'knowledge.lancedb');
+      assert.equal(relocated.storage.databasePath, relocatedDb);
+      assert.equal(relocated.storage.followsConfiguredRoot, true);
+      assert.equal(relocated.relocation.moved, true);
+      assert.ok(fs.existsSync(relocatedDb));
+      assert.ok(!fs.existsSync(maintenanceBefore.dbPath));
+      const maintenanceRelocated = await request('GET', '/api/knowledge/maintenance');
+      assert.equal(maintenanceRelocated.dbPath, relocatedDb);
+      assert.equal(maintenanceRelocated.rows, 1);
+      assert.equal(maintenanceRelocated.lastBackupPath, path.join(relocatedRoot, '.project-knowledge', '_backup', 'knowledge-db', path.basename(maintenanceAfter.lastBackupPath)));
+      assert.ok(fs.existsSync(maintenanceRelocated.lastBackupPath));
+      const searchedAfterRelocation = await request('POST', '/api/knowledge/search', { projectSlug: 'api', query: 'migration API', limit: 5 });
+      assert.equal(searchedAfterRelocation.results[0].space_id, savedProjects.api.primarySpaceId);
       const rolledBack = await request('POST', '/api/projects/api/knowledge-migration/rollback', {});
       assert.equal(rolledBack.knowledgeBackend, 'markdown');
       assert.equal(rolledBack.retainedDatabase, true);
