@@ -11,7 +11,7 @@
   <a href="https://www.npmjs.com/package/project-knowledge"><img src="https://img.shields.io/npm/v/project-knowledge.svg?style=flat-square" alt="npm"></a>
   <img src="https://img.shields.io/node/v/project-knowledge.svg?style=flat-square" alt="Node 18+">
   <img src="https://img.shields.io/github/license/SanQianX/project-knowledge-base?style=flat-square" alt="Apache-2.0">
-  <a href="https://github.com/SanQianX/project-knowledge-base/actions"><img src="https://img.shields.io/badge/tests-43%20passed-2f7d64?style=flat-square" alt="Tests"></a>
+  <a href="https://github.com/SanQianX/project-knowledge-base/actions"><img src="https://img.shields.io/badge/tests-45%20passed-2f7d64?style=flat-square" alt="Tests"></a>
   <a href="#star-history"><img src="https://img.shields.io/badge/star_history-⬇-7492a5?style=flat-square" alt="Star history"></a>
 </p>
 
@@ -28,6 +28,14 @@ npm install -g project-knowledge
 project-knowledge
 ```
 
+## v4.0.2 数据库跟随知识库根目录
+
+向量数据库、维护状态和保留的回滚备份现在统一保存在
+`<知识库根目录>/.project-knowledge/`。设置页面会直接显示实际数据库路径。
+从 v4.0.0 或 v4.0.1 升级后，程序会把旧固定位置的数据库自动搬到你之前已经选择的
+知识库根目录。以后修改根目录时，会先搬迁并验证数据库，成功后才保存新设置；目标
+位置已有数据库时不会覆盖。跨磁盘修改路径也会先复制并核对文件数量和字节数。
+
 ## v4.0.1 数据库空间修复
 
 从 v4.0.0 升级后，打开“设置 → 一键迁移全部向量知识库”，点击一次“压缩数据库”。
@@ -40,7 +48,7 @@ Markdown `00-index.md` 仍会保留，旧功能和团队知识库模式不受影
 
 ## v4 向量知识库与一键升级
 
-v4 在 `~/.project-knowledge/knowledge.lancedb` 中同时保存完整自然语言原文、
+v4 在 `<设置中选择的知识库根目录>/.project-knowledge/knowledge.lancedb` 中同时保存完整自然语言原文、
 元数据和 `Xenova/bge-small-zh-v1.5` 的 512 维向量。向量只负责召回，不能反向
 “翻译”为文本；`search/get/ask/history` 工具返回的是数据库中保存的原始
 `chunk_text`，再由 Claude 根据原文回答。
@@ -96,7 +104,7 @@ Anthropic 兼容 API Profile 用于生成 AI 草稿。
 首次启动的预期输出：
 
 ```text
-project-knowledge  ·  v4.0.1
+project-knowledge  ·  v4.0.2
 Local knowledge-base dashboard
 
   ▸ Resolving data directory …      ~/.project-knowledge/

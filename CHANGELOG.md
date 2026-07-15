@@ -1,5 +1,20 @@
 # Changelog
 
+## [4.0.2] - 2026-07-15
+
+- Store LanceDB, its maintenance metadata, and retained database backups under
+  `<configured knowledge root>/.project-knowledge/` instead of a fixed app-data
+  location.
+- Automatically relocate v4.0.0/v4.0.1 databases on startup to the knowledge
+  root already selected in Settings.
+- Safely relocate and verify the database before saving a changed knowledge
+  root, including cross-volume copies, target-conflict protection, and retained
+  backup path rebasing.
+- Display the effective vector database path directly below the Knowledge Store
+  root setting.
+- Expanded the complete regression suite to 45 passing test files, including
+  real LanceDB startup and live root-change relocation tests.
+
 ## [4.0.1] - 2026-07-15
 
 - Excluded generated `00-index.md` files from embedding and removed stale

@@ -11,7 +11,7 @@
   <a href="https://www.npmjs.com/package/project-knowledge"><img src="https://img.shields.io/npm/v/project-knowledge.svg?style=flat-square" alt="npm"></a>
   <img src="https://img.shields.io/node/v/project-knowledge.svg?style=flat-square" alt="Node 18+">
   <img src="https://img.shields.io/github/license/SanQianX/project-knowledge-base?style=flat-square" alt="Apache-2.0">
-  <a href="https://github.com/SanQianX/project-knowledge-base/actions"><img src="https://img.shields.io/badge/tests-43%20passed-2f7d64?style=flat-square" alt="Tests"></a>
+  <a href="https://github.com/SanQianX/project-knowledge-base/actions"><img src="https://img.shields.io/badge/tests-45%20passed-2f7d64?style=flat-square" alt="Tests"></a>
   <a href="#star-history"><img src="https://img.shields.io/badge/star_history-⬇-7492a5?style=flat-square" alt="Star history"></a>
 </p>
 
@@ -47,7 +47,7 @@ Anthropic-compatible API profile for AI drafts.
 Expected output on first launch:
 
 ```text
-project-knowledge  ·  v4.0.1
+project-knowledge  ·  v4.0.2
 Local knowledge-base dashboard
 
   ▸ Resolving data directory …      ~/.project-knowledge/
@@ -144,7 +144,8 @@ only grows when you say so.
 
 Version 4 stores the complete human-readable knowledge text, metadata, and
 `Xenova/bge-small-zh-v1.5` vectors in
-`~/.project-knowledge/knowledge.lancedb`. Vectors are retrieval indexes — they
+`<configured knowledge root>/.project-knowledge/knowledge.lancedb`. The exact
+path is displayed below the Knowledge Store root setting. Vectors are retrieval indexes — they
 cannot be decoded back into prose. `project-knowledge-kb` retrieves the
 original `chunk_text`, and Claude uses that source text to answer.
 
@@ -422,7 +423,7 @@ The regression suite under `_site/_test/` covers:
 - Project control panel flows, Runs / Drafts UI flow
 - CLI startup / stop / status
 - Gitea OAuth + sparse checkout
-- 43 tests, 0 failures
+- 45 tests, 0 failures
 
 ---
 
