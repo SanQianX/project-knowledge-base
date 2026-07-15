@@ -1,0 +1,95 @@
+name: Publish Windows desktop
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag matching package.json (for a manual retry)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  windows-desktop:
+    if: github.repository == 'SanQianX/project-knowledge-base'
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.x'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/package-lock.json
+
+      - name: Verify release version
+        shell: pwsh
+        run: |
+          $core = node -p "require('./package.json').version"
+          $desktop = node -p "require('./desktop/package.json').version"
+          if ($core -ne $desktop) {
+            throw "Core version $core does not match desktop version $desktop"
+          }
+          if ($env:RELEASE_TAG -ne "v$core") {
+            throw "Release tag $env:RELEASE_TAG does not match package version v$core"
+          }
+          "RELEASE_VERSION=$core" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Install and test core
+        run: |
+          npm ci
+          npm test -- --no-report
+
+      - name: Install and test desktop
+        run: |
+          npm ci --prefix desktop
+          npm test --prefix desktop
+
+      - name: Build Windows x64 installer
+        run: npm run make --prefix desktop
+
+      - name: Test packaged application and LanceDB
+        run: npm run test:packaged --prefix desktop
+
+      - name: Prepare release assets
+        shell: pwsh
+        run: |
+          $source = "desktop/out/make/squirrel.windows/x64/Project-Knowledge-$env:RELEASE_VERSION-Setup.exe"
+          if (-not (Test-Path -LiteralPath $source)) {
+            throw "Installer was not generated at $source"
+          }
+          New-Item -ItemType Directory -Path release-assets -Force | Out-Null
+          $target = "release-assets/Project-Knowledge-$env:RELEASE_VERSION-Setup.exe"
+          Copy-Item -LiteralPath $source -Destination $target
+          $hash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  Project-Knowledge-$env:RELEASE_VERSION-Setup.exe" |
+            Set-Content -LiteralPath "release-assets/Project-Knowledge-$env:RELEASE_VERSION-Setup.exe.sha256" -Encoding ascii
+
+      - name: Create release and upload installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:RELEASE_TAG `
+              --repo $env:GITHUB_REPOSITORY `
+              --title "Project Knowledge $env:RELEASE_VERSION" `
+              --generate-notes
+            if ($LASTEXITCODE -ne 0) { throw "Failed to create GitHub Release" }
+          }
+          $assets = Get-ChildItem -LiteralPath release-assets -File | ForEach-Object { $_.FullName }
+          gh release upload $env:RELEASE_TAG @assets `
+            --repo $env:GITHUB_REPOSITORY `
+            --clobber
+          if ($LASTEXITCODE -ne 0) { throw "Failed to upload desktop installer" }
