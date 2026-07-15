@@ -46,14 +46,20 @@ jobs:
           "RELEASE_VERSION=$core" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Install and test core
+        shell: pwsh
         run: |
           npm ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm test -- --no-report
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Install and test desktop
+        shell: pwsh
         run: |
           npm ci --prefix desktop
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm test --prefix desktop
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build Windows x64 installer
         run: npm run make --prefix desktop
