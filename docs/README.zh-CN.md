@@ -11,7 +11,7 @@
   <a href="https://www.npmjs.com/package/project-knowledge"><img src="https://img.shields.io/npm/v/project-knowledge.svg?style=flat-square" alt="npm"></a>
   <img src="https://img.shields.io/node/v/project-knowledge.svg?style=flat-square" alt="Node 18+">
   <img src="https://img.shields.io/github/license/SanQianX/project-knowledge-base?style=flat-square" alt="Apache-2.0">
-  <a href="https://github.com/SanQianX/project-knowledge-base/actions"><img src="https://img.shields.io/badge/tests-45%20passed-2f7d64?style=flat-square" alt="Tests"></a>
+  <a href="https://github.com/SanQianX/project-knowledge-base/actions"><img src="https://img.shields.io/badge/tests-46%20passed-2f7d64?style=flat-square" alt="Tests"></a>
   <a href="#star-history"><img src="https://img.shields.io/badge/star_history-⬇-7492a5?style=flat-square" alt="Star history"></a>
 </p>
 
@@ -27,6 +27,16 @@
 npm install -g project-knowledge
 project-knowledge
 ```
+
+## v4.0.3 模型下载与迁移失败提示
+
+“设置 → 一键迁移全部向量知识库”中新增“嵌入模型设置”。迁移前先点击“下载并验证
+模型”；程序会实际加载模型并执行一次向量推理，下载残片不会再被误判成安装成功。
+如果公共模型无法加载，整个迁移批次会在修改任何项目前停止，并通过弹窗、错误面板
+和项目详情明确提醒，不再把同一个模型问题重复记录成多个项目失败。
+
+可以直接在页面中设置 Hugging Face 兼容镜像、本地模型基础目录和离线模式。推荐使用
+页面设置；环境变量命令仍保留在页面中的可选说明内。
 
 ## v4.0.2 数据库跟随知识库根目录
 
@@ -65,11 +75,14 @@ v4 在 `<设置中选择的知识库根目录>/.project-knowledge/knowledge.lanc
 未变化文件不重新向量化，变化内容替换旧分块，已删除文件对应的旧记录会删除，
 不会无限追加重复内容。
 
-首次使用会下载约 100 MB 的本地模型。受限网络或离线环境可配置：
+首次使用会下载约 100 MB 的本地模型。推荐先在页面中设置下载地址或本地目录，然后
+点击“下载并验证模型”。也可以使用持久化环境变量，设置后需要重启服务：
 
-```bash
-KB_EMBEDDING_REMOTE_HOST=https://your-model-mirror.example/ project-knowledge
-KB_EMBEDDING_LOCAL_PATH=D:/models project-knowledge
+```powershell
+[Environment]::SetEnvironmentVariable('KB_EMBEDDING_REMOTE_HOST', 'https://your-model-mirror.example/', 'User')
+[Environment]::SetEnvironmentVariable('KB_EMBEDDING_LOCAL_PATH', 'D:\models', 'User')
+project-knowledge stop
+project-knowledge
 ```
 
 每个项目只有一个主写入空间。你可以在项目设置中显式勾选关联项目；检索会覆盖
@@ -104,7 +117,7 @@ Anthropic 兼容 API Profile 用于生成 AI 草稿。
 首次启动的预期输出：
 
 ```text
-project-knowledge  ·  v4.0.2
+project-knowledge  ·  v4.0.3
 Local knowledge-base dashboard
 
   ▸ Resolving data directory …      ~/.project-knowledge/

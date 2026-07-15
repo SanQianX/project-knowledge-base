@@ -1,5 +1,20 @@
 # Changelog
 
+## [4.0.3] - 2026-07-15
+
+- Added an embedding-model setup panel with one-click download and real
+  inference verification, configurable Hugging Face endpoint/mirror, local
+  model directory, offline mode, and copyable PowerShell environment-variable
+  examples.
+- Stop a migration batch before changing any project when the shared embedding
+  model cannot load, instead of reporting the same model failure once for every
+  project.
+- Surface migration failures through a prominent settings panel, a one-time
+  browser alert, detailed per-project errors, and direct retry actions.
+- Persist model settings and verified download state while rejecting partial
+  cache files or verification results from a different model configuration.
+- Expanded the complete regression suite to 46 passing test files.
+
 ## [4.0.2] - 2026-07-15
 
 - Store LanceDB, its maintenance metadata, and retained database backups under

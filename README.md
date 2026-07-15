@@ -11,7 +11,7 @@
   <a href="https://www.npmjs.com/package/project-knowledge"><img src="https://img.shields.io/npm/v/project-knowledge.svg?style=flat-square" alt="npm"></a>
   <img src="https://img.shields.io/node/v/project-knowledge.svg?style=flat-square" alt="Node 18+">
   <img src="https://img.shields.io/github/license/SanQianX/project-knowledge-base?style=flat-square" alt="Apache-2.0">
-  <a href="https://github.com/SanQianX/project-knowledge-base/actions"><img src="https://img.shields.io/badge/tests-45%20passed-2f7d64?style=flat-square" alt="Tests"></a>
+  <a href="https://github.com/SanQianX/project-knowledge-base/actions"><img src="https://img.shields.io/badge/tests-46%20passed-2f7d64?style=flat-square" alt="Tests"></a>
   <a href="#star-history"><img src="https://img.shields.io/badge/star_history-⬇-7492a5?style=flat-square" alt="Star history"></a>
 </p>
 
@@ -47,7 +47,7 @@ Anthropic-compatible API profile for AI drafts.
 Expected output on first launch:
 
 ```text
-project-knowledge  ·  v4.0.2
+project-knowledge  ·  v4.0.3
 Local knowledge-base dashboard
 
   ▸ Resolving data directory …      ~/.project-knowledge/
@@ -172,15 +172,28 @@ the old oversized database is deleted after verification. Select **Keep old
 database for manual rollback** only when you can temporarily afford both
 copies on disk.
 
-The model downloads on first use (about 100 MB). For restricted networks or
-offline installations:
+Before starting migration, use **Embedding model setup** in the same panel and
+click **Download and verify model**. The application loads the model and runs a
+real embedding inference before marking it ready; partial cache files are not
+treated as an installed model. If loading fails, the whole batch stops before
+changing any project and the UI displays the error and retry guidance.
 
-```bash
+The default fp32 ONNX model download is about 100 MB. For restricted networks,
+set a reachable Hugging Face-compatible endpoint in the UI. For offline
+installations, select the local base directory that contains
+`Xenova/bge-small-zh-v1.5`, enable local-only mode, save, and verify. The UI is
+the recommended setup path; persistent environment variables remain available
+under the optional environment guide:
+
+```powershell
 # Alternative Hugging Face-compatible endpoint
-KB_EMBEDDING_REMOTE_HOST=https://your-model-mirror.example/ project-knowledge
+[Environment]::SetEnvironmentVariable('KB_EMBEDDING_REMOTE_HOST', 'https://your-model-mirror.example/', 'User')
 
-# Pre-downloaded model tree
-KB_EMBEDDING_LOCAL_PATH=D:/models project-knowledge
+# Base directory containing Xenova/bge-small-zh-v1.5
+[Environment]::SetEnvironmentVariable('KB_EMBEDDING_LOCAL_PATH', 'D:\models', 'User')
+
+project-knowledge stop
+project-knowledge
 ```
 
 ### Related projects and team knowledge
@@ -423,7 +436,7 @@ The regression suite under `_site/_test/` covers:
 - Project control panel flows, Runs / Drafts UI flow
 - CLI startup / stop / status
 - Gitea OAuth + sparse checkout
-- 45 tests, 0 failures
+- 46 tests, 0 failures
 
 ---
 
