@@ -91,6 +91,8 @@ function project(overrides = {}) {
   assert(policyWrite.allowedTools.includes('Edit'), 'directWriteKb should allow Edit');
   assert(automationConfig.evaluateAutomationToolUse(policyWrite, 'Write', { file_path: path.join(TEMP_KB, 'changes', 'x.md') }).behavior === 'allow',
     'write inside KB should be allowed');
+  assert(automationConfig.evaluateAutomationToolUse(policyWrite, 'Write', { file_path: path.join(TEMP_KB, 'changes', '00-index.md') }).behavior === 'deny',
+    'AI should never write a generated Markdown index');
   assert(automationConfig.evaluateAutomationToolUse(policyWrite, 'Write', { file_path: path.join(TEMP_REPO, 'README.md') }).behavior === 'deny',
     'write inside source repo should be denied');
 
@@ -106,6 +108,7 @@ function project(overrides = {}) {
   });
   assert(rendered.prompt.includes(SLUG), 'prompt should include slug');
   assert(rendered.prompt.includes('feature.txt'), 'prompt should include changed file');
+  assert(rendered.prompt.includes('不要创建、修改或追加任何 00-index.md'), 'all custom prompts should receive mandatory knowledge-hygiene rules');
   assert(rendered.metadata.pendingCommitCount === 1, 'render should include only commits after trackingStartCommit');
   assert(rendered.metadata.commitRange.includes('..'), 'render should include a commit range');
   assert(rendered.workbench.permissionMode === 'bypassPermissions', 'render should keep project permission mode');

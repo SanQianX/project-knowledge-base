@@ -32,6 +32,8 @@ function write(filePath, value) {
     const oldBackup = path.join(legacy.backupRoot, 'old.lancedb');
     write(legacy.maintenanceStatePath, `${JSON.stringify({ status: 'completed', lastBackupPath: oldBackup })}\n`);
     write(path.join(oldBackup, 'part.lance'), 'backup-content');
+    write(legacy.markdownMaintenanceStatePath, `${JSON.stringify({ status: 'completed', batchId: 'markdown-test' })}\n`);
+    write(path.join(legacy.markdownBackupRoot, 'markdown-test', 'demo', 'README.md'), '# backup\n');
     const legacyManifest = manifest(legacy.dbPath);
 
     assert.equal(resolveActiveLayout(rootA, dataDir).kind, 'legacy-data-dir');
@@ -42,6 +44,8 @@ function write(filePath, value) {
     assert.ok(fs.existsSync(layoutA.databaseMaintenancePath));
     assert.ok(fs.existsSync(layoutA.maintenanceStatePath));
     assert.ok(fs.existsSync(path.join(layoutA.backupRoot, 'old.lancedb', 'part.lance')));
+    assert.ok(fs.existsSync(layoutA.markdownMaintenanceStatePath));
+    assert.ok(fs.existsSync(path.join(layoutA.markdownBackupRoot, 'markdown-test', 'demo', 'README.md')));
     assert.equal(firstRebase.lastBackupPath, path.join(layoutA.backupRoot, 'old.lancedb'));
     assert.equal(JSON.parse(fs.readFileSync(layoutA.maintenanceStatePath, 'utf8')).lastBackupPath, path.join(layoutA.backupRoot, 'old.lancedb'));
     assert.ok(!fs.existsSync(legacy.dbPath));
@@ -51,6 +55,7 @@ function write(filePath, value) {
     const second = relocateLayout(layoutA, layoutB);
     assert.equal(second.moved, true);
     assert.deepEqual(manifest(layoutB.dbPath), legacyManifest);
+    assert.ok(fs.existsSync(path.join(layoutB.markdownBackupRoot, 'markdown-test', 'demo', 'README.md')));
     assert.ok(!fs.existsSync(layoutA.dbPath));
 
     write(path.join(layoutA.dbPath, 'collision.lance'), 'do-not-overwrite');

@@ -31,6 +31,14 @@ Hard rules:
 - If the configured mode is requestApproval, produce a reviewable proposal and do not edit files.
 - If the configured mode allows writing, make conservative KB-only edits that are directly supported by the commit evidence.`;
 
+const KNOWLEDGE_HYGIENE_INSTRUCTIONS = `
+
+知识库结构维护硬规则：
+- 不要创建、修改或追加任何 00-index.md；它们是系统完整重建的派生文件。
+- 更新 README、ARCHITECTURE 或 modules 文档时，必须在原有章节中就地替换已经过时的描述，并删除被新事实取代的旧描述；不要在文件末尾重复追加同名章节、完整旧正文或多行 Updated 元数据。
+- 提交历史只写入对应的 changes 文档；模块文档只保留当前有效状态，并通过 changes 文档保留历史。
+- 保持 Markdown frontmatter、标题层级和代码围栏完整；不要为了“保留历史”复制整段重复内容。`;
+
 function newRunId() {
   return `auto-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
 }
@@ -149,7 +157,7 @@ async function renderAutomationPrompt({ slug, cfg, event = {}, defaultProjectKbP
     automation,
     workbench,
     metadata,
-    prompt: renderTemplate(automation.hookPromptTemplate, vars),
+    prompt: `${renderTemplate(automation.hookPromptTemplate, vars).trimEnd()}${KNOWLEDGE_HYGIENE_INSTRUCTIONS}\n`,
     vars,
   };
 }
@@ -207,7 +215,7 @@ async function renderProjectInitPrompt({ slug, cfg, defaultProjectKbPath }) {
     automation,
     workbench,
     metadata,
-    prompt: renderTemplate(automation.initPromptTemplate, vars),
+    prompt: `${renderTemplate(automation.initPromptTemplate, vars).trimEnd()}${KNOWLEDGE_HYGIENE_INSTRUCTIONS}\n`,
     vars,
   };
 }
@@ -558,26 +566,28 @@ function _markRunEnded(slug, runId, session, deps) {
     if (r.status === 'failed' && !r.error) r.error = `non-zero exitCode (${session.exitCode})`;
   }
   writeAutomationRun(slug, r);
-  if (r.status === 'succeeded' && r.source !== 'project-init' && r.headCommitAtRun && ['autoApply', 'directWriteKb'].includes(r.knowledgeMode)) {
-    try {
-      const projects = typeof deps.readProjects === 'function' ? deps.readProjects() : deps.projects;
-      if (projects && projects[slug]) {
-        projects[slug].lastAnalyzedCommit = r.headCommitAtRun;
-        const knownHead = projects[slug].headCommit || projects[slug].lastSeenCommit || null;
-        const shouldAdvanceVisibleHead = !knownHead
-          || knownHead === r.headCommitAtRun
-          || knownHead === r.lastAnalyzedCommitBefore;
-        if (shouldAdvanceVisibleHead) {
-          projects[slug].lastSeenCommit = r.headCommitAtRun;
-          projects[slug].headCommit = r.headCommitAtRun;
+  if (r.status === 'succeeded' && ['autoApply', 'directWriteKb'].includes(r.knowledgeMode)) {
+    if (r.source !== 'project-init' && r.headCommitAtRun) {
+      try {
+        const projects = typeof deps.readProjects === 'function' ? deps.readProjects() : deps.projects;
+        if (projects && projects[slug]) {
+          projects[slug].lastAnalyzedCommit = r.headCommitAtRun;
+          const knownHead = projects[slug].headCommit || projects[slug].lastSeenCommit || null;
+          const shouldAdvanceVisibleHead = !knownHead
+            || knownHead === r.headCommitAtRun
+            || knownHead === r.lastAnalyzedCommitBefore;
+          if (shouldAdvanceVisibleHead) {
+            projects[slug].lastSeenCommit = r.headCommitAtRun;
+            projects[slug].headCommit = r.headCommitAtRun;
+          }
+          if (!projects[slug].trackingStartCommit && r.trackingStartCommit) {
+            projects[slug].trackingStartCommit = r.trackingStartCommit;
+            projects[slug].trackingStartedAt = projects[slug].trackingStartedAt || r.startedAt || new Date().toISOString();
+          }
+          if (typeof deps.writeProjects === 'function') deps.writeProjects(projects);
         }
-        if (!projects[slug].trackingStartCommit && r.trackingStartCommit) {
-          projects[slug].trackingStartCommit = r.trackingStartCommit;
-          projects[slug].trackingStartedAt = projects[slug].trackingStartedAt || r.startedAt || new Date().toISOString();
-        }
-        if (typeof deps.writeProjects === 'function') deps.writeProjects(projects);
-      }
-    } catch {}
+      } catch {}
+    }
     if (typeof deps.onKnowledgeUpdated === 'function') {
       Promise.resolve(deps.onKnowledgeUpdated(slug, r)).then(result => {
         const latest = _readAutomationRun(slug, runId);

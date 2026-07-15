@@ -312,6 +312,11 @@ function assert(cond, msg) {
       returnByValue: true,
     });
     assert(r.result.value, 'vector migration should render embedding model setup and download controls');
+    r = await send('Runtime.evaluate', {
+      expression: '!!document.querySelector("[data-markdown-maintenance] [data-markdown-optimize-all]")',
+      returnByValue: true,
+    });
+    assert(r.result.value, 'settings should render Markdown knowledge audit and optimization controls');
 
     r = await send('Runtime.evaluate', {
       expression: '(() => { const settings = Array.from(document.querySelectorAll("button, a")).find(b => /^Settings|^设置|^璁剧疆/.test(b.innerText)); if (settings) settings.click(); return !!settings; })()',

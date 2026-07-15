@@ -1046,6 +1046,48 @@
             <button @click="saveLoggingConfig" class="btn-primary">{{ t("save") }}</button>
           </div>
         </div>
+        <div class="panel rounded-xl border p-5 xl:col-span-2" data-markdown-maintenance>
+          <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h2 class="text-lg font-semibold">{{ t("markdownMaintenanceTitle") }}</h2>
+              <p class="mt-1 text-sm muted">{{ t("markdownMaintenanceHelp") }}</p>
+              <p class="mt-1 text-xs muted">{{ t("markdownMaintenanceBackup") }} <code>{{ markdownMaintenance.backupRoot || "-" }}</code></p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button @click="loadMarkdownMaintenance" class="btn" :disabled="markdownMaintenanceBusy">{{ t("scanMarkdownKnowledge") }}</button>
+              <button data-markdown-optimize-all @click="startMarkdownMaintenance()" class="btn-primary" :disabled="markdownMaintenanceBusy || !(markdownMaintenance.summary?.fixable)">
+                {{ markdownMaintenanceBusy ? t("optimizingMarkdown") : t("optimizeAllMarkdown") }}
+              </button>
+            </div>
+          </div>
+          <div class="mt-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <div class="panel2 rounded-lg border p-3"><div class="text-xs muted">{{ t("projects") }}</div><div class="mt-1 text-xl font-semibold">{{ markdownMaintenance.summary?.projects || 0 }}</div></div>
+            <div class="panel2 rounded-lg border p-3"><div class="text-xs muted">{{ t("markdownFiles") }}</div><div class="mt-1 text-xl font-semibold">{{ markdownMaintenance.summary?.files || 0 }}</div></div>
+            <div class="panel2 rounded-lg border p-3"><div class="text-xs muted">{{ t("totalSize") }}</div><div class="mt-1 text-sm font-semibold">{{ formatBytes(markdownMaintenance.summary?.bytes || 0) }}</div></div>
+            <div class="panel2 rounded-lg border p-3"><div class="text-xs muted">{{ t("formatIssues") }}</div><div class="mt-1 text-xl font-semibold">{{ markdownMaintenance.summary?.issues || 0 }}</div></div>
+            <div class="panel2 rounded-lg border p-3"><div class="text-xs muted">{{ t("safeFixes") }}</div><div class="mt-1 text-xl font-semibold">{{ markdownMaintenance.summary?.fixable || 0 }}</div></div>
+            <div class="panel2 rounded-lg border p-3"><div class="text-xs muted">{{ t("needsSemanticReview") }}</div><div class="mt-1 text-xl font-semibold">{{ markdownMaintenance.summary?.review || 0 }}</div></div>
+          </div>
+          <div v-if="markdownMaintenanceMessage" class="mt-3 rounded-lg border p-3 text-sm panel2 whitespace-pre-line">{{ markdownMaintenanceMessage }}</div>
+          <div class="mt-4 grid gap-2">
+            <details v-for="project in markdownMaintenance.projects || []" :key="project.slug" class="rounded-lg border p-3 panel2">
+              <summary class="cursor-pointer text-sm">
+                <span class="font-medium">{{ project.slug }}</span>
+                <span class="ml-2 muted">{{ project.files }} {{ t("markdownFiles") }} · {{ formatBytes(project.bytes) }} · {{ project.issueCount }} {{ t("formatIssues") }}</span>
+              </summary>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <button v-if="project.fixableCount" @click="startMarkdownMaintenance(project.slug)" class="btn-primary text-xs" :disabled="markdownMaintenanceBusy">{{ t("optimizeThisProject") }}</button>
+                <span v-if="project.aliases?.length" class="text-xs muted">{{ t("sharedPathAliases") }}: {{ project.aliases.join(", ") }}</span>
+              </div>
+              <div v-if="project.issues?.length" class="mt-3 max-h-48 overflow-auto text-xs">
+                <div v-for="item in project.issues.slice(0, 30)" :key="`${item.path}:${item.code}`" class="border-t py-2">
+                  <code>{{ item.path || project.kbPath }}</code> · {{ item.code }} · {{ item.message }}
+                </div>
+              </div>
+            </details>
+          </div>
+          <p class="mt-3 text-xs muted">{{ t("markdownSemanticSafety") }}</p>
+        </div>
         <div class="panel rounded-xl border p-5 xl:col-span-2" data-vector-migration>
           <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
@@ -1744,6 +1786,23 @@ const I18N = {
     recentAutomationRuns: "Recent automation runs",
     noAutomationRuns: "No automation runs yet.",
     vectorMigrationTitle: "One-click vector knowledge migration",
+    markdownMaintenanceTitle: "Markdown knowledge health and optimization",
+    markdownMaintenanceHelp: "Audit every registered personal and team knowledge base, rebuild derived indexes from scratch, normalize safe formatting, and refresh affected vector spaces.",
+    markdownMaintenanceBackup: "Every changed file is backed up under:",
+    scanMarkdownKnowledge: "Scan all Markdown",
+    optimizeAllMarkdown: "Safely optimize all",
+    optimizingMarkdown: "Optimizing Markdown…",
+    markdownFiles: "Markdown files",
+    totalSize: "Total size",
+    formatIssues: "issues",
+    safeFixes: "Safe fixes",
+    needsSemanticReview: "Needs semantic review",
+    optimizeThisProject: "Optimize this project",
+    sharedPathAliases: "Shared KB aliases",
+    markdownSemanticSafety: "Safe optimization never guesses which conflicting statement is newer. It fixes generated indexes and deterministic formatting, while repeated headings, repeated update metadata, oversized documents, and malformed structures remain clearly listed for semantic review.",
+    markdownOptimizeConfirm: "Back up changed Markdown files and safely optimize the selected knowledge bases now?",
+    markdownOptimizeStarted: "Markdown optimization started. Indexes will be rebuilt and migrated projects will be re-indexed automatically.",
+    markdownOptimizeFinished: "Markdown optimization finished: {completed} completed, {failed} failed, {review} semantic review item(s) remain.",
     vectorMigrationHelp: "Back up and import every legacy Markdown knowledge base into one local LanceDB, verify it, then switch each project atomically.",
     embeddingModel: "Local embedding model",
     embeddingModelSetup: "Embedding model setup",
@@ -2230,6 +2289,23 @@ const I18N = {
     recentAutomationRuns: "最近自动化运行",
     noAutomationRuns: "暂无自动化运行记录。",
     vectorMigrationTitle: "一键迁移全部向量知识库",
+    markdownMaintenanceTitle: "Markdown 知识库体检与优化",
+    markdownMaintenanceHelp: "检查全部已注册的个人及团队知识库，从零重建派生索引，规范可安全处理的格式，并自动刷新受影响的向量空间。",
+    markdownMaintenanceBackup: "所有被修改的文件都会先备份到：",
+    scanMarkdownKnowledge: "扫描全部 Markdown",
+    optimizeAllMarkdown: "安全优化全部",
+    optimizingMarkdown: "正在优化 Markdown…",
+    markdownFiles: "Markdown 文件",
+    totalSize: "总大小",
+    formatIssues: "个问题",
+    safeFixes: "可安全修复",
+    needsSemanticReview: "需要语义审查",
+    optimizeThisProject: "优化这个项目",
+    sharedPathAliases: "共享知识库别名",
+    markdownSemanticSafety: "安全优化不会猜测冲突内容中哪一段更新。系统会自动修复派生索引和确定性的格式问题；重复标题、重复 Updated 元数据、超大正文和破损结构会继续明确列出，等待语义整理。",
+    markdownOptimizeConfirm: "现在备份相关 Markdown 文件并安全优化所选知识库吗？",
+    markdownOptimizeStarted: "Markdown 优化已经开始；系统会完整重建索引，并自动重新索引已迁移项目。",
+    markdownOptimizeFinished: "Markdown 优化完成：成功 {completed} 个，失败 {failed} 个，仍有 {review} 个语义审查项。",
     vectorMigrationHelp: "备份并导入全部旧 Markdown 知识库到本地 LanceDB，逐项目校验成功后再原子切换。",
     embeddingModel: "本地嵌入模型",
     embeddingModelSetup: "嵌入模型设置",
@@ -2760,6 +2836,10 @@ const app = createApp({
     const knowledgeStoreConfig = reactive({ schema: "knowledge-store/v1", rootPath: "", git: { enabled: false, remoteUrl: "", branch: "main", autoCommit: false, autoPush: false } });
     const knowledgeStorage = ref({ storagePath: "", databasePath: "", followsConfiguredRoot: false, legacyLocation: false });
     const knowledgeMigrationPlan = ref([]);
+    const markdownMaintenance = ref({ summary: { projects: 0, files: 0, bytes: 0, issues: 0, fixable: 0, review: 0, errors: 0 }, projects: [], lastRun: { status: "idle" }, backupRoot: "" });
+    const markdownMaintenanceBusy = ref(false);
+    const markdownMaintenanceMessage = ref("");
+    let markdownMaintenanceTimer = null;
     const vectorMigration = ref({ status: "idle", eligible: 0, migratedProjects: 0, items: [], projects: {} });
     const vectorMigrationBusy = ref(false);
     const vectorMigrationMessage = ref("");
@@ -2989,6 +3069,7 @@ const app = createApp({
         loadKnowledgeStoreConfig().catch(() => {});
         loadLoggingConfig().catch(() => {});
         loadClaudeMdAudit(true).catch(() => {});
+        loadMarkdownMaintenance().catch(() => {});
         loadVectorMigration().catch(() => {});
         ensureSettingsProjectSlug();
       }
@@ -5103,6 +5184,45 @@ const app = createApp({
       return migration;
     }
 
+    async function loadMarkdownMaintenance() {
+      const wasBusy = markdownMaintenanceBusy.value;
+      try {
+        const data = await api("GET", "/api/knowledge/markdown-maintenance");
+        markdownMaintenance.value = data;
+        markdownMaintenanceBusy.value = data.running === true;
+        if (markdownMaintenanceTimer) { clearTimeout(markdownMaintenanceTimer); markdownMaintenanceTimer = null; }
+        if (data.running) {
+          markdownMaintenanceTimer = setTimeout(() => loadMarkdownMaintenance().catch(() => {}), 1000);
+        } else if (wasBusy && data.lastRun && data.lastRun.status !== "idle") {
+          markdownMaintenanceMessage.value = t("markdownOptimizeFinished", {
+            completed: data.lastRun.completed || 0,
+            failed: data.lastRun.failed || 0,
+            review: data.summary?.review || 0,
+          });
+        }
+        return data;
+      } catch (e) {
+        markdownMaintenanceBusy.value = false;
+        markdownMaintenanceMessage.value = e.message;
+        throw e;
+      }
+    }
+
+    async function startMarkdownMaintenance(slug = null) {
+      if (markdownMaintenanceBusy.value) return;
+      if (!confirm(t("markdownOptimizeConfirm"))) return;
+      markdownMaintenanceBusy.value = true;
+      markdownMaintenanceMessage.value = "";
+      try {
+        await api("POST", "/api/knowledge/markdown-maintenance/optimize", typeof slug === "string" && slug ? { slugs: [slug] } : {});
+        markdownMaintenanceMessage.value = t("markdownOptimizeStarted");
+        await loadMarkdownMaintenance();
+      } catch (e) {
+        markdownMaintenanceBusy.value = false;
+        markdownMaintenanceMessage.value = e.message;
+      }
+    }
+
     async function startVectorMigration() {
       return runVectorMigration(null);
     }
@@ -5396,6 +5516,7 @@ const app = createApp({
       importNotice.value = "";
       clearImportNoticeTimer();
       if (vectorMigrationTimer) clearTimeout(vectorMigrationTimer);
+      if (markdownMaintenanceTimer) clearTimeout(markdownMaintenanceTimer);
       importPreflight.value = null;
       selectedTeamStoreKey.value = "";
       selectedTeamKbKey.value = "";
@@ -6029,6 +6150,8 @@ const app = createApp({
       clearGithubOAuthPoll();
       clearGiteaOAuthPoll();
       clearImportNoticeTimer();
+      if (vectorMigrationTimer) clearTimeout(vectorMigrationTimer);
+      if (markdownMaintenanceTimer) clearTimeout(markdownMaintenanceTimer);
       window.removeEventListener("message", handleGiteaOAuthMessage);
     });
 
@@ -6036,6 +6159,7 @@ const app = createApp({
       kbRoot, projects, schedule, lastRun, runningJobs, jobHistory, selectedJob, logOutput, logTitle,
       summaryPanel, pendingCommitItems, supervisionIssues, issuesByProject, structuredLogs, selectedLog, logFilters,
       knowledgeStoreConfig, knowledgeStorage, knowledgeMigrationPlan, loggingConfig,
+      markdownMaintenance, markdownMaintenanceBusy, markdownMaintenanceMessage, loadMarkdownMaintenance, startMarkdownMaintenance,
       vectorMigration, vectorMigrationBusy, vectorMigrationMessage, vectorModelStatus, embeddingConfig, modelSetupMessage, migrationFailureSummary, knowledgeMaintenance, keepDatabaseBackup, loadVectorMigration, startVectorMigration, retryVectorMigration, rollbackVectorMigration, saveEmbeddingConfig, downloadEmbeddingModel, startKnowledgeMaintenance, rollbackKnowledgeMaintenance,
       githubAuthForm, githubProviderForm, githubStatus, githubOAuth, gitProviders, githubAuthModal, githubStores, githubStoresMessage, githubBusy, selectedTeamStoreKey, selectedTeamKbKey, teamKbStorePath,
       teamStoreSetup, teamStorePreview, teamStoreBusy, teamStoreMessage, teamStoreError, pickingTeamStoreFolder,

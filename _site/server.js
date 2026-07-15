@@ -45,6 +45,8 @@ const { KnowledgeMigrationManager } = require('./lib/knowledge-migration');
 const { KnowledgeMaintenanceManager } = require('./lib/knowledge-maintenance');
 const knowledgeStorageLocation = require('./lib/knowledge-storage-location');
 const embeddingConfigStore = require('./lib/embedding-config');
+const markdownMaintenance = require('./lib/markdown-maintenance');
+const { regenerateIndexes } = require('./lib/index-builder');
 const { EMBEDDING_DIMENSIONS } = require('./lib/knowledge-schema');
 const { KnowledgeQueryService } = require('./lib/knowledge-query-service');
 
@@ -108,6 +110,7 @@ let knowledgeMigrationRunning = null;
 let knowledgeMaintenanceRunning = null;
 let knowledgeStorageRelocationRunning = null;
 let knowledgeModelDownloadRunning = null;
+let markdownMaintenanceRunning = null;
 let knowledgeActiveQueries = 0;
 let knowledgeActiveUpdates = 0;
 let knowledgeStorageLayout = initializeKnowledgeStorageLayout();
@@ -186,12 +189,17 @@ async function indexMigratedProject(slug, run = {}) {
   if (knowledgeMaintenanceRunning) await knowledgeMaintenanceRunning.catch(() => {});
   const projects = readProjects({ persistMigrations: false });
   const project = projects[slug];
-  if (!project || project.knowledgeBackend !== 'lancedb') return { ok: true, skipped: true, reason: 'project is not using LanceDB' };
+  if (!project) return { ok: true, skipped: true, reason: 'project is not registered' };
+  const kbPath = project.kbPath || project.legacyKbPath;
+  // 00-index.md is a derived compatibility file. Always rebuild it after
+  // background AI writes, including for legacy Markdown/team transports.
+  const indexes = regenerateIndexes(kbPath);
+  if (project.knowledgeBackend !== 'lancedb') return { ok: true, skipped: true, reason: 'project is not using LanceDB', indexes };
   knowledgeActiveUpdates += 1;
   try {
     const runtime = knowledgeRuntime();
     return await runtime.indexer.indexDirectory({
-      kbPath: project.kbPath || project.legacyKbPath,
+      kbPath,
       spaceId: project.primarySpaceId,
       sourceProjectId: slug,
       sourceCommit: run.headCommitAtRun || project.headCommit || project.lastAnalyzedCommit || '',
@@ -212,6 +220,89 @@ function createKnowledgeMaintenanceManager() {
   });
 }
 
+function readMarkdownMaintenanceState() {
+  try { return readJson(knowledgeStorageLayout.markdownMaintenanceStatePath); }
+  catch {
+    return {
+      schema: markdownMaintenance.SCHEMA,
+      status: 'idle',
+      startedAt: null,
+      endedAt: null,
+      batchId: null,
+      completed: 0,
+      failed: 0,
+      review: 0,
+      projects: {},
+    };
+  }
+}
+
+function writeMarkdownMaintenanceState(state) {
+  writeJson(knowledgeStorageLayout.markdownMaintenanceStatePath, state);
+  return state;
+}
+
+async function optimizeProjectMarkdown(projects, selectedSlugs = null) {
+  const batchId = `markdown-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+  const state = {
+    schema: markdownMaintenance.SCHEMA,
+    status: 'running',
+    startedAt: new Date().toISOString(),
+    endedAt: null,
+    batchId,
+    completed: 0,
+    failed: 0,
+    review: 0,
+    projects: {},
+  };
+  writeMarkdownMaintenanceState(state);
+  for (const entry of markdownMaintenance.uniqueProjects(projects, selectedSlugs)) {
+    const { slug, project, aliases } = entry;
+    state.projects[slug] = { status: 'running', aliases, startedAt: new Date().toISOString() };
+    writeMarkdownMaintenanceState(state);
+    try {
+      const result = markdownMaintenance.optimizeKnowledgeBase({
+        slug,
+        kbPath: project.kbPath,
+        backupRoot: knowledgeStorageLayout.markdownBackupRoot,
+        batchId,
+      });
+      if (result.status === 'failed') throw new Error(result.error || 'Markdown optimization failed');
+      const vectorIndexes = [];
+      for (const projectSlug of [slug, ...aliases]) {
+        if (projects[projectSlug]?.knowledgeBackend !== 'lancedb' || !result.changed.length) continue;
+        try {
+          vectorIndexes.push({ slug: projectSlug, status: 'succeeded', result: await indexMigratedProject(projectSlug, {}) });
+        } catch (error) {
+          vectorIndexes.push({ slug: projectSlug, status: 'failed', error: error.message });
+        }
+      }
+      const vectorFailed = vectorIndexes.some(item => item.status === 'failed');
+      state.projects[slug] = {
+        status: vectorFailed ? 'completed-with-errors' : result.status,
+        aliases,
+        endedAt: new Date().toISOString(),
+        changed: result.changed,
+        backupDir: result.backupDir,
+        remainingReview: result.after.reviewCount,
+        remainingErrors: result.after.errorCount,
+        vectorIndexes,
+      };
+      if (vectorFailed) state.failed += 1;
+      else state.completed += 1;
+      state.review += result.after.reviewCount + result.after.errorCount;
+    } catch (error) {
+      state.failed += 1;
+      state.projects[slug] = { status: 'failed', aliases, endedAt: new Date().toISOString(), error: error.message };
+    }
+    writeMarkdownMaintenanceState(state);
+  }
+  state.status = state.failed ? 'completed-with-errors' : (state.review ? 'completed-with-review' : 'completed');
+  state.endedAt = new Date().toISOString();
+  state.audit = markdownMaintenance.auditProjects(projects, selectedSlugs).summary;
+  return writeMarkdownMaintenanceState(state);
+}
+
 function knowledgeStorageInfo(config = readKnowledgeStore()) {
   return knowledgeStorageLocation.publicStorageInfo(knowledgeStorageLayout, config.rootPath);
 }
@@ -220,6 +311,7 @@ function knowledgeStorageBusy() {
   return knowledgeMigrationRunning
     || knowledgeMaintenanceRunning
     || knowledgeStorageRelocationRunning
+    || markdownMaintenanceRunning
     || knowledgeActiveQueries > 0
     || knowledgeActiveUpdates > 0
     || [...runningJobs.values()].some(job => job?.status === 'running');
@@ -2303,6 +2395,54 @@ const server = http.createServer(async (req, res) => {
         resolved[slug] = new KnowledgeScopeRegistry({ filePath: KNOWLEDGE_SCOPES_PATH }).resolveProjectScope(projects, slug);
       }
       return send(res, 200, { ok: true, ...registry, resolved });
+    }
+
+    // Markdown compatibility files remain the team-sync and rollback layer.
+    // Audit is read-only; optimization backs up every changed file, rebuilds
+    // derived indexes from scratch, then refreshes affected vector spaces.
+    if (m === 'GET' && p === '/api/knowledge/markdown-maintenance') {
+      const projects = readProjects({ persistMigrations: true });
+      const audit = markdownMaintenance.auditProjects(projects);
+      return send(res, 200, {
+        ok: true,
+        running: !!markdownMaintenanceRunning,
+        ...audit,
+        lastRun: readMarkdownMaintenanceState(),
+        backupRoot: knowledgeStorageLayout.markdownBackupRoot,
+      });
+    }
+
+    if (m === 'POST' && p === '/api/knowledge/markdown-maintenance/optimize') {
+      if (markdownMaintenanceRunning) return send(res, 409, { ok: false, error: 'Markdown knowledge maintenance is already running' });
+      if (knowledgeMigrationRunning || knowledgeMaintenanceRunning || knowledgeStorageRelocationRunning || knowledgeModelDownloadRunning) {
+        return send(res, 409, { ok: false, error: 'wait for active knowledge maintenance and model operations to finish' });
+      }
+      if (knowledgeActiveQueries > 0 || knowledgeActiveUpdates > 0 || [...runningJobs.values()].some(job => job?.status === 'running') || claudeCliRunner.listSessions({}).some(session => session.active)) {
+        return send(res, 409, { ok: false, error: 'wait for active knowledge queries, jobs, and Claude sessions to finish' });
+      }
+      const body = await readBody(req).catch(() => '{}');
+      const parsed = (() => { try { return JSON.parse(body); } catch { return {}; } })();
+      const projects = readProjects({ persistMigrations: true });
+      const slugs = Array.isArray(parsed.slugs) ? parsed.slugs.filter(slug => typeof slug === 'string' && projects[slug]) : null;
+      if (Array.isArray(parsed.slugs) && !slugs.length) return send(res, 400, { ok: false, error: 'no valid project slugs were selected' });
+      markdownMaintenanceRunning = optimizeProjectMarkdown(projects, slugs)
+        .then(result => {
+          logEvent(result.failed ? 'warn' : 'info', 'markdown_knowledge_optimized', 'Markdown knowledge maintenance finished.', {
+            source: 'markdown-maintenance', status: result.status, completed: result.completed, failed: result.failed, batchId: result.batchId,
+          });
+          return result;
+        })
+        .catch(error => {
+          const state = readMarkdownMaintenanceState();
+          state.status = 'failed';
+          state.endedAt = new Date().toISOString();
+          state.error = error.message;
+          writeMarkdownMaintenanceState(state);
+          logEvent('error', 'markdown_knowledge_optimization_failed', error.message, { source: 'markdown-maintenance' });
+          return state;
+        })
+        .finally(() => { markdownMaintenanceRunning = null; });
+      return send(res, 202, { ok: true, started: true, state: readMarkdownMaintenanceState() });
     }
 
     // GET /api/knowledge/migration - startup-safe discovery; does not download the model.

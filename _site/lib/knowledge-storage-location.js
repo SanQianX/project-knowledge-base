@@ -14,6 +14,8 @@ function configuredLayout(rootPath) {
     databaseMaintenancePath: path.join(storageRoot, 'knowledge.lancedb.maintenance.json'),
     maintenanceStatePath: path.join(storageRoot, 'knowledge-maintenance.json'),
     backupRoot: path.join(storageRoot, '_backup', 'knowledge-db'),
+    markdownMaintenanceStatePath: path.join(storageRoot, 'markdown-maintenance.json'),
+    markdownBackupRoot: path.join(storageRoot, '_backup', 'markdown-maintenance'),
   };
 }
 
@@ -27,6 +29,8 @@ function legacyLayout(dataDir) {
     databaseMaintenancePath: path.join(root, 'knowledge.lancedb.maintenance.json'),
     maintenanceStatePath: path.join(root, 'knowledge-maintenance.json'),
     backupRoot: path.join(root, '_backup', 'knowledge-db'),
+    markdownMaintenanceStatePath: path.join(root, 'markdown-maintenance.json'),
+    markdownBackupRoot: path.join(root, '_backup', 'markdown-maintenance'),
   };
 }
 
@@ -40,6 +44,8 @@ function layoutItems(layout) {
     ['database-maintenance', layout.databaseMaintenancePath, 'knowledge.lancedb.maintenance.json'],
     ['maintenance-state', layout.maintenanceStatePath, 'knowledge-maintenance.json'],
     ['backups', layout.backupRoot, path.join('_backup', 'knowledge-db')],
+    ['markdown-maintenance-state', layout.markdownMaintenanceStatePath, 'markdown-maintenance.json'],
+    ['markdown-backups', layout.markdownBackupRoot, path.join('_backup', 'markdown-maintenance')],
   ];
 }
 
