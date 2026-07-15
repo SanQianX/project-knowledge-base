@@ -1053,6 +1053,9 @@
               <button @click="startVectorMigration" class="btn-primary" :disabled="vectorMigrationBusy || !vectorMigration.eligible">
                 {{ vectorMigrationBusy || vectorMigration.running ? t("migrating") : t("migrateAllKnowledge") }}
               </button>
+              <button data-knowledge-db-rebuild @click="startKnowledgeMaintenance" class="btn-primary" :disabled="vectorMigrationBusy || knowledgeMaintenance.running || !knowledgeMaintenance.exists">
+                {{ knowledgeMaintenance.running ? t("compactingDatabase") : t("compactDatabase") }}
+              </button>
             </div>
           </div>
           <div class="mt-4 grid gap-3 sm:grid-cols-3">
@@ -1068,6 +1071,26 @@
                 <div class="mt-1 text-xs muted">{{ item.files }} Markdown · {{ item.knowledgeMode }} · {{ item.migrated ? "LanceDB" : "Markdown" }}</div>
               </div>
               <button v-if="item.migrated" @click="rollbackVectorMigration(item.slug)" class="btn text-xs">{{ t("rollbackToMarkdown") }}</button>
+            </div>
+          </div>
+          <div class="mt-4 rounded-lg border p-3 panel2" data-knowledge-db-maintenance>
+            <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <div class="font-medium">{{ t("databaseMaintenanceTitle") }}</div>
+                <div class="mt-1 text-xs muted">{{ t("databaseMaintenanceHelp") }}</div>
+              </div>
+              <label class="flex items-center gap-2 text-xs"><input type="checkbox" v-model="keepDatabaseBackup" /> {{ t("keepDatabaseBackup") }}</label>
+            </div>
+            <div class="mt-3 grid gap-3 sm:grid-cols-4">
+              <div><div class="text-xs muted">{{ t("databaseSize") }}</div><div class="font-semibold">{{ formatBytes(knowledgeMaintenance.bytes || 0) }}</div></div>
+              <div><div class="text-xs muted">{{ t("databaseRows") }}</div><div class="font-semibold">{{ knowledgeMaintenance.rows || 0 }}</div></div>
+              <div><div class="text-xs muted">{{ t("databaseVersions") }}</div><div class="font-semibold">{{ knowledgeMaintenance.versions || 0 }}</div></div>
+              <div><div class="text-xs muted">{{ t("reclaimedSpace") }}</div><div class="font-semibold">{{ formatBytes(knowledgeMaintenance.reclaimedBytes || 0) }}</div></div>
+            </div>
+            <div v-if="knowledgeMaintenance.ftsUpgradeRequired" class="mt-2 text-xs" style="color: var(--warn)">{{ t("ftsUpgradeRequired") }}</div>
+            <div v-if="knowledgeMaintenance.backupRetained && knowledgeMaintenance.lastBackupPath" class="mt-3 flex flex-wrap items-center gap-2 text-xs">
+              <span class="break-all muted">{{ knowledgeMaintenance.lastBackupPath }}</span>
+              <button @click="rollbackKnowledgeMaintenance" class="btn text-xs">{{ t("rollbackDatabase") }}</button>
             </div>
           </div>
           <p class="mt-3 text-xs muted">{{ vectorMigrationMessage || t("vectorMigrationSafety") }}</p>
@@ -1672,6 +1695,17 @@ const I18N = {
     migrationStatus: "Migration status",
     rollbackToMarkdown: "Roll back to Markdown",
     vectorMigrationSafety: "Original Markdown and a migration backup are retained. Team Git remains the sync transport; vectors are generated locally.",
+    databaseMaintenanceTitle: "Vector database storage maintenance",
+    databaseMaintenanceHelp: "Build a compact database from current valid rows, verify vector and keyword retrieval, then atomically switch. The original stays active if verification fails.",
+    compactDatabase: "Compact database",
+    compactingDatabase: "Compacting database...",
+    databaseSize: "Database size",
+    databaseRows: "Current chunks",
+    databaseVersions: "Stored versions",
+    reclaimedSpace: "Reclaimed",
+    keepDatabaseBackup: "Keep old database for manual rollback (uses disk space)",
+    rollbackDatabase: "Rollback database",
+    ftsUpgradeRequired: "The v4.0.0 full-text index is waiting for safe atomic rebuild; in-place optimization is disabled.",
     knowledgeRelations: "Related project knowledge",
     knowledgeRelationsHelp: "Select projects whose knowledge may be searched together with this project. Relationships are explicit and bidirectional.",
     primaryKnowledgeSpace: "Primary write space",
@@ -2126,6 +2160,17 @@ const I18N = {
     migrationStatus: "迁移状态",
     rollbackToMarkdown: "回退到 Markdown",
     vectorMigrationSafety: "原 Markdown 和迁移备份都会保留；团队 Git 继续负责同步，向量只在每台机器本地生成。",
+    databaseMaintenanceTitle: "向量数据库空间维护",
+    databaseMaintenanceHelp: "从当前有效数据创建紧凑数据库，验证向量和关键词检索后原子切换；验证失败时原数据库保持不变。",
+    compactDatabase: "压缩数据库",
+    compactingDatabase: "正在压缩数据库...",
+    databaseSize: "数据库大小",
+    databaseRows: "当前分块",
+    databaseVersions: "存储版本",
+    reclaimedSpace: "已回收空间",
+    keepDatabaseBackup: "保留旧数据库用于手动回滚（继续占用磁盘）",
+    rollbackDatabase: "回滚数据库",
+    ftsUpgradeRequired: "检测到 4.0.0 全文索引，正在等待安全原子重建；已禁止就地优化。",
     knowledgeRelations: "关联项目知识库",
     knowledgeRelationsHelp: "选择可与当前项目一起检索的项目知识库；关联关系显式保存并默认双向生效。",
     primaryKnowledgeSpace: "主写入空间",
@@ -2618,6 +2663,8 @@ const app = createApp({
     const vectorMigrationBusy = ref(false);
     const vectorMigrationMessage = ref("");
     const vectorModelStatus = ref({ modelId: "Xenova/bge-small-zh-v1.5", installed: false, bytes: 0 });
+    const knowledgeMaintenance = ref({ status: "idle", running: false, exists: false, bytes: 0, rows: 0, versions: 0, reclaimedBytes: 0 });
+    const keepDatabaseBackup = ref(false);
     let vectorMigrationTimer = null;
     const loggingConfig = reactive({ schema: "logging/v1", rootPath: "", retentionDays: 30, levels: ["info", "warn", "error"] });
     const loading = ref(false);
@@ -4912,15 +4959,18 @@ const app = createApp({
     }
 
     async function loadVectorMigration() {
-      const [migration, model] = await Promise.all([
+      const [migration, model, maintenance] = await Promise.all([
         api("GET", "/api/knowledge/migration"),
         api("GET", "/api/knowledge/model/status").catch(() => vectorModelStatus.value),
+        api("GET", "/api/knowledge/maintenance").catch(() => knowledgeMaintenance.value),
       ]);
       vectorMigration.value = migration;
       vectorModelStatus.value = model;
-      vectorMigrationBusy.value = migration.running === true;
+      knowledgeMaintenance.value = maintenance;
+      vectorMigrationBusy.value = migration.running === true || maintenance.running === true;
+      if (maintenance.status === "failed" && maintenance.error) vectorMigrationMessage.value = maintenance.error;
       if (vectorMigrationTimer) { clearTimeout(vectorMigrationTimer); vectorMigrationTimer = null; }
-      if (migration.running) {
+      if (migration.running || maintenance.running) {
         vectorMigrationTimer = setTimeout(() => loadVectorMigration().catch(() => {}), 1000);
       } else if (migration.status === "completed" || migration.status === "completed-with-errors") {
         await refreshAll({ force: true });
@@ -4948,6 +4998,31 @@ const app = createApp({
         await loadVectorMigration();
       } catch (e) {
         vectorMigrationMessage.value = e.message;
+      }
+    }
+
+    async function startKnowledgeMaintenance() {
+      vectorMigrationBusy.value = true;
+      vectorMigrationMessage.value = "";
+      try {
+        await api("POST", "/api/knowledge/maintenance/rebuild", { keepBackup: keepDatabaseBackup.value === true });
+        vectorMigrationMessage.value = t("compactingDatabase");
+        await loadVectorMigration();
+      } catch (e) {
+        vectorMigrationMessage.value = e.message;
+        vectorMigrationBusy.value = false;
+      }
+    }
+
+    async function rollbackKnowledgeMaintenance() {
+      vectorMigrationBusy.value = true;
+      try {
+        await api("POST", "/api/knowledge/maintenance/rollback", {});
+        await loadVectorMigration();
+      } catch (e) {
+        vectorMigrationMessage.value = e.message;
+      } finally {
+        vectorMigrationBusy.value = false;
       }
     }
 
@@ -5799,7 +5874,7 @@ const app = createApp({
       kbRoot, projects, schedule, lastRun, runningJobs, jobHistory, selectedJob, logOutput, logTitle,
       summaryPanel, pendingCommitItems, supervisionIssues, issuesByProject, structuredLogs, selectedLog, logFilters,
       knowledgeStoreConfig, knowledgeMigrationPlan, loggingConfig,
-      vectorMigration, vectorMigrationBusy, vectorMigrationMessage, vectorModelStatus, loadVectorMigration, startVectorMigration, rollbackVectorMigration,
+      vectorMigration, vectorMigrationBusy, vectorMigrationMessage, vectorModelStatus, knowledgeMaintenance, keepDatabaseBackup, loadVectorMigration, startVectorMigration, rollbackVectorMigration, startKnowledgeMaintenance, rollbackKnowledgeMaintenance,
       githubAuthForm, githubProviderForm, githubStatus, githubOAuth, gitProviders, githubAuthModal, githubStores, githubStoresMessage, githubBusy, selectedTeamStoreKey, selectedTeamKbKey, teamKbStorePath,
       teamStoreSetup, teamStorePreview, teamStoreBusy, teamStoreMessage, teamStoreError, pickingTeamStoreFolder,
       selectedTeamStore, selectedTeamStoreKnowledgeBases, selectedTeamKb, githubStatusText, githubHeaderLabel, gitOAuthAvailable, giteaProvider, giteaOAuthRedirectUri,

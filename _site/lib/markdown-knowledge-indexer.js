@@ -136,13 +136,16 @@ class MarkdownKnowledgeIndexer {
     const rawChunks = chunkMarkdown(markdown, { maxChars: this.maxChars, overlapChars: this.overlapChars });
     const chunks = [];
     for (const chunk of rawChunks) {
-      const searchText = [title, chunk.headingPath.join(' > '), chunk.chunkText].filter(Boolean).join('\n');
+      const embeddingText = [title, chunk.headingPath.join(' > '), chunk.chunkText].filter(Boolean).join('\n');
       chunks.push({
         ...chunk,
         title,
         entryType: inferEntryType(relativePath),
-        searchText,
-        vector: await this.embedder.embedPassage(searchText),
+        // Keyword search now indexes chunk_text directly. Keep only compact
+        // title/heading metadata in the legacy search_text column so new rows
+        // do not duplicate the entire document body.
+        searchText: [title, chunk.headingPath.join(' > ')].filter(Boolean).join('\n'),
+        vector: await this.embedder.embedPassage(embeddingText),
         sourcePaths: input.sourcePaths || [],
         sourceProjectId: input.sourceProjectId || '',
         sourceCommit: input.sourceCommit || '',

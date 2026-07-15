@@ -120,6 +120,34 @@ class KnowledgeDatabase {
     return Array.from(new Set(rows.map(row => String(row.entry_id)))).sort();
   }
 
+  async allRows() {
+    await this.open();
+    return this.table.query().toArray();
+  }
+
+  async addRows(rows) {
+    await this.open();
+    if (!Array.isArray(rows) || !rows.length) return { ok: true, added: 0 };
+    if (await this.table.countRows()) throw new Error('bulk destination table must be empty');
+    await this.table.add(rows);
+    return { ok: true, added: rows.length };
+  }
+
+  async versions() {
+    await this.open();
+    return this.table.listVersions();
+  }
+
+  async indexDetails() {
+    await this.open();
+    const indices = await this.table.listIndices();
+    const out = [];
+    for (const index of indices) {
+      out.push({ ...index, statistics: await this.table.indexStats(index.name) });
+    }
+    return out;
+  }
+
   async getEntry(entryId, options = {}) {
     await this.open();
     const predicates = [inPredicate('space_id', options.spaceIds || []), `entry_id = ${sqlString(entryId)}`];
@@ -220,13 +248,15 @@ class KnowledgeDatabase {
     // both generations alive until Lance's old-version retention expires and
     // could exhaust the user's disk. Mark it for the atomic rebuild workflow
     // instead. New databases create the compact v2 index immediately.
-    if (existing.has('search_text_idx') && state.ftsSchemaVersion === 0) {
+    if (existing.has('search_text_idx') && !existing.has('chunk_text_idx') && state.ftsSchemaVersion === 0) {
       state = this.saveMaintenanceState({ ftsSchemaVersion: 1, ftsUpgradeRequired: true });
     }
     const definitions = [
       ['space_id', 'space_id_idx', lancedb.Index.bitmap()],
       ['entry_id', 'entry_id_idx', lancedb.Index.btree()],
-      ['search_text', 'search_text_idx', lancedb.Index.fts({
+    ];
+    if (!existing.has('search_text_idx') || existing.has('chunk_text_idx')) {
+      definitions.push(['chunk_text', 'chunk_text_idx', lancedb.Index.fts({
         baseTokenizer: 'ngram',
         ngramMinLength: 2,
         // Chinese bigrams preserve exact keyword recall without creating the
@@ -235,14 +265,14 @@ class KnowledgeDatabase {
         withPosition: false,
         stem: false,
         removeStopWords: false,
-      })],
-    ];
+      })]);
+    }
     for (const [column, name, config] of definitions) {
       if (existing.has(name)) continue;
       await this.table.createIndex(column, { name, config, replace: false, waitTimeoutSeconds: 60 });
       created.push(name);
     }
-    if (created.includes('search_text_idx')) {
+    if (created.includes('chunk_text_idx') || existing.has('chunk_text_idx')) {
       state = this.saveMaintenanceState({ ftsSchemaVersion: FTS_SCHEMA_VERSION, ftsUpgradeRequired: false });
     }
     return {
@@ -289,8 +319,11 @@ class KnowledgeDatabase {
     const queryText = String(text || '').trim();
     if (!queryText) throw new Error('search text is required');
     const limit = Math.max(1, Math.min(Number(options.limit || 10), 100));
+    const ftsColumn = this.maintenanceState().ftsSchemaVersion >= FTS_SCHEMA_VERSION
+      ? 'chunk_text'
+      : 'search_text';
     const rows = await this.table.query()
-      .fullTextSearch(queryText)
+      .fullTextSearch(queryText, { columns: ftsColumn })
       .where(inPredicate('space_id', options.spaceIds || []))
       .limit(limit)
       .toArray();

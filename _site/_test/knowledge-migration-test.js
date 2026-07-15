@@ -108,6 +108,23 @@ function fakeVector(text) {
       assert.match(searched.results[0].chunk_text, /迁移接口测试/);
       const asked = await request('POST', '/api/knowledge/ask', { projectSlug: 'api', query: '迁移接口', limit: 5 });
       assert.match(asked.answer, /相关知识记录/);
+      const maintenanceBefore = await request('GET', '/api/knowledge/maintenance');
+      assert.equal(maintenanceBefore.rows, 1);
+      assert.equal(maintenanceBefore.exists, true);
+      const rebuildStarted = await request('POST', '/api/knowledge/maintenance/rebuild', { keepBackup: false });
+      assert.equal(rebuildStarted.started, true);
+      let maintenanceAfter;
+      for (let i = 0; i < 100; i++) {
+        maintenanceAfter = await request('GET', '/api/knowledge/maintenance');
+        if (!maintenanceAfter.running && maintenanceAfter.status === 'completed') break;
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      assert.equal(maintenanceAfter.status, 'completed');
+      assert.equal(maintenanceAfter.rows, 1);
+      assert.equal(maintenanceAfter.ftsSchemaVersion, 2);
+      assert.equal(maintenanceAfter.backupRetained, false);
+      const searchedAfterRebuild = await request('POST', '/api/knowledge/search', { projectSlug: 'api', query: 'migration API', limit: 5 });
+      assert.equal(searchedAfterRebuild.results[0].space_id, savedProjects.api.primarySpaceId);
       const rolledBack = await request('POST', '/api/projects/api/knowledge-migration/rollback', {});
       assert.equal(rolledBack.knowledgeBackend, 'markdown');
       assert.equal(rolledBack.retainedDatabase, true);

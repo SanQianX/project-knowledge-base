@@ -69,12 +69,6 @@ function vectorAt(index) {
     assert.equal(initialIndexes.ftsSchemaVersion, 2);
     assert.equal(initialIndexes.ftsUpgradeRequired, false);
     assert.equal(db.maintenanceState().ftsSchemaVersion, 2);
-    db.saveMaintenanceState({ ftsSchemaVersion: 0, ftsUpgradeRequired: false });
-    const legacyIndexes = await db.ensureSearchIndexes();
-    assert.equal(legacyIndexes.ftsSchemaVersion, 1, 'an existing unversioned FTS index should be treated as v4.0.0');
-    assert.equal(legacyIndexes.ftsUpgradeRequired, true, 'legacy FTS should wait for atomic rebuild instead of rebuilding in place');
-    assert.equal((await db.maybeOptimize({ force: true })).blockedBy, 'fts-upgrade-required', 'legacy FTS must not be expanded by in-place optimization');
-    db.saveMaintenanceState({ ftsSchemaVersion: 2, ftsUpgradeRequired: false });
     const keyword = await db.fullTextSearch('短期访问令牌', { spaceIds: ['personal:alpha'], limit: 5 });
     assert.equal(keyword.length, 1);
     const hybrid = await db.hybridSearch({ text: '短期访问令牌', vector: vectorAt(0), spaceIds: ['personal:alpha'], limit: 5 });

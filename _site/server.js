@@ -42,6 +42,7 @@ const { KnowledgeDatabase } = require('./lib/knowledge-db');
 const { LocalEmbeddingService, DEFAULT_MODEL_ID } = require('./lib/embedding-service');
 const { MarkdownKnowledgeIndexer } = require('./lib/markdown-knowledge-indexer');
 const { KnowledgeMigrationManager } = require('./lib/knowledge-migration');
+const { KnowledgeMaintenanceManager } = require('./lib/knowledge-maintenance');
 const { EMBEDDING_DIMENSIONS } = require('./lib/knowledge-schema');
 const { KnowledgeQueryService } = require('./lib/knowledge-query-service');
 
@@ -86,6 +87,9 @@ let claudeMdAuditCache = null;
 let claudeMdRefreshRunning = false;
 let knowledgeRuntimeCache = null;
 let knowledgeMigrationRunning = null;
+let knowledgeMaintenanceRunning = null;
+let knowledgeActiveQueries = 0;
+let knowledgeActiveUpdates = 0;
 
 function fakeEmbedding(text) {
   const vector = new Array(EMBEDDING_DIMENSIONS).fill(0);
@@ -113,15 +117,30 @@ function knowledgeRuntime() {
 }
 
 async function indexMigratedProject(slug, run = {}) {
+  if (knowledgeMaintenanceRunning) await knowledgeMaintenanceRunning.catch(() => {});
   const projects = readProjects({ persistMigrations: false });
   const project = projects[slug];
   if (!project || project.knowledgeBackend !== 'lancedb') return { ok: true, skipped: true, reason: 'project is not using LanceDB' };
+  knowledgeActiveUpdates += 1;
+  try {
+    const runtime = knowledgeRuntime();
+    return await runtime.indexer.indexDirectory({
+      kbPath: project.kbPath || project.legacyKbPath,
+      spaceId: project.primarySpaceId,
+      sourceProjectId: slug,
+      sourceCommit: run.headCommitAtRun || project.headCommit || project.lastAnalyzedCommit || '',
+    });
+  } finally {
+    knowledgeActiveUpdates -= 1;
+  }
+}
+
+function createKnowledgeMaintenanceManager() {
   const runtime = knowledgeRuntime();
-  return runtime.indexer.indexDirectory({
-    kbPath: project.kbPath || project.legacyKbPath,
-    spaceId: project.primarySpaceId,
-    sourceProjectId: slug,
-    sourceCommit: run.headCommitAtRun || project.headCommit || project.lastAnalyzedCommit || '',
+  return new KnowledgeMaintenanceManager({
+    dataDir: DATA_DIR,
+    dbPath: KNOWLEDGE_DB_PATH,
+    database: runtime.database,
   });
 }
 
@@ -2153,6 +2172,7 @@ const server = http.createServer(async (req, res) => {
     // POST /api/knowledge/migration/start - resumable batch migration in the background.
     if (m === 'POST' && p === '/api/knowledge/migration/start') {
       if (knowledgeMigrationRunning) return send(res, 409, { ok: false, error: 'knowledge migration is already running' });
+      if (knowledgeMaintenanceRunning) return send(res, 409, { ok: false, error: 'knowledge database maintenance is running' });
       const body = await readBody(req).catch(() => '{}');
       const parsed = (() => { try { return JSON.parse(body); } catch { return {}; } })();
       const projects = readProjects({ persistMigrations: true });
@@ -2169,6 +2189,52 @@ const server = http.createServer(async (req, res) => {
         logEvent('error', 'knowledge_migration_failed', error.message, { source: 'knowledge-migration' });
       }).finally(() => { knowledgeMigrationRunning = null; });
       return send(res, 202, { ok: true, started: true, status: manager.state() });
+    }
+
+    // GET /api/knowledge/maintenance - disk usage and rebuild status.
+    if (m === 'GET' && p === '/api/knowledge/maintenance') {
+      const manager = createKnowledgeMaintenanceManager();
+      const status = await manager.inspect({ openDatabase: !knowledgeMaintenanceRunning });
+      return send(res, 200, { ...status, running: !!knowledgeMaintenanceRunning || status.running === true });
+    }
+
+    // POST /api/knowledge/maintenance/rebuild - create, verify, and atomically
+    // swap a compact database. The original remains untouched on failure.
+    if (m === 'POST' && p === '/api/knowledge/maintenance/rebuild') {
+      if (knowledgeMaintenanceRunning) return send(res, 409, { ok: false, error: 'knowledge database maintenance is already running' });
+      if (knowledgeMigrationRunning) return send(res, 409, { ok: false, error: 'knowledge migration is running' });
+      if (knowledgeActiveQueries > 0 || knowledgeActiveUpdates > 0 || [...runningJobs.values()].some(job => job?.status === 'running')) {
+        return send(res, 409, { ok: false, error: 'wait for active knowledge queries and jobs to finish' });
+      }
+      const body = await readBody(req).catch(() => '{}');
+      const parsed = (() => { try { return JSON.parse(body); } catch { return {}; } })();
+      const manager = createKnowledgeMaintenanceManager();
+      knowledgeMaintenanceRunning = manager.rebuild({ keepBackup: parsed.keepBackup === true })
+        .then(result => {
+          logEvent('info', 'knowledge_database_rebuilt', 'Knowledge database was rebuilt and verified.', {
+            source: 'knowledge-maintenance', beforeBytes: result.beforeBytes, afterBytes: result.afterBytes,
+          });
+          return result;
+        })
+        .catch(error => {
+          logEvent('error', 'knowledge_database_rebuild_failed', error.message, { source: 'knowledge-maintenance' });
+          return manager.state();
+        })
+        .finally(() => { knowledgeMaintenanceRunning = null; });
+      return send(res, 202, { ok: true, started: true });
+    }
+
+    if (m === 'POST' && p === '/api/knowledge/maintenance/rollback') {
+      if (knowledgeMaintenanceRunning || knowledgeMigrationRunning) return send(res, 409, { ok: false, error: 'knowledge database is busy' });
+      if (knowledgeActiveQueries > 0 || knowledgeActiveUpdates > 0 || [...runningJobs.values()].some(job => job?.status === 'running')) {
+        return send(res, 409, { ok: false, error: 'wait for active knowledge queries and jobs to finish' });
+      }
+      try {
+        const result = await createKnowledgeMaintenanceManager().rollbackBackup();
+        return send(res, 200, result);
+      } catch (error) {
+        return send(res, 400, { ok: false, error: error.message });
+      }
     }
 
     if (m === 'POST' && p.startsWith('/api/projects/') && p.endsWith('/knowledge-migration/rollback')) {
@@ -2199,7 +2265,9 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (m === 'POST' && (p === '/api/knowledge/search' || p === '/api/knowledge/ask')) {
+      if (knowledgeMaintenanceRunning) return send(res, 503, { ok: false, error: 'knowledge database maintenance is running' });
       const body = JSON.parse(await readBody(req));
+      knowledgeActiveQueries += 1;
       try {
         const service = createKnowledgeQueryService();
         const result = p.endsWith('/ask')
@@ -2208,10 +2276,14 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, result);
       } catch (error) {
         return send(res, /not been migrated/.test(error.message) ? 409 : 400, { ok: false, error: error.message });
+      } finally {
+        knowledgeActiveQueries -= 1;
       }
     }
 
     if (m === 'GET' && p === '/api/knowledge/entry') {
+      if (knowledgeMaintenanceRunning) return send(res, 503, { ok: false, error: 'knowledge database maintenance is running' });
+      knowledgeActiveQueries += 1;
       try {
         const result = await createKnowledgeQueryService().get({
           projectSlug: url.searchParams.get('projectSlug'),
@@ -2221,10 +2293,14 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, result);
       } catch (error) {
         return send(res, 400, { ok: false, error: error.message });
+      } finally {
+        knowledgeActiveQueries -= 1;
       }
     }
 
     if (m === 'GET' && p === '/api/knowledge/history') {
+      if (knowledgeMaintenanceRunning) return send(res, 503, { ok: false, error: 'knowledge database maintenance is running' });
+      knowledgeActiveQueries += 1;
       try {
         const result = await createKnowledgeQueryService().history({
           projectSlug: url.searchParams.get('projectSlug'),
@@ -2233,6 +2309,8 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, result);
       } catch (error) {
         return send(res, 400, { ok: false, error: error.message });
+      } finally {
+        knowledgeActiveQueries -= 1;
       }
     }
 
