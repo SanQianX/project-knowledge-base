@@ -1,0 +1,33 @@
+{
+  "name": "project-knowledge-desktop",
+  "productName": "Project Knowledge",
+  "version": "4.0.4",
+  "description": "Windows desktop application for project-knowledge",
+  "main": "main.cjs",
+  "author": "SanQianX",
+  "license": "Apache-2.0",
+  "private": true,
+  "scripts": {
+    "prepare-core": "node scripts/prepare-core.cjs",
+    "start": "npm run prepare-core && electron-forge start",
+    "package": "npm run prepare-core && electron-forge package --arch=x64",
+    "make": "npm run prepare-core && electron-forge make --arch=x64",
+    "test": "node test/desktop-runtime-test.cjs",
+    "test:packaged": "node test/packaged-smoke.cjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.141",
+    "@huggingface/transformers": "3.8.1",
+    "@lancedb/lancedb": "0.31.0",
+    "apache-arrow": "18.1.0",
+    "project-knowledge": "file:..",
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "7.11.2",
+    "@electron-forge/maker-squirrel": "7.11.2",
+    "electron": "43.1.1",
+    "png-to-ico": "3.0.1",
+    "sharp": "0.34.5"
+  }
+}

@@ -9,6 +9,8 @@ Thumbs.db
 __pycache__/
 *.pyc
 dist/
+desktop/out/
+desktop/.core-package/
 .venv/
 
 # Test artifacts and dev logs (regenerated on demand; do not push)

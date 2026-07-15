@@ -11,7 +11,7 @@
   <a href="https://www.npmjs.com/package/project-knowledge"><img src="https://img.shields.io/npm/v/project-knowledge.svg?style=flat-square" alt="npm"></a>
   <img src="https://img.shields.io/node/v/project-knowledge.svg?style=flat-square" alt="Node 18+">
   <img src="https://img.shields.io/github/license/SanQianX/project-knowledge-base?style=flat-square" alt="Apache-2.0">
-  <a href="https://github.com/SanQianX/project-knowledge-base/actions"><img src="https://img.shields.io/badge/tests-48%20passed-2f7d64?style=flat-square" alt="Tests"></a>
+  <a href="https://github.com/SanQianX/project-knowledge-base/actions"><img src="https://img.shields.io/badge/tests-50%20passed-2f7d64?style=flat-square" alt="Tests"></a>
   <a href="#star-history"><img src="https://img.shields.io/badge/star_history-⬇-7492a5?style=flat-square" alt="Star history"></a>
 </p>
 
@@ -22,6 +22,24 @@
 ---
 
 ## Install
+
+### Windows desktop application
+
+Download `Project-Knowledge-<version>-Setup.exe` from the latest GitHub
+Release and run it. The desktop application uses the same
+`~/.project-knowledge/` configuration, configured knowledge root, Markdown,
+model cache, and LanceDB database as the npm version; it does not copy or
+re-vectorize existing data. Closing the window keeps the application and Git
+hooks alive in the system tray. Choose **Quit** from the tray to stop a backend
+started by the desktop application.
+
+If the npm CLI is already running, the desktop window safely reuses that
+backend instead of opening a second LanceDB writer. Git must still be available
+on `PATH`. Until Windows code signing is configured, SmartScreen can show an
+unrecognized-publisher warning; download installers only from this repository's
+GitHub Releases page.
+
+### npm / browser application
 
 ```bash
 npm install -g project-knowledge
