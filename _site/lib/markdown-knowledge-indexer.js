@@ -6,6 +6,7 @@ const CHUNKER_VERSION = 1;
 const DEFAULT_MAX_CHARS = 1200;
 const DEFAULT_OVERLAP_CHARS = 120;
 const EXCLUDED_DIRS = new Set(['.git', '_ai', '_backup', 'node_modules']);
+const DERIVED_INDEX_FILENAME = '00-index.md';
 
 function normalizeRel(value) {
   return String(value || '').replace(/\\/g, '/').replace(/^\.\//, '');
@@ -79,14 +80,19 @@ function chunkMarkdown(markdown, options = {}) {
   return chunks;
 }
 
-function listMarkdownFiles(root) {
+function isDerivedIndex(filePath) {
+  return path.basename(String(filePath || '')).toLowerCase() === DERIVED_INDEX_FILENAME;
+}
+
+function listMarkdownFiles(root, options = {}) {
+  const includeDerived = options.includeDerived === true;
   const files = [];
   const walk = (dir) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       if (entry.name.startsWith('.') || EXCLUDED_DIRS.has(entry.name)) continue;
       const abs = path.join(dir, entry.name);
       if (entry.isDirectory()) walk(abs);
-      else if (entry.isFile() && /\.md$/i.test(entry.name)) files.push(abs);
+      else if (entry.isFile() && /\.md$/i.test(entry.name) && (includeDerived || !isDerivedIndex(entry.name))) files.push(abs);
     }
   };
   if (fs.existsSync(root)) walk(path.resolve(root));
@@ -182,5 +188,6 @@ module.exports = {
   CHUNKER_VERSION,
   chunkMarkdown,
   listMarkdownFiles,
+  isDerivedIndex,
   inferEntryType,
 };

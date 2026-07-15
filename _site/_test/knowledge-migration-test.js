@@ -46,6 +46,7 @@ function fakeVector(text) {
     fs.mkdirSync(path.join(teamKb, 'changes'), { recursive: true });
     fs.writeFileSync(path.join(personalKb, 'GOAL.md'), '# API 目标\n\n提供稳定认证接口。\n', 'utf8');
     fs.writeFileSync(path.join(personalKb, 'modules', 'auth.md'), '# 认证\n\n刷新令牌可轮换。\n', 'utf8');
+    fs.writeFileSync(path.join(personalKb, 'modules', '00-index.md'), '# Modules Index\n\nTags: derived\n', 'utf8');
     fs.writeFileSync(path.join(teamKb, 'README.md'), '# 团队知识\n\n多项目共享约定。\n', 'utf8');
     fs.writeFileSync(path.join(teamKb, 'changes', 'abc.md'), '# 变更\n\n统一请求标识。\n', 'utf8');
 
@@ -73,6 +74,8 @@ function fakeVector(text) {
     assert.equal(await db.count(['project:api']), 2);
     assert.equal(await db.count(['team:store:shared']), 2);
     assert.ok(fs.existsSync(path.join(result.projects.api.backupPath, 'migration-manifest.json')));
+    assert.ok(fs.existsSync(path.join(result.projects.api.backupPath, 'modules', '00-index.md')), 'compatibility index must remain in the migration backup');
+    assert(!((await db.entryIds('project:api')).includes('modules/00-index.md')), 'compatibility index must not enter LanceDB');
     assert.ok(fs.existsSync(path.join(personalKb, 'GOAL.md')), 'legacy Markdown must remain untouched');
     const second = await manager.migrateAll(projects);
     assert.equal(second.message, 'no legacy projects need migration');

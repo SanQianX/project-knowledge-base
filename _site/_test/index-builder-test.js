@@ -1,0 +1,38 @@
+const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { regenerateIndexes } = require('../lib/index-builder');
+
+const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'index-builder-test-'));
+
+try {
+  const modules = path.join(temp, 'modules');
+  const changes = path.join(temp, 'changes');
+  fs.mkdirSync(modules, { recursive: true });
+  fs.mkdirSync(changes, { recursive: true });
+
+  const manyTags = Array.from({ length: 40 }, (_, index) => `tag-${index}`);
+  fs.writeFileSync(path.join(modules, 'core.md'), `---\ntitle: Core\ntags: [${manyTags.join(', ')}]\nsourcePaths: [${manyTags.map(tag => `src/${tag}.js`).join(', ')}]\nsymbols: [${manyTags.map(tag => `symbol-${tag}`).join(', ')}]\n---\n# Core\n`, 'utf8');
+
+  for (let index = 0; index < 105; index++) {
+    const day = String((index % 28) + 1).padStart(2, '0');
+    fs.writeFileSync(path.join(changes, `change-${String(index).padStart(3, '0')}.md`), `---\ntitle: Change ${index}\ntags: [${manyTags.join(', ')}]\naffectedModules: [core, api, ui, worker, storage, release]\nupdatedAt: 2026-07-${day}\ndevelopmentIntent: ${'Long intent '.repeat(80)}\n---\n# Change ${index}\n`, 'utf8');
+  }
+
+  regenerateIndexes(temp);
+  const moduleIndex = fs.readFileSync(path.join(modules, '00-index.md'), 'utf8');
+  const changeIndex = fs.readFileSync(path.join(changes, '00-index.md'), 'utf8');
+
+  assert(!/^Tags:/m.test(moduleIndex), 'module index must not aggregate all tags');
+  assert(!/^Tags:/m.test(changeIndex), 'change index must not aggregate all tags');
+  assert(moduleIndex.includes('tag-0, tag-1, tag-2, tag-3, tag-4, tag-5 (+34)'), 'tags should be capped with a remainder count');
+  assert(changeIndex.includes('Items: 105 (showing 100;'), 'large change indexes should be bounded');
+  assert.equal((changeIndex.match(/^\| \[/gm) || []).length, 100, 'only the most recent 100 entries should be listed');
+  assert(Math.max(...moduleIndex.split(/\r?\n/).map(line => line.length)) < 900, 'module index lines should stay compact');
+  assert(Math.max(...changeIndex.split(/\r?\n/).map(line => line.length)) < 900, 'change index lines should stay compact');
+
+  console.log('index-builder-test: PASS');
+} finally {
+  fs.rmSync(temp, { recursive: true, force: true });
+}

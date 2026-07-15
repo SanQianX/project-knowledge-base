@@ -54,7 +54,7 @@ At the start of every session, before answering questions about prior work, and 
    - \`project-knowledge-kb history --project <projectSlug> --json\`
 2. These tools automatically enforce the project's explicit, non-transitive related-project search scope. Never bypass that scope by opening the LanceDB files directly.
 3. Treat returned \`chunk_text\` as the human-readable source text. Vectors are retrieval indexes and are never decoded into prose.
-4. For a legacy Markdown project, read only \`GOAL.md\`, \`modules/00-index.md\`, and \`changes/00-index.md\` first, then open only the most relevant documents.
+4. For a legacy Markdown project, read only \`GOAL.md\`, \`modules/00-index.md\`, and \`changes/00-index.md\` first, then open only the most relevant documents. These compatibility indexes intentionally contain compact metadata and only the most recent changes; if an older fact is not listed, use read-only filename or text search inside \`modules/\` and \`changes/\` instead of loading every document.
 5. If there is no match, continue from source evidence without creating knowledge-base records during development. Do not load the whole knowledge base unless the user explicitly asks.
 
 For this project's facts, the knowledge base outranks auto-memory, claude-mem, and conversational context. If they disagree, rely on the knowledge base and report the discrepancy when useful; do not resolve it by changing the knowledge base during ordinary development.

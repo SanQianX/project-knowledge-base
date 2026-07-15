@@ -1,6 +1,12 @@
 const fs = require('fs');
 const path = require('path');
 
+const MAX_INDEX_ITEMS = 100;
+const MAX_TAGS = 6;
+const MAX_SOURCE_PATHS = 4;
+const MAX_LOOKUPS = 6;
+const MAX_CELL_CHARS = 240;
+
 function parseFrontmatter(text) {
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/.exec(String(text || ''));
   if (!match) return {};
@@ -31,46 +37,52 @@ function listMarkdown(dir) {
     });
 }
 
-function tagLine(items) {
-  const tags = new Set();
-  for (const item of items) {
-    const raw = item.meta.tags;
-    if (Array.isArray(raw)) raw.forEach(t => tags.add(t));
-    else if (raw) String(raw).split(',').map(s => s.trim()).filter(Boolean).forEach(t => tags.add(t));
-  }
-  return [...tags].sort();
-}
-
 function metaList(value) {
   if (Array.isArray(value)) return value.filter(Boolean);
   if (!value) return [];
   return String(value).split(',').map(s => s.trim()).filter(Boolean);
 }
 
-function cell(value) {
+function compactList(value, limit) {
+  const items = metaList(value);
+  if (items.length <= limit) return items.join(', ');
+  return `${items.slice(0, limit).join(', ')} (+${items.length - limit})`;
+}
+
+function cell(value, maxChars = MAX_CELL_CHARS) {
   const text = Array.isArray(value) ? value.join(', ') : String(value || '');
-  return text.replace(/\r?\n/g, ' ').replace(/\|/g, '\\|') || '-';
+  const clean = text.replace(/\r?\n/g, ' ').replace(/\|/g, '\\|').trim();
+  if (!clean) return '-';
+  return clean.length > maxChars ? `${clean.slice(0, Math.max(1, maxChars - 1)).trimEnd()}…` : clean;
+}
+
+function indexSummary(total, shown) {
+  return shown < total
+    ? `Items: ${total} (showing ${shown}; use knowledge search or file search for older entries)`
+    : `Items: ${total}`;
 }
 
 function writeModuleIndex(kbPath) {
   const dir = path.join(kbPath, 'modules');
   fs.mkdirSync(dir, { recursive: true });
   const items = listMarkdown(dir).sort((a, b) => a.title.localeCompare(b.title));
-  const tags = tagLine(items);
+  // Modules describe the current system shape, so keep every module visible.
+  // Their individual metadata cells are still bounded below.
+  const visible = items;
   const lines = [
     '# Modules Index',
     '',
-    tags.length ? `Tags: ${tags.map(t => `\`${t}\``).join(', ')}` : 'Tags: none',
+    indexSummary(items.length, visible.length),
     '',
     '| Module | Tags | Source Paths | Routes / Symbols | Updated |',
     '|---|---|---|---|---|',
   ];
-  for (const item of items) {
-    const tagsText = metaList(item.meta.tags).join(', ');
-    const sourcePaths = metaList(item.meta.sourcePaths).join(', ');
-    const routes = metaList(item.meta.routes).join(', ');
-    const symbols = metaList(item.meta.symbols).join(', ');
-    const lookup = [routes, symbols].filter(Boolean).join(' / ');
+  for (const item of visible) {
+    const tagsText = compactList(item.meta.tags, MAX_TAGS);
+    const sourcePaths = compactList(item.meta.sourcePaths, MAX_SOURCE_PATHS);
+    const routes = metaList(item.meta.routes);
+    const symbols = metaList(item.meta.symbols);
+    const lookup = compactList([...routes, ...symbols], MAX_LOOKUPS);
     lines.push(`| [${item.title}](./${item.rel}) | ${cell(tagsText)} | ${cell(sourcePaths)} | ${cell(lookup)} | ${cell(item.updatedAt)} |`);
   }
   if (!items.length) lines.push('| No modules yet | - | - | - | - |');
@@ -82,18 +94,18 @@ function writeChangesIndex(kbPath) {
   const dir = path.join(kbPath, 'changes');
   fs.mkdirSync(dir, { recursive: true });
   const items = listMarkdown(dir).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)) || a.title.localeCompare(b.title));
-  const tags = tagLine(items);
+  const visible = items.slice(0, MAX_INDEX_ITEMS);
   const lines = [
     '# Changes Index',
     '',
-    tags.length ? `Tags: ${tags.map(t => `\`${t}\``).join(', ')}` : 'Tags: none',
+    indexSummary(items.length, visible.length),
     '',
     '| Change | Tags | Affected Modules | Period / Updated | Intent |',
     '|---|---|---|---|---|',
   ];
-  for (const item of items) {
-    const tagsText = metaList(item.meta.tags).join(', ');
-    const affected = metaList(item.meta.affectedModules).join(', ');
+  for (const item of visible) {
+    const tagsText = compactList(item.meta.tags, MAX_TAGS);
+    const affected = compactList(item.meta.affectedModules, MAX_SOURCE_PATHS);
     const intent = item.meta.developmentIntent || item.meta.intent || '';
     lines.push(`| [${item.title}](./${item.rel}) | ${cell(tagsText)} | ${cell(affected)} | ${cell(item.updatedAt)} | ${cell(intent)} |`);
   }
@@ -111,6 +123,8 @@ function regenerateIndexes(kbPath) {
 
 module.exports = {
   parseFrontmatter,
+  compactList,
+  cell,
   regenerateIndexes,
   writeModuleIndex,
   writeChangesIndex,

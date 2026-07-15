@@ -106,13 +106,19 @@ function vectorAt(index) {
     fs.mkdirSync(path.join(markdownRoot, 'modules'), { recursive: true });
     fs.writeFileSync(path.join(markdownRoot, 'GOAL.md'), '# 项目目标\n\n建立可靠的支付知识库。\n', 'utf8');
     fs.writeFileSync(path.join(markdownRoot, 'modules', 'pay.md'), '# 支付模块\n\n对账任务每天运行。\n', 'utf8');
+    fs.writeFileSync(path.join(markdownRoot, 'modules', '00-index.md'), '# Modules Index\n\nTags: duplicated, derived\n', 'utf8');
     const deterministicEmbedder = {
       embedPassage: async text => text.includes('对账') ? vectorAt(3) : vectorAt(4),
     };
     const indexer = new MarkdownKnowledgeIndexer({ database: db, embedder: deterministicEmbedder });
+    await db.replaceEntry('personal:migrated', 'modules/00-index.md', [
+      { chunkOrder: 0, title: 'Legacy index', chunkText: 'duplicated derived tags', vector: vectorAt(5) },
+    ]);
     const firstIndex = await indexer.indexDirectory({ kbPath: markdownRoot, spaceId: 'personal:migrated', sourceProjectId: 'pay' });
     assert.equal(firstIndex.files, 2);
     assert.equal(firstIndex.indexed, 2);
+    assert.equal(firstIndex.deletedEntries, 1, 'previously indexed derived files should be removed as stale');
+    assert(!firstIndex.results.some(item => item.entryId.endsWith('00-index.md')), 'derived indexes must not be embedded');
     const secondIndex = await indexer.indexDirectory({ kbPath: markdownRoot, spaceId: 'personal:migrated', sourceProjectId: 'pay' });
     assert.equal(secondIndex.unchanged, 2);
     fs.unlinkSync(path.join(markdownRoot, 'GOAL.md'));

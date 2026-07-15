@@ -36,7 +36,9 @@ function defaultState() {
 }
 
 function copyMarkdownBackup(kbPath, backupRoot, slug) {
-  const files = listMarkdownFiles(kbPath);
+  // Backups retain derived compatibility indexes even though they are not
+  // searchable knowledge and are deliberately excluded from LanceDB.
+  const files = listMarkdownFiles(kbPath, { includeDerived: true });
   const target = path.join(backupRoot, slug);
   const manifest = [];
   for (const filePath of files) {
