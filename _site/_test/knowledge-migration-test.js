@@ -80,6 +80,23 @@ function fakeVector(text) {
     const second = await manager.migrateAll(projects);
     assert.equal(second.message, 'no legacy projects need migration');
 
+    let indexCalled = false;
+    const blockedManager = new KnowledgeMigrationManager({
+      dataDir: temp,
+      statePath: path.join(temp, 'blocked-migration.json'),
+      database: db,
+      embedder: {
+        load: async () => { throw new Error('model download unavailable'); },
+        status: () => ({ modelId: 'Xenova/bge-small-zh-v1.5', remoteHost: 'https://models.invalid/' }),
+      },
+      indexer: { indexDirectory: async () => { indexCalled = true; throw new Error('must not index without a model'); } },
+    });
+    const blocked = await blockedManager.migrateAll({ api: { ...projects.api, knowledgeBackend: 'markdown' } });
+    assert.equal(blocked.status, 'model-required');
+    assert.equal(blocked.failed, 0, 'a shared model failure must not be counted once per project');
+    assert.match(blocked.error, /model download unavailable/);
+    assert.equal(indexCalled, false);
+
     const runtime = spawnServer({ root: ROOT, port: PORT, tag: 'knowledge-migration-api', extraEnv: { KB_EMBEDDING_FAKE: '1' } });
     try {
       const apiKb = path.join(runtime.dataDir, 'projects', 'api');
@@ -89,6 +106,22 @@ function fakeVector(text) {
         api: { displayName: 'API', kbPath: apiKb, localPath: temp, gitPath: temp, enabled: true },
       }, null, 2));
       await waitForServer();
+      const modelBefore = await request('GET', '/api/knowledge/model/status');
+      assert.equal(modelBefore.installed, true);
+      const modelConfig = await request('PUT', '/api/knowledge/model/config', {
+        remoteHost: 'https://model-mirror.example/', localModelPath: '', localFilesOnly: false,
+      });
+      assert.equal(modelConfig.config.remoteHost, 'https://model-mirror.example/');
+      const modelDownload = await request('POST', '/api/knowledge/model/download', {});
+      assert.equal(modelDownload.started, true);
+      let modelAfter;
+      for (let i = 0; i < 50; i++) {
+        modelAfter = await request('GET', '/api/knowledge/model/status');
+        if (!modelAfter.downloading) break;
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      assert.equal(modelAfter.state.status, 'ready');
+      assert.match(modelAfter.environmentExamples.remoteHost, /KB_EMBEDDING_REMOTE_HOST/);
       const before = await request('GET', '/api/knowledge/migration');
       assert.equal(before.eligible, 1);
       const started = await request('POST', '/api/knowledge/migration/start', {});

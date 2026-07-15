@@ -1068,14 +1068,67 @@
             <div class="panel2 rounded-lg border p-3"><div class="text-xs muted">{{ t("migratedProjects") }}</div><div class="mt-1 text-xl font-semibold">{{ vectorMigration.migratedProjects || 0 }}</div></div>
             <div class="panel2 rounded-lg border p-3"><div class="text-xs muted">{{ t("migrationStatus") }}</div><div class="mt-1 text-sm font-semibold">{{ vectorMigration.status || "idle" }}</div></div>
           </div>
+          <div class="mt-4 rounded-lg border p-4 panel2" data-embedding-model-setup>
+            <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <div class="font-medium">{{ t("embeddingModelSetup") }}</div>
+                <div class="mt-1 text-xs muted">{{ t("embeddingModelSetupHelp") }}</div>
+                <div class="mt-2 text-xs">
+                  <span class="font-medium">{{ vectorModelStatus.installed ? t("modelReady") : (vectorModelStatus.downloading ? t("modelDownloading") : t("modelNotReady")) }}</span>
+                  <span class="ml-2 muted">{{ formatBytes(vectorModelStatus.bytes || 0) }} · {{ vectorModelStatus.cacheDir || "-" }}</span>
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button @click="saveEmbeddingConfig" class="btn" :disabled="vectorMigrationBusy">{{ t("saveModelConfig") }}</button>
+                <button data-model-download @click="downloadEmbeddingModel" class="btn-primary" :disabled="vectorMigrationBusy || vectorModelStatus.downloading">
+                  {{ vectorModelStatus.downloading ? t("modelDownloading") : t("downloadAndVerifyModel") }}
+                </button>
+              </div>
+            </div>
+            <div v-if="vectorModelStatus.state?.error" class="mt-3 rounded-lg border p-3 text-xs" style="border-color: var(--danger); color: var(--danger)">
+              {{ vectorModelStatus.state.error }}
+            </div>
+            <div class="mt-3 grid gap-3 md:grid-cols-2">
+              <label class="grid gap-1 text-xs">{{ t("modelRemoteHost") }}
+                <input v-model="embeddingConfig.remoteHost" class="input font-mono text-xs" placeholder="https://huggingface.co/" />
+              </label>
+              <label class="grid gap-1 text-xs">{{ t("localModelPath") }}
+                <input v-model="embeddingConfig.localModelPath" class="input font-mono text-xs" placeholder="D:\models" />
+              </label>
+            </div>
+            <label class="mt-3 flex items-center gap-2 text-xs"><input type="checkbox" v-model="embeddingConfig.localFilesOnly" /> {{ t("localFilesOnly") }}</label>
+            <div class="mt-3 text-xs muted">{{ modelSetupMessage || t("modelConfigPriority") }}</div>
+            <details class="mt-3 text-xs">
+              <summary class="cursor-pointer font-medium">{{ t("environmentVariableGuide") }}</summary>
+              <div class="mt-2 muted">{{ t("environmentVariableHelp") }}</div>
+              <pre class="mt-2 overflow-auto rounded-lg bg-slate-950 p-3 text-slate-100">{{ vectorModelStatus.environmentExamples?.remoteHost || "" }}
+{{ vectorModelStatus.environmentExamples?.localModelPath || "" }}</pre>
+              <div class="mt-2 flex flex-wrap gap-3">
+                <a class="link" href="https://huggingface.co/Xenova/bge-small-zh-v1.5" target="_blank" rel="noreferrer">Xenova/bge-small-zh-v1.5</a>
+                <a class="link" href="https://huggingface.co/docs/transformers.js/custom_usage" target="_blank" rel="noreferrer">Transformers.js model settings</a>
+              </div>
+            </details>
+          </div>
+          <div v-if="vectorMigration.status === 'model-required' || vectorMigration.status === 'completed-with-errors'" class="mt-4 rounded-lg border p-4" data-migration-failure style="border-color: var(--danger)">
+            <div class="font-semibold" style="color: var(--danger)">{{ t("migrationFailedTitle") }}</div>
+            <div class="mt-1 text-sm">{{ migrationFailureSummary }}</div>
+            <button v-if="vectorMigration.status === 'model-required'" @click="downloadEmbeddingModel" class="btn-primary mt-3">{{ t("configureAndDownloadModel") }}</button>
+            <button v-else @click="startVectorMigration" class="btn-primary mt-3">{{ t("retryFailedMigration") }}</button>
+          </div>
           <div class="mt-4 grid gap-2">
             <div v-for="item in vectorMigration.items || []" :key="item.slug" class="flex flex-col gap-2 rounded-lg border p-3 text-sm panel2 md:flex-row md:items-center md:justify-between">
               <div>
                 <span class="font-medium">{{ item.displayName }}</span>
                 <span class="ml-2 font-mono text-xs muted">{{ item.primarySpaceId }}</span>
                 <div class="mt-1 text-xs muted">{{ item.files }} Markdown · {{ item.knowledgeMode }} · {{ item.migrated ? "LanceDB" : "Markdown" }}</div>
+                <div v-if="item.state?.status" class="mt-1 text-xs" :style="item.state.status === 'failed' ? 'color: var(--danger)' : ''">
+                  {{ item.state.status }}<span v-if="item.state.error"> · {{ item.state.error }}</span>
+                </div>
               </div>
-              <button v-if="item.migrated" @click="rollbackVectorMigration(item.slug)" class="btn text-xs">{{ t("rollbackToMarkdown") }}</button>
+              <div class="flex gap-2">
+                <button v-if="item.state?.status === 'failed' && !item.migrated" @click="retryVectorMigration(item.slug)" class="btn-primary text-xs">{{ t("retryFailedMigration") }}</button>
+                <button v-if="item.migrated" @click="rollbackVectorMigration(item.slug)" class="btn text-xs">{{ t("rollbackToMarkdown") }}</button>
+              </div>
             </div>
           </div>
           <div class="mt-4 rounded-lg border p-3 panel2" data-knowledge-db-maintenance>
@@ -1693,6 +1746,25 @@ const I18N = {
     vectorMigrationTitle: "One-click vector knowledge migration",
     vectorMigrationHelp: "Back up and import every legacy Markdown knowledge base into one local LanceDB, verify it, then switch each project atomically.",
     embeddingModel: "Local embedding model",
+    embeddingModelSetup: "Embedding model setup",
+    embeddingModelSetupHelp: "Download and verify the model before migration, or configure a mirror/offline model directory. A shared model failure stops the batch before any project is changed.",
+    modelReady: "Model ready",
+    modelNotReady: "Model not installed or verified",
+    modelDownloading: "Downloading and verifying…",
+    saveModelConfig: "Save model settings",
+    modelConfigSaved: "Model settings saved. Download and verify the model before retrying migration.",
+    modelDownloadStarted: "Model download and verification started. Keep this page open; status refreshes automatically.",
+    downloadAndVerifyModel: "Download and verify model",
+    modelRemoteHost: "Model download endpoint / mirror",
+    localModelPath: "Local model base directory (optional)",
+    localFilesOnly: "Offline mode: use local files only",
+    modelConfigPriority: "Recommended: configure here and click Download and verify. Environment variables are optional and require restarting the service.",
+    environmentVariableGuide: "Environment-variable setup (optional)",
+    environmentVariableHelp: "Run these PowerShell commands, then restart project-knowledge. Replace the values with your mirror or local model base directory.",
+    migrationFailedTitle: "Knowledge migration did not complete",
+    migrationFailures: "project migration failure(s)",
+    configureAndDownloadModel: "Configure and download model",
+    retryFailedMigration: "Retry failed migration",
     migrateAllKnowledge: "Migrate all legacy knowledge",
     migrating: "Migrating…",
     legacyProjects: "Legacy projects",
@@ -2160,6 +2232,25 @@ const I18N = {
     vectorMigrationTitle: "一键迁移全部向量知识库",
     vectorMigrationHelp: "备份并导入全部旧 Markdown 知识库到本地 LanceDB，逐项目校验成功后再原子切换。",
     embeddingModel: "本地嵌入模型",
+    embeddingModelSetup: "嵌入模型设置",
+    embeddingModelSetupHelp: "迁移前先下载并验证模型，也可以配置镜像或离线模型目录。公共模型加载失败时会在修改任何项目前停止整个批次。",
+    modelReady: "模型已就绪",
+    modelNotReady: "模型尚未安装或验证",
+    modelDownloading: "正在下载并验证…",
+    saveModelConfig: "保存模型设置",
+    modelConfigSaved: "模型设置已保存。请先下载并验证模型，再重试迁移。",
+    modelDownloadStarted: "模型下载和验证已经开始，请保持页面打开，状态会自动刷新。",
+    downloadAndVerifyModel: "下载并验证模型",
+    modelRemoteHost: "模型下载地址 / 镜像",
+    localModelPath: "本地模型基础目录（可选）",
+    localFilesOnly: "离线模式：只使用本地文件",
+    modelConfigPriority: "推荐直接在这里配置并点击“下载并验证模型”。环境变量是可选方式，设置后需要重启服务。",
+    environmentVariableGuide: "环境变量设置方法（可选）",
+    environmentVariableHelp: "在 PowerShell 中执行下面的命令，然后重启 project-knowledge；请把值替换成你的镜像地址或本地模型基础目录。",
+    migrationFailedTitle: "知识库迁移没有完成",
+    migrationFailures: "个项目迁移失败",
+    configureAndDownloadModel: "配置并下载模型",
+    retryFailedMigration: "重试失败迁移",
     migrateAllKnowledge: "一键迁移全部旧知识库",
     migrating: "正在迁移…",
     legacyProjects: "待迁移项目",
@@ -2673,9 +2764,19 @@ const app = createApp({
     const vectorMigrationBusy = ref(false);
     const vectorMigrationMessage = ref("");
     const vectorModelStatus = ref({ modelId: "Xenova/bge-small-zh-v1.5", installed: false, bytes: 0 });
+    const embeddingConfig = reactive({ remoteHost: "https://huggingface.co/", localModelPath: "", localFilesOnly: false });
+    const modelSetupMessage = ref("");
     const knowledgeMaintenance = ref({ status: "idle", running: false, exists: false, bytes: 0, rows: 0, versions: 0, reclaimedBytes: 0 });
     const keepDatabaseBackup = ref(false);
     let vectorMigrationTimer = null;
+    const migrationFailureSummary = computed(() => {
+      const migration = vectorMigration.value || {};
+      if (migration.status === "model-required") return migration.error || migration.model?.error || t("modelNotReady");
+      const failed = (migration.items || []).filter(item => item.state?.status === "failed");
+      const details = failed.slice(0, 5).map(item => `${item.displayName}: ${item.state.error || "failed"}`);
+      const count = Number(migration.failed || failed.length || 0);
+      return [`${count} ${t("migrationFailures")}`, ...details].join("\n");
+    });
     const loggingConfig = reactive({ schema: "logging/v1", rootPath: "", retentionDays: 30, levels: ["info", "warn", "error"] });
     const loading = ref(false);
     const pollError = ref("");
@@ -4978,27 +5079,76 @@ const app = createApp({
       ]);
       vectorMigration.value = migration;
       vectorModelStatus.value = model;
+      if (model.config) Object.assign(embeddingConfig, model.config);
       knowledgeMaintenance.value = maintenance;
-      vectorMigrationBusy.value = migration.running === true || maintenance.running === true;
+      vectorMigrationBusy.value = migration.running === true || maintenance.running === true || model.downloading === true;
       if (maintenance.status === "failed" && maintenance.error) vectorMigrationMessage.value = maintenance.error;
+      if (model.state?.status === "failed" && model.state.error) modelSetupMessage.value = model.state.error;
+      if (migration.status === "model-required" || migration.status === "completed-with-errors") {
+        vectorMigrationMessage.value = migrationFailureSummary.value;
+        const alertKey = `kb-migration-alert:${migration.batchId || "unknown"}:${migration.status}:${migration.endedAt || ""}`;
+        let alreadyAlerted = false;
+        try { alreadyAlerted = sessionStorage.getItem(alertKey) === "1"; } catch {}
+        if (!alreadyAlerted) {
+          alert(`${t("migrationFailedTitle")}\n\n${migrationFailureSummary.value}`);
+          try { sessionStorage.setItem(alertKey, "1"); } catch {}
+        }
+      }
       if (vectorMigrationTimer) { clearTimeout(vectorMigrationTimer); vectorMigrationTimer = null; }
-      if (migration.running || maintenance.running) {
+      if (migration.running || maintenance.running || model.downloading) {
         vectorMigrationTimer = setTimeout(() => loadVectorMigration().catch(() => {}), 1000);
-      } else if (migration.status === "completed" || migration.status === "completed-with-errors") {
+      } else if (migration.status === "completed" || migration.status === "completed-with-errors" || migration.status === "model-required") {
         await refreshAll({ force: true });
       }
       return migration;
     }
 
     async function startVectorMigration() {
+      return runVectorMigration(null);
+    }
+
+    async function retryVectorMigration(slug) {
+      return runVectorMigration([slug]);
+    }
+
+    async function runVectorMigration(slugs) {
       vectorMigrationBusy.value = true;
       vectorMigrationMessage.value = "";
       try {
-        await api("POST", "/api/knowledge/migration/start", {});
+        await api("POST", "/api/knowledge/migration/start", slugs ? { slugs } : {});
         vectorMigrationMessage.value = t("migrating");
         await loadVectorMigration();
       } catch (e) {
         vectorMigrationMessage.value = e.message;
+        vectorMigrationBusy.value = false;
+      }
+    }
+
+    async function saveEmbeddingConfig() {
+      modelSetupMessage.value = "";
+      try {
+        const result = await api("PUT", "/api/knowledge/model/config", embeddingConfig);
+        if (result.config) Object.assign(embeddingConfig, result.config);
+        modelSetupMessage.value = t("modelConfigSaved");
+        await loadVectorMigration();
+        return result;
+      } catch (e) {
+        modelSetupMessage.value = e.message;
+        return null;
+      }
+    }
+
+    async function downloadEmbeddingModel() {
+      vectorMigrationBusy.value = true;
+      modelSetupMessage.value = "";
+      try {
+        const saved = await saveEmbeddingConfig();
+        if (!saved) { vectorMigrationBusy.value = false; return; }
+        await api("POST", "/api/knowledge/model/download", {});
+        modelSetupMessage.value = t("modelDownloadStarted");
+        await loadVectorMigration();
+      } catch (e) {
+        modelSetupMessage.value = e.message;
         vectorMigrationBusy.value = false;
       }
     }
@@ -5886,7 +6036,7 @@ const app = createApp({
       kbRoot, projects, schedule, lastRun, runningJobs, jobHistory, selectedJob, logOutput, logTitle,
       summaryPanel, pendingCommitItems, supervisionIssues, issuesByProject, structuredLogs, selectedLog, logFilters,
       knowledgeStoreConfig, knowledgeStorage, knowledgeMigrationPlan, loggingConfig,
-      vectorMigration, vectorMigrationBusy, vectorMigrationMessage, vectorModelStatus, knowledgeMaintenance, keepDatabaseBackup, loadVectorMigration, startVectorMigration, rollbackVectorMigration, startKnowledgeMaintenance, rollbackKnowledgeMaintenance,
+      vectorMigration, vectorMigrationBusy, vectorMigrationMessage, vectorModelStatus, embeddingConfig, modelSetupMessage, migrationFailureSummary, knowledgeMaintenance, keepDatabaseBackup, loadVectorMigration, startVectorMigration, retryVectorMigration, rollbackVectorMigration, saveEmbeddingConfig, downloadEmbeddingModel, startKnowledgeMaintenance, rollbackKnowledgeMaintenance,
       githubAuthForm, githubProviderForm, githubStatus, githubOAuth, gitProviders, githubAuthModal, githubStores, githubStoresMessage, githubBusy, selectedTeamStoreKey, selectedTeamKbKey, teamKbStorePath,
       teamStoreSetup, teamStorePreview, teamStoreBusy, teamStoreMessage, teamStoreError, pickingTeamStoreFolder,
       selectedTeamStore, selectedTeamStoreKnowledgeBases, selectedTeamKb, githubStatusText, githubHeaderLabel, gitOAuthAvailable, giteaProvider, giteaOAuthRedirectUri,

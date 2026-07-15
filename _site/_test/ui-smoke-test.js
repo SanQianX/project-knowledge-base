@@ -307,6 +307,11 @@ function assert(cond, msg) {
       returnByValue: true,
     });
     assert(r.result.value, 'project Git / Hook settings did not render');
+    r = await send('Runtime.evaluate', {
+      expression: '!!document.querySelector("[data-vector-migration] [data-embedding-model-setup]") && !!document.querySelector("[data-vector-migration] [data-model-download]")',
+      returnByValue: true,
+    });
+    assert(r.result.value, 'vector migration should render embedding model setup and download controls');
 
     r = await send('Runtime.evaluate', {
       expression: '(() => { const settings = Array.from(document.querySelectorAll("button, a")).find(b => /^Settings|^设置|^璁剧疆/.test(b.innerText)); if (settings) settings.click(); return !!settings; })()',

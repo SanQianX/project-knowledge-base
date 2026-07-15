@@ -178,6 +178,28 @@ class KnowledgeMigrationManager {
     const state = defaultState();
     Object.assign(state, { status: 'running', startedAt: new Date().toISOString(), total: candidates.length, batchId });
     this.saveState(state);
+    if (typeof this.embedder.load === 'function') {
+      state.currentProject = '__embedding_model__';
+      state.model = { status: 'loading', startedAt: new Date().toISOString() };
+      this.saveState(state);
+      try {
+        await this.embedder.load();
+        state.model = { status: 'ready', endedAt: new Date().toISOString(), ...(this.embedder.status?.() || {}) };
+      } catch (error) {
+        state.currentProject = null;
+        state.status = 'model-required';
+        state.endedAt = new Date().toISOString();
+        state.error = error.message;
+        state.model = {
+          status: 'failed',
+          endedAt: state.endedAt,
+          error: error.message,
+          ...(this.embedder.status?.() || {}),
+        };
+        return this.saveState(state);
+      }
+      this.saveState(state);
+    }
     for (const [slug, project] of candidates) {
       state.currentProject = slug;
       state.projects[slug] = { status: 'running', startedAt: new Date().toISOString() };

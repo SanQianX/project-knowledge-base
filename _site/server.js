@@ -44,6 +44,7 @@ const { MarkdownKnowledgeIndexer } = require('./lib/markdown-knowledge-indexer')
 const { KnowledgeMigrationManager } = require('./lib/knowledge-migration');
 const { KnowledgeMaintenanceManager } = require('./lib/knowledge-maintenance');
 const knowledgeStorageLocation = require('./lib/knowledge-storage-location');
+const embeddingConfigStore = require('./lib/embedding-config');
 const { EMBEDDING_DIMENSIONS } = require('./lib/knowledge-schema');
 const { KnowledgeQueryService } = require('./lib/knowledge-query-service');
 
@@ -78,6 +79,8 @@ const TEAM_GIT_PROVIDERS_PATH = path.join(DATA_DIR, 'team-git-providers.json');
 const TEAM_STORES_CACHE_PATH = path.join(DATA_DIR, 'team-stores-cache.json');
 const KNOWLEDGE_SCOPES_PATH = path.join(DATA_DIR, 'knowledge-scopes.json');
 const EMBEDDING_CACHE_PATH = path.join(DATA_DIR, 'models');
+const EMBEDDING_CONFIG_PATH = path.join(DATA_DIR, 'embedding-config.json');
+const EMBEDDING_MODEL_STATE_PATH = path.join(DATA_DIR, 'embedding-model-state.json');
 
 function initializeKnowledgeStorageLayout() {
   const config = knowledgeStore.readConfig(KNOWLEDGE_STORE_PATH, DATA_DIR);
@@ -104,6 +107,7 @@ let knowledgeRuntimeCache = null;
 let knowledgeMigrationRunning = null;
 let knowledgeMaintenanceRunning = null;
 let knowledgeStorageRelocationRunning = null;
+let knowledgeModelDownloadRunning = null;
 let knowledgeActiveQueries = 0;
 let knowledgeActiveUpdates = 0;
 let knowledgeStorageLayout = initializeKnowledgeStorageLayout();
@@ -116,21 +120,62 @@ function fakeEmbedding(text) {
   return vector.map(item => item / norm);
 }
 
+function readEmbeddingConfig() {
+  const persisted = fs.existsSync(EMBEDDING_CONFIG_PATH)
+    ? embeddingConfigStore.readConfig(EMBEDDING_CONFIG_PATH)
+    : embeddingConfigStore.normalizeConfig();
+  return embeddingConfigStore.normalizeConfig({
+    remoteHost: process.env.KB_EMBEDDING_REMOTE_HOST || process.env.HF_ENDPOINT || persisted.remoteHost,
+    localModelPath: process.env.KB_EMBEDDING_LOCAL_PATH || persisted.localModelPath,
+    localFilesOnly: process.env.HF_HUB_OFFLINE === '1' || process.env.TRANSFORMERS_OFFLINE === '1' || persisted.localFilesOnly,
+  });
+}
+
+function createEmbeddingService() {
+  if (process.env.KB_EMBEDDING_FAKE === '1') {
+    return {
+      modelId: 'test/fake-embedding',
+      embedPassage: async text => fakeEmbedding(text),
+      embedQuery: async text => fakeEmbedding(text),
+      load: async () => true,
+      status: () => ({ modelId: 'test/fake-embedding', dimensions: EMBEDDING_DIMENSIONS, loaded: true, cacheDir: EMBEDDING_CACHE_PATH }),
+    };
+  }
+  const config = readEmbeddingConfig();
+  return new LocalEmbeddingService({
+    cacheDir: EMBEDDING_CACHE_PATH,
+    remoteHost: config.remoteHost,
+    localModelPath: config.localModelPath,
+    localFilesOnly: config.localFilesOnly,
+  });
+}
+
+function embeddingCacheBytes() {
+  let bytes = 0;
+  const walk = dir => {
+    if (!fs.existsSync(dir)) return;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const abs = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(abs);
+      else if (entry.isFile()) bytes += fs.statSync(abs).size;
+    }
+  };
+  walk(EMBEDDING_CACHE_PATH);
+  return bytes;
+}
+
+function embeddingConfigKey(config = readEmbeddingConfig()) {
+  const normalized = embeddingConfigStore.normalizeConfig(config);
+  return JSON.stringify([normalized.remoteHost, normalized.localModelPath, normalized.localFilesOnly]);
+}
+
 function knowledgeRuntime() {
   if (knowledgeRuntimeCache) return knowledgeRuntimeCache;
   const database = new KnowledgeDatabase({
     dbPath: knowledgeStorageLayout.dbPath,
     maintenancePath: knowledgeStorageLayout.databaseMaintenancePath,
   });
-  const embedder = process.env.KB_EMBEDDING_FAKE === '1'
-    ? {
-        modelId: 'test/fake-embedding',
-        embedPassage: async text => fakeEmbedding(text),
-        embedQuery: async text => fakeEmbedding(text),
-        load: async () => true,
-        status: () => ({ modelId: 'test/fake-embedding', dimensions: EMBEDDING_DIMENSIONS, loaded: true, cacheDir: EMBEDDING_CACHE_PATH }),
-      }
-    : new LocalEmbeddingService({ cacheDir: EMBEDDING_CACHE_PATH });
+  const embedder = createEmbeddingService();
   const indexer = new MarkdownKnowledgeIndexer({ database, embedder });
   knowledgeRuntimeCache = { database, embedder, indexer };
   return knowledgeRuntimeCache;
@@ -2270,6 +2315,7 @@ const server = http.createServer(async (req, res) => {
     // POST /api/knowledge/migration/start - resumable batch migration in the background.
     if (m === 'POST' && p === '/api/knowledge/migration/start') {
       if (knowledgeMigrationRunning) return send(res, 409, { ok: false, error: 'knowledge migration is already running' });
+      if (knowledgeModelDownloadRunning) return send(res, 409, { ok: false, error: 'embedding model download is running' });
       if (knowledgeMaintenanceRunning) return send(res, 409, { ok: false, error: 'knowledge database maintenance is running' });
       if (knowledgeStorageRelocationRunning) return send(res, 409, { ok: false, error: 'knowledge database relocation is running' });
       const body = await readBody(req).catch(() => '{}');
@@ -2280,8 +2326,18 @@ const server = http.createServer(async (req, res) => {
         slugs: Array.isArray(parsed.slugs) ? parsed.slugs : null,
         force: parsed.force === true,
       }).then(result => {
-        logEvent(result.failed ? 'warn' : 'info', 'knowledge_migration_finished', 'Knowledge migration batch finished.', {
-          source: 'knowledge-migration', completed: result.completed, failed: result.failed,
+        const failures = Object.entries(result.projects || {})
+          .filter(([, item]) => item?.status === 'failed')
+          .map(([slug, item]) => ({ slug, error: item.error || 'unknown migration error' }));
+        if (result.status === 'model-required') {
+          const config = readEmbeddingConfig();
+          embeddingConfigStore.writeState(EMBEDDING_MODEL_STATE_PATH, {
+            status: 'failed', error: result.error, endedAt: new Date().toISOString(), modelId: DEFAULT_MODEL_ID,
+            configKey: embeddingConfigKey(config),
+          });
+        }
+        logEvent(result.failed || result.status === 'model-required' ? 'warn' : 'info', 'knowledge_migration_finished', result.status === 'model-required' ? 'Knowledge migration needs an embedding model.' : 'Knowledge migration batch finished.', {
+          source: 'knowledge-migration', status: result.status, completed: result.completed, failed: result.failed, error: result.error || null, failures,
         });
         return result;
       }).catch(error => {
@@ -2349,20 +2405,81 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { ok: true, slug, knowledgeBackend: 'markdown', retainedDatabase: true, kbPath: projects[slug].kbPath });
     }
 
+    if (m === 'GET' && p === '/api/knowledge/model/config') {
+      return send(res, 200, { ok: true, config: readEmbeddingConfig() });
+    }
+
+    if (m === 'PUT' && p === '/api/knowledge/model/config') {
+      if (knowledgeMigrationRunning || knowledgeModelDownloadRunning || knowledgeMaintenanceRunning || knowledgeActiveQueries > 0 || knowledgeActiveUpdates > 0) {
+        return send(res, 409, { ok: false, error: 'wait for active knowledge and model operations to finish' });
+      }
+      const body = JSON.parse(await readBody(req));
+      const config = embeddingConfigStore.writeConfig(EMBEDDING_CONFIG_PATH, body);
+      const runtime = knowledgeRuntime();
+      const embedder = createEmbeddingService();
+      knowledgeRuntimeCache = {
+        database: runtime.database,
+        embedder,
+        indexer: new MarkdownKnowledgeIndexer({ database: runtime.database, embedder }),
+      };
+      embeddingConfigStore.writeState(EMBEDDING_MODEL_STATE_PATH, {
+        status: 'idle', error: null, startedAt: null, endedAt: null, modelId: DEFAULT_MODEL_ID, bytes: 0, configKey: null,
+      });
+      return send(res, 200, { ok: true, config, status: embedder.status() });
+    }
+
+    if (m === 'POST' && p === '/api/knowledge/model/download') {
+      if (knowledgeModelDownloadRunning) return send(res, 409, { ok: false, error: 'embedding model download is already running' });
+      if (knowledgeMigrationRunning || knowledgeMaintenanceRunning || knowledgeActiveQueries > 0 || knowledgeActiveUpdates > 0) {
+        return send(res, 409, { ok: false, error: 'wait for active knowledge operations to finish' });
+      }
+      const runtime = knowledgeRuntime();
+      const configKey = embeddingConfigKey();
+      embeddingConfigStore.writeState(EMBEDDING_MODEL_STATE_PATH, {
+        status: 'downloading', error: null, startedAt: new Date().toISOString(), endedAt: null, modelId: runtime.embedder.modelId || DEFAULT_MODEL_ID,
+        configKey,
+      });
+      knowledgeModelDownloadRunning = Promise.resolve()
+        .then(() => runtime.embedder.load())
+        .then(() => runtime.embedder.embedQuery('knowledge model verification'))
+        .then(() => embeddingConfigStore.writeState(EMBEDDING_MODEL_STATE_PATH, {
+          status: 'ready', error: null, endedAt: new Date().toISOString(), modelId: runtime.embedder.modelId || DEFAULT_MODEL_ID,
+          bytes: embeddingCacheBytes(), configKey,
+        }))
+        .catch(error => {
+          logEvent('error', 'embedding_model_download_failed', error.message, { source: 'knowledge-migration', modelId: DEFAULT_MODEL_ID });
+          return embeddingConfigStore.writeState(EMBEDDING_MODEL_STATE_PATH, {
+            status: 'failed', error: error.message, endedAt: new Date().toISOString(), modelId: runtime.embedder.modelId || DEFAULT_MODEL_ID,
+            bytes: embeddingCacheBytes(), configKey,
+          });
+        })
+        .finally(() => { knowledgeModelDownloadRunning = null; });
+      return send(res, 202, { ok: true, started: true, status: embeddingConfigStore.readState(EMBEDDING_MODEL_STATE_PATH) });
+    }
+
     if (m === 'GET' && p === '/api/knowledge/model/status') {
       const runtime = knowledgeRuntime();
       const status = runtime.embedder.status();
-      let bytes = 0;
-      const walk = dir => {
-        if (!fs.existsSync(dir)) return;
-        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-          const abs = path.join(dir, entry.name);
-          if (entry.isDirectory()) walk(abs);
-          else if (entry.isFile()) bytes += fs.statSync(abs).size;
-        }
-      };
-      walk(EMBEDDING_CACHE_PATH);
-      return send(res, 200, { ok: true, ...status, modelId: status.modelId || DEFAULT_MODEL_ID, installed: status.loaded || bytes > 1024 * 1024, bytes });
+      const modelState = embeddingConfigStore.readState(EMBEDDING_MODEL_STATE_PATH);
+      const config = readEmbeddingConfig();
+      const bytes = embeddingCacheBytes();
+      const installed = status.loaded === true || (modelState.status === 'ready' && modelState.configKey === embeddingConfigKey(config));
+      const escapePowerShell = value => String(value || '').replace(/'/g, "''");
+      return send(res, 200, {
+        ok: true,
+        ...status,
+        modelId: status.modelId || DEFAULT_MODEL_ID,
+        installed,
+        downloadRequired: !installed,
+        downloading: !!knowledgeModelDownloadRunning || modelState.status === 'downloading',
+        bytes,
+        state: modelState,
+        config,
+        environmentExamples: {
+          remoteHost: `[Environment]::SetEnvironmentVariable('KB_EMBEDDING_REMOTE_HOST', '${escapePowerShell(config.remoteHost)}', 'User')`,
+          localModelPath: `[Environment]::SetEnvironmentVariable('KB_EMBEDDING_LOCAL_PATH', '${escapePowerShell(config.localModelPath || 'D:\\models')}', 'User')`,
+        },
+      });
     }
 
     if (m === 'POST' && (p === '/api/knowledge/search' || p === '/api/knowledge/ask')) {
