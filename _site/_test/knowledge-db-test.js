@@ -65,7 +65,16 @@ function vectorAt(index) {
     assert.deepEqual(scoped[0].tags, []);
     assert.equal(scoped[0].content_hash, sha256('系统使用短期访问令牌。'));
 
-    await db.ensureSearchIndexes();
+    const initialIndexes = await db.ensureSearchIndexes();
+    assert.equal(initialIndexes.ftsSchemaVersion, 2);
+    assert.equal(initialIndexes.ftsUpgradeRequired, false);
+    assert.equal(db.maintenanceState().ftsSchemaVersion, 2);
+    db.saveMaintenanceState({ ftsSchemaVersion: 0, ftsUpgradeRequired: false });
+    const legacyIndexes = await db.ensureSearchIndexes();
+    assert.equal(legacyIndexes.ftsSchemaVersion, 1, 'an existing unversioned FTS index should be treated as v4.0.0');
+    assert.equal(legacyIndexes.ftsUpgradeRequired, true, 'legacy FTS should wait for atomic rebuild instead of rebuilding in place');
+    assert.equal((await db.maybeOptimize({ force: true })).blockedBy, 'fts-upgrade-required', 'legacy FTS must not be expanded by in-place optimization');
+    db.saveMaintenanceState({ ftsSchemaVersion: 2, ftsUpgradeRequired: false });
     const keyword = await db.fullTextSearch('短期访问令牌', { spaceIds: ['personal:alpha'], limit: 5 });
     assert.equal(keyword.length, 1);
     const hybrid = await db.hybridSearch({ text: '短期访问令牌', vector: vectorAt(0), spaceIds: ['personal:alpha'], limit: 5 });
@@ -119,11 +128,15 @@ function vectorAt(index) {
     assert.equal(firstIndex.indexed, 2);
     assert.equal(firstIndex.deletedEntries, 1, 'previously indexed derived files should be removed as stale');
     assert(!firstIndex.results.some(item => item.entryId.endsWith('00-index.md')), 'derived indexes must not be embedded');
+    assert.equal(firstIndex.maintenance.optimized, false, 'small updates must not optimize on every commit');
     const secondIndex = await indexer.indexDirectory({ kbPath: markdownRoot, spaceId: 'personal:migrated', sourceProjectId: 'pay' });
     assert.equal(secondIndex.unchanged, 2);
+    db.optimizeOperationsThreshold = 1;
     fs.unlinkSync(path.join(markdownRoot, 'GOAL.md'));
     const thirdIndex = await indexer.indexDirectory({ kbPath: markdownRoot, spaceId: 'personal:migrated', sourceProjectId: 'pay' });
     assert.equal(thirdIndex.deletedEntries, 1);
+    assert.equal(thirdIndex.maintenance.optimized, true, 'maintenance should run after the configured mutation threshold');
+    assert.equal(db.maintenanceState().pendingOperations, 0);
     assert.deepEqual(await db.entryIds('personal:migrated'), ['modules/pay.md']);
 
     console.log('knowledge-db-test: PASS');

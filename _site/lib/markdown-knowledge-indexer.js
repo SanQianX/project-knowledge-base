@@ -166,18 +166,24 @@ class MarkdownKnowledgeIndexer {
     const stale = (await this.database.entryIds(input.spaceId)).filter(entryId => !present.has(entryId));
     let deletedChunks = 0;
     for (const entryId of stale) deletedChunks += (await this.database.deleteEntry(input.spaceId, entryId)).deleted;
+    const changed = results.filter(item => item.action !== 'unchanged');
+    const operations = changed.length + stale.length;
+    const rows = changed.reduce((sum, item) => sum + Number(item.upserted || 0) + Number(item.deleted || 0), 0) + deletedChunks;
+    const mutationState = this.database.noteMutations({ operations, rows });
+    let maintenance = { ok: true, optimized: false, deferred: input.deferMaintenance === true, state: mutationState };
     if (await this.database.count([input.spaceId])) {
       await this.database.ensureSearchIndexes();
-      await this.database.optimize();
+      if (input.deferMaintenance !== true) maintenance = await this.database.maybeOptimize();
     }
     return {
       ok: true,
       spaceId: input.spaceId,
       files: files.length,
-      indexed: results.filter(item => item.action !== 'unchanged').length,
+      indexed: changed.length,
       unchanged: results.filter(item => item.action === 'unchanged').length,
       deletedEntries: stale.length,
       deletedChunks,
+      maintenance,
       results,
     };
   }

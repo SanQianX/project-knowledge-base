@@ -9,6 +9,26 @@ const {
   decodeKnowledgeChunk,
 } = require('./knowledge-schema');
 
+const FTS_SCHEMA_VERSION = 2;
+const DEFAULT_OPTIMIZE_OPERATIONS = 20;
+const DEFAULT_OPTIMIZE_ROWS = 100000;
+
+function readJson(filePath, fallback) {
+  try {
+    const value = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    return value && typeof value === 'object' ? value : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJsonAtomic(filePath, value) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const temp = `${filePath}.${process.pid}.tmp`;
+  fs.writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+  fs.renameSync(temp, filePath);
+}
+
 function sqlString(value) {
   return `'${String(value).replace(/'/g, "''")}'`;
 }
@@ -25,8 +45,40 @@ class KnowledgeDatabase {
     this.dbPath = path.resolve(options.dbPath);
     this.tableName = options.tableName || KNOWLEDGE_TABLE;
     this.dimensions = options.dimensions || EMBEDDING_DIMENSIONS;
+    this.maintenancePath = options.maintenancePath || `${this.dbPath}.maintenance.json`;
+    this.optimizeOperationsThreshold = Number(options.optimizeOperationsThreshold || DEFAULT_OPTIMIZE_OPERATIONS);
+    this.optimizeRowsThreshold = Number(options.optimizeRowsThreshold || DEFAULT_OPTIMIZE_ROWS);
     this.connection = null;
     this.table = null;
+  }
+
+  maintenanceState() {
+    return {
+      schema: 'project-knowledge/lancedb-maintenance/v1',
+      ftsSchemaVersion: 0,
+      ftsUpgradeRequired: false,
+      pendingOperations: 0,
+      pendingRows: 0,
+      lastOptimizedAt: null,
+      ...readJson(this.maintenancePath, {}),
+    };
+  }
+
+  saveMaintenanceState(patch = {}) {
+    const state = { ...this.maintenanceState(), ...patch };
+    writeJsonAtomic(this.maintenancePath, state);
+    return state;
+  }
+
+  noteMutations(input = {}) {
+    const operations = Math.max(0, Number(input.operations || 0));
+    const rows = Math.max(0, Number(input.rows || 0));
+    if (!operations && !rows) return this.maintenanceState();
+    const current = this.maintenanceState();
+    return this.saveMaintenanceState({
+      pendingOperations: current.pendingOperations + operations,
+      pendingRows: current.pendingRows + rows,
+    });
   }
 
   async open() {
@@ -162,14 +214,24 @@ class KnowledgeDatabase {
     await this.open();
     if (await this.table.countRows() === 0) return { ok: true, created: [], skipped: 'empty-table' };
     const existing = new Set((await this.table.listIndices()).map(index => index.name));
+    let state = this.maintenanceState();
     const created = [];
+    // A v4.0.0 FTS index can be very large. Rebuilding it in place would keep
+    // both generations alive until Lance's old-version retention expires and
+    // could exhaust the user's disk. Mark it for the atomic rebuild workflow
+    // instead. New databases create the compact v2 index immediately.
+    if (existing.has('search_text_idx') && state.ftsSchemaVersion === 0) {
+      state = this.saveMaintenanceState({ ftsSchemaVersion: 1, ftsUpgradeRequired: true });
+    }
     const definitions = [
       ['space_id', 'space_id_idx', lancedb.Index.bitmap()],
       ['entry_id', 'entry_id_idx', lancedb.Index.btree()],
       ['search_text', 'search_text_idx', lancedb.Index.fts({
         baseTokenizer: 'ngram',
         ngramMinLength: 2,
-        ngramMaxLength: 4,
+        // Chinese bigrams preserve exact keyword recall without creating the
+        // duplicate 2/3/4-gram postings used by v4.0.0.
+        ngramMaxLength: 2,
         withPosition: false,
         stem: false,
         removeStopWords: false,
@@ -180,12 +242,46 @@ class KnowledgeDatabase {
       await this.table.createIndex(column, { name, config, replace: false, waitTimeoutSeconds: 60 });
       created.push(name);
     }
-    return { ok: true, created };
+    if (created.includes('search_text_idx')) {
+      state = this.saveMaintenanceState({ ftsSchemaVersion: FTS_SCHEMA_VERSION, ftsUpgradeRequired: false });
+    }
+    return {
+      ok: true,
+      created,
+      ftsSchemaVersion: state.ftsSchemaVersion,
+      ftsUpgradeRequired: state.ftsUpgradeRequired === true,
+    };
   }
 
-  async optimize() {
+  async optimize(options = {}) {
     await this.open();
-    return this.table.optimize();
+    return this.table.optimize(options);
+  }
+
+  async maybeOptimize(options = {}) {
+    const state = this.maintenanceState();
+    if (state.ftsUpgradeRequired === true && options.allowLegacyFts !== true) {
+      return {
+        ok: true,
+        optimized: false,
+        due: false,
+        blockedBy: 'fts-upgrade-required',
+        state,
+      };
+    }
+    const due = options.force === true
+      || state.pendingOperations >= this.optimizeOperationsThreshold
+      || state.pendingRows >= this.optimizeRowsThreshold;
+    if (!due || (!state.pendingOperations && !state.pendingRows)) {
+      return { ok: true, optimized: false, due: false, state };
+    }
+    const stats = await this.optimize();
+    const next = this.saveMaintenanceState({
+      pendingOperations: 0,
+      pendingRows: 0,
+      lastOptimizedAt: new Date().toISOString(),
+    });
+    return { ok: true, optimized: true, due: true, stats, state: next };
   }
 
   async fullTextSearch(text, options = {}) {
@@ -224,4 +320,11 @@ class KnowledgeDatabase {
   }
 }
 
-module.exports = { KnowledgeDatabase, sqlString, inPredicate };
+module.exports = {
+  KnowledgeDatabase,
+  sqlString,
+  inPredicate,
+  FTS_SCHEMA_VERSION,
+  DEFAULT_OPTIMIZE_OPERATIONS,
+  DEFAULT_OPTIMIZE_ROWS,
+};

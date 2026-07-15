@@ -121,6 +121,7 @@ class KnowledgeMigrationManager {
       spaceId,
       sourceProjectId: slug,
       sourceCommit: project.headCommit || project.lastAnalyzedCommit || '',
+      deferMaintenance: true,
     });
 
     const expected = indexResult.results.filter(item => item.chunks > 0);
@@ -192,6 +193,10 @@ class KnowledgeMigrationManager {
       this.saveState(state);
     }
     state.currentProject = null;
+    if (state.completed > 0) {
+      await this.database.ensureSearchIndexes();
+      state.maintenance = await this.database.maybeOptimize();
+    }
     state.status = state.failed ? 'completed-with-errors' : 'completed';
     state.endedAt = new Date().toISOString();
     return this.saveState(state);
