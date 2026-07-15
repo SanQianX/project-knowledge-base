@@ -11,7 +11,7 @@
   <a href="https://www.npmjs.com/package/project-knowledge"><img src="https://img.shields.io/npm/v/project-knowledge.svg?style=flat-square" alt="npm"></a>
   <img src="https://img.shields.io/node/v/project-knowledge.svg?style=flat-square" alt="Node 18+">
   <img src="https://img.shields.io/github/license/SanQianX/project-knowledge-base?style=flat-square" alt="Apache-2.0">
-  <a href="https://github.com/SanQianX/project-knowledge-base/actions"><img src="https://img.shields.io/badge/tests-41%20passed-2f7d64?style=flat-square" alt="Tests"></a>
+  <a href="https://github.com/SanQianX/project-knowledge-base/actions"><img src="https://img.shields.io/badge/tests-43%20passed-2f7d64?style=flat-square" alt="Tests"></a>
   <a href="#star-history"><img src="https://img.shields.io/badge/star_history-⬇-7492a5?style=flat-square" alt="Star history"></a>
 </p>
 
@@ -47,7 +47,7 @@ Anthropic-compatible API profile for AI drafts.
 Expected output on first launch:
 
 ```text
-project-knowledge  ·  v4.0.0
+project-knowledge  ·  v4.0.1
 Local knowledge-base dashboard
 
   ▸ Resolving data directory …      ~/.project-knowledge/
@@ -162,6 +162,14 @@ the project backend without deleting either the original files or LanceDB.
 Post-commit automation incrementally re-indexes migrated projects: unchanged
 files are skipped, changed chunks are replaced, and chunks from deleted files
 are removed.
+
+When upgrading an existing v4.0.0 installation, use **Compact database** once
+in the same settings panel. It builds a separate compact database from the
+current valid rows, excludes generated `00-index.md` files, verifies vector
+and keyword retrieval, and only then atomically switches databases. By default
+the old oversized database is deleted after verification. Select **Keep old
+database for manual rollback** only when you can temporarily afford both
+copies on disk.
 
 The model downloads on first use (about 100 MB). For restricted networks or
 offline installations:
@@ -414,7 +422,7 @@ The regression suite under `_site/_test/` covers:
 - Project control panel flows, Runs / Drafts UI flow
 - CLI startup / stop / status
 - Gitea OAuth + sparse checkout
-- 36 tests, 0 failures, ~110s on a cold cache
+- 43 tests, 0 failures
 
 ---
 

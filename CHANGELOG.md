@@ -1,5 +1,22 @@
 # Changelog
 
+## [4.0.1] - 2026-07-15
+
+- Excluded generated `00-index.md` files from embedding and removed stale
+  derived-index rows while retaining the Markdown files for legacy and Team
+  Knowledge Mode compatibility.
+- Replaced unbounded Tags and change lists in generated Markdown indexes with
+  compact, capped navigation metadata; all module links remain available.
+- Stopped running LanceDB compaction after every commit. Maintenance now runs
+  only after bounded mutation thresholds and never rewrites the oversized
+  v4.0.0 full-text index in place.
+- Added a compact full-text schema that indexes `chunk_text` once with Chinese
+  bigrams instead of storing and indexing a second full document copy.
+- Added one-click, atomic database rebuilding with disk statistics, vector and
+  keyword verification, optional retained backup, and manual rollback.
+- Added upgrade and regression coverage for old v4.0.0 databases; the complete
+  suite now contains 43 passing test files.
+
 ## [4.0.0] - 2026-07-15
 
 - Added a local LanceDB knowledge store containing original text, metadata,

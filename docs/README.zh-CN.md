@@ -11,7 +11,7 @@
   <a href="https://www.npmjs.com/package/project-knowledge"><img src="https://img.shields.io/npm/v/project-knowledge.svg?style=flat-square" alt="npm"></a>
   <img src="https://img.shields.io/node/v/project-knowledge.svg?style=flat-square" alt="Node 18+">
   <img src="https://img.shields.io/github/license/SanQianX/project-knowledge-base?style=flat-square" alt="Apache-2.0">
-  <a href="https://github.com/SanQianX/project-knowledge-base/actions"><img src="https://img.shields.io/badge/tests-41%20passed-2f7d64?style=flat-square" alt="Tests"></a>
+  <a href="https://github.com/SanQianX/project-knowledge-base/actions"><img src="https://img.shields.io/badge/tests-43%20passed-2f7d64?style=flat-square" alt="Tests"></a>
   <a href="#star-history"><img src="https://img.shields.io/badge/star_history-⬇-7492a5?style=flat-square" alt="Star history"></a>
 </p>
 
@@ -27,6 +27,16 @@
 npm install -g project-knowledge
 project-knowledge
 ```
+
+## v4.0.1 数据库空间修复
+
+从 v4.0.0 升级后，打开“设置 → 一键迁移全部向量知识库”，点击一次“压缩数据库”。
+系统会从当前有效数据创建独立的新数据库，排除生成的 `00-index.md`，验证向量检索和
+关键词检索后再原子切换。验证失败不会修改原数据库。默认在验证成功后删除旧的膨胀
+数据库；只有磁盘空间足够且确实需要手动回滚时，才勾选“保留旧数据库用于手动回滚”。
+
+Markdown `00-index.md` 仍会保留，旧功能和团队知识库模式不受影响；它只是不再进入
+向量数据库。提交后的知识库更新仍采用增量替换和删除，不会只追加旧内容。
 
 ## v4 向量知识库与一键升级
 
@@ -86,7 +96,7 @@ Anthropic 兼容 API Profile 用于生成 AI 草稿。
 首次启动的预期输出：
 
 ```text
-project-knowledge  ·  v4.0.0
+project-knowledge  ·  v4.0.1
 Local knowledge-base dashboard
 
   ▸ Resolving data directory …      ~/.project-knowledge/
