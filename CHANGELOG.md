@@ -1,5 +1,14 @@
 # Changelog
 
+## [4.1.2] - 2026-07-16
+
+- Made the desktop dependency lock reproducible under the newer npm version on
+  GitHub's Windows runner by explicitly locking the encoding compatibility
+  dependency used by the packaging tree.
+- Made the desktop release workflow fail immediately when a native npm command
+  fails instead of allowing PowerShell to continue into a misleading later
+  step.
+
 ## [4.1.1] - 2026-07-16
 
 - Fixed Windows GitHub Actions browser discovery for the `windows-2025`

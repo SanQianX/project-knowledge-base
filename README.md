@@ -65,7 +65,7 @@ Anthropic-compatible API profile for AI drafts.
 Expected output on first launch:
 
 ```text
-project-knowledge  ·  v4.1.1
+project-knowledge  ·  v4.1.2
 Local knowledge-base dashboard
 
   ▸ Resolving data directory …      ~/.project-knowledge/
