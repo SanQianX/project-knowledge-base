@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.1.1] - 2026-07-16
+
+- Fixed Windows GitHub Actions browser discovery for the `windows-2025`
+  runner by detecting system-level Chrome and Microsoft Edge installations.
+- Restored the release gate for all three real-browser UI suites so the
+  Windows desktop installer can be built, smoke-tested, and uploaded only
+  after the complete 50-file core regression suite passes.
+
 ## [4.1.0] - 2026-07-16
 
 - Added a Windows x64 Electron desktop application and Squirrel installer that
