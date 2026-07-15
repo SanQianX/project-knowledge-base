@@ -1,5 +1,27 @@
 # Changelog
 
+## [4.1.0] - 2026-07-16
+
+- Added a Windows x64 Electron desktop application and Squirrel installer that
+  reuse the existing configuration, configured knowledge root, model cache,
+  Markdown sources, Team Knowledge Mode, and LanceDB without copying or
+  re-vectorizing user data.
+- Added single-instance and system-tray lifecycle behavior: closing the window
+  keeps Git hooks available, while an explicit tray Quit stops only a backend
+  owned by the desktop application.
+- Added an atomic, local-only runtime endpoint record so CLI, desktop, and
+  existing Git hooks discover the active fallback port dynamically and never
+  open competing LanceDB writers.
+- Made the desktop application safely attach to an already-running npm CLI and
+  leave that external backend alive when the desktop window exits.
+- Added hardened Electron navigation, context isolation, sandboxing, denied
+  permission requests, bounded desktop backend logs, Squirrel lifecycle event
+  handling, and explicit native-module ASAR unpacking.
+- Added Windows release automation that runs all 50 core regression files,
+  desktop unit tests, a packaged EXE/API smoke test, and packaged LanceDB native
+  read/write tests before uploading the installer and SHA-256 to GitHub
+  Releases. The existing npm provenance publish workflow remains unchanged.
+
 ## [4.0.4] - 2026-07-16
 
 - Added a Settings-based Markdown knowledge health audit for every registered
