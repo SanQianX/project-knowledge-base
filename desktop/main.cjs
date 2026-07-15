@@ -9,6 +9,13 @@ const {
   session,
   shell,
 } = require('electron');
+
+// Squirrel invokes the executable with install/update/uninstall arguments.
+// Handle those events before loading the knowledge backend so setup can create
+// shortcuts without accidentally starting LanceDB or showing the dashboard.
+if (require('electron-squirrel-startup')) {
+  app.quit();
+} else {
 const backendRuntime = require('./lib/backend-runtime.cjs');
 
 const corePackagePath = require.resolve('project-knowledge/package.json');
@@ -170,3 +177,4 @@ app.on('before-quit', () => {
   isQuitting = true;
   stopOwnedBackend();
 });
+}

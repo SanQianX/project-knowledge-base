@@ -20,6 +20,7 @@
     "@huggingface/transformers": "3.8.1",
     "@lancedb/lancedb": "0.31.0",
     "apache-arrow": "18.1.0",
+    "electron-squirrel-startup": "1.0.1",
     "project-knowledge": "file:..",
     "ws": "^8.21.0"
   },
