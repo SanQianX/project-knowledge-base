@@ -11,7 +11,7 @@
   <a href="https://www.npmjs.com/package/project-knowledge"><img src="https://img.shields.io/npm/v/project-knowledge.svg?style=flat-square" alt="npm"></a>
   <img src="https://img.shields.io/node/v/project-knowledge.svg?style=flat-square" alt="Node 18+">
   <img src="https://img.shields.io/github/license/SanQianX/project-knowledge-base?style=flat-square" alt="Apache-2.0">
-  <a href="https://github.com/SanQianX/project-knowledge-base/actions"><img src="https://img.shields.io/badge/tests-46%20passed-2f7d64?style=flat-square" alt="Tests"></a>
+  <a href="https://github.com/SanQianX/project-knowledge-base/actions"><img src="https://img.shields.io/badge/tests-48%20passed-2f7d64?style=flat-square" alt="Tests"></a>
   <a href="#star-history"><img src="https://img.shields.io/badge/star_history-⬇-7492a5?style=flat-square" alt="Star history"></a>
 </p>
 
@@ -27,6 +27,19 @@
 npm install -g project-knowledge
 project-knowledge
 ```
+
+## v4.0.4 Markdown 知识库体检与安全优化
+
+打开“设置 → Markdown 知识库体检与优化”，可以一次扫描全部已注册的个人和团队
+知识库。页面会分别显示可确定性修复的问题，以及需要理解内容后才能处理的语义问题。
+点击“安全优化全部”后，每个被修改的文件都会先备份到
+`<知识库根目录>/.project-knowledge/_backup/markdown-maintenance/`，随后原子写入规范
+格式、修复可恢复的 frontmatter 和代码围栏，并根据原始模块与变更文档从零重建两个
+`00-index.md`；已经迁移的项目会自动刷新对应 LanceDB 向量空间。
+
+系统不会猜测重复内容中哪一段更新。重复标题、多行 `Updated:` 元数据和超大正文会
+继续列为“需要语义审查”。后台 AI 此后不能直接编辑 `00-index.md`，每次成功自动更新
+后由系统完整重建紧凑索引；模块文档必须就地替换过时描述，历史信息写入 `changes/`。
 
 ## v4.0.3 模型下载与迁移失败提示
 
@@ -117,7 +130,7 @@ Anthropic 兼容 API Profile 用于生成 AI 草稿。
 首次启动的预期输出：
 
 ```text
-project-knowledge  ·  v4.0.3
+project-knowledge  ·  v4.0.4
 Local knowledge-base dashboard
 
   ▸ Resolving data directory …      ~/.project-knowledge/

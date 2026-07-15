@@ -11,7 +11,7 @@
   <a href="https://www.npmjs.com/package/project-knowledge"><img src="https://img.shields.io/npm/v/project-knowledge.svg?style=flat-square" alt="npm"></a>
   <img src="https://img.shields.io/node/v/project-knowledge.svg?style=flat-square" alt="Node 18+">
   <img src="https://img.shields.io/github/license/SanQianX/project-knowledge-base?style=flat-square" alt="Apache-2.0">
-  <a href="https://github.com/SanQianX/project-knowledge-base/actions"><img src="https://img.shields.io/badge/tests-46%20passed-2f7d64?style=flat-square" alt="Tests"></a>
+  <a href="https://github.com/SanQianX/project-knowledge-base/actions"><img src="https://img.shields.io/badge/tests-48%20passed-2f7d64?style=flat-square" alt="Tests"></a>
   <a href="#star-history"><img src="https://img.shields.io/badge/star_history-⬇-7492a5?style=flat-square" alt="Star history"></a>
 </p>
 
@@ -47,7 +47,7 @@ Anthropic-compatible API profile for AI drafts.
 Expected output on first launch:
 
 ```text
-project-knowledge  ·  v4.0.3
+project-knowledge  ·  v4.0.4
 Local knowledge-base dashboard
 
   ▸ Resolving data directory …      ~/.project-knowledge/
@@ -141,6 +141,24 @@ only grows when you say so.
 ---
 
 ## Vector knowledge and one-click upgrade
+
+### Markdown health and safe optimization
+
+Open **Settings → Markdown knowledge health and optimization** to audit all
+registered personal and team knowledge bases. The scan separates deterministic
+fixes from findings that require semantic judgment. **Safely optimize all**
+backs up every changed file under
+`<configured knowledge root>/.project-knowledge/_backup/markdown-maintenance/`,
+normalizes safe formatting, repairs recoverable frontmatter and code fences,
+and regenerates both `00-index.md` files from source documents instead of
+appending to the old index. Migrated projects are re-indexed automatically.
+
+Repeated headings, repeated update metadata, and oversized documents remain
+visible as semantic-review findings: the deterministic optimizer does not
+guess which conflicting statement is newer. Background AI can no longer edit
+`00-index.md`; after each successful automatic update the system rebuilds the
+compact indexes and requires module documents to replace obsolete text in
+place while `changes/` retains history.
 
 Version 4 stores the complete human-readable knowledge text, metadata, and
 `Xenova/bge-small-zh-v1.5` vectors in
@@ -436,7 +454,7 @@ The regression suite under `_site/_test/` covers:
 - Project control panel flows, Runs / Drafts UI flow
 - CLI startup / stop / status
 - Gitea OAuth + sparse checkout
-- 46 tests, 0 failures
+- 48 tests, 0 failures
 
 ---
 

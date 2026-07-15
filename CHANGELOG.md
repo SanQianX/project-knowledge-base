@@ -1,5 +1,23 @@
 # Changelog
 
+## [4.0.4] - 2026-07-16
+
+- Added a Settings-based Markdown knowledge health audit for every registered
+  personal and team knowledge base, with per-project file size, deterministic
+  fixes, structural errors, and semantic-review findings.
+- Added safe batch or per-project optimization with retained backups under the
+  configured knowledge root, atomic writes, formatting repair, compact index
+  regeneration, and automatic LanceDB refresh for migrated projects.
+- Reduced generated change indexes to the latest 40 entries with bounded cells
+  and generated-file markers; a real 125 KiB legacy index now rebuilds to about
+  9 KiB without deleting its source change documents.
+- Prevented background AI automation from writing `00-index.md`, injected
+  mandatory in-place-update hygiene rules even for custom prompts, and rebuilt
+  compatibility indexes after every successful automatic update.
+- Preserved Team Knowledge Mode by de-duplicating shared physical KB paths
+  during maintenance while refreshing every aliased vector space.
+- Expanded the complete regression suite to 48 passing test files.
+
 ## [4.0.3] - 2026-07-15
 
 - Added an embedding-model setup panel with one-click download and real
