@@ -16,6 +16,8 @@ const BIN = path.join(ROOT, 'bin', 'project-knowledge.js');
 const KB_BIN = path.join(ROOT, 'bin', 'project-knowledge-kb.js');
 const PID_FILE = path.join(os.tmpdir(), '.project-knowledge.pid');
 const ISOLATED_STATUS_PORT = 19000 + (process.pid % 1000);
+const TEST_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), `kb-bin-cli-${process.pid}-`));
+const TEST_ENV = { ...process.env, KB_DATA_DIR: TEST_DATA_DIR, KB_SKIP_MIGRATION: '1' };
 
 function assert(cond, msg) { if (!cond) throw new Error(msg); }
 
@@ -24,6 +26,7 @@ function run(args, opts = {}) {
     cwd: ROOT,
     encoding: 'utf-8',
     timeout: 15_000,
+    env: TEST_ENV,
     ...opts,
   });
 }
@@ -107,13 +110,13 @@ async function waitForListening(port, deadlineMs = 8000) {
 
   // status when no PID file
   removePidFile();
-  const statusResult = run(['status'], { env: { ...process.env, KB_SITE_PORT: String(ISOLATED_STATUS_PORT) } });
+  const statusResult = run(['status'], { env: { ...TEST_ENV, KB_SITE_PORT: String(ISOLATED_STATUS_PORT) } });
   assert(statusResult.status === 0, 'status should exit 0 when not running');
   assert(/not running/i.test(statusResult.stdout + statusResult.stderr),
     `status output should mention "not running", got: ${statusResult.stdout} ${statusResult.stderr}`);
 
   // stop when no PID file
-  const stopResult = run(['stop'], { env: { ...process.env, KB_SITE_PORT: String(ISOLATED_STATUS_PORT) } });
+  const stopResult = run(['stop'], { env: { ...TEST_ENV, KB_SITE_PORT: String(ISOLATED_STATUS_PORT) } });
   assert(stopResult.status === 0, 'stop should exit 0 when no PID file');
   assert(/No background process/i.test(stopResult.stdout + stopResult.stderr),
     `stop output should mention "No background process", got: ${stopResult.stdout} ${stopResult.stderr}`);
@@ -122,7 +125,7 @@ async function waitForListening(port, deadlineMs = 8000) {
   const fgPort = await pickFreePort();
   const fgChild = spawn(process.execPath, [BIN, '--fg', '--port', String(fgPort), '--no-open'], {
     cwd: ROOT,
-    env: { ...process.env },
+    env: TEST_ENV,
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });
@@ -168,7 +171,7 @@ async function waitForListening(port, deadlineMs = 8000) {
 
   const fallbackChild = spawn(process.execPath, [BIN, '--fg', '--no-open'], {
     cwd: ROOT,
-    env: { ...process.env, KB_SITE_PORT: String(busyPort) },
+    env: { ...TEST_ENV, KB_SITE_PORT: String(busyPort) },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });
@@ -204,9 +207,11 @@ async function waitForListening(port, deadlineMs = 8000) {
     `unknown flag output should mention "Unknown option", got: ${unknown.stdout} ${unknown.stderr}`);
 
   removePidFile();
+  fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
   console.log('bin-cli-test PASS');
 })().catch(err => {
   console.error(err && err.stack || err);
   removePidFile();
+  fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
   process.exit(1);
 });

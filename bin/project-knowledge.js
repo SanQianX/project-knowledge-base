@@ -9,11 +9,14 @@ const { spawn, exec, execSync } = require('child_process');
 const { existsSync, readFileSync, writeFileSync, unlinkSync } = require('fs');
 const net = require('net');
 const os = require('os');
+const { getDataDir } = require('../_site/lib/data-dir');
+const runtimeEndpoint = require('../_site/lib/runtime-endpoint');
 
 const pkg = require('../package.json');
 const DEFAULT_PORT = parseInt(process.env.KB_SITE_PORT || '5757', 10);
 const PORT_RANGE = 20;
 const PID_FILE = path.join(os.tmpdir(), '.project-knowledge.pid');
+const DATA_DIR = getDataDir();
 
 function readPid() {
   try {
@@ -39,8 +42,11 @@ function writePid(pid, port) {
   }
 }
 
-function removePid() {
-  try { unlinkSync(PID_FILE); } catch { /* ignore */ }
+function removePid(expectedPid) {
+  try {
+    if (expectedPid != null && readPid() !== Number(expectedPid)) return;
+    unlinkSync(PID_FILE);
+  } catch { /* ignore */ }
 }
 
 function isProcessAlive(pid) {
@@ -151,6 +157,19 @@ function findOrphanProcess() {
 
 // ── Subcommands ──
 function cmdStop() {
+  const endpoint = runtimeEndpoint.readLiveEndpoint(DATA_DIR);
+  if (endpoint) {
+    try {
+      process.kill(endpoint.pid);
+      runtimeEndpoint.clearEndpoint(DATA_DIR, { pid: endpoint.pid });
+      if (readPid() === endpoint.pid) removePid(endpoint.pid);
+      console.log(`project-knowledge stopped (PID ${endpoint.pid}).`);
+    } catch {
+      console.error(`Failed to stop process ${endpoint.pid}`);
+      process.exit(1);
+    }
+    process.exit(0);
+  }
   const pid = readPid();
   if (pid && isProcessAlive(pid)) {
     try {
@@ -189,6 +208,11 @@ function cmdStop() {
 }
 
 function cmdStatus() {
+  const endpoint = runtimeEndpoint.readLiveEndpoint(DATA_DIR);
+  if (endpoint) {
+    console.log(`project-knowledge is running (PID ${endpoint.pid}) at http://${endpoint.host}:${endpoint.port} [${endpoint.mode}]`);
+    process.exit(0);
+  }
   const pid = readPid();
   if (pid && isProcessAlive(pid)) {
     const port = readPort() || DEFAULT_PORT;
@@ -278,6 +302,13 @@ for (let i = 0; i < args.length; i++) {
 
 // ── Background launch ──
 if (!foreground) {
+  const endpoint = runtimeEndpoint.readLiveEndpoint(DATA_DIR);
+  if (endpoint) {
+    const url = `http://${endpoint.host}:${endpoint.port}`;
+    console.log(`Already running (PID ${endpoint.pid}) at ${url}`);
+    if (shouldOpen) openBrowser(url);
+    process.exit(0);
+  }
   const existingPid = readPid();
   if (existingPid && isProcessAlive(existingPid)) {
     const actualPort = readPort() || DEFAULT_PORT;
@@ -313,18 +344,42 @@ if (!foreground) {
 process.env.KB_SITE_HOST = host;
 
 async function main() {
+  const existingEndpoint = runtimeEndpoint.readLiveEndpoint(DATA_DIR);
+  if (existingEndpoint && existingEndpoint.pid !== process.pid) {
+    console.log(`Already running (PID ${existingEndpoint.pid}) at http://${existingEndpoint.host}:${existingEndpoint.port}`);
+    process.exit(0);
+  }
   const actualPort = portExplicit ? port : await findFreePort(port, host);
   process.env.KB_SITE_PORT = String(actualPort);
 
+  const claim = runtimeEndpoint.claimEndpoint(DATA_DIR, {
+    pid: process.pid,
+    host,
+    port: actualPort,
+    mode: process.env.KB_RUNTIME_MODE || 'cli',
+  });
+  if (!claim.claimed) {
+    const active = claim.endpoint;
+    if (active) {
+      console.log(`Already running (PID ${active.pid}) at http://${active.host}:${active.port}`);
+    } else {
+      console.error('Another project-knowledge process is starting. Please try again in a moment.');
+    }
+    process.exit(active ? 0 : 1);
+  }
   writePid(process.pid, actualPort);
-  process.on('exit', removePid);
-  process.on('SIGINT', () => { removePid(); process.exit(0); });
-  process.on('SIGTERM', () => { removePid(); process.exit(0); });
+  const cleanup = () => {
+    removePid(process.pid);
+    runtimeEndpoint.clearEndpoint(DATA_DIR, { pid: process.pid });
+  };
+  process.on('exit', cleanup);
+  process.on('SIGINT', () => { cleanup(); process.exit(0); });
+  process.on('SIGTERM', () => { cleanup(); process.exit(0); });
   // Windows console-close sends SIGBREAK; Node doesn't run exit handlers after
   // a forceful TerminateProcess, but SIGBREAK does fire before the process is
   // torn down, so we can still clean up here.
   if (process.platform === 'win32') {
-    process.on('SIGBREAK', () => { removePid(); process.exit(0); });
+    process.on('SIGBREAK', () => { cleanup(); process.exit(0); });
   }
 
   const url = `http://localhost:${actualPort}`;
@@ -336,7 +391,6 @@ async function main() {
   // Resolve data dir the same way server.js will, so we can show the user
   // where their config and KB files live BEFORE the server boots.
   try {
-    const { getDataDir } = require(path.join(__dirname, '..', '_site', 'lib', 'data-dir.js'));
     console.log(`Data dir: ${getDataDir()}`);
   } catch {}
 
@@ -347,6 +401,7 @@ async function main() {
 
 main().catch((err) => {
   console.error(err.message);
-  removePid();
+  removePid(process.pid);
+  runtimeEndpoint.clearEndpoint(DATA_DIR, { pid: process.pid });
   process.exit(1);
 });

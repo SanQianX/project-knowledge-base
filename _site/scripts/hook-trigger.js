@@ -15,6 +15,7 @@ const path = require('path');
 const http = require('http');
 const { execFileSync } = require('child_process');
 const { getDataDir } = require('../lib/data-dir');
+const { readLiveEndpoint } = require('../lib/runtime-endpoint');
 
 const args = process.argv.slice(2);
 function arg(name, fallback) {
@@ -25,12 +26,19 @@ function arg(name, fallback) {
 
 const KB_ROOT = arg('--kb-root', '');
 const REPO = arg('--repo', '');
-const HOST = arg('--host', '127.0.0.1');
-const PORT = parseInt(arg('--port', process.env.KB_SITE_PORT || '5757'), 10);
+const FALLBACK_HOST = arg('--host', '127.0.0.1');
+const FALLBACK_PORT = parseInt(arg('--port', process.env.KB_SITE_PORT || '5757'), 10);
 
 const HOOK_TIMEOUT_MS = 2000;
 const LOG_FILENAME = '.hook-trigger-errors.log';
 const DATA_DIR = getDataDir();
+
+function resolveTarget() {
+  const endpoint = readLiveEndpoint(DATA_DIR);
+  return endpoint
+    ? { host: endpoint.host, port: endpoint.port, source: 'runtime-endpoint' }
+    : { host: FALLBACK_HOST, port: FALLBACK_PORT, source: 'hook-fallback' };
+}
 
 function logError(msg) {
   try {
@@ -57,9 +65,10 @@ function git(args, fallback = '') {
 function postJson(p, body) {
   return new Promise((resolve, reject) => {
     const data = JSON.stringify(body);
+    const target = resolveTarget();
     const req = http.request({
-      host: HOST,
-      port: PORT,
+      host: target.host,
+      port: target.port,
       method: 'POST',
       path: p,
       headers: {

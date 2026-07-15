@@ -97,6 +97,9 @@ function buildHookBody({ siteRoot, host, port }) {
   // accepts them. Quote with single-quotes for paths that contain spaces.
   const triggerPosix = trigger.replace(/\\/g, '/');
   const repoPath = '$REPO_PATH_PLACEHOLDER';
+  // host/port remain only as a compatibility fallback. hook-trigger reads the
+  // live endpoint from ~/.project-knowledge first, so installed hooks survive
+  // port fallback, CLI upgrades, and switching to the desktop application.
   const hostLine = host ? `--host ${host}` : '';
   const portLine = Number.isFinite(port) ? `--port ${port}` : '';
   return `#!/bin/sh
