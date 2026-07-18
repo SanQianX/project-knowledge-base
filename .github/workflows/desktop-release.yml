@@ -56,7 +56,7 @@ jobs:
       - name: Install and test desktop
         shell: pwsh
         run: |
-          npm ci --prefix desktop
+          npm ci --prefix desktop --omit=optional
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm test --prefix desktop
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
