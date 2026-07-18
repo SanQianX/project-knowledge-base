@@ -15,7 +15,7 @@
 // - The SDK emits messages via an async iterator (not a child stdout pipe), so the
 //   per-line buffer is fed stringified message objects one at a time.
 
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -913,27 +913,63 @@ function findClaudeExecutable() {
   return { cmd: 'claude', shell: false };
 }
 
-function findClaudeExecutableForSdk() {
-  const isShellShim = (file) => /\.(cmd|bat|ps1)$/i.test(String(file || ''));
-  const usable = (file) => file && !isShellShim(file);
+function findClaudeExecutableForSdk(options = {}) {
+  const env = options.env || process.env;
+  const platform = options.platform || process.platform;
+  const exists = options.exists || fs.existsSync;
+  const runCommand = options.runCommand || ((command, args) => spawnSync(command, args, {
+    encoding: 'utf8',
+    windowsHide: true,
+    timeout: 3000,
+  }));
+  const isShellShim = file => /\.(cmd|bat|ps1)$/i.test(String(file || ''));
+  const clean = file => String(file || '').trim().replace(/^"|"$/g, '');
+  const usable = file => {
+    const candidate = clean(file);
+    return candidate && !isShellShim(candidate) && exists(candidate) ? candidate : null;
+  };
+  const npmCliForShim = file => {
+    const npmRoot = path.dirname(clean(file));
+    const candidates = [
+      path.join(npmRoot, 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
+      path.join(npmRoot, 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe'),
+    ];
+    return candidates.map(usable).find(Boolean) || null;
+  };
+  const resolveCandidate = file => usable(file) || (isShellShim(file) ? npmCliForShim(file) : null);
 
-  if (process.env.CLAUDE_CODE_EXECPATH && usable(process.env.CLAUDE_CODE_EXECPATH)) {
-    return { cmd: process.env.CLAUDE_CODE_EXECPATH, shell: false };
-  }
-  if (process.platform === 'win32') {
-    const npmRoot = process.env.APPDATA && path.join(process.env.APPDATA, 'npm');
+  const configured = resolveCandidate(env.CLAUDE_CODE_EXECPATH);
+  if (configured) return { cmd: configured, shell: false, source: 'CLAUDE_CODE_EXECPATH' };
+
+  if (platform === 'win32') {
+    let discovered = [];
+    try {
+      const result = runCommand('where.exe', ['claude']);
+      if (result && result.status === 0) discovered = String(result.stdout || '').split(/\r?\n/).filter(Boolean);
+    } catch {}
+    for (const found of discovered) {
+      const candidate = resolveCandidate(found);
+      if (candidate) return { cmd: candidate, shell: false, source: 'PATH' };
+    }
+
+    const npmRoot = env.APPDATA && path.join(env.APPDATA, 'npm');
     if (npmRoot) {
       const candidates = [
         path.join(npmRoot, 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe'),
         path.join(npmRoot, 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
       ];
-      for (const candidate of candidates) {
-        if (fs.existsSync(candidate) && usable(candidate)) return { cmd: candidate, shell: false };
+      for (const file of candidates) {
+        const candidate = usable(file);
+        if (candidate) return { cmd: candidate, shell: false, source: 'npm-global' };
       }
     }
-    return { cmd: null, shell: false, reason: 'no SDK-compatible Claude Code executable found' };
+    return {
+      cmd: null,
+      shell: false,
+      reason: 'Claude Code was not found. Install Claude Code on this computer or set CLAUDE_CODE_EXECPATH.',
+    };
   }
-  return { cmd: 'claude', shell: false };
+  return { cmd: clean(env.CLAUDE_CODE_EXECPATH) || 'claude', shell: false, source: 'PATH' };
 }
 
 function spawnClaude(session, opts) {
@@ -951,6 +987,7 @@ async function runSdkTurn(session, opts, isResume) {
   session.permissionMode = sdkPermissionMode;
   const allowedTools = Array.isArray(opts.allowedTools) ? opts.allowedTools : [];
   const claudeBin = findClaudeExecutableForSdk();
+  if (!claudeBin.cmd) throw new Error(claudeBin.reason);
   const sdkOptions = {
     cwd: opts.cwd,
     env: { ...process.env, ...(opts.env || {}), FORCE_COLOR: '0', NO_COLOR: '1' },
@@ -1031,7 +1068,7 @@ async function runSdkTurn(session, opts, isResume) {
       });
     },
   };
-  if (claudeBin.cmd) sdkOptions.pathToClaudeCodeExecutable = claudeBin.cmd;
+  sdkOptions.pathToClaudeCodeExecutable = claudeBin.cmd;
   if (opts.resumeSessionId) sdkOptions.resume = opts.resumeSessionId;
 
   try {
