@@ -13,7 +13,9 @@
     "package": "npm run prepare-core && electron-forge package --arch=x64",
     "make": "npm run prepare-core && electron-forge make --arch=x64",
     "test": "node test/desktop-runtime-test.cjs",
-    "test:packaged": "node test/packaged-smoke.cjs"
+    "test:packaged": "node test/packaged-smoke.cjs",
+    "test:packaged:model": "node test/packaged-model-smoke.cjs",
+    "audit:package": "node scripts/audit-package.cjs"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.141",
@@ -30,6 +32,7 @@
     "@electron-forge/cli": "7.11.2",
     "@electron-forge/maker-squirrel": "7.11.2",
     "electron": "43.1.1",
+    "electron-winstaller": "5.4.4",
     "encoding": "0.1.13",
     "png-to-ico": "3.0.1",
     "sharp": "0.34.5"

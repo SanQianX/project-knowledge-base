@@ -118,6 +118,30 @@ function stopTree(pid) {
       `packaged LanceDB test failed: ${nativeResult.stdout}\n${nativeResult.stderr}`);
     assert(/PASS/.test(nativeResult.stdout), 'packaged LanceDB test did not report PASS');
 
+    const runtimeProbe = path.join(dataDir, 'vector-runtime-probe.cjs');
+    fs.writeFileSync(runtimeProbe, `
+      const assert = require('assert');
+      const path = require('path');
+      const { createRequire } = require('module');
+      const appRequire = createRequire(path.join(process.argv[2], 'package.json'));
+      const ort = appRequire('onnxruntime-node');
+      const transformers = appRequire('@huggingface/transformers');
+      assert.equal(typeof ort.InferenceSession, 'function');
+      assert.equal(typeof transformers.pipeline, 'function');
+      console.log('VECTOR_RUNTIME_PASS');
+    `);
+    const runtimeResult = spawnSync(executable, [runtimeProbe, asarRoot], {
+      cwd: projectRoot,
+      env: { ...env, ELECTRON_RUN_AS_NODE: '1' },
+      encoding: 'utf-8',
+      timeout: 120000,
+      windowsHide: true,
+    });
+    assert(runtimeResult.status === 0,
+      `packaged vector runtime failed: ${runtimeResult.stdout}\n${runtimeResult.stderr}`);
+    assert(/VECTOR_RUNTIME_PASS/.test(runtimeResult.stdout),
+      'packaged vector runtime did not load Transformers.js and ONNX Runtime');
+
     console.log(`packaged-smoke PASS (${endpoint.host}:${endpoint.port}, backend PID ${endpoint.pid})`);
   } finally {
     if (endpoint) stopTree(endpoint.pid);

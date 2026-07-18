@@ -67,6 +67,9 @@ jobs:
       - name: Test packaged application and LanceDB
         run: npm run test:packaged --prefix desktop
 
+      - name: Audit packaged runtimes and size
+        run: npm run audit:package --prefix desktop
+
       - name: Prepare release assets
         shell: pwsh
         run: |
@@ -99,3 +102,9 @@ jobs:
             --repo $env:GITHUB_REPOSITORY `
             --clobber
           if ($LASTEXITCODE -ne 0) { throw "Failed to upload desktop installer" }
+
+      - name: Upload package size report
+        uses: actions/upload-artifact@v6
+        with:
+          name: package-size-report-${{ env.RELEASE_VERSION }}
+          path: desktop/out/package-size-report.json

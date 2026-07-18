@@ -1,4 +1,5 @@
 const path = require('path');
+const { pruneWindowsRuntime } = require('./scripts/prune-runtime.cjs');
 
 const iconBase = path.join(__dirname, 'assets', 'icon');
 
@@ -13,6 +14,16 @@ module.exports = {
       /^\/\.core-package(?:\/|$)/,
       /^\/out(?:\/|$)/,
       /^\/test(?:\/|$)/,
+    ],
+    afterPrune: [
+      (buildPath, _electronVersion, platform, arch, done) => {
+        try {
+          pruneWindowsRuntime(buildPath, { platform, arch });
+          done();
+        } catch (error) {
+          done(error);
+        }
+      },
     ],
   },
   rebuildConfig: {},
