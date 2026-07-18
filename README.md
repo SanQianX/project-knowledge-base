@@ -35,7 +35,11 @@ started by the desktop application.
 
 If the npm CLI is already running, the desktop window safely reuses that
 backend instead of opening a second LanceDB writer. Git must still be available
-on `PATH`. Until Windows code signing is configured, SmartScreen can show an
+on `PATH`. Claude Code is not bundled with the desktop installer; AI sessions
+use the Claude Code already installed on the computer through
+`CLAUDE_CODE_EXECPATH`, `PATH`, or its npm global installation. Knowledge-base
+management and vector search remain available when Claude Code is absent.
+Until Windows code signing is configured, SmartScreen can show an
 unrecognized-publisher warning; download installers only from this repository's
 GitHub Releases page.
 

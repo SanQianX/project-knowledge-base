@@ -1,5 +1,26 @@
 # Changelog
 
+## [4.1.3] - 2026-07-19
+
+- Removed the bundled 218 MiB Claude Code executable from the Windows desktop
+  application. The small Agent SDK control layer now discovers the user's
+  installed Claude Code through `CLAUDE_CODE_EXECPATH`, `PATH`, or the npm
+  global installation and reports a clear error without disabling knowledge
+  management when Claude Code is unavailable.
+- Removed LanceDB's unused optional embedding-provider stack and its duplicate
+  Transformers.js 3.0.2 / ONNX Runtime 1.19.2 dependency tree while retaining
+  the application's supported Transformers.js 3.8.1 embedding service.
+- Pruned non-Windows and non-x64 ONNX binaries, browser-only ONNX Web runtimes,
+  Transformers browser builds, source maps, and unused platform packages from
+  the Windows x64 bundle.
+- Added packaged runtime probes for LanceDB, Transformers.js, ONNX Runtime, and
+  the real 512-dimensional `bge-small-zh-v1.5` embedding model, plus release
+  size auditing that rejects bundled Claude binaries, duplicate runtimes, and
+  oversized artifacts.
+- Reduced the measured Windows installer from 476.0 MiB to 221.1 MiB and the
+  installed application bundle from 1,491.1 MiB to 617.5 MiB without changing
+  existing model caches, Markdown sources, LanceDB data, or storage paths.
+
 ## [4.1.2] - 2026-07-16
 
 - Made the desktop dependency lock reproducible under the newer npm version on
