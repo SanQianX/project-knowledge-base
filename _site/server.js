@@ -37,6 +37,7 @@ const {
   pathsReferToSameLocation,
 } = require('./lib/automation-config');
 const postCommitAutomation = require('./lib/post-commit-automation');
+const { selectedDirectoryFromOutput } = require('./lib/folder-picker-output');
 const { KnowledgeScopeRegistry, defaultPrimarySpaceId } = require('./lib/knowledge-scope-registry');
 const { KnowledgeDatabase } = require('./lib/knowledge-db');
 const { LocalEmbeddingService, DEFAULT_MODEL_ID } = require('./lib/embedding-service');
@@ -1573,15 +1574,19 @@ async function pickLocalFolder() {
     // Modern Vista+ IFileOpenDialog folder picker (the same dialog VS Code
     // shows). Default initial folder is "This PC". Returns the selected
     // folder path on stdout; nothing on cancel.
-    const pickerScript = path.join(__dirname, 'scripts', 'folder-picker.ps1');
+    const packedScript = path.join(__dirname, 'scripts', 'folder-picker.ps1');
+    const unpackedScript = packedScript.replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`);
+    const pickerScript = unpackedScript !== packedScript && fs.existsSync(unpackedScript) ? unpackedScript : packedScript;
     const result = await runPickerCommand('powershell.exe', [
       '-NoProfile', '-STA', '-WindowStyle', 'Hidden',
       '-ExecutionPolicy', 'Bypass',
       '-File', pickerScript,
       '选择要导入的本地项目目录',
     ]);
-    const folder = (result.stdout || '').trim().split(/\r?\n/).filter(Boolean).pop() || '';
-    return folder ? { ok: true, path: folder } : { ok: false, cancelled: true, error: result.error || 'folder selection cancelled' };
+    const folder = selectedDirectoryFromOutput(result.stdout);
+    return folder
+      ? { ok: true, path: folder }
+      : { ok: false, cancelled: result.ok === true && !(result.stdout || '').trim(), error: result.error || 'Folder picker returned no valid directory.' };
   }
   if (process.platform === 'darwin') {
     const result = await runPickerCommand('osascript', ['-e', 'POSIX path of (choose folder with prompt "Select project folder")']);

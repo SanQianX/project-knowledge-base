@@ -11,7 +11,7 @@
   <a href="https://www.npmjs.com/package/project-knowledge"><img src="https://img.shields.io/npm/v/project-knowledge.svg?style=flat-square" alt="npm"></a>
   <img src="https://img.shields.io/node/v/project-knowledge.svg?style=flat-square" alt="Node 18+">
   <img src="https://img.shields.io/github/license/SanQianX/project-knowledge-base?style=flat-square" alt="Apache-2.0">
-  <a href="https://github.com/SanQianX/project-knowledge-base/actions"><img src="https://img.shields.io/badge/tests-50%20passed-2f7d64?style=flat-square" alt="Tests"></a>
+  <a href="https://github.com/SanQianX/project-knowledge-base/actions"><img src="https://img.shields.io/badge/tests-52%20passed-2f7d64?style=flat-square" alt="Tests"></a>
   <a href="#star-history"><img src="https://img.shields.io/badge/star_history-⬇-7492a5?style=flat-square" alt="Star history"></a>
 </p>
 
@@ -31,7 +31,9 @@ Release and run it. The desktop application uses the same
 model cache, and LanceDB database as the npm version; it does not copy or
 re-vectorize existing data. Closing the window keeps the application and Git
 hooks alive in the system tray. Choose **Quit** from the tray to stop a backend
-started by the desktop application.
+started by the desktop application. Starting with v4.1.5, Settings displays the
+installed client version and can check, download, and restart into future
+Squirrel updates directly from the application.
 
 If the npm CLI is already running, the desktop window safely reuses that
 backend instead of opening a second LanceDB writer. Git must still be available

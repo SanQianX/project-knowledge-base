@@ -74,12 +74,19 @@ jobs:
         shell: pwsh
         run: |
           $source = "desktop/out/make/squirrel.windows/x64/Project-Knowledge-$env:RELEASE_VERSION-Setup.exe"
+          $nupkg = "desktop/out/make/squirrel.windows/x64/project_knowledge-$env:RELEASE_VERSION-full.nupkg"
+          $releases = "desktop/out/make/squirrel.windows/x64/RELEASES"
           if (-not (Test-Path -LiteralPath $source)) {
             throw "Installer was not generated at $source"
+          }
+          if (-not (Test-Path -LiteralPath $nupkg) -or -not (Test-Path -LiteralPath $releases)) {
+            throw "Squirrel update metadata was not generated"
           }
           New-Item -ItemType Directory -Path release-assets -Force | Out-Null
           $target = "release-assets/Project-Knowledge-$env:RELEASE_VERSION-Setup.exe"
           Copy-Item -LiteralPath $source -Destination $target
+          Copy-Item -LiteralPath $nupkg -Destination release-assets
+          Copy-Item -LiteralPath $releases -Destination release-assets
           $hash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  Project-Knowledge-$env:RELEASE_VERSION-Setup.exe" |
             Set-Content -LiteralPath "release-assets/Project-Knowledge-$env:RELEASE_VERSION-Setup.exe.sha256" -Encoding ascii

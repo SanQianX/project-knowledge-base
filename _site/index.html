@@ -1484,6 +1484,17 @@
       </div>
       <div class="grid gap-3">
         <section class="panel2 rounded-xl border p-4">
+          <div class="flex items-center justify-between gap-3">
+            <div class="font-medium">{{ t("desktopClient") }}</div>
+            <span class="chip">v{{ desktopUpdate.currentVersion || "-" }}</span>
+          </div>
+          <p class="mt-2 text-sm muted">{{ desktopUpdateSummary }}</p>
+          <div v-if="desktopUpdate.error" class="mt-2 text-xs" style="color: var(--bad)">{{ desktopUpdate.error }}</div>
+          <button v-if="desktopUpdate.supported" type="button" @click="handleDesktopUpdate" :disabled="desktopUpdateBusy" class="btn mt-3">
+            {{ desktopUpdateActionLabel }}
+          </button>
+        </section>
+        <section class="panel2 rounded-xl border p-4">
           <div class="font-medium">{{ t("aiProfiles") }}</div>
           <p class="mt-1 text-sm muted">{{ t("projectAssignmentsHelp") }}</p>
           <button @click="openAiSetup" class="btn mt-3">{{ t("aiProfiles") }}</button>
@@ -1623,6 +1634,17 @@ const I18N = {
     refreshSettingsHelp: "Force reload backend state only when the automatic polling has not caught up.",
     scheduleSettingsHelp: "Manage the Windows scheduled task and runner frequency.",
     logsSettingsHelp: "Open activity logs or adjust log retention and storage settings.",
+    desktopClient: "Desktop client",
+    desktopUpdateHelp: "Check GitHub Releases and install a verified Squirrel update without leaving the client.",
+    desktopWebMode: "Version and in-app updates are available in the Windows desktop client.",
+    desktopCheckingUpdate: "Checking for updates...",
+    desktopDownloadingUpdate: "A new version was found and is downloading in the background...",
+    desktopUpdateReady: "Version {version} is ready. Restart to finish installing it.",
+    desktopUpdateCurrent: "You are using the latest version.",
+    desktopInstallingUpdate: "Restarting to install the update...",
+    checkForUpdates: "Check for updates",
+    checkAgain: "Check again",
+    restartAndInstall: "Restart and install",
     consoleSubtitle: "Backend-driven project supervision console",
     refreshing: "refreshing",
     refresh: "Refresh",
@@ -2561,6 +2583,17 @@ Object.assign(I18N.zh, {
   refreshSettingsHelp: "自动轮询未及时同步时，再手动强制刷新后端状态。",
   scheduleSettingsHelp: "管理 Windows 定时任务、运行器和执行频率。",
   logsSettingsHelp: "打开活动日志，或调整日志保留与存储设置。",
+  desktopClient: "桌面客户端",
+  desktopUpdateHelp: "直接检查 GitHub Release，并在客户端内下载和安装经过校验的 Squirrel 更新。",
+  desktopWebMode: "当前版本号和客户端内更新仅在 Windows 桌面客户端中可用。",
+  desktopCheckingUpdate: "正在检查更新……",
+  desktopDownloadingUpdate: "发现新版本，正在后台下载……",
+  desktopUpdateReady: "版本 {version} 已下载完成，重启即可完成安装。",
+  desktopUpdateCurrent: "当前已经是最新版本。",
+  desktopInstallingUpdate: "正在重启并安装更新……",
+  checkForUpdates: "检查更新",
+  checkAgain: "再次检查",
+  restartAndInstall: "重启并安装",
   pendingCommitDetails: "待分析提交明细",
   pendingCommitDetailsHelp: "等待被分析并写入项目知识库的 Git 提交。",
   issueCenter: "异常中心",
@@ -3086,6 +3119,8 @@ const app = createApp({
     const draftBranchFilter = ref("");
     const removeDialog = reactive({ open: false, slug: "", preview: {}, deleteKb: false, reason: "", confirmText: "", error: "", busy: false });
     const settingsDrawerOpen = ref(false);
+    const desktopUpdate = reactive({ supported: false, currentVersion: "", latestVersion: "", status: "unsupported", updateAvailable: false, error: "" });
+    let removeDesktopUpdateListener = null;
 
     const aiConfig = reactive({ schema: "ai-profiles/v1", profiles: [] });
     const aiProfilesText = ref("");
@@ -3354,6 +3389,24 @@ const app = createApp({
     });
     const applyDraftButtonLabel = computed(() => draftBranchFilter.value ? `${t("applySelected")} · ${draftBranchFilter.value}` : t("applySelected"));
     const removeProjectDisabled = computed(() => removeDialog.busy || removeDialog.preview.hasRunningJobs || (removeDialog.deleteKb && removeDialog.confirmText !== removeDialog.slug));
+    const desktopUpdateBusy = computed(() => ["checking", "downloading", "installing"].includes(desktopUpdate.status));
+    const desktopUpdateActionLabel = computed(() => {
+      if (desktopUpdate.status === "checking") return t("desktopCheckingUpdate");
+      if (desktopUpdate.status === "downloading") return t("desktopDownloadingUpdate");
+      if (desktopUpdate.status === "ready") return t("restartAndInstall");
+      if (desktopUpdate.status === "installing") return t("desktopInstallingUpdate");
+      if (desktopUpdate.status === "current") return t("checkAgain");
+      return t("checkForUpdates");
+    });
+    const desktopUpdateSummary = computed(() => {
+      if (!desktopUpdate.supported) return t("desktopWebMode");
+      if (desktopUpdate.status === "checking") return t("desktopCheckingUpdate");
+      if (desktopUpdate.status === "downloading") return t("desktopDownloadingUpdate");
+      if (desktopUpdate.status === "ready") return t("desktopUpdateReady", { version: desktopUpdate.latestVersion || "-" });
+      if (desktopUpdate.status === "current") return t("desktopUpdateCurrent");
+      if (desktopUpdate.status === "installing") return t("desktopInstallingUpdate");
+      return t("desktopUpdateHelp");
+    });
     const projectGoalModalStyle = computed(() => ({
       left: `${projectGoalModal.x}px`,
       top: `${projectGoalModal.y}px`,
@@ -5531,6 +5584,38 @@ const app = createApp({
       return api("POST", "/api/system/pick-folder", {});
     }
 
+    function applyDesktopUpdateState(state) {
+      if (state && typeof state === "object") Object.assign(desktopUpdate, state);
+    }
+
+    async function loadDesktopUpdateState() {
+      const desktop = window.projectKnowledgeDesktop;
+      if (!desktop || typeof desktop.getUpdateState !== "function") return;
+      try {
+        applyDesktopUpdateState(await desktop.getUpdateState());
+        if (typeof desktop.onUpdateState === "function") {
+          if (removeDesktopUpdateListener) removeDesktopUpdateListener();
+          removeDesktopUpdateListener = desktop.onUpdateState(applyDesktopUpdateState);
+        }
+      } catch (error) {
+        desktopUpdate.error = error && error.message || String(error);
+      }
+    }
+
+    async function handleDesktopUpdate() {
+      const desktop = window.projectKnowledgeDesktop;
+      if (!desktop) return;
+      try {
+        const state = desktopUpdate.status === "ready"
+          ? await desktop.installUpdate()
+          : await desktop.checkForUpdates();
+        applyDesktopUpdateState(state);
+      } catch (error) {
+        desktopUpdate.status = "error";
+        desktopUpdate.error = error && error.message || String(error);
+      }
+    }
+
     async function pickProjectFolder() {
       formError.value = "";
       pickingFolder.value = true;
@@ -6147,6 +6232,7 @@ const app = createApp({
       document.documentElement.lang = uiLanguage.value === "zh" ? "zh-CN" : "en";
       window.addEventListener("message", handleGiteaOAuthMessage);
       refreshAll();
+      loadDesktopUpdateState();
       loadClaudeMdAudit(true).catch(() => {});
       openClaudeSessionsStream();
     });
@@ -6160,6 +6246,8 @@ const app = createApp({
       clearImportNoticeTimer();
       if (vectorMigrationTimer) clearTimeout(vectorMigrationTimer);
       if (markdownMaintenanceTimer) clearTimeout(markdownMaintenanceTimer);
+      if (removeDesktopUpdateListener) removeDesktopUpdateListener();
+      removeDesktopUpdateListener = null;
       window.removeEventListener("message", handleGiteaOAuthMessage);
     });
 
@@ -6173,6 +6261,7 @@ const app = createApp({
       teamStoreSetup, teamStorePreview, teamStoreBusy, teamStoreMessage, teamStoreError, pickingTeamStoreFolder,
       selectedTeamStore, selectedTeamStoreKnowledgeBases, selectedTeamKb, githubStatusText, githubHeaderLabel, gitOAuthAvailable, giteaProvider, giteaOAuthRedirectUri,
       loading, pollError, activeView, selectedSlug, selectedProject, settingsProjectSlug, settingsProject, pageTitle, projectList, summaryCards, navItems, settingsDrawerOpen, setup,
+      desktopUpdate, desktopUpdateBusy, desktopUpdateActionLabel, desktopUpdateSummary, handleDesktopUpdate,
       onboardingModalOpen, onboardingSteps, currentOnboardingStep, dismissOnboarding, runOnboardingAction,
       theme, uiLanguage, t, toggleTheme, form, importSlugPreview, submitting, formError, formOk, pickingFolder, pickProjectFolder, addProject, resetForm, busySlug, initProject,
       isNarrow, narrowPane, setNarrowPane,

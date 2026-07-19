@@ -11,6 +11,7 @@
 param([string]$Title = 'Select folder')
 
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
 $src = @'
 using System;

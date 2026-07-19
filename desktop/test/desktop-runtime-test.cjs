@@ -67,8 +67,12 @@ function assert(condition, message) {
   const mainSource = fs.readFileSync(path.join(__dirname, '..', 'main.cjs'), 'utf-8');
   assert(preloadSource.includes("exposeInMainWorld('projectKnowledgeDesktop'"),
     'preload should expose the narrow desktop bridge');
+  assert(preloadSource.includes('checkForUpdates:') && preloadSource.includes('installUpdate:'),
+    'preload should expose only the bounded desktop update operations');
   assert(mainSource.includes("preload: path.join(__dirname, 'preload.cjs')"),
     'BrowserWindow should load the desktop preload bridge');
+  assert(mainSource.includes('registerAppUpdater'),
+    'desktop main process should register the Squirrel updater');
 
   const freePort = await runtime.findFreePort(20000 + (process.pid % 10000), 20);
   assert(Number.isInteger(freePort), 'findFreePort should find a port');

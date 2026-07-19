@@ -1,5 +1,21 @@
 # Changelog
 
+## [4.1.5] - 2026-07-19
+
+- Added a desktop-client card in Settings that always shows the installed
+  application version and provides Check for updates / Restart and install
+  actions without opening a browser.
+- Integrated Electron's Squirrel updater with a stable GitHub Latest Release
+  feed. Release automation now uploads `RELEASES` and the full `.nupkg` beside
+  the installer so future desktop versions download and install in-app.
+- Hardened the PowerShell folder-picker fallback: scripts are unpacked from the
+  desktop ASAR, stdout uses UTF-8, and only an existing absolute directory can
+  be returned. PowerShell banners and error text can never populate a path
+  field.
+- Added updater lifecycle and folder-output regressions, bringing the complete
+  core suite to 52 passing test files while retaining the native Electron
+  folder dialog introduced in 4.1.4.
+
 ## [4.1.4] - 2026-07-19
 
 - Fixed Windows Claude Code discovery so extensionless npm shell shims and

@@ -1,6 +1,7 @@
 const path = require('path');
 const {
   app,
+  autoUpdater,
   BrowserWindow,
   Menu,
   Tray,
@@ -19,6 +20,7 @@ if (require('electron-squirrel-startup')) {
 } else {
 const backendRuntime = require('./lib/backend-runtime.cjs');
 const folderPicker = require('./lib/folder-picker.cjs');
+const appUpdater = require('./lib/app-updater.cjs');
 
 const corePackagePath = require.resolve('project-knowledge/package.json');
 const coreRoot = path.dirname(corePackagePath);
@@ -31,6 +33,7 @@ let ownedBackend = null;
 let activeEndpoint = null;
 let isQuitting = false;
 let removeFolderPickerHandler = null;
+let removeAppUpdaterHandler = null;
 
 app.setName('Project Knowledge');
 if (process.platform === 'win32') app.setAppUserModelId('com.sanqian.projectknowledge');
@@ -163,6 +166,16 @@ if (singleInstance) app.whenReady().then(async () => {
       dialog,
       getWindow: () => mainWindow,
     });
+    removeAppUpdaterHandler = appUpdater.registerAppUpdater({
+      ipcMain,
+      autoUpdater,
+      app,
+      getWindow: () => mainWindow,
+      onBeforeInstall: () => {
+        isQuitting = true;
+        stopOwnedBackend();
+      },
+    });
     activeEndpoint = await resolveBackend();
     createTray();
     createWindow(activeEndpoint);
@@ -186,6 +199,8 @@ app.on('before-quit', () => {
   isQuitting = true;
   if (removeFolderPickerHandler) removeFolderPickerHandler();
   removeFolderPickerHandler = null;
+  if (removeAppUpdaterHandler) removeAppUpdaterHandler();
+  removeAppUpdaterHandler = null;
   stopOwnedBackend();
 });
 }

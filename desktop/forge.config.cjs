@@ -6,7 +6,7 @@ const iconBase = path.join(__dirname, 'assets', 'icon');
 module.exports = {
   packagerConfig: {
     asar: {
-      unpack: '**/*.{node,dll}',
+      unpack: '**/*.{node,dll,ps1}',
     },
     executableName: 'Project Knowledge',
     icon: iconBase,

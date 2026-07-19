@@ -73,6 +73,23 @@ function stopTree(pid) {
 (async () => {
   assert(process.platform === 'win32', 'packaged smoke test currently targets Windows x64');
   assert(fs.existsSync(executable), `packaged executable missing: ${executable}`);
+  const unpackedPicker = path.join(
+    bundleRoot,
+    'resources',
+    'app.asar.unpacked',
+    'node_modules',
+    'project-knowledge',
+    '_site',
+    'scripts',
+    'folder-picker.ps1'
+  );
+  assert(fs.existsSync(unpackedPicker), 'PowerShell folder-picker fallback must be unpacked from ASAR');
+
+  const squirrelRoot = path.join(desktopRoot, 'out', 'make', 'squirrel.windows', 'x64');
+  const desktopVersion = require('../package.json').version;
+  assert(fs.existsSync(path.join(squirrelRoot, 'RELEASES')), 'Squirrel RELEASES feed is missing');
+  assert(fs.existsSync(path.join(squirrelRoot, `project_knowledge-${desktopVersion}-full.nupkg`)),
+    'Squirrel full update package is missing');
 
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), `kb-packaged-smoke-${process.pid}-`));
   const env = {
