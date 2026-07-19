@@ -922,21 +922,37 @@ function findClaudeExecutableForSdk(options = {}) {
     windowsHide: true,
     timeout: 3000,
   }));
-  const isShellShim = file => /\.(cmd|bat|ps1)$/i.test(String(file || ''));
   const clean = file => String(file || '').trim().replace(/^"|"$/g, '');
+  const isWindowsShellShim = file => {
+    const candidate = clean(file);
+    if (!candidate) return false;
+    const extension = path.extname(candidate).toLowerCase();
+    return !extension || ['.cmd', '.bat', '.ps1'].includes(extension);
+  };
+  const isSdkCompatibleWindowsFile = file => {
+    const extension = path.extname(clean(file)).toLowerCase();
+    return ['.exe', '.js', '.mjs', '.ts', '.tsx', '.jsx'].includes(extension);
+  };
   const usable = file => {
     const candidate = clean(file);
-    return candidate && !isShellShim(candidate) && exists(candidate) ? candidate : null;
+    if (!candidate || !exists(candidate)) return null;
+    if (platform === 'win32' && !isSdkCompatibleWindowsFile(candidate)) return null;
+    return candidate;
   };
   const npmCliForShim = file => {
     const npmRoot = path.dirname(clean(file));
     const candidates = [
-      path.join(npmRoot, 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
       path.join(npmRoot, 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe'),
+      path.join(npmRoot, 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
     ];
     return candidates.map(usable).find(Boolean) || null;
   };
-  const resolveCandidate = file => usable(file) || (isShellShim(file) ? npmCliForShim(file) : null);
+  const resolveCandidate = file => {
+    const candidate = clean(file);
+    if (!candidate) return null;
+    if (platform === 'win32' && isWindowsShellShim(candidate)) return npmCliForShim(candidate);
+    return usable(candidate);
+  };
 
   const configured = resolveCandidate(env.CLAUDE_CODE_EXECPATH);
   if (configured) return { cmd: configured, shell: false, source: 'CLAUDE_CODE_EXECPATH' };

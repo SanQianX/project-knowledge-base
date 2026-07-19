@@ -5,6 +5,7 @@ const {
   Menu,
   Tray,
   dialog,
+  ipcMain,
   nativeImage,
   session,
   shell,
@@ -17,6 +18,7 @@ if (require('electron-squirrel-startup')) {
   app.quit();
 } else {
 const backendRuntime = require('./lib/backend-runtime.cjs');
+const folderPicker = require('./lib/folder-picker.cjs');
 
 const corePackagePath = require.resolve('project-knowledge/package.json');
 const coreRoot = path.dirname(corePackagePath);
@@ -28,6 +30,7 @@ let tray = null;
 let ownedBackend = null;
 let activeEndpoint = null;
 let isQuitting = false;
+let removeFolderPickerHandler = null;
 
 app.setName('Project Knowledge');
 if (process.platform === 'win32') app.setAppUserModelId('com.sanqian.projectknowledge');
@@ -91,6 +94,7 @@ function createWindow(endpoint) {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
+      preload: path.join(__dirname, 'preload.cjs'),
       devTools: !app.isPackaged,
     },
   });
@@ -154,6 +158,11 @@ function stopOwnedBackend() {
 
 if (singleInstance) app.whenReady().then(async () => {
   try {
+    removeFolderPickerHandler = folderPicker.registerFolderPicker({
+      ipcMain,
+      dialog,
+      getWindow: () => mainWindow,
+    });
     activeEndpoint = await resolveBackend();
     createTray();
     createWindow(activeEndpoint);
@@ -175,6 +184,8 @@ app.on('window-all-closed', event => {
 });
 app.on('before-quit', () => {
   isQuitting = true;
+  if (removeFolderPickerHandler) removeFolderPickerHandler();
+  removeFolderPickerHandler = null;
   stopOwnedBackend();
 });
 }

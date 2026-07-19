@@ -9,12 +9,16 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-discovery-test-'));
 try {
   const nativeExe = path.join(temp, 'claude.exe');
   const npmRoot = path.join(temp, 'npm');
+  const extensionlessNpmShim = path.join(npmRoot, 'claude');
   const npmShim = path.join(npmRoot, 'claude.cmd');
   const npmCli = path.join(npmRoot, 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js');
-  fs.mkdirSync(path.dirname(npmCli), { recursive: true });
+  const npmExe = path.join(npmRoot, 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe');
+  fs.mkdirSync(path.dirname(npmExe), { recursive: true });
   fs.writeFileSync(nativeExe, 'test');
+  fs.writeFileSync(extensionlessNpmShim, '#!/bin/sh');
   fs.writeFileSync(npmShim, '@echo off');
   fs.writeFileSync(npmCli, '#!/usr/bin/env node');
+  fs.writeFileSync(npmExe, 'native executable');
 
   const fromEnv = runner.findClaudeExecutableForSdk({
     platform: 'win32',
@@ -32,12 +36,21 @@ try {
   assert.equal(fromPath.cmd, nativeExe);
   assert.equal(fromPath.source, 'PATH');
 
-  const fromNpmShim = runner.findClaudeExecutableForSdk({
+  const fromExtensionlessNpmShim = runner.findClaudeExecutableForSdk({
     platform: 'win32',
     env: {},
-    runCommand: () => ({ status: 0, stdout: `${npmShim}\r\n` }),
+    runCommand: () => ({ status: 0, stdout: `${extensionlessNpmShim}\r\n${npmShim}\r\n` }),
   });
-  assert.equal(fromNpmShim.cmd, npmCli, 'npm .cmd shim should resolve to the SDK-compatible cli.js');
+  assert.equal(fromExtensionlessNpmShim.cmd, npmExe,
+    'extensionless npm shell shim should resolve to the package native executable');
+
+  const fromCmdNpmShim = runner.findClaudeExecutableForSdk({
+    platform: 'win32',
+    env: { CLAUDE_CODE_EXECPATH: npmShim },
+    runCommand: () => ({ status: 1, stdout: '' }),
+  });
+  assert.equal(fromCmdNpmShim.cmd, npmExe,
+    'configured npm .cmd shim should resolve to the package native executable');
 
   const missing = runner.findClaudeExecutableForSdk({
     platform: 'win32',

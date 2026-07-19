@@ -99,8 +99,8 @@ function postJson(p, body) {
       commitHash,
       branch,
     });
-    if (r.status !== 200) {
-      logError(`post-commit dispatch non-200 for repo=${REPO}: HTTP ${r.status}`);
+    if (r.status < 200 || r.status >= 300) {
+      logError(`post-commit dispatch non-2xx for repo=${REPO}: HTTP ${r.status}`);
     }
   } catch (e) {
     logError(`post-commit dispatch failed for repo=${REPO}: ${e.message}`);

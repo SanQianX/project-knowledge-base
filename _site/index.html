@@ -5523,11 +5523,19 @@ const app = createApp({
       githubStoresMessage.value = "";
     }
 
+    async function requestLocalFolder() {
+      const desktop = window.projectKnowledgeDesktop;
+      if (desktop && typeof desktop.pickFolder === 'function') {
+        return desktop.pickFolder();
+      }
+      return api("POST", "/api/system/pick-folder", {});
+    }
+
     async function pickProjectFolder() {
       formError.value = "";
       pickingFolder.value = true;
       try {
-        const data = await api("POST", "/api/system/pick-folder", {});
+        const data = await requestLocalFolder();
         if (data && data.path) {
           form.localPath = data.path;
           importPreflight.value = null;
@@ -5547,7 +5555,7 @@ const app = createApp({
       teamStoreError.value = "";
       pickingTeamStoreFolder.value = true;
       try {
-        const data = await api("POST", "/api/system/pick-folder", {});
+        const data = await requestLocalFolder();
         if (data && data.path) {
           teamStoreSetup.localPath = data.path;
           teamStorePreview.value = null;

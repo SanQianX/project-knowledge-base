@@ -271,7 +271,7 @@ async function waitFor(predicate, timeoutMs = 5000, intervalMs = 50) {
       commitHash: '',
       branch: 'main',
     });
-    assert(dispatch.status === 200 && dispatch.data.ok !== false,
+    assert(dispatch.status === 202 && dispatch.data.accepted === true,
       `dispatch failed: HTTP ${dispatch.status} ${JSON.stringify(dispatch.data)}`);
 
     // Wait for at least one 'create' frame followed by a state transition.

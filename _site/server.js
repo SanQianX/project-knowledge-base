@@ -2893,21 +2893,39 @@ const server = http.createServer(async (req, res) => {
     if (m === 'POST' && p === '/api/hooks/post-commit') {
       let body;
       try { body = JSON.parse(await readBody(req)); } catch { return send(res, 400, { ok: false, error: 'invalid JSON body' }); }
-      const projects = readProjects({ persistMigrations: true });
       const repoPath = body.repoPath || body.repo || '';
-      const result = await postCommitAutomation.handlePostCommitEvent({
+      if (!repoPath) return send(res, 400, { ok: false, error: 'repoPath required' });
+      const event = {
         repoPath,
         commitHash: body.commitHash || body.commit || '',
         branch: body.branch || '',
         source: 'git-hook',
-      }, automationDeps(projects));
-      logEvent(result.ok ? 'info' : 'error', result.ok ? 'post_commit_automation' : 'post_commit_automation_failed', result.reason || result.error || 'post-commit automation dispatched', {
-        source: 'git-hook',
-        projectSlug: result.slug || '',
-        runId: result.runId || '',
-        repoPath,
+      };
+
+      // A Git hook only needs to know that the event reached the desktop
+      // runtime. Commit inspection and Claude startup can take several
+      // seconds, so acknowledge first and perform the dispatch in the
+      // background. This prevents a successfully-created run from being
+      // misreported by hook-trigger.js as an HTTP timeout.
+      send(res, 202, { ok: true, accepted: true, status: 'accepted', repoPath });
+      setImmediate(async () => {
+        try {
+          const projects = readProjects({ persistMigrations: true });
+          const result = await postCommitAutomation.handlePostCommitEvent(event, automationDeps(projects));
+          logEvent(result.ok ? 'info' : 'error', result.ok ? 'post_commit_automation' : 'post_commit_automation_failed', result.reason || result.error || 'post-commit automation dispatched', {
+            source: 'git-hook',
+            projectSlug: result.slug || '',
+            runId: result.runId || '',
+            repoPath,
+          });
+        } catch (error) {
+          logEvent('error', 'post_commit_automation_failed', error && error.message || 'post-commit automation dispatch failed', {
+            source: 'git-hook',
+            repoPath,
+          });
+        }
       });
-      return send(res, result.ok ? 200 : result.status || 500, result);
+      return;
     }
 
     if (m === 'POST' && p.startsWith('/api/projects/') && p.endsWith('/automation/preview')) {

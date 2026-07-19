@@ -81,7 +81,12 @@ function stopTree(pid) {
     KB_SKIP_MIGRATION: '1',
     KB_EMBEDDING_FAKE: '1',
   };
-  const app = spawn(executable, [], { env, windowsHide: true, stdio: 'ignore' });
+  // Isolate Electron's ProcessSingleton lock from an installed copy that the
+  // developer may be actively using. The second process below intentionally
+  // reuses this directory so single-instance behavior is still exercised.
+  const electronUserData = path.join(dataDir, 'electron-user-data');
+  const appArgs = [`--user-data-dir=${electronUserData}`];
+  const app = spawn(executable, appArgs, { env, windowsHide: true, stdio: 'ignore' });
   let endpoint = null;
   try {
     const ready = await waitForEndpoint(dataDir);
@@ -90,7 +95,7 @@ function stopTree(pid) {
     assert(endpoint.pid !== app.pid, 'desktop backend should run in a dedicated process');
     assert(ready.state && typeof ready.state === 'object', '/api/state should return JSON');
 
-    const second = spawn(executable, [], { env, windowsHide: true, stdio: 'ignore' });
+    const second = spawn(executable, appArgs, { env, windowsHide: true, stdio: 'ignore' });
     const secondExit = await Promise.race([
       new Promise(resolve => second.once('exit', code => resolve({ exited: true, code }))),
       sleep(5000).then(() => ({ exited: false })),

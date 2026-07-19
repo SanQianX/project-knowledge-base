@@ -1,5 +1,20 @@
 # Changelog
 
+## [4.1.4] - 2026-07-19
+
+- Fixed Windows Claude Code discovery so extensionless npm shell shims and
+  command wrappers are never passed to the Agent SDK. The resolver now prefers
+  the installed package's native `bin/claude.exe` and retains `cli.js` only as
+  a legacy fallback.
+- Changed the post-commit Hook endpoint to acknowledge valid events with HTTP
+  202 before commit inspection and Claude startup. Dispatch continues in the
+  background, while the Hook accepts every successful 2xx response instead of
+  recording a false timeout/error after a run was already created.
+- Restored both desktop directory-selection flows with a narrow Electron IPC
+  bridge and native directory dialog. Project import and Team Knowledge folder
+  selection no longer execute a PowerShell script from inside the packaged
+  ASAR or mistake PowerShell banner text for a selected path.
+
 ## [4.1.3] - 2026-07-19
 
 - Removed the bundled 218 MiB Claude Code executable from the Windows desktop

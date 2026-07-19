@@ -354,7 +354,17 @@ async function waitForAutomationRun(slug, timeoutMs = 30000) {
     assert(fs.readFileSync(path.join(projKb, 'README.md'), 'utf-8') === kbReadmeBeforeCommit,
       'editing or staging files must not change the KB');
 
-    makeCommit(FIXTURE_REPO, 'feat: add changelog entry to trigger hook');
+    // The spawned server intentionally uses an isolated data directory. Give
+    // the hook process the same location so it reads this test server's live
+    // runtime endpoint instead of a real desktop instance owned by the user.
+    const previousDataDir = process.env.KB_DATA_DIR;
+    process.env.KB_DATA_DIR = serverDataDir;
+    try {
+      makeCommit(FIXTURE_REPO, 'feat: add changelog entry to trigger hook');
+    } finally {
+      if (previousDataDir === undefined) delete process.env.KB_DATA_DIR;
+      else process.env.KB_DATA_DIR = previousDataDir;
+    }
 
     const run = await waitForAutomationRun(SLUG, 30000);
     assert(run, `no automation run for ${SLUG} appeared within 30s; server output: ${serverOutput.slice(-1000)}`);

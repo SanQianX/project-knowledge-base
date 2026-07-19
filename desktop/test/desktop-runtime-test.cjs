@@ -3,6 +3,7 @@ const http = require('http');
 const os = require('os');
 const path = require('path');
 const runtime = require('../lib/backend-runtime.cjs');
+const folderPicker = require('../lib/folder-picker.cjs');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -29,6 +30,45 @@ function assert(condition, message) {
   assert(!runtime.isAllowedNavigation('https://example.com', endpoint), 'remote navigation must be blocked');
   assert(runtime.isAllowedExternalUrl('https://github.com/test'), 'https external link should be allowed');
   assert(!runtime.isAllowedExternalUrl('file:///etc/passwd'), 'file URL must be blocked');
+
+  let pickerHandler = null;
+  let pickerRemoved = false;
+  const ipcMain = {
+    handle(channel, handler) {
+      assert(channel === folderPicker.CHANNEL, 'unexpected folder picker IPC channel');
+      pickerHandler = handler;
+    },
+    removeHandler(channel) {
+      assert(channel === folderPicker.CHANNEL, 'unexpected folder picker IPC cleanup channel');
+      pickerRemoved = true;
+    },
+  };
+  const dialog = {
+    async showOpenDialog(owner, options) {
+      assert(owner && owner.name === 'main-window', 'folder picker should be owned by the main window');
+      assert(options.properties.includes('openDirectory'), 'folder picker must select directories');
+      return { canceled: false, filePaths: ['C:\\work\\selected-project'] };
+    },
+  };
+  const unregisterPicker = folderPicker.registerFolderPicker({
+    ipcMain,
+    dialog,
+    getWindow: () => ({ name: 'main-window', isDestroyed: () => false }),
+  });
+  assert(typeof pickerHandler === 'function', 'folder picker IPC handler should be registered');
+  const selected = await pickerHandler();
+  assert(selected.ok === true && selected.path === 'C:\\work\\selected-project',
+    'folder picker should return the selected directory');
+  pickerRemoved = false;
+  unregisterPicker();
+  assert(pickerRemoved, 'folder picker IPC handler should be removed on shutdown');
+
+  const preloadSource = fs.readFileSync(path.join(__dirname, '..', 'preload.cjs'), 'utf-8');
+  const mainSource = fs.readFileSync(path.join(__dirname, '..', 'main.cjs'), 'utf-8');
+  assert(preloadSource.includes("exposeInMainWorld('projectKnowledgeDesktop'"),
+    'preload should expose the narrow desktop bridge');
+  assert(mainSource.includes("preload: path.join(__dirname, 'preload.cjs')"),
+    'BrowserWindow should load the desktop preload bridge');
 
   const freePort = await runtime.findFreePort(20000 + (process.pid % 10000), 20);
   assert(Number.isInteger(freePort), 'findFreePort should find a port');
