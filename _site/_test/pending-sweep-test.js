@@ -68,6 +68,10 @@ function makeDeps(projects) {
     }),
     startAutomationSession: opts => {
       const sessionId = `sess-${++sessionCounter}`;
+      const hash = opts.metadata && opts.metadata.commitHash || '';
+      if (opts.kbPath && hash) {
+        write(path.join(opts.kbPath, 'changes', `test-${hash.slice(0, 7)}.md`), `---\ncommit: ${hash}\n---\n\n# ${hash.slice(0, 7)}\n`);
+      }
       started.push({ sessionId, opts });
       return { sessionId };
     },
@@ -145,7 +149,7 @@ async function waitFor(predicate, timeoutMs = 3000) {
     }, deps);
 
     assert(result.ok, 'hook dispatch should succeed: ' + JSON.stringify(result));
-    assert(result.queued === true, 'current trigger should queue behind stale trigger pending run');
+    assert(result.status === 'dispatched', 'oldest trigger commit should dispatch immediately');
     assert(result.pendingSweep && result.pendingSweep.dispatched === 2,
       'pending sweep should dispatch trigger stale batch and other project');
 
@@ -162,31 +166,26 @@ async function waitFor(predicate, timeoutMs = 3000) {
       'other project prompt should include its pending commit');
 
     const triggerRuns = automation.listAutomationRuns('trigger', 10);
-    const staleRun = triggerRuns.find(r => r.source === 'pending-sweep');
-    const currentRun = triggerRuns.find(r => r.source === 'git-hook');
+    const staleRun = triggerRuns.find(r => r.source === 'git-hook');
     assert(staleRun && staleRun.status === 'dispatched',
-      'stale pending trigger run should be dispatched');
-    assert(currentRun && currentRun.status === 'queued',
-      'current trigger run should be queued behind stale pending run');
+      'oldest pending trigger run should be dispatched');
+    assert(triggerRuns.length === 1, 'a hook should not create an overlapping current-head run');
 
     assert(projects.other.lastScanPendingCount === 1,
       'sweep should refresh non-trigger project pending count');
     assert(projects.trigger.lastSeenCommit === a2,
       'current trigger scan should keep the visible project head on the current commit');
-    const queueBeforeEnd = automation.getQueueSize('trigger');
-
     deps.triggerEnd(triggerStarted.sessionId, 'idle');
     const resumedCurrent = await waitFor(
-      () => deps.started.find(s => s.opts.metadata && s.opts.metadata.automationRunId === currentRun.runId),
+      () => deps.started.find(s => s.opts.slug === 'trigger' && s.sessionId !== triggerStarted.sessionId),
       5000
     );
-    const queueAfterEnd = automation.getQueueSize('trigger');
     assert(projects.trigger.lastAnalyzedCommit === a1,
       'stale pending success should advance lastAnalyzedCommit to the stale head');
     assert(projects.trigger.lastSeenCommit === a2 && projects.trigger.headCommit === a2,
       'stale pending success must not roll visible head back from the current commit');
 
-    assert(resumedCurrent, `current trigger run should resume after stale pending run ends; queueBefore=${queueBeforeEnd} queueAfter=${queueAfterEnd}; started=`
+    assert(resumedCurrent, `the Git-backed worker should discover the next commit after the first completes; started=`
       + JSON.stringify(deps.started.map(s => ({
         slug: s.opts.slug,
         runId: s.opts.metadata && s.opts.metadata.automationRunId,
@@ -197,6 +196,12 @@ async function waitFor(predicate, timeoutMs = 3000) {
       'resumed current run should include the current trigger commit');
     assert(!resumedCurrent.opts.userPrompt.includes('feat: old pending'),
       'resumed current run should not re-analyze the stale pending commit');
+
+    deps.triggerEnd(resumedCurrent.sessionId, 'idle');
+    deps.triggerEnd(otherStarted.sessionId, 'idle');
+    await waitFor(() => projects.trigger.lastAnalyzedCommit === a2 && projects.other.lastAnalyzedCommit === b1, 5000);
+    assert(projects.trigger.lastAnalyzedCommit === a2, 'trigger worker should finish the current commit');
+    assert(projects.other.lastAnalyzedCommit === b1, 'global sweep worker should finish the other project commit');
 
     console.log('pending-sweep-test PASS');
   } finally {

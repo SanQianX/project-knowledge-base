@@ -133,7 +133,7 @@ async function getProject(slug) {
     assert(r.data.mode === 'incremental', `second scan with lastAnalyzedCommit should be incremental, got ${r.data.mode}`);
     assert(r.data.pendingCount === 2, `expected 2 new pending, got ${r.data.pendingCount}`);
     assert(r.data.headCommit === newHead, 'headCommit should be updated to new HEAD');
-    assert(r.data.commits[0].subject.includes('fix: add d module'), 'commits should be ordered');
+    assert(r.data.commits[0].subject.includes('feat: add c module'), 'pending commits should be ordered oldest first');
 
     cfg = await getProject(TEMP_SLUG);
     assert(cfg.lastSeenCommit === newHead, 'lastSeenCommit should equal new HEAD');

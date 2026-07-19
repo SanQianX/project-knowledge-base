@@ -37,6 +37,7 @@ Claude 工具权限模式：{{permissionMode}}
 四、结构化更新：知识库修改应是增量式的。保留历史信息，同时为本次提交新增可回溯的章节或条目，建议记录提交哈希、日期、作者和关键变更文件。若变更影响 README、API 参考、开发指南或模块说明，请同步更新相关章节。
 五、目标导向：更新后的知识库应让未来维护者无需重新翻阅大量代码，也能快速理解本次提交的实质影响，并能够正确使用或适配新代码。
 六、证据约束：只记录能从代码、diff、现有知识库或明确上下文中确认的信息；不确定的内容请标注待确认，不要写成事实。
+七、逐提交记录：必须为当前提交创建或完善一份独立的 changes Markdown 记录；文件名应以当前短提交哈希结尾，frontmatter 的 commit 字段必须使用当前完整提交哈希。即使本提交只涉及测试、文档或基础设施，也必须保留独立记录并说明其长期知识影响。
 `;
 
 const DEFAULT_INIT_PROMPT_TEMPLATE = `请为以下项目初始化当前项目知识库。
@@ -94,6 +95,7 @@ function normalizeAutomationConfig(input) {
   return {
     enabled: src.enabled === true,
     postCommitEnabled: src.postCommitEnabled === true,
+    paused: src.paused === true,
     knowledgeMode: normalizeKnowledgeMode(src.knowledgeMode),
     allowReadOnlyBash: src.allowReadOnlyBash !== false,
     maxQueueSize,

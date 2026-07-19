@@ -1,5 +1,27 @@
 # Changelog
 
+## [4.1.6] - 2026-07-19
+
+- Replaced overlapping post-commit batches with a single per-project worker
+  that treats Git history as the durable queue. Live hooks and desktop startup
+  recovery now use the same path and process exactly one commit at a time,
+  strictly from oldest to newest.
+- Preserved the original knowledge contract: every analyzed commit must create
+  an independent `changes/` Markdown record containing its full hash, including
+  test-only, documentation, and infrastructure commits.
+- Added transactional knowledge workspaces. Claude edits a temporary KB copy;
+  validated Markdown is applied to the live KB only after the session succeeds,
+  and LanceDB must finish before `lastAnalyzedCommit` advances.
+- Added resumable vector finalization and automatic startup recovery. Index
+  failures retry without rerunning Claude or duplicating Markdown, while an
+  interrupted desktop session resumes from the oldest unfinished commit.
+- Made Stop pause the project's automatic commit worker, discard uncommitted
+  staged knowledge, and prevent queued work from immediately restarting. The
+  Claude Code UI now provides a dedicated Resume automatic analysis action.
+- Added end-to-end regressions for duplicate Hook delivery, strict commit order,
+  per-commit changes records, staged Markdown, abort behavior, and vector-index
+  recovery. The complete core suite now contains 53 passing test files.
+
 ## [4.1.5] - 2026-07-19
 
 - Added a desktop-client card in Settings that always shows the installed

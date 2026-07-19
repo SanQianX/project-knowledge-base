@@ -381,6 +381,14 @@ context-heavy tasks. It does not maintain the KB while code is still in
 progress; the managed `post-commit` worker performs that update from committed
 evidence.
 
+The Git history is also the durable automation queue. A live Hook and desktop
+startup recovery both wake the same per-project worker, which processes exactly
+one commit at a time from oldest to newest. Every commit receives its own
+`changes/` record. Claude writes into a temporary knowledge workspace; only a
+successful, validated result is applied to Markdown and indexed in LanceDB
+before the analyzed commit pointer advances. Stopping an automation session
+pauses that project's worker without losing pending commits.
+
 ---
 
 ## Runtime data

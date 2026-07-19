@@ -14,11 +14,14 @@ const {
 const { createAutomationQueue } = require('./automation-queue');
 
 const AUTOMATION_RUNS_DIR = 'automation-runs';
+const AUTOMATION_WORKSPACES_DIR = 'automation-workspaces';
 
 // Per-project serial gate. Same project's automation runs serialize; different
 // projects are completely independent. In-memory only — see cleanupOrphanedRuns
 // for restart handling.
 const queue = createAutomationQueue();
+const wakeLocks = new Map();
+const indexRetryTimers = new Map();
 let endHookRegistered = false;
 
 const AUTOMATION_SYSTEM_PROMPT = `You are the background KB automation worker for one registered project.
@@ -35,6 +38,7 @@ const KNOWLEDGE_HYGIENE_INSTRUCTIONS = `
 
 知识库结构维护硬规则：
 - 不要创建、修改或追加任何 00-index.md；它们是系统完整重建的派生文件。
+- 每次自动分析只处理一个 Git commit，并必须为该 commit 创建或完善一份独立 changes Markdown；文件名必须包含当前短哈希，正文或 frontmatter 必须包含当前完整哈希。测试、文档和基础设施提交也不能省略此记录。
 - 更新 README、ARCHITECTURE 或 modules 文档时，必须在原有章节中就地替换已经过时的描述，并删除被新事实取代的旧描述；不要在文件末尾重复追加同名章节、完整旧正文或多行 Updated 元数据。
 - 提交历史只写入对应的 changes 文档；模块文档只保留当前有效状态，并通过 changes 文档保留历史。
 - 保持 Markdown frontmatter、标题层级和代码围栏完整；不要为了“保留历史”复制整段重复内容。`;
@@ -224,6 +228,116 @@ function automationRunsDir(slug) {
   return path.join(aiWorkspace.ensureProjectAIPath(slug), AUTOMATION_RUNS_DIR);
 }
 
+function automationWorkspaceDir(slug, runId) {
+  return path.join(aiWorkspace.ensureProjectAIPath(slug), AUTOMATION_WORKSPACES_DIR, runId);
+}
+
+function shouldCopyKnowledgePath(sourcePath) {
+  const segments = path.resolve(sourcePath).split(path.sep).map(value => value.toLowerCase());
+  return !segments.some(segment => ['.git', '_ai', '_backup', 'knowledge.lancedb'].includes(segment));
+}
+
+function prepareKnowledgeWorkspace(slug, runId, liveKbPath) {
+  const root = automationWorkspaceDir(slug, runId);
+  const stagingKbPath = path.join(root, 'staging');
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.mkdirSync(stagingKbPath, { recursive: true });
+  if (liveKbPath && fs.existsSync(liveKbPath)) {
+    fs.cpSync(liveKbPath, stagingKbPath, {
+      recursive: true,
+      force: true,
+      filter: shouldCopyKnowledgePath,
+    });
+  }
+  return { root, stagingKbPath };
+}
+
+function listKnowledgeFiles(root) {
+  const files = [];
+  if (!root || !fs.existsSync(root)) return files;
+  const walk = (current) => {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      if (['.git', '_ai', '_backup', 'knowledge.lancedb'].includes(entry.name.toLowerCase())) continue;
+      const absolute = path.join(current, entry.name);
+      if (entry.isDirectory()) walk(absolute);
+      else if (entry.isFile()) files.push(path.relative(root, absolute).replace(/\\/g, '/'));
+    }
+  };
+  walk(root);
+  return files.sort();
+}
+
+function fileHash(filePath) {
+  if (!fs.existsSync(filePath)) return null;
+  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+}
+
+function validateCommitChangeRecord(stagingKbPath, commitHash) {
+  const full = String(commitHash || '').trim().toLowerCase();
+  const short = full.slice(0, 7);
+  const changesDir = path.join(stagingKbPath, 'changes');
+  if (!full || !fs.existsSync(changesDir)) {
+    throw new Error(`missing changes record for commit ${full || '(unknown)'}`);
+  }
+  const matches = listKnowledgeFiles(changesDir).filter(relativePath => {
+    if (!relativePath.toLowerCase().endsWith('.md')) return false;
+    if (!path.basename(relativePath).toLowerCase().includes(short)) return false;
+    try { return fs.readFileSync(path.join(changesDir, relativePath), 'utf8').toLowerCase().includes(full); }
+    catch { return false; }
+  });
+  if (!matches.length) {
+    throw new Error(`changes record must include full commit ${full} and ${short} in its filename`);
+  }
+  return matches.map(relativePath => `changes/${relativePath.replace(/\\/g, '/')}`);
+}
+
+function applyKnowledgeWorkspace(record) {
+  const stagingKbPath = record.stagingKbPath;
+  const liveKbPath = record.liveKbPath;
+  if (!stagingKbPath || !liveKbPath) return { changed: [], changeRecords: [] };
+  const changeRecords = validateCommitChangeRecord(stagingKbPath, record.commitHash);
+  const stagedFiles = listKnowledgeFiles(stagingKbPath);
+  const changed = stagedFiles.filter(relativePath => {
+    if (!relativePath.toLowerCase().endsWith('.md')) return false;
+    if (path.basename(relativePath).toLowerCase() === '00-index.md') return false;
+    return fileHash(path.join(stagingKbPath, relativePath)) !== fileHash(path.join(liveKbPath, relativePath));
+  });
+  const backupRoot = path.join(path.dirname(stagingKbPath), 'backup');
+  const applied = [];
+  try {
+    for (const relativePath of changed) {
+      const source = path.join(stagingKbPath, relativePath);
+      const target = path.join(liveKbPath, relativePath);
+      const backup = path.join(backupRoot, relativePath);
+      const existed = fs.existsSync(target);
+      if (existed) {
+        fs.mkdirSync(path.dirname(backup), { recursive: true });
+        fs.copyFileSync(target, backup);
+      }
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      const temp = `${target}.${process.pid}.${Date.now()}.tmp`;
+      fs.copyFileSync(source, temp);
+      fs.renameSync(temp, target);
+      applied.push({ relativePath, existed, backup });
+    }
+  } catch (error) {
+    for (const item of applied.reverse()) {
+      const target = path.join(liveKbPath, item.relativePath);
+      try {
+        if (item.existed) fs.copyFileSync(item.backup, target);
+        else fs.rmSync(target, { force: true });
+      } catch {}
+    }
+    throw error;
+  }
+  return { changed, changeRecords };
+}
+
+function discardKnowledgeWorkspace(record) {
+  if (!record || !record.stagingKbPath) return;
+  try { fs.rmSync(path.dirname(record.stagingKbPath), { recursive: true, force: true }); } catch {}
+}
+
 function writeAutomationRun(slug, record) {
   const dir = automationRunsDir(slug);
   fs.mkdirSync(dir, { recursive: true });
@@ -251,6 +365,9 @@ async function dispatchAutomation({ slug, cfg, event = {}, source = 'git-hook' }
   if (!automation.enabled || !automation.postCommitEnabled) {
     return { ok: true, skipped: true, reason: 'post-commit automation disabled', slug };
   }
+  if (automation.paused) {
+    return { ok: true, skipped: true, reason: 'post-commit automation paused', slug };
+  }
 
   const rendered = await renderAutomationPrompt({ slug, cfg, event, defaultProjectKbPath: deps.defaultProjectKbPath });
   if (typeof deps.writeProjects === 'function') {
@@ -266,74 +383,67 @@ async function dispatchAutomation({ slug, cfg, event = {}, source = 'git-hook' }
   return dispatchRenderedAutomation({ slug, cfg, rendered, source }, deps);
 }
 
-async function dispatchPendingAutomations({ triggerSlug = null, triggerEvent = {} } = {}, deps) {
-  const projects = typeof deps.readProjects === 'function' ? deps.readProjects() : deps.projects;
-  const results = [];
-  const dispatchedSlugs = new Set();
-  if (!projects || typeof projects !== 'object') {
-    return { ok: true, dispatched: 0, results };
-  }
-
-  for (const [slug, cfg] of Object.entries(projects)) {
-    if (!cfg || cfg.enabled === false) continue;
-    const isTriggerProject = slug === triggerSlug;
-    const staleHead = cfg.headCommit || cfg.lastSeenCommit || null;
-    const triggerHead = triggerEvent.commitHash || '';
-    const hasConcreteTriggerHead = !!triggerHead && String(triggerHead) !== 'HEAD';
-    const hasKnownStalePending = isTriggerProject
-      && staleHead
-      && hasConcreteTriggerHead
-      && Number(cfg.lastScanPendingCount || 0) > 0
-      && String(triggerHead) !== String(staleHead);
-
-    if (hasKnownStalePending) {
-      const scan = await scanProject({ slug, ...cfg }, { maxCommits: 200, headCommit: staleHead });
-      if (scan.repoStatus === 'ok' && scan.pendingCount > 0) {
-        const result = await dispatchAutomation({
-          slug,
-          cfg,
-          event: {
-            ...triggerEvent,
-            commitHash: staleHead,
-            analysisHeadCommit: staleHead,
-          },
-          source: 'pending-sweep',
-        }, { ...deps, projects });
-        dispatchedSlugs.add(slug);
-        results.push({ slug, pendingCount: scan.pendingCount, headCommit: staleHead, result });
-      } else {
-        results.push({ slug, pendingCount: scan.pendingCount || 0, headCommit: staleHead, skipped: true, reason: scan.error || 'no stale pending commits' });
-      }
-      continue;
+async function wakeProjectAutomation(slug, triggerEvent = {}, deps) {
+  const previous = wakeLocks.get(slug) || Promise.resolve();
+  const current = previous.catch(() => {}).then(async () => {
+    const projects = typeof deps.readProjects === 'function' ? deps.readProjects() : deps.projects;
+    const cfg = projects && projects[slug];
+    if (!cfg || cfg.enabled === false) return { ok: true, skipped: true, reason: 'project disabled', slug };
+    const automation = normalizeAutomationConfig(cfg.automation);
+    if (!automation.enabled || !automation.postCommitEnabled) {
+      return { ok: true, skipped: true, reason: 'post-commit automation disabled', slug };
     }
-
-    if (isTriggerProject) continue;
+    if (automation.paused) return { ok: true, skipped: true, reason: 'post-commit automation paused', slug };
+    if (queue.isActive(slug)) return { ok: true, busy: true, reason: 'project automation already running', slug };
+    const pendingIndex = listAutomationRuns(slug, 100).find(run => ['indexing', 'index-pending'].includes(run.status));
+    if (pendingIndex) {
+      scheduleIndexRetry(slug, pendingIndex.runId, deps, 250);
+      return { ok: true, busy: true, reason: 'project vector finalization is pending', slug, runId: pendingIndex.runId };
+    }
 
     const scan = await scanProject({ slug, ...cfg }, { maxCommits: 200 });
     if (scan.repoStatus === 'ok') {
       await applyScanResult(cfg, scan);
+      if (typeof deps.writeProjects === 'function') {
+        try { deps.writeProjects(projects); } catch {}
+      }
     }
-    if (scan.repoStatus === 'ok' && scan.pendingCount > 0) {
-      const result = await dispatchAutomation({
-        slug,
-        cfg,
-        event: {
-          commitHash: scan.headCommit || 'HEAD',
-          branch: cfg.currentBranch || '',
-        },
-        source: 'pending-sweep',
-      }, { ...deps, projects });
-      dispatchedSlugs.add(slug);
-      results.push({ slug, pendingCount: scan.pendingCount, headCommit: scan.headCommit || null, result });
-    } else {
-      results.push({ slug, pendingCount: scan.pendingCount || 0, headCommit: scan.headCommit || null, skipped: true, reason: scan.error || 'no pending commits' });
+    if (scan.repoStatus !== 'ok' || scan.pendingCount === 0) {
+      return { ok: scan.repoStatus === 'ok', skipped: true, reason: scan.error || 'no pending commits', slug, scan };
     }
-  }
 
-  if (typeof deps.writeProjects === 'function') {
-    try { deps.writeProjects(projects); } catch {}
+    const nextCommit = scan.commits[0];
+    return dispatchAutomation({
+      slug,
+      cfg,
+      event: {
+        ...triggerEvent,
+        commitHash: nextCommit.hash,
+        analysisHeadCommit: nextCommit.hash,
+        branch: triggerEvent.branch || cfg.currentBranch || '',
+      },
+      source: triggerEvent.source || 'pending-sweep',
+    }, { ...deps, projects });
+  });
+  wakeLocks.set(slug, current);
+  try { return await current; }
+  finally { if (wakeLocks.get(slug) === current) wakeLocks.delete(slug); }
+}
+
+async function dispatchPendingAutomations({ triggerSlug = null, triggerEvent = {} } = {}, deps) {
+  const projects = typeof deps.readProjects === 'function' ? deps.readProjects() : deps.projects;
+  const results = [];
+  let dispatched = 0;
+  for (const [slug, cfg] of Object.entries(projects || {})) {
+    if (!cfg || cfg.enabled === false) continue;
+    const result = await wakeProjectAutomation(slug, {
+      ...(slug === triggerSlug ? triggerEvent : {}),
+      source: slug === triggerSlug ? (triggerEvent.source || 'git-hook') : 'pending-sweep',
+    }, deps);
+    if (result && result.status === 'dispatched') dispatched += 1;
+    results.push({ slug, result });
   }
-  return { ok: true, dispatched: dispatchedSlugs.size, results };
+  return { ok: true, dispatched, results };
 }
 
 async function dispatchProjectInit({ slug, cfg, source = 'project-init' }, deps) {
@@ -349,16 +459,30 @@ async function dispatchRenderedAutomation({ slug, cfg, rendered, source }, deps)
   _ensureEndHook(deps);
   const automation = normalizeAutomationConfig(cfg.automation);
   const workbench = rendered.workbench;
-  const policy = buildAutomationToolPolicy({ automation, kbPath: rendered.kbPath });
   const runId = newRunId();
   const startedAt = new Date().toISOString();
+  const liveKbPath = rendered.kbPath;
+  let stagingKbPath = null;
+  if (source !== 'project-init' && ['autoApply', 'directWriteKb'].includes(automation.knowledgeMode)) {
+    const workspace = prepareKnowledgeWorkspace(slug, runId, liveKbPath);
+    stagingKbPath = workspace.stagingKbPath;
+    rendered = {
+      ...rendered,
+      kbPath: stagingKbPath,
+      prompt: rendered.prompt.split(liveKbPath).join(stagingKbPath),
+    };
+  }
+  const policy = buildAutomationToolPolicy({ automation, kbPath: rendered.kbPath });
   const record = {
     schema: 'kb-automation-run/v1',
     runId,
     projectSlug: slug,
     source,
     repoPath: rendered.repoPath,
-    kbPath: rendered.kbPath,
+    kbPath: liveKbPath,
+    workingKbPath: rendered.kbPath,
+    liveKbPath,
+    stagingKbPath,
     commitHash: rendered.metadata.commitHash,
     branch: rendered.metadata.branch,
     knowledgeMode: automation.knowledgeMode,
@@ -368,6 +492,7 @@ async function dispatchRenderedAutomation({ slug, cfg, rendered, source }, deps)
     startedAt,
     endedAt: null,
     error: null,
+    phase: stagingKbPath ? 'analyzing' : null,
     commitRange: rendered.metadata.commitRange || '',
     pendingCommitCount: rendered.metadata.pendingCommitCount || 0,
     headCommitAtRun: rendered.metadata.headCommitAtRun || rendered.metadata.commitHash || null,
@@ -384,6 +509,7 @@ async function dispatchRenderedAutomation({ slug, cfg, rendered, source }, deps)
     record.endedAt = new Date().toISOString();
     record.error = profileCheck.error;
     writeAutomationRun(slug, record);
+    discardKnowledgeWorkspace(record);
     return { ok: false, status: profileCheck.status || 400, error: profileCheck.error, runId, slug };
   }
 
@@ -398,6 +524,7 @@ async function dispatchRenderedAutomation({ slug, cfg, rendered, source }, deps)
     record.endedAt = new Date().toISOString();
     record.error = `queue full (max ${automation.maxQueueSize})`;
     writeAutomationRun(slug, record);
+    discardKnowledgeWorkspace(record);
     return { ok: false, status: 429, error: record.error, runId, slug };
   }
 
@@ -445,6 +572,7 @@ function _startRun(ctx, deps) {
     ctx.record.endedAt = new Date().toISOString();
     ctx.record.error = e.message;
     writeAutomationRun(ctx.slug, ctx.record);
+    discardKnowledgeWorkspace(ctx.record);
     // No session was created, so onSessionEnded will never fire. Release the
     // slot manually and promote the next queued run.
     _advanceAfter(ctx.slug, deps, ctx.runId);
@@ -474,6 +602,13 @@ async function _resumeQueuedRun(slug, runId, deps) {
           event: { commitHash: record.commitHash, branch: record.branch },
           defaultProjectKbPath: deps.defaultProjectKbPath,
         });
+    if (record.stagingKbPath && record.liveKbPath) {
+      rendered = {
+        ...rendered,
+        kbPath: record.stagingKbPath,
+        prompt: rendered.prompt.split(record.liveKbPath).join(record.stagingKbPath),
+      };
+    }
     if (typeof deps.writeProjects === 'function') {
       try { deps.writeProjects(projects); } catch {}
     }
@@ -498,7 +633,8 @@ async function _resumeQueuedRun(slug, runId, deps) {
   const policy = buildAutomationToolPolicy({ automation, kbPath: rendered.kbPath });
   const profileCheck = deps.validateUsableAiProfile(cfg.aiProfileId);
   record.repoPath = rendered.repoPath;
-  record.kbPath = rendered.kbPath;
+  record.kbPath = record.liveKbPath || rendered.kbPath;
+  record.workingKbPath = rendered.kbPath;
   record.commitHash = rendered.metadata.commitHash;
   record.branch = rendered.metadata.branch;
   record.knowledgeMode = automation.knowledgeMode;
@@ -549,7 +685,76 @@ function _readAutomationRun(slug, runId) {
   }
 }
 
-function _markRunEnded(slug, runId, session, deps) {
+function advanceProjectCheckpoint(slug, r, deps) {
+  const projects = typeof deps.readProjects === 'function' ? deps.readProjects() : deps.projects;
+  if (!projects || !projects[slug] || !r.headCommitAtRun) return;
+  projects[slug].lastAnalyzedCommit = r.headCommitAtRun;
+  const knownHead = projects[slug].headCommit || projects[slug].lastSeenCommit || null;
+  const shouldAdvanceVisibleHead = !knownHead
+    || knownHead === r.headCommitAtRun
+    || knownHead === r.lastAnalyzedCommitBefore;
+  if (shouldAdvanceVisibleHead) {
+    projects[slug].lastSeenCommit = r.headCommitAtRun;
+    projects[slug].headCommit = r.headCommitAtRun;
+  }
+  if (!projects[slug].trackingStartCommit && r.trackingStartCommit) {
+    projects[slug].trackingStartCommit = r.trackingStartCommit;
+    projects[slug].trackingStartedAt = projects[slug].trackingStartedAt || r.startedAt || new Date().toISOString();
+  }
+  if (typeof deps.writeProjects === 'function') deps.writeProjects(projects);
+}
+
+async function finishVectorIndex(slug, runId, deps) {
+  const r = _readAutomationRun(slug, runId);
+  if (!r) return false;
+  if (!['indexing', 'index-pending'].includes(r.status)) return r.status === 'succeeded';
+  try {
+    const result = typeof deps.onKnowledgeUpdated === 'function'
+      ? await deps.onKnowledgeUpdated(slug, r)
+      : null;
+    r.vectorIndex = { status: 'succeeded', endedAt: new Date().toISOString(), result: result || null };
+    r.phase = 'completed';
+    r.status = 'succeeded';
+    r.endedAt = new Date().toISOString();
+    r.error = null;
+    if (r.source !== 'project-init' && r.headCommitAtRun) advanceProjectCheckpoint(slug, r, deps);
+    writeAutomationRun(slug, r);
+    discardKnowledgeWorkspace(r);
+    const timer = indexRetryTimers.get(`${slug}:${runId}`);
+    if (timer) clearTimeout(timer);
+    indexRetryTimers.delete(`${slug}:${runId}`);
+    return true;
+  } catch (error) {
+    r.status = 'index-pending';
+    r.phase = 'indexing';
+    r.error = error.message;
+    r.vectorIndex = { status: 'failed', endedAt: new Date().toISOString(), error: error.message };
+    writeAutomationRun(slug, r);
+    scheduleIndexRetry(slug, runId, deps);
+    return false;
+  }
+}
+
+function scheduleIndexRetry(slug, runId, deps, requestedDelay = null) {
+  const key = `${slug}:${runId}`;
+  if (indexRetryTimers.has(key)) return;
+  const r = _readAutomationRun(slug, runId);
+  if (!r || !['indexing', 'index-pending'].includes(r.status)) return;
+  r.indexRetryCount = Number(r.indexRetryCount || 0) + 1;
+  writeAutomationRun(slug, r);
+  const delay = requestedDelay == null
+    ? Math.min(300000, 5000 * Math.pow(2, Math.min(6, r.indexRetryCount - 1)))
+    : requestedDelay;
+  const timer = setTimeout(async () => {
+    indexRetryTimers.delete(key);
+    const completed = await finishVectorIndex(slug, runId, deps);
+    if (completed) await wakeProjectAutomation(slug, { source: 'vector-recovery' }, deps);
+  }, delay);
+  if (typeof timer.unref === 'function') timer.unref();
+  indexRetryTimers.set(key, timer);
+}
+
+async function _markRunEnded(slug, runId, session, deps) {
   const r = _readAutomationRun(slug, runId);
   if (!r) return;
   r.sessionId = session.sessionId || r.sessionId;
@@ -557,50 +762,58 @@ function _markRunEnded(slug, runId, session, deps) {
   r.exitCode = typeof session.exitCode === 'number' ? session.exitCode : null;
   if (session.state === 'aborted') {
     r.status = 'aborted';
+    r.phase = 'aborted';
   } else if (session.state === 'failed') {
     r.status = 'failed';
+    r.phase = 'failed';
     r.error = session.error || 'claude session failed';
   } else {
-    // idle — single automation turn completed. Treat as succeeded.
     r.status = session.exitCode === 0 || session.exitCode === null ? 'succeeded' : 'failed';
+    r.phase = r.status === 'succeeded' ? r.phase : 'failed';
     if (r.status === 'failed' && !r.error) r.error = `non-zero exitCode (${session.exitCode})`;
   }
   writeAutomationRun(slug, r);
-  if (r.status === 'succeeded' && ['autoApply', 'directWriteKb'].includes(r.knowledgeMode)) {
-    if (r.source !== 'project-init' && r.headCommitAtRun) {
-      try {
-        const projects = typeof deps.readProjects === 'function' ? deps.readProjects() : deps.projects;
-        if (projects && projects[slug]) {
-          projects[slug].lastAnalyzedCommit = r.headCommitAtRun;
-          const knownHead = projects[slug].headCommit || projects[slug].lastSeenCommit || null;
-          const shouldAdvanceVisibleHead = !knownHead
-            || knownHead === r.headCommitAtRun
-            || knownHead === r.lastAnalyzedCommitBefore;
-          if (shouldAdvanceVisibleHead) {
-            projects[slug].lastSeenCommit = r.headCommitAtRun;
-            projects[slug].headCommit = r.headCommitAtRun;
-          }
-          if (!projects[slug].trackingStartCommit && r.trackingStartCommit) {
-            projects[slug].trackingStartCommit = r.trackingStartCommit;
-            projects[slug].trackingStartedAt = projects[slug].trackingStartedAt || r.startedAt || new Date().toISOString();
-          }
-          if (typeof deps.writeProjects === 'function') deps.writeProjects(projects);
-        }
-      } catch {}
+
+  if (r.status !== 'succeeded') {
+    discardKnowledgeWorkspace(r);
+    if (r.status === 'aborted') drainQueue(slug);
+    _advanceAfter(slug, deps, runId);
+    return;
+  }
+
+  if (!['autoApply', 'directWriteKb'].includes(r.knowledgeMode)) {
+    _advanceAfter(slug, deps, runId);
+    return;
+  }
+
+  try {
+    if (r.stagingKbPath) {
+      r.status = 'applying';
+      r.phase = 'applying';
+      writeAutomationRun(slug, r);
+      const applied = applyKnowledgeWorkspace(r);
+      r.changedKnowledgeFiles = applied.changed;
+      r.changeRecords = applied.changeRecords;
+      r.markdownAppliedAt = new Date().toISOString();
     }
-    if (typeof deps.onKnowledgeUpdated === 'function') {
-      Promise.resolve(deps.onKnowledgeUpdated(slug, r)).then(result => {
-        const latest = _readAutomationRun(slug, runId);
-        if (!latest) return;
-        latest.vectorIndex = { status: 'succeeded', endedAt: new Date().toISOString(), result: result || null };
-        writeAutomationRun(slug, latest);
-      }).catch(error => {
-        const latest = _readAutomationRun(slug, runId);
-        if (!latest) return;
-        latest.vectorIndex = { status: 'failed', endedAt: new Date().toISOString(), error: error.message };
-        writeAutomationRun(slug, latest);
-      });
-    }
+    r.status = 'indexing';
+    r.phase = 'indexing';
+    writeAutomationRun(slug, r);
+  } catch (error) {
+    r.status = 'failed';
+    r.phase = 'failed';
+    r.error = error.message;
+    r.endedAt = new Date().toISOString();
+    writeAutomationRun(slug, r);
+    discardKnowledgeWorkspace(r);
+    _advanceAfter(slug, deps, runId);
+    return;
+  }
+
+  const completed = await finishVectorIndex(slug, runId, deps);
+  _advanceAfter(slug, deps, runId);
+  if (completed && r.source !== 'project-init') {
+    await wakeProjectAutomation(slug, { source: 'queue-drain' }, deps);
   }
 }
 
@@ -620,8 +833,17 @@ function _ensureEndHook(deps) {
     const slug = session && session.projectSlug;
     const runId = session && session.metadata && session.metadata.automationRunId;
     if (!slug || !runId) return;
-    _markRunEnded(slug, runId, session, d);
-    _advanceAfter(slug, d, runId);
+    Promise.resolve(_markRunEnded(slug, runId, session, d)).catch(error => {
+      const r = _readAutomationRun(slug, runId);
+      if (r) {
+        r.status = 'failed';
+        r.phase = 'failed';
+        r.error = `finalization failed: ${error.message}`;
+        r.endedAt = new Date().toISOString();
+        writeAutomationRun(slug, r);
+      }
+      _advanceAfter(slug, d, runId);
+    });
   });
   _registeredOnEnded = deps.onSessionEnded;
   endHookRegistered = true;
@@ -657,10 +879,45 @@ function cleanupOrphanedRuns(projects) {
         r.endedAt = new Date().toISOString();
         r.error = r.error || 'server restart: in-memory queue/session lost';
         writeAutomationRun(slug, r);
+        discardKnowledgeWorkspace(r);
       }
     }
   }
   return summary;
+}
+
+async function resumePendingFinalizations(projects, deps) {
+  const results = [];
+  for (const slug of Object.keys(projects || {})) {
+    const pending = listAutomationRuns(slug, 500)
+      .filter(run => ['applying', 'indexing', 'index-pending'].includes(run.status))
+      .sort((a, b) => String(a.startedAt || '').localeCompare(String(b.startedAt || '')));
+    for (const run of pending) {
+      try {
+        if (run.status === 'applying') {
+          const applied = applyKnowledgeWorkspace(run);
+          run.changedKnowledgeFiles = applied.changed;
+          run.changeRecords = applied.changeRecords;
+          run.markdownAppliedAt = run.markdownAppliedAt || new Date().toISOString();
+          run.status = 'indexing';
+          run.phase = 'indexing';
+          writeAutomationRun(slug, run);
+        }
+        const completed = await finishVectorIndex(slug, run.runId, deps);
+        results.push({ slug, runId: run.runId, completed });
+        if (!completed) break;
+      } catch (error) {
+        run.status = 'failed';
+        run.phase = 'failed';
+        run.error = `startup finalization failed: ${error.message}`;
+        run.endedAt = new Date().toISOString();
+        writeAutomationRun(slug, run);
+        results.push({ slug, runId: run.runId, completed: false, error: error.message });
+        break;
+      }
+    }
+  }
+  return results;
 }
 
 async function handlePostCommitEvent(event, deps) {
@@ -674,14 +931,8 @@ async function handlePostCommitEvent(event, deps) {
     triggerSlug: hit.slug,
     triggerEvent: event,
   }, nextDeps);
-  const latestProjects = typeof deps.readProjects === 'function' ? deps.readProjects() : projects;
-  const latestCfg = latestProjects && latestProjects[hit.slug] || hit.cfg;
-  const result = await dispatchAutomation({
-    slug: hit.slug,
-    cfg: latestCfg,
-    event,
-    source: event.source || 'git-hook',
-  }, { ...deps, projects: latestProjects || projects });
+  const trigger = pendingSweep.results.find(item => item.slug === hit.slug);
+  const result = trigger && trigger.result || { ok: true, skipped: true, reason: 'trigger project was not dispatched', slug: hit.slug };
   return { ...result, pendingSweep };
 }
 
@@ -698,8 +949,10 @@ module.exports = {
   dispatchAutomation,
   dispatchProjectInit,
   dispatchPendingAutomations,
+  wakeProjectAutomation,
   handlePostCommitEvent,
   cleanupOrphanedRuns,
+  resumePendingFinalizations,
   getQueueSize,
   drainQueue,
 };

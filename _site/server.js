@@ -1931,6 +1931,24 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    // POST /api/projects/:slug/automation/resume — resume the Git-backed
+    // per-commit worker from the oldest pending commit.
+    if (m === 'POST' && p.startsWith('/api/projects/') && p.endsWith('/automation/resume')) {
+      const slug = p.split('/')[3];
+      if (!isSafeSlug(slug)) return send(res, 400, { error: 'Invalid slug' });
+      const projects = readProjects({ persistMigrations: true });
+      if (!projects[slug]) return send(res, 404, { error: 'Slug not in projects.json' });
+      projects[slug].automation = normalizeAutomationConfig({
+        ...(projects[slug].automation || {}),
+        paused: false,
+      });
+      writeJson(PROJECTS_PATH, projects);
+      send(res, 202, { ok: true, accepted: true, slug, paused: false });
+      setImmediate(() => postCommitAutomation.wakeProjectAutomation(slug, { source: 'user-resume' }, automationDeps(projects))
+        .catch(error => logEvent('error', 'automation_resume_failed', error.message, { source: 'user-resume', projectSlug: slug })));
+      return;
+    }
+
     // GET /api/knowledge-store/config
     if (m === 'GET' && p === '/api/knowledge-store/config') {
       const cfg = readKnowledgeStore();
@@ -3441,10 +3459,21 @@ const server = http.createServer(async (req, res) => {
     // POST /api/claude/sessions/:id/abort — terminate current subprocess
     if (m === 'POST' && p.startsWith('/api/claude/sessions/') && p.endsWith('/abort')) {
       const sessionId = p.split('/')[4];
-      if (!claudeCliRunner.getSession(sessionId)) return send(res, 404, { error: 'session not found' });
+      const session = claudeCliRunner.getSession(sessionId);
+      if (!session) return send(res, 404, { error: 'session not found' });
       try {
+        if (session.automation && session.projectSlug) {
+          const projects = readProjects({ persistMigrations: true });
+          if (projects[session.projectSlug]) {
+            projects[session.projectSlug].automation = normalizeAutomationConfig({
+              ...(projects[session.projectSlug].automation || {}),
+              paused: true,
+            });
+            writeJson(PROJECTS_PATH, projects);
+          }
+        }
         claudeCliRunner.abort(sessionId);
-        return send(res, 200, { ok: true, sessionId });
+        return send(res, 200, { ok: true, sessionId, automationPaused: !!session.automation });
       } catch (e) {
         return send(res, 400, { ok: false, error: e.message });
       }
@@ -3771,4 +3800,25 @@ server.listen(PORT, HOST, () => {
   } catch (e) {
     console.error('[kb-site] automation cleanup failed:', e.message);
   }
+  setImmediate(async () => {
+    try {
+      let projects = readProjects({ persistMigrations: false });
+      const recovered = await postCommitAutomation.resumePendingFinalizations(projects, automationDeps(projects));
+      projects = readProjects({ persistMigrations: false });
+      const recovery = await postCommitAutomation.dispatchPendingAutomations({
+        triggerSlug: null,
+        triggerEvent: { source: 'startup-recovery' },
+      }, automationDeps(projects));
+      const resumed = recovered.filter(item => item.completed).length;
+      console.log(`[kb-site] startup recovery: ${recovery.dispatched} project worker(s) started, ${resumed} finalization(s) resumed`);
+      logEvent('info', 'startup_commit_recovery', 'startup pending commit recovery completed', {
+        source: 'startup-recovery',
+        dispatched: recovery.dispatched,
+        resumedFinalizations: resumed,
+      });
+    } catch (e) {
+      console.error('[kb-site] startup commit recovery failed:', e.message);
+      logEvent('error', 'startup_commit_recovery_failed', e.message, { source: 'startup-recovery' });
+    }
+  });
 });

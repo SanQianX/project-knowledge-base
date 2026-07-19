@@ -311,6 +311,7 @@ async function waitForAutomationRun(slug, timeoutMs = 30000) {
     fs.writeFileSync(path.join(projKb, 'changes', '00-index.md'), '# Changes Index\n', 'utf-8');
 
     const projects = JSON.parse(fs.readFileSync(PROJECTS_JSON, 'utf-8'));
+    const trackingBaseline = execGit(FIXTURE_REPO, ['rev-parse', 'HEAD']).stdout.trim();
     projects[SLUG] = {
       displayName: 'Hook Test',
       localPath: FIXTURE_REPO,
@@ -324,7 +325,8 @@ async function waitForAutomationRun(slug, timeoutMs = 30000) {
       repoStatus: 'unknown',
       headCommit: null,
       lastSeenCommit: null,
-      lastAnalyzedCommit: null,
+      lastAnalyzedCommit: trackingBaseline,
+      trackingStartCommit: trackingBaseline,
       aiProfileId: enabledProfileId(),
       kbSchemaVersion: 'minimal',
       goalStatus: 'accepted',

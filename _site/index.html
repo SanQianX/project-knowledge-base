@@ -484,6 +484,13 @@
                     <span class="absolute inset-0 m-auto h-5 w-5 rounded-full border-2 border-white/40 border-t-white animate-spin"></span>
                     <span class="h-2.5 w-2.5 rounded-sm bg-white"></span>
                   </button>
+                  <button v-else-if="terminalSession.automation && terminalSession.state === 'aborted'" @click="resumeProjectAutomation"
+                          class="shrink-0 h-8 w-8 rounded-md flex items-center justify-center"
+                          style="background: var(--good); color: white"
+                          :title="t('resumeAutomation')"
+                          :aria-label="t('resumeAutomation')">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                  </button>
                   <button v-else @click="sendClaudeInput"
                           :disabled="!selectedSlug || !terminalInput.trim() || terminalSession.state === 'pending-permission'"
                           class="shrink-0 h-8 w-8 rounded-md flex items-center justify-center"
@@ -1906,6 +1913,7 @@ const I18N = {
     noRestorableSession: "No previous Claude session for this project.",
     analyze: "Analyze",
     stop: "Stop",
+    resumeAutomation: "Resume automatic analysis",
     clear: "Clear",
     editPrompts: "Edit Prompts",
     send: "Send",
@@ -2409,6 +2417,7 @@ const I18N = {
     noRestorableSession: "当前项目没有可恢复的 Claude 会话。",
     analyze: "分析",
     stop: "停止",
+    resumeAutomation: "继续自动分析",
     clear: "清屏",
     editPrompts: "编辑提示词",
     send: "发送",
@@ -5584,6 +5593,19 @@ const app = createApp({
       return api("POST", "/api/system/pick-folder", {});
     }
 
+    async function resumeProjectAutomation() {
+      const slug = selectedSlug.value;
+      if (!slug) return;
+      try {
+        await api("POST", `/api/projects/${slug}/automation/resume`);
+        appendTerminalLine({ kind: 'system', text: t('resumeAutomation') });
+        await new Promise(resolve => setTimeout(resolve, 250));
+        await restoreLatestClaudeSession();
+      } catch (e) {
+        appendTerminalLine({ kind: 'error', text: 'resume failed: ' + e.message });
+      }
+    }
+
     function applyDesktopUpdateState(state) {
       if (state && typeof state === "object") Object.assign(desktopUpdate, state);
     }
@@ -6288,7 +6310,7 @@ const app = createApp({
       loadRuns, selectRun, loadRunDetail, loadDraftPreview, applySelectedDrafts, rejectRun,
       terminalLines, terminalSessionId, terminalSession, terminalSessions, terminalPermission, terminalPermissionBusy, terminalInput, terminalInputRef, terminalScrollRef,
       terminalStatusDot, terminalInputPlaceholder, isClaudeRunning, terminalProfileLabel, permissionSummaryText, renderMarkdown,
-      sendClaudeInput, stopClaudeSession, clearTerminal, restoreLatestClaudeSession, autoresizeTerminalInput, startNewClaudeSession, approveClaudePermission, denyClaudePermission,
+      sendClaudeInput, stopClaudeSession, resumeProjectAutomation, clearTerminal, restoreLatestClaudeSession, autoresizeTerminalInput, startNewClaudeSession, approveClaudePermission, denyClaudePermission,
       slashCommands, slashCommandItems, slashMenuOpen, slashMenuIndex, slashMenuPos, slashMenuRef, filteredSlashCommands, openSlashMenu, closeSlashMenu, toggleSlashMenu, cycleSlashMenu, selectSlashCommand, handleTerminalKeydown, onTerminalInput, startSlashMenuDrag, slashMenuDragging,
       permissionModes, permissionMode, permissionModeLabel, permissionModeColor, modeMenuOpen, modeMenuRef, toggleModeMenu, selectPermissionMode,
       sessionTokenUsage, tokenUsagePercent, tokenUsageStroke, tokenUsageDashOffset, tokenUsageCircumference, onAttachImage,

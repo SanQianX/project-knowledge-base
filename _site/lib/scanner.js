@@ -62,7 +62,10 @@ async function scanProject(project, options = {}) {
     result.trackingStartCommit = project.trackingStartCommit || result.trackingStartCommit || rangeStart;
     const range = `${rangeStart}..${result.headCommit}`;
     result.range = range;
-    const logArgs = ['log', '--no-merges', range, '--pretty=format:%H|%h|%ad|%an|%s', '--date=short'];
+    // Git is the durable automation queue. Always expose pending commits in
+    // chronological order so a per-project worker can process exactly one
+    // commit at a time without inventing a second persisted queue.
+    const logArgs = ['log', '--reverse', '--no-merges', range, '--pretty=format:%H|%h|%ad|%an|%s', '--date=short'];
     const log = await execGit(targetPath, logArgs);
     if (log.ok) {
       const lines = (log.stdout || '').split('\n').filter(l => l.includes('|'));

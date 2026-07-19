@@ -809,6 +809,13 @@ function startAutomationSession({
     automation: true,
   });
   if (process.env.KB_AUTOMATION_FAKE_CLAUDE === '1') {
+    const commitHash = String(metadata.commitHash || '');
+    if (commitHash && kbPath) {
+      const changesDir = path.join(kbPath, 'changes');
+      fs.mkdirSync(changesDir, { recursive: true });
+      fs.writeFileSync(path.join(changesDir, `fake-${commitHash.slice(0, 7)}.md`),
+        `---\ncommit: ${commitHash}\n---\n\n# Fake automation ${commitHash.slice(0, 7)}\n`, 'utf8');
+    }
     emit(session, { type: 'claude/result', result: 'fake automation completed', automation: true });
     setState(session, 'idle', { exitCode: 0, message: 'fake automation complete' });
     return { sessionId: session.sessionId, pendingPermission: null, runner: 'sdk', fake: true };

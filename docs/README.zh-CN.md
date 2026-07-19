@@ -190,6 +190,9 @@ Ctrl+C in this window, or run `project-knowledge stop` elsewhere.
 
 - 每个项目从 `git log` 扫描待提交。
 - `post-commit` 钩子在每次提交后自动触发。
+- Git 历史同时作为持久化待分析队列；实时 Hook 与客户端启动补偿使用同一个项目处理器，严格按照从旧到新的顺序一次分析一个 commit。
+- 每个 commit 都生成一份独立的 `changes/` 记录。Claude 先写入临时知识库工作区，Markdown 校验和 LanceDB 增量索引都成功后才推进已分析游标。
+- 停止自动化会暂停当前项目并丢弃尚未应用的临时结果；待分析 commit 仍保留在 Git 中，继续后从最早未完成提交恢复。
 - 每个项目的 `CLAUDE.md` 只写入一句用户目录相对的中央规则引用；详细规则只在
   `~/.project-knowledge/` 下维护一份。
 - 分支、远端、HEAD 元数据、reflog。

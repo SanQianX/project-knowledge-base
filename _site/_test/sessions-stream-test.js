@@ -222,6 +222,7 @@ async function waitFor(predicate, timeoutMs = 5000, intervalMs = 50) {
 
     // Register the project so /api/hooks/post-commit can resolve it.
     const projects = JSON.parse(fs.readFileSync(PROJECTS_JSON, 'utf-8'));
+    const trackingBaseline = execGit(FIXTURE_REPO, ['rev-parse', 'HEAD']).stdout.trim();
     projects[SLUG] = {
       displayName: 'SSE Test',
       localPath: FIXTURE_REPO,
@@ -235,7 +236,8 @@ async function waitFor(predicate, timeoutMs = 5000, intervalMs = 50) {
       repoStatus: 'unknown',
       headCommit: null,
       lastSeenCommit: null,
-      lastAnalyzedCommit: null,
+      lastAnalyzedCommit: trackingBaseline,
+      trackingStartCommit: trackingBaseline,
       aiProfileId: TEST_AI_PROFILE_ID,
       kbSchemaVersion: 'minimal',
       goalStatus: 'accepted',
