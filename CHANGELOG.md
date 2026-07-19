@@ -1,5 +1,23 @@
 # Changelog
 
+## [4.1.7] - 2026-07-19
+
+- Restored GitHub and Gitea login in the Windows desktop client through an
+  acknowledged Electron bridge that opens OAuth pages in the system browser.
+  Browser launch failures are now reported immediately instead of appearing
+  later as an authorization timeout.
+- Added support for HTTP authorization URLs used by private, intranet Gitea
+  installations while continuing to reject local-file and script URLs at the
+  desktop security boundary.
+- Forwarded Electron's Windows system-proxy resolution to the backend and made
+  GitHub OAuth plus remote repository discovery proxy-aware, while preserving
+  loopback and `NO_PROXY` bypasses for private Gitea installations.
+- Verified the full team-knowledge path after desktop migration: GitHub device
+  authorization, Gitea callback/token persistence, remote repository scanning,
+  manifest discovery, cached store loading, and team knowledge-base binding.
+- Added desktop bridge/security regressions and an end-to-end Gitea OAuth plus
+  remote team-store discovery test.
+
 ## [4.1.6] - 2026-07-19
 
 - Replaced overlapping post-commit batches with a single per-project worker

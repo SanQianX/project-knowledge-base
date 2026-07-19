@@ -148,8 +148,14 @@ function stopTree(pid) {
       const appRequire = createRequire(path.join(process.argv[2], 'package.json'));
       const ort = appRequire('onnxruntime-node');
       const transformers = appRequire('@huggingface/transformers');
+      const { HttpProxyAgent } = appRequire('http-proxy-agent');
+      const { HttpsProxyAgent } = appRequire('https-proxy-agent');
+      const { SocksProxyAgent } = appRequire('socks-proxy-agent');
       assert.equal(typeof ort.InferenceSession, 'function');
       assert.equal(typeof transformers.pipeline, 'function');
+      assert.equal(typeof HttpProxyAgent, 'function');
+      assert.equal(typeof HttpsProxyAgent, 'function');
+      assert.equal(typeof SocksProxyAgent, 'function');
       console.log('VECTOR_RUNTIME_PASS');
     `);
     const runtimeResult = spawnSync(executable, [runtimeProbe, asarRoot], {
@@ -162,7 +168,7 @@ function stopTree(pid) {
     assert(runtimeResult.status === 0,
       `packaged vector runtime failed: ${runtimeResult.stdout}\n${runtimeResult.stderr}`);
     assert(/VECTOR_RUNTIME_PASS/.test(runtimeResult.stdout),
-      'packaged vector runtime did not load Transformers.js and ONNX Runtime');
+      'packaged runtime did not load vector or Git proxy dependencies');
 
     console.log(`packaged-smoke PASS (${endpoint.host}:${endpoint.port}, backend PID ${endpoint.pid})`);
   } finally {

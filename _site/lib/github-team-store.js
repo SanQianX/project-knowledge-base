@@ -4,6 +4,9 @@ const http = require('http');
 const https = require('https');
 const crypto = require('crypto');
 const { URL } = require('url');
+const { HttpProxyAgent } = require('http-proxy-agent');
+const { HttpsProxyAgent } = require('https-proxy-agent');
+const { SocksProxyAgent } = require('socks-proxy-agent');
 const { execGit, getGitVersion } = require('./git-runner');
 
 const SCHEMA = 'github-team/v1';
@@ -160,6 +163,60 @@ function authHeaderForProvider(provider, token) {
     : { Authorization: `Bearer ${token}` };
 }
 
+function noProxyEntryMatches(entry, parsed) {
+  let value = String(entry || '').trim().toLowerCase();
+  if (!value) return false;
+  if (value === '*') return true;
+  const hostname = parsed.hostname.toLowerCase();
+  const port = parsed.port || (parsed.protocol === 'https:' ? '443' : '80');
+  if (value.includes('://')) {
+    try { value = new URL(value).host.toLowerCase(); } catch { return false; }
+  }
+  const bracketed = value.startsWith('[');
+  const colon = value.lastIndexOf(':');
+  let expectedPort = '';
+  if (colon > -1 && (!bracketed || value.includes(']:'))) {
+    expectedPort = value.slice(colon + 1);
+    value = value.slice(0, colon);
+  }
+  value = value.replace(/^\./, '').replace(/^\[|\]$/g, '');
+  if (expectedPort && expectedPort !== port) return false;
+  return hostname === value || hostname.endsWith(`.${value}`);
+}
+
+function shouldBypassProxy(parsed, env = process.env) {
+  const hostname = parsed.hostname.toLowerCase();
+  if (hostname === 'localhost' || hostname === '::1' || hostname === '0.0.0.0' || /^127\./.test(hostname)) return true;
+  const noProxy = String(env.NO_PROXY || env.no_proxy || '');
+  return noProxy.split(',').some(entry => noProxyEntryMatches(entry, parsed));
+}
+
+function proxyUrlForTarget(url, env = process.env) {
+  let parsed;
+  try { parsed = url instanceof URL ? url : new URL(url); } catch { return ''; }
+  if (shouldBypassProxy(parsed, env)) return '';
+  const hostname = parsed.hostname.toLowerCase();
+  const isGithubWeb = hostname === 'github.com' || hostname.endsWith('.github.com');
+  const candidates = [
+    isGithubWeb && hostname === 'api.github.com' ? env.KB_GITHUB_API_PROXY : '',
+    isGithubWeb && hostname !== 'api.github.com' ? env.KB_GITHUB_WEB_PROXY : '',
+    isGithubWeb ? env.KB_GITHUB_PROXY : '',
+    env.KB_GIT_PROXY,
+    parsed.protocol === 'https:' ? (env.HTTPS_PROXY || env.https_proxy) : (env.HTTP_PROXY || env.http_proxy),
+    env.ALL_PROXY || env.all_proxy,
+  ];
+  return String(candidates.find(value => String(value || '').trim()) || '').trim();
+}
+
+function proxyAgentForTarget(parsed, env = process.env) {
+  const proxyUrl = proxyUrlForTarget(parsed, env);
+  if (!proxyUrl) return undefined;
+  if (/^socks/i.test(proxyUrl)) return new SocksProxyAgent(proxyUrl);
+  return parsed.protocol === 'http:'
+    ? new HttpProxyAgent(proxyUrl)
+    : new HttpsProxyAgent(proxyUrl);
+}
+
 function requestJson({ method = 'GET', url, token = '', provider = 'github', body = null, headers = {}, timeoutMs = 20000 }) {
   return new Promise((resolve) => {
     let parsed;
@@ -178,6 +235,7 @@ function requestJson({ method = 'GET', url, token = '', provider = 'github', bod
       port: parsed.port,
       path: `${parsed.pathname}${parsed.search}`,
       timeout: timeoutMs,
+      agent: proxyAgentForTarget(parsed),
       headers: {
         'User-Agent': 'project-knowledge',
         'Accept': 'application/vnd.github+json',
@@ -232,6 +290,7 @@ function requestFormJson({ method = 'POST', url, form = {}, headers = {}, timeou
       port: parsed.port,
       path: `${parsed.pathname}${parsed.search}`,
       timeout: timeoutMs,
+      agent: proxyAgentForTarget(parsed),
       headers: {
         'User-Agent': 'project-knowledge',
         'Accept': 'application/json',
@@ -1080,6 +1139,7 @@ module.exports = {
   inferWebBaseUrlFromApiBaseUrl,
   defaultConfig,
   normalizeConfig,
+  proxyUrlForTarget,
   normalizeProvider,
   normalizeProviderFileConfig,
   readProviderFileConfig,

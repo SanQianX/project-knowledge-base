@@ -21,6 +21,7 @@ if (require('electron-squirrel-startup')) {
 const backendRuntime = require('./lib/backend-runtime.cjs');
 const folderPicker = require('./lib/folder-picker.cjs');
 const appUpdater = require('./lib/app-updater.cjs');
+const externalLink = require('./lib/external-link.cjs');
 
 const corePackagePath = require.resolve('project-knowledge/package.json');
 const coreRoot = path.dirname(corePackagePath);
@@ -34,6 +35,7 @@ let activeEndpoint = null;
 let isQuitting = false;
 let removeFolderPickerHandler = null;
 let removeAppUpdaterHandler = null;
+let removeExternalLinkHandler = null;
 
 app.setName('Project Knowledge');
 if (process.platform === 'win32') app.setAppUserModelId('com.sanqian.projectknowledge');
@@ -125,6 +127,7 @@ async function resolveBackend() {
   }
 
   const port = await backendRuntime.findFreePort(Number(process.env.KB_SITE_PORT || 5757), 20);
+  const extraEnv = await resolveDesktopNetworkEnv();
   const cliPath = path.join(coreRoot, 'bin', 'project-knowledge.js');
   const started = backendRuntime.spawnBackend({
     executable: process.execPath,
@@ -132,6 +135,7 @@ async function resolveBackend() {
     dataDir,
     port,
     cwd: path.dirname(process.execPath),
+    extraEnv,
   });
   ownedBackend = started.child;
   ownedBackend.once('exit', () => {
@@ -151,6 +155,26 @@ async function resolveBackend() {
   });
 }
 
+async function resolveDesktopNetworkEnv() {
+  const result = {};
+  const targets = [
+    ['KB_GITHUB_WEB_PROXY', 'https://github.com/login/device'],
+    ['KB_GITHUB_API_PROXY', 'https://api.github.com/user'],
+  ];
+  await Promise.all(targets.map(async ([name, target]) => {
+    if (process.env[name] || process.env.KB_GITHUB_PROXY || process.env.KB_GIT_PROXY) return;
+    try {
+      const rules = await Promise.race([
+        session.defaultSession.resolveProxy(target),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('system proxy resolution timed out')), 3000)),
+      ]);
+      const proxyUrl = backendRuntime.proxyUrlFromElectronRules(rules);
+      if (proxyUrl) result[name] = proxyUrl;
+    } catch {}
+  }));
+  return result;
+}
+
 function stopOwnedBackend() {
   if (!ownedBackend) return;
   const pid = ownedBackend.pid;
@@ -161,6 +185,11 @@ function stopOwnedBackend() {
 
 if (singleInstance) app.whenReady().then(async () => {
   try {
+    removeExternalLinkHandler = externalLink.registerExternalLink({
+      ipcMain,
+      shell,
+      isAllowedUrl: backendRuntime.isAllowedExternalUrl,
+    });
     removeFolderPickerHandler = folderPicker.registerFolderPicker({
       ipcMain,
       dialog,
@@ -201,6 +230,8 @@ app.on('before-quit', () => {
   removeFolderPickerHandler = null;
   if (removeAppUpdaterHandler) removeAppUpdaterHandler();
   removeAppUpdaterHandler = null;
+  if (removeExternalLinkHandler) removeExternalLinkHandler();
+  removeExternalLinkHandler = null;
   stopOwnedBackend();
 });
 }

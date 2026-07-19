@@ -123,10 +123,27 @@ function isAllowedNavigation(url, endpoint) {
 
 function isAllowedExternalUrl(url) {
   try {
-    return new URL(url).protocol === 'https:';
+    const protocol = new URL(url).protocol;
+    return protocol === 'https:' || protocol === 'http:';
   } catch {
     return false;
   }
+}
+
+function proxyUrlFromElectronRules(rules) {
+  const entries = String(rules || '').split(';').map(item => item.trim()).filter(Boolean);
+  for (const entry of entries) {
+    if (/^DIRECT$/i.test(entry)) continue;
+    const match = /^(PROXY|HTTP|HTTPS|SOCKS|SOCKS5)\s+(.+)$/i.exec(entry);
+    if (!match) continue;
+    const kind = match[1].toUpperCase();
+    const address = match[2].trim();
+    if (!address) continue;
+    if (kind === 'SOCKS5') return `socks5://${address}`;
+    if (kind === 'SOCKS') return `socks://${address}`;
+    return `http://${address}`;
+  }
+  return '';
 }
 
 module.exports = {
@@ -140,4 +157,5 @@ module.exports = {
   endpointUrl,
   isAllowedNavigation,
   isAllowedExternalUrl,
+  proxyUrlFromElectronRules,
 };

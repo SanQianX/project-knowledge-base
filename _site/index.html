@@ -1679,6 +1679,7 @@ const I18N = {
     githubDeviceCodeTitle: "Authorize in GitHub",
     githubDeviceCodeHelp: "A GitHub page has opened. Enter this code there to authorize this local app.",
     openGithubAuthPage: "Open GitHub authorization",
+    externalLinkOpenFailed: "The system browser could not be opened. Check the default browser setting and try again.",
     copyCode: "Copy code",
     chooseGitLogin: "Choose login method",
     chooseGitLoginHelp: "Use GitHub for public GitHub, or Gitea for your company Git service.",
@@ -2191,6 +2192,7 @@ const I18N = {
     githubDeviceCodeTitle: "在 GitHub 中授权",
     githubDeviceCodeHelp: "GitHub 授权页面已经打开，请在页面中输入这个授权码完成登录。",
     openGithubAuthPage: "打开 GitHub 授权页",
+    externalLinkOpenFailed: "无法打开系统浏览器，请检查 Windows 默认浏览器设置后重试。",
     copyCode: "复制授权码",
     chooseGitLogin: "选择登录方式",
     chooseGitLoginHelp: "公网 GitHub 选择 GitHub，公司 Gitea 选择 Gitea。",
@@ -5881,8 +5883,29 @@ const app = createApp({
       });
     }
 
-    function openGithubVerification() {
-      if (githubAuthModal.verificationUri) window.open(githubAuthModal.verificationUri, "_blank", "noopener,noreferrer");
+    async function openExternalUrl(url) {
+      const target = String(url || "").trim();
+      if (!/^https?:\/\//i.test(target)) throw new Error(t("externalLinkOpenFailed"));
+      const desktop = window.projectKnowledgeDesktop;
+      if (desktop && typeof desktop.openExternal === "function") {
+        const result = await desktop.openExternal(target);
+        if (!result || !result.ok) throw new Error(result && result.error || t("externalLinkOpenFailed"));
+        return true;
+      }
+      const opened = window.open(target, "_blank", "noopener,noreferrer");
+      if (!opened) throw new Error(t("externalLinkOpenFailed"));
+      return true;
+    }
+
+    async function openGithubVerification() {
+      if (!githubAuthModal.verificationUri) return false;
+      try {
+        await openExternalUrl(githubAuthModal.verificationUri);
+        return true;
+      } catch (error) {
+        githubAuthModal.error = error && error.message || t("externalLinkOpenFailed");
+        return false;
+      }
     }
 
     async function copyGithubDeviceCode() {
@@ -5928,7 +5951,8 @@ const app = createApp({
           expiresAt: Date.now() + Number(data.expiresIn || 900) * 1000,
           message: t("waitingGithubAuthorization"),
         });
-        openGithubVerification();
+        const opened = await openGithubVerification();
+        if (!opened) return;
         scheduleGithubOAuthPoll(data.interval || 5);
       } catch (e) {
         githubAuthModal.error = e.message;
@@ -5947,7 +5971,7 @@ const app = createApp({
         const data = await api("POST", "/api/team/gitea/oauth/start", {});
         if (data.config) Object.assign(githubStatus, data.config);
         if (data.redirectUri && gitProviders.gitea) gitProviders.gitea.oauthRedirectUri = data.redirectUri;
-        if (data.authorizationUrl) window.open(data.authorizationUrl, "_blank", "noopener,noreferrer");
+        if (data.authorizationUrl) await openExternalUrl(data.authorizationUrl);
         githubAuthModal.message = t("waitingGithubAuthorization");
         githubAuthModal.expiresAt = Date.now() + Number(data.expiresIn || 900) * 1000;
         scheduleGiteaOAuthPoll(2);

@@ -178,6 +178,26 @@ function startMockGitea(manifest) {
   });
 }
 
+function startMockHttpProxy() {
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    requests.push(req.url);
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url === 'http://github-proxy.example.test/user') {
+      res.end(JSON.stringify({ login: 'proxy-alice' }));
+      return;
+    }
+    res.statusCode = 502;
+    res.end(JSON.stringify({ message: 'unexpected proxy target' }));
+  });
+  return new Promise(resolve => {
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      resolve({ server, requests, proxyUrl: `http://127.0.0.1:${address.port}` });
+    });
+  });
+}
+
 (async () => {
   const manifest = {
     schema: 'project-knowledge/team-store/v1',
@@ -190,6 +210,7 @@ function startMockGitea(manifest) {
   };
   const mock = await startMockGithub(manifest);
   const giteaMock = await startMockGitea(manifest);
+  const proxyMock = await startMockHttpProxy();
   const providerConfigPath = path.join(DATA_DIR, 'team-git-providers.json');
   fs.writeFileSync(providerConfigPath, '\uFEFF' + JSON.stringify({
     schema: 'project-knowledge/git-providers/v1',
@@ -206,6 +227,19 @@ function startMockGitea(manifest) {
   assert(providerPublic.gitea.apiBaseUrl === 'http://gitea.example.test:3000/api/v1', 'Gitea API URL should be inferred from BOM config');
   assert(providerPublic.gitea.oauthClientSecret === undefined, 'Gitea client secret should not be exposed in public provider config');
   assert(providerPublic.gitea.oauthClientSecretConfigured === true, 'Gitea public config should expose only whether a client secret exists');
+  assert(githubTeamStore.proxyUrlForTarget('https://github.com/login/device', {
+    KB_GITHUB_WEB_PROXY: 'http://127.0.0.1:7890',
+  }) === 'http://127.0.0.1:7890', 'GitHub web OAuth should use the desktop-resolved system proxy');
+  assert(githubTeamStore.proxyUrlForTarget('https://api.github.com/user', {
+    KB_GITHUB_API_PROXY: 'socks5://127.0.0.1:1080',
+  }) === 'socks5://127.0.0.1:1080', 'GitHub API and repository scans should use their resolved system proxy');
+  assert(githubTeamStore.proxyUrlForTarget('http://127.0.0.1:3000/api/v1/user', {
+    KB_GIT_PROXY: 'http://127.0.0.1:7890',
+  }) === '', 'loopback Gitea should always bypass a configured proxy');
+  assert(githubTeamStore.proxyUrlForTarget('https://gitea.internal/api/v1/user', {
+    KB_GIT_PROXY: 'http://127.0.0.1:7890',
+    NO_PROXY: '.internal',
+  }) === '', 'NO_PROXY should bypass private Gitea hosts');
 
   fs.writeFileSync(path.join(DATA_DIR, 'projects.json'), '{}\n', 'utf-8');
   fs.writeFileSync(path.join(DATA_DIR, 'ai-profiles.json'), JSON.stringify({
@@ -254,6 +288,22 @@ function startMockGitea(manifest) {
     assert(giteaDiscovered.stores[0].provider === 'gitea', 'Gitea discovery should preserve provider');
     assert(giteaDiscovered.stores[0].knowledgeBases.length === 2, 'Gitea manifest knowledge bases should be returned');
 
+    const previousGitProxy = process.env.KB_GIT_PROXY;
+    process.env.KB_GIT_PROXY = proxyMock.proxyUrl;
+    try {
+      const proxiedValidation = await githubTeamStore.validateToken({
+        token: 'token',
+        apiBaseUrl: 'http://github-proxy.example.test',
+      });
+      assert(proxiedValidation.ok && proxiedValidation.login === 'proxy-alice',
+        `Git provider requests should use the configured desktop proxy: ${JSON.stringify(proxiedValidation)}`);
+      assert(proxyMock.requests.includes('http://github-proxy.example.test/user'),
+        'the proxy should receive the Git provider request as an absolute URL');
+    } finally {
+      if (previousGitProxy == null) delete process.env.KB_GIT_PROXY;
+      else process.env.KB_GIT_PROXY = previousGitProxy;
+    }
+
     initGitRepo(TEAM_SYNC_REMOTE);
     git(TEAM_SYNC_REMOTE, ['checkout', '-B', 'main']);
     fs.mkdirSync(path.join(TEAM_SYNC_REMOTE, 'acc'), { recursive: true });
@@ -297,7 +347,13 @@ function startMockGitea(manifest) {
       port: PORT,
       dataDir: DATA_DIR,
       tag: 'team-kb',
-      extraEnv: { KB_AUTOMATION_FAKE_CLAUDE: '1' },
+      extraEnv: {
+        KB_AUTOMATION_FAKE_CLAUDE: '1',
+        KB_GITEA_WEB_BASE_URL: giteaMock.webBaseUrl,
+        KB_GITEA_API_BASE_URL: giteaMock.apiBaseUrl,
+        KB_GITEA_OAUTH_CLIENT_ID: 'client-from-bom-file',
+        KB_GITEA_OAUTH_CLIENT_SECRET: 'secret-from-bom-file',
+      },
     });
     let serverOutput = '';
     spawned.child.stdout.on('data', d => { serverOutput += d.toString(); });
@@ -331,6 +387,15 @@ function startMockGitea(manifest) {
       assert(giteaStart.data.redirectUri === expectedGiteaRedirect, 'Gitea OAuth start should use the stable redirect URI');
       const authUrl = new URL(giteaStart.data.authorizationUrl);
       assert(authUrl.searchParams.get('redirect_uri') === expectedGiteaRedirect, 'Gitea authorization URL should include the stable redirect URI');
+      const giteaCallback = await json('GET', `/api/team/gitea/oauth/callback?code=oauth-code&state=${encodeURIComponent(authUrl.searchParams.get('state'))}`);
+      assert(giteaCallback.res.ok, `Gitea OAuth callback should exchange and save the token: ${JSON.stringify(giteaCallback.data)}`);
+      const giteaStatus = await json('GET', '/api/team/github/status');
+      assert(giteaStatus.data.config.provider === 'gitea' && giteaStatus.data.config.configured === true,
+        'Gitea OAuth callback should persist the authenticated provider');
+      const giteaStores = await json('GET', '/api/team/github/stores?refresh=1');
+      assert(giteaStores.res.ok, `Gitea team store scan should succeed after OAuth: ${JSON.stringify(giteaStores.data)}`);
+      assert(giteaStores.data.scannedRepoCount === 1 && giteaStores.data.stores.length === 1,
+        'Gitea scan should discover the manifest-backed team knowledge repository');
 
       const imported = await json('POST', '/api/projects/import', {
         localPath: SOURCE_REPO,
@@ -401,6 +466,7 @@ function startMockGitea(manifest) {
   } finally {
     try { mock.server.close(); } catch {}
     try { giteaMock.server.close(); } catch {}
+    try { proxyMock.server.close(); } catch {}
     try { fs.rmSync(DATA_DIR, { recursive: true, force: true }); } catch {}
     try { fs.rmSync(SOURCE_REPO, { recursive: true, force: true }); } catch {}
     try { fs.rmSync(SOURCE_REPO_AUTO_CLONE, { recursive: true, force: true }); } catch {}

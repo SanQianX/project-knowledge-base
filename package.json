@@ -1,6 +1,6 @@
 {
   "name": "project-knowledge",
-  "version": "4.1.6",
+  "version": "4.1.7",
   "description": "Knowledge base manager with Git integration, AI-driven analysis, and bilingual (zh-CN/en-US) knowledge output",
   "main": "_site/server.js",
   "scripts": {
@@ -54,6 +54,9 @@
     "@anthropic-ai/claude-agent-sdk": "^0.2.141",
     "@huggingface/transformers": "3.8.1",
     "@lancedb/lancedb": "0.31.0",
+    "http-proxy-agent": "7.0.2",
+    "https-proxy-agent": "7.0.6",
+    "socks-proxy-agent": "8.0.5",
     "ws": "^8.21.0"
   }
 }

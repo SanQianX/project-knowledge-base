@@ -1,7 +1,7 @@
 {
   "name": "project-knowledge-desktop",
   "productName": "Project Knowledge",
-  "version": "4.1.6",
+  "version": "4.1.7",
   "description": "Windows desktop application for project-knowledge",
   "main": "main.cjs",
   "author": "SanQianX",
@@ -25,7 +25,10 @@
     "@lancedb/lancedb-win32-x64-msvc": "0.31.0",
     "apache-arrow": "18.1.0",
     "electron-squirrel-startup": "1.0.1",
+    "http-proxy-agent": "7.0.2",
+    "https-proxy-agent": "7.0.6",
     "project-knowledge": "file:..",
+    "socks-proxy-agent": "8.0.5",
     "ws": "^8.21.0"
   },
   "devDependencies": {
