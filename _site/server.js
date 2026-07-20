@@ -1754,44 +1754,54 @@ async function runKnowledgeUpdate(slug) {
   let reviewReason = '';
 
   if ((scan.pendingCount || 0) > 0) {
-    analysis = await runCommitAnalysis({ slug, ...project, kbPath });
-    if (analysis.ok && !analysis.noop && analysis.runId) {
-      const drafts = listDrafts(kbPath, analysis.runId);
-      const safeDrafts = [];
-      const blocked = [];
-      for (const draft of drafts) {
-        if (draft.path === 'GOAL.md' || draft.path === 'ARCHITECTURE.md') {
-          blocked.push(draft.path);
-          continue;
+    analysis = await runCommitAnalysis({ slug, ...project, kbPath }, { writeProjects: () => writeJson(PROJECTS_PATH, projects) });
+    if (analysis.ok && !analysis.noop) {
+      // Each successful single-commit run gets its own draft + apply. The
+      // lastAnalyzedCommit pointer was already advanced inside the
+      // analysis loop, so we only need to track aggregate apply result.
+      applyResult = { ok: true, applied: [], backups: [], indexes: [] };
+      for (const runResult of analysis.runResults || []) {
+        if (!runResult.ok) continue;
+        const runDrafts = listDrafts(kbPath, runResult.runId);
+        const safeDrafts = [];
+        const blocked = [];
+        for (const draft of runDrafts) {
+          if (draft.path === 'GOAL.md' || draft.path === 'ARCHITECTURE.md') {
+            blocked.push(draft.path);
+            continue;
+          }
+          const content = readDraftContent(kbPath, runResult.runId, draft.path);
+          if (content != null) safeDrafts.push({ path: draft.path, content });
         }
-        const content = readDraftContent(kbPath, analysis.runId, draft.path);
-        if (content != null) safeDrafts.push({ path: draft.path, content });
-      }
-      if (safeDrafts.length) {
-        applyResult = applyDrafts({
-          kbPath,
-          slug,
-          runId: analysis.runId,
-          drafts: safeDrafts,
-          allowGoalEdit: false,
-          headCommitAtRun: analysis.runRecord && analysis.runRecord.headCommitAtRun,
-        });
-        if (applyResult.ok && analysis.runRecord && analysis.runRecord.headCommitAtRun) {
-          projects[slug].lastAnalyzedCommit = analysis.runRecord.headCommitAtRun;
-        } else if (!applyResult.ok) {
+        if (safeDrafts.length) {
+          const singleApply = applyDrafts({
+            kbPath,
+            slug,
+            runId: runResult.runId,
+            drafts: safeDrafts,
+            allowGoalEdit: false,
+            headCommitAtRun: runResult.runRecord.headCommitAtRun,
+          });
+          if (singleApply.ok) {
+            applyResult.applied = applyResult.applied.concat(singleApply.applied || []);
+            applyResult.backups = applyResult.backups.concat(singleApply.backups || []);
+            if (singleApply.indexes) applyResult.indexes = singleApply.indexes;
+          } else {
+            applyResult.ok = false;
+            reviewRequired = true;
+            reviewReason = singleApply.error || 'auto apply failed';
+          }
+        }
+        if (blocked.length) {
           reviewRequired = true;
-          reviewReason = applyResult.error || 'auto apply failed';
+          reviewReason = `blocked goal-related drafts: ${blocked.join(', ')}`;
         }
       }
-      if (blocked.length) {
-        reviewRequired = true;
-        reviewReason = `blocked goal-related drafts: ${blocked.join(', ')}`;
-      }
-      logEvent(applyResult && applyResult.ok ? 'info' : 'warn', 'commit_analysis_auto_apply', applyResult && applyResult.ok ? 'Commit analysis drafts auto-applied.' : 'Commit analysis requires review.', { source: 'knowledge-update', projectSlug: slug, runId: analysis.runId, applied: applyResult && applyResult.applied || [], reviewRequired });
+      logEvent(applyResult.ok ? 'info' : 'warn', 'commit_analysis_auto_apply', applyResult.ok ? 'Commit analysis drafts auto-applied.' : 'Commit analysis requires review.', { source: 'knowledge-update', projectSlug: slug, runIds: analysis.runIds, applied: applyResult.applied, reviewRequired });
     } else if (analysis.ok && analysis.noop) {
       logEvent('info', 'knowledge_update_noop', 'No pending commits to analyze.', { source: 'knowledge-update', projectSlug: slug });
     } else if (!analysis.ok) {
-      logEvent('error', 'commit_analysis_failed', analysis.error, { source: 'knowledge-update', projectSlug: slug, runId: analysis.runId || '' });
+      logEvent('error', 'commit_analysis_failed', analysis.error, { source: 'knowledge-update', projectSlug: slug, runIds: analysis.runIds || [] });
     }
   } else {
     analysis = { ok: true, noop: true, message: 'no pending commits' };
@@ -3500,11 +3510,11 @@ const server = http.createServer(async (req, res) => {
       const projects = readProjects({ persistMigrations: false });
       if (!projects[slug]) return send(res, 404, { error: 'Slug not in projects.json' });
       const kbPath = projects[slug].kbPath || defaultProjectKbPath(slug);
-      const result = await runCommitAnalysis({ slug, ...projects[slug], kbPath });
+      const result = await runCommitAnalysis({ slug, ...projects[slug], kbPath }, { writeProjects: () => writeJson(PROJECTS_PATH, projects) });
       if (!result.ok) {
-        return send(res, result.status, { ok: false, error: result.error, runId: result.runId, run: result.runRecord });
+        return send(res, result.status, { ok: false, error: result.error, runIds: result.runIds, totalCommits: result.totalCommits });
       }
-      return send(res, 200, { ok: true, slug, runId: result.runId, noop: !!result.noop, run: result.runRecord });
+      return send(res, 200, { ok: true, slug, runIds: result.runIds, noop: !!result.noop, totalCommits: result.totalCommits, succeededCount: result.succeededCount, failedCount: result.failedCount });
     }
 
     // GET /api/projects/:slug/runs — list run records

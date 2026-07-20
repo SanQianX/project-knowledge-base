@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.1.11] - 2026-07-21
+
+- Refactored `runCommitAnalysis` from batch to one-by-one: each pending
+  commit now gets its own run record and its own draft, analyzed in
+  chronological order (FIFO). After every successful single-commit
+  run, `project.lastAnalyzedCommit` advances to that commit's hash so
+  the "待分析" count drops by one per analysis, matching the UI label.
+  Previously a 10-commit batch produced 1 run + 10 drafts and the
+  pending count did not decrease until the user clicked Apply (which
+  could also advance the checkpoint past commits the user had not
+  actually applied drafts for).
+
 ## [4.1.10] - 2026-07-21
 
 - Made startup-recovery's staging copy (`prepareKnowledgeWorkspace`) and

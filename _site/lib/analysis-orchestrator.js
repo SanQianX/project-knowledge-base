@@ -139,6 +139,7 @@ async function runCommitAnalysis(project, options = {}) {
   const slug = project.slug;
   const kbPath = path.resolve(project.kbPath);
   const aiProfileId = project.aiProfileId;
+  const writeProjects = options.writeProjects || null;
   const profileCheck = validateUsableProfile(aiProfileId);
   if (!profileCheck.ok) return profileCheck;
   const adapter = profileCheck.adapter;
@@ -152,27 +153,70 @@ async function runCommitAnalysis(project, options = {}) {
     return { ok: true, noop: true, message: 'no pending commits', runId: null, scan };
   }
 
-  const runId = `commits-${shortRunId(Date.now().toString(36) + Math.random().toString(36))}`;
+  // Analyze each pending commit as its own run. scan.commits is ordered
+  // oldest-first (git log --reverse), so the analysis queue is FIFO in
+  // chronological order. After every successful single-commit run we
+  // advance project.lastAnalyzedCommit so the "pending" count drops by
+  // one, matching the "待分析" UI label.
   const aiRoot = aiWorkspace.ensureProjectAIPath(slug);
-  const draftsDir = path.join(aiRoot, 'drafts', runId);
   const runsDir = path.join(aiRoot, 'runs');
-  fs.mkdirSync(draftsDir, { recursive: true });
   fs.mkdirSync(runsDir, { recursive: true });
-  const meta = sourceMeta(project, scan.headCommit || null);
+
+  const runResults = [];
+  for (let i = 0; i < scan.commits.length; i++) {
+    const commit = scan.commits[i];
+    const result = await _runSingleCommitAnalysis({
+      slug, kbPath, adapter, project, commit,
+      runIndex: i, totalCount: scan.commits.length, runsDir, aiRoot,
+    });
+    runResults.push(result);
+    if (result.ok && result.runRecord.headCommitAtRun) {
+      const headCommitAtRun = result.runRecord.headCommitAtRun;
+      project.lastAnalyzedCommit = headCommitAtRun;
+      const knownHead = project.headCommit || project.lastSeenCommit || null;
+      if (!knownHead || knownHead === headCommitAtRun) {
+        project.lastSeenCommit = headCommitAtRun;
+        project.headCommit = headCommitAtRun;
+      }
+      if (writeProjects) writeProjects();
+    }
+  }
+
+  const successful = runResults.filter(r => r.ok);
+  const failed = runResults.filter(r => !r.ok);
+  return {
+    ok: failed.length === 0,
+    noop: false,
+    mode: scan.mode,
+    range: scan.range,
+    scan,
+    runResults,
+    runIds: successful.map(r => r.runId),
+    totalCommits: scan.commits.length,
+    succeededCount: successful.length,
+    failedCount: failed.length,
+  };
+}
+
+async function _runSingleCommitAnalysis({ slug, kbPath, adapter, project, commit, runIndex, totalCount, runsDir, aiRoot }) {
+  const runId = `commits-${shortRunId(Date.now().toString(36) + Math.random().toString(36))}-${runIndex + 1}-of-${totalCount}`;
+  const draftsDir = path.join(aiRoot, 'drafts', runId);
+  fs.mkdirSync(path.join(draftsDir, 'changes'), { recursive: true });
+  const meta = sourceMeta(project, commit.hash);
 
   const runRecord = {
     schema: 'ai-run/v1',
     runId,
     type: 'commits',
     project: slug,
-    aiProfileId,
+    aiProfileId: project.aiProfileId,
     knowledgeLanguage: knowledgeLanguage(project),
     status: 'running',
     startedAt: new Date().toISOString(),
-    mode: scan.mode,
-    range: scan.range,
-    commitCount: scan.commits.length,
-    headCommitAtRun: scan.headCommit || null,
+    mode: 'single-commit',
+    range: `${commit.hash}..${commit.hash}`,
+    commitCount: 1,
+    headCommitAtRun: commit.hash,
     lastAnalyzedCommitBefore: project.lastAnalyzedCommit || null,
     sourceBranch: meta.sourceBranch,
     sourceDefaultBranch: meta.sourceDefaultBranch,
@@ -182,17 +226,17 @@ async function runCommitAnalysis(project, options = {}) {
   };
 
   try {
-    // 1. Build a commit-aware context pack
+    // 1. Build a commit-aware context pack for THIS commit only
     const pack = await buildContextPack({
       project,
       runId,
       trigger: 'commits',
-      commits: scan.commits,
+      commits: [commit],
     });
     runRecord.contextPackPath = path.relative(aiRoot, path.join(aiRoot, 'context-packs', runId, 'context-pack.json')).replace(/\\/g, '/');
 
-    // 2. Run analyzer
-    const output = await adapter.analyzeCommitBatch({ project, commits: scan.commits, contextPack: pack });
+    // 2. Run analyzer on the single commit
+    const output = await adapter.analyzeCommitBatch({ project, commits: [commit], contextPack: pack });
 
     // 3. Validate
     const validation = adapter.validateOutput(output);
@@ -202,44 +246,38 @@ async function runCommitAnalysis(project, options = {}) {
       runRecord.error = 'invalid adapter output';
       runRecord.validationErrors = validation.errors;
       writeRun(runsDir, runRecord);
-      return { ok: false, status: 422, error: 'invalid adapter output', validation, runId, runRecord };
+      return { ok: false, runId, runRecord, error: 'invalid adapter output' };
     }
 
-    // 4. Render drafts
+    // 4. Render draft for this commit (only if AI returned a change for it)
     const changes = output.changes || [];
-    const changesByCommit = new Map(changes.map(c => [c.commit, c]));
-    let touchedGoal = false;
-
-    for (const commit of scan.commits) {
-      const change = changesByCommit.get(commit.hash);
-      if (!change) continue;
+    const change = changes.find(c => c.commit === commit.hash);
+    if (change) {
       const shortCommit = (commit.short || commit.hash || '').slice(0, 7);
       const draftChangePath = path.join(draftsDir, 'changes', `${shortCommit}.md`);
       fs.mkdirSync(path.dirname(draftChangePath), { recursive: true });
-      const draftMeta = { ...meta, sourceRunId: runId, sourceHeadCommit: runRecord.headCommitAtRun };
+      const draftMeta = { ...meta, sourceRunId: runId, sourceHeadCommit: commit.hash };
       fs.writeFileSync(draftChangePath, prependDraftFrontmatter(renderChangeDraft(project, change, commit), draftMeta), 'utf-8');
       runRecord.drafts.push({ op: 'create-file', path: `changes/${shortCommit}.md`, fromDraft: 'change', sourceBranch: meta.sourceBranch });
       runRecord.outputPaths.push(`changes/${shortCommit}.md`);
-
-      if (change.classification === 'refactor' || change.classification === 'infrastructure') {
-        // Note a goal-impact line so the reviewer can see this changed the implementation shape.
-        touchedGoal = touchedGoal || (change.goalImpact && change.goalImpact.length > 0);
-      }
+      runRecord.touchedGoal = (change.classification === 'refactor' || change.classification === 'infrastructure')
+        && !!(change.goalImpact && change.goalImpact.length > 0);
+    } else {
+      // AI returned no change — record but don't fail; advance still happens.
+      runRecord.error = 'no change returned for commit';
     }
 
-    runRecord.touchedGoal = touchedGoal;
     runRecord.status = 'succeeded';
     runRecord.finishedAt = new Date().toISOString();
-    runRecord.evidenceTotal = changes.reduce((acc, c) => acc + (c.evidence ? c.evidence.length : 0), 0);
+    runRecord.evidenceTotal = (change && change.evidence ? change.evidence.length : 0);
     writeRun(runsDir, runRecord);
-
-    return { ok: true, runId, runRecord, scan };
+    return { ok: true, runId, runRecord };
   } catch (e) {
     runRecord.status = 'failed';
     runRecord.finishedAt = new Date().toISOString();
     runRecord.error = e.message;
     writeRun(runsDir, runRecord);
-    return { ok: false, status: 500, error: e.message, runId, runRecord };
+    return { ok: false, runId, runRecord, error: e.message };
   }
 }
 

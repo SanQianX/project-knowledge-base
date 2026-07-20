@@ -135,7 +135,7 @@ async function runCommits(projects, slug, job, options = {}) {
     const result = await runCommitAnalysis({ slug: p.slug, ...p, kbPath });
     if (result.ok) {
       if (result.noop) { noop++; appendLine(job, `[analyze-commits] ${p.slug} → no pending commits`); }
-      else { ran++; appendLine(job, `[analyze-commits] ${p.slug} → run ${result.runId} (${result.runRecord.commitCount} commits)`); }
+      else { ran++; appendLine(job, `[analyze-commits] ${p.slug} → ${result.succeededCount}/${result.totalCommits} commits analyzed (${(result.runIds || []).length} runs)`); }
     } else { failed++; appendLine(job, `[analyze-commits] ${p.slug} → failed: ${result.error}`); }
   }
   return { ran, noop, failed, total: list.length };
