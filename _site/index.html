@@ -194,7 +194,7 @@
         </div>
       </div>
 
-      <nav class="border-t p-3" style="border-color: var(--sideBorder)">
+      <nav v-if="navItems.length" class="border-t p-3" style="border-color: var(--sideBorder)">
         <button v-for="item in navItems" :key="item.key" @click="activeView = item.key"
           :class="['mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition']"
           :style="activeView === item.key ? { background: 'var(--sideActive)', color: 'var(--sideText)' } : { color: 'var(--sideMuted)' }">
@@ -3453,7 +3453,10 @@ const app = createApp({
     });
 
     const navItems = computed(() => [
-      { key: "runs", label: t("runsDrafts"), badge: runs.value.length || "" }
+      // All projects on this install are autoApply, so the Runs/Drafts
+      // sidebar entry is hidden. Restore by uncommenting this line; the
+      // runs view itself stays intact for programmatic navigation.
+      // { key: "runs", label: t("runsDrafts"), badge: runs.value.length || "" }
     ]);
 
     const logOutput = computed(() => selectedJob.value ? (selectedJob.value.output || "") : (lastRun.value.output || ""));

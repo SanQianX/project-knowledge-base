@@ -164,10 +164,10 @@ async function waitFor(fn, label, ms = 15000) {
     const removeShot = await screenshot('task15-20-remove-modal.png');
     await evalJs(`[...document.querySelectorAll('button')].find(b => b.innerText.trim() === '×')?.click()`);
 
-    await evalJs(`[...document.querySelectorAll('button')].find(b => b.innerText.includes('Runs / Drafts'))?.click()`);
-    await waitFor(() => evalJs('document.body.innerText.includes("Runs and Drafts")'), 'runs view');
-    assert(await evalJs('document.body.innerText.includes("All branches") || document.querySelector("select")'), 'runs view should expose branch filtering controls when a run is selected or controls area exists');
-    const runsShot = await screenshot('task15-20-runs-view.png');
+    // v4.1.12: Runs/Drafts nav hidden by default for autoApply-only installs.
+    // Re-enable the sidebar entry by uncommenting navItems in index.html
+    // to restore this assertion.
+    const runsShot = await screenshot('task15-20-after-remove.png');
 
     assert(errors.length === 0, `console errors: ${errors.join('\\n')}`);
     console.log('TASK-015..020 UI flow test passed');

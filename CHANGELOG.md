@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.1.12] - 2026-07-21
+
+- Hid the "Runs / Drafts" sidebar nav entry. All registered projects
+  use `knowledgeMode: autoApply` so manual review is not part of the
+  workflow; the runs view itself is preserved for programmatic access
+  (uncomment the one line in `navItems` to restore the button).
+
 ## [4.1.11] - 2026-07-21
 
 - Refactored `runCommitAnalysis` from batch to one-by-one: each pending

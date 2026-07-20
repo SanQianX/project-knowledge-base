@@ -224,7 +224,7 @@ function assert(cond, msg) {
     const navText = r.result.value;
     assert(!navText.some(t => /^Dashboard|^仪表盘/.test(t)), 'Dashboard nav should not render as a standalone control');
     assert(navText.some(t => /^Import Project|^导入项目/.test(t)), 'Import project action missing');
-    assert(navText.some(t => /^Runs \/ Drafts|^运行 \/ 草稿/.test(t)), 'Runs / Drafts nav missing');
+    assert(!navText.some(t => /^Runs \/ Drafts|^运行 \/ 草稿/.test(t)), 'Runs / Drafts nav should be hidden for autoApply-only installs');
     assert(!navText.some(t => /^Logs|^日志/.test(t)), 'Logs should live inside settings, not the top bar');
     assert(navText.some(t => /^Log in to Git|^登录 Git|GitHub:|Gitea:/.test(t)), 'Git account trigger missing');
     assert(navText.some(t => /^Settings|^设置|^璁剧疆/.test(t)), 'Settings drawer trigger missing');
@@ -285,10 +285,10 @@ function assert(cond, msg) {
     });
     await new Promise(resolve => setTimeout(resolve, 1000));
     r = await send('Runtime.evaluate', {
-      expression: '/Runs|运行/.test(document.body.innerText) && /Drafts|草稿/.test(document.body.innerText)',
+      expression: '!document.body.innerText.includes("Runs / Drafts") && !document.body.innerText.includes("运行 / 草稿")',
       returnByValue: true,
     });
-    assert(r.result.value, 'Runs / Drafts tab did not render its content');
+    assert(r.result.value, 'Runs / Drafts tab should not be reachable for autoApply-only installs');
 
     r = await send('Runtime.evaluate', {
       expression: '(() => { const settings = Array.from(document.querySelectorAll("button, a")).find(b => /^Settings|^设置|^璁剧疆/.test(b.innerText)); if (settings) settings.click(); return !!settings; })()',
