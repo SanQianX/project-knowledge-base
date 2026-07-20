@@ -3462,18 +3462,8 @@ const server = http.createServer(async (req, res) => {
       const session = claudeCliRunner.getSession(sessionId);
       if (!session) return send(res, 404, { error: 'session not found' });
       try {
-        if (session.automation && session.projectSlug) {
-          const projects = readProjects({ persistMigrations: true });
-          if (projects[session.projectSlug]) {
-            projects[session.projectSlug].automation = normalizeAutomationConfig({
-              ...(projects[session.projectSlug].automation || {}),
-              paused: true,
-            });
-            writeJson(PROJECTS_PATH, projects);
-          }
-        }
         claudeCliRunner.abort(sessionId);
-        return send(res, 200, { ok: true, sessionId, automationPaused: !!session.automation });
+        return send(res, 200, { ok: true, sessionId, automationPaused: false });
       } catch (e) {
         return send(res, 400, { ok: false, error: e.message });
       }

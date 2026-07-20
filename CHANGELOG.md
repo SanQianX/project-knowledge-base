@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.1.8] - 2026-07-21
+
+- Stopped the post-commit automation worker from being auto-paused when a
+  user aborts the Claude session in the terminal. Pending commits queued
+  before the abort are now picked up again on the next desktop launch.
+
 ## [4.1.7] - 2026-07-19
 
 - Restored GitHub and Gitea login in the Windows desktop client through an
