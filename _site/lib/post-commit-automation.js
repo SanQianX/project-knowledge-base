@@ -237,13 +237,13 @@ function shouldCopyKnowledgePath(sourcePath) {
   return !segments.some(segment => ['.git', '_ai', '_backup', 'knowledge.lancedb'].includes(segment));
 }
 
-function prepareKnowledgeWorkspace(slug, runId, liveKbPath) {
+async function prepareKnowledgeWorkspace(slug, runId, liveKbPath) {
   const root = automationWorkspaceDir(slug, runId);
   const stagingKbPath = path.join(root, 'staging');
   fs.rmSync(root, { recursive: true, force: true });
   fs.mkdirSync(stagingKbPath, { recursive: true });
   if (liveKbPath && fs.existsSync(liveKbPath)) {
-    fs.cpSync(liveKbPath, stagingKbPath, {
+    await fs.promises.cp(liveKbPath, stagingKbPath, {
       recursive: true,
       force: true,
       filter: shouldCopyKnowledgePath,
@@ -464,7 +464,7 @@ async function dispatchRenderedAutomation({ slug, cfg, rendered, source }, deps)
   const liveKbPath = rendered.kbPath;
   let stagingKbPath = null;
   if (source !== 'project-init' && ['autoApply', 'directWriteKb'].includes(automation.knowledgeMode)) {
-    const workspace = prepareKnowledgeWorkspace(slug, runId, liveKbPath);
+    const workspace = await prepareKnowledgeWorkspace(slug, runId, liveKbPath);
     stagingKbPath = workspace.stagingKbPath;
     rendered = {
       ...rendered,

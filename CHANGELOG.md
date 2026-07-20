@@ -1,5 +1,16 @@
 # Changelog
 
+## [4.1.10] - 2026-07-21
+
+- Made startup-recovery's staging copy (`prepareKnowledgeWorkspace`) and
+  Claude-executable lookup (`findClaudeExecutableForSdk`) asynchronous
+  so the server's HTTP handlers (notably `/api/state`) stay responsive
+  while pending-commit workers are being dispatched. Previously the
+  desktop client would time out with `backend request timed out` when
+  several projects had pending commits on startup, because the sync
+  `fs.cpSync` and `spawnSync` calls were freezing the event loop for
+  several seconds during `/api/state` polling.
+
 ## [4.1.9] - 2026-07-21
 
 - Refused to import or upsert a project whose `kbPath` resolves to the

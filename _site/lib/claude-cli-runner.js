@@ -920,14 +920,18 @@ function findClaudeExecutable() {
   return { cmd: 'claude', shell: false };
 }
 
-function findClaudeExecutableForSdk(options = {}) {
+async function findClaudeExecutableForSdk(options = {}) {
   const env = options.env || process.env;
   const platform = options.platform || process.platform;
   const exists = options.exists || fs.existsSync;
-  const runCommand = options.runCommand || ((command, args) => spawnSync(command, args, {
-    encoding: 'utf8',
-    windowsHide: true,
-    timeout: 3000,
+  const runCommand = options.runCommand || ((command, args) => new Promise((resolve) => {
+    const child = spawn(command, args, { encoding: 'utf8', windowsHide: true });
+    let stdout = '', stderr = '';
+    const killer = setTimeout(() => { child.kill(); resolve({ status: null, stdout, stderr, error: 'timeout' }); }, 3000);
+    child.stdout.on('data', d => { stdout += d.toString('utf8'); });
+    child.stderr.on('data', d => { stderr += d.toString('utf8'); });
+    child.on('error', e => { clearTimeout(killer); resolve({ status: null, stdout, stderr, error: e.message }); });
+    child.on('close', code => { clearTimeout(killer); resolve({ status: code, stdout, stderr, error: null }); });
   }));
   const clean = file => String(file || '').trim().replace(/^"|"$/g, '');
   const isWindowsShellShim = file => {
@@ -1009,7 +1013,7 @@ async function runSdkTurn(session, opts, isResume) {
   const sdkPermissionMode = normalizePermissionMode(opts.permissionMode || session.permissionMode || 'default');
   session.permissionMode = sdkPermissionMode;
   const allowedTools = Array.isArray(opts.allowedTools) ? opts.allowedTools : [];
-  const claudeBin = findClaudeExecutableForSdk();
+  const claudeBin = await findClaudeExecutableForSdk();
   if (!claudeBin.cmd) throw new Error(claudeBin.reason);
   const sdkOptions = {
     cwd: opts.cwd,
