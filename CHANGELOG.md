@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.1.13] - 2026-07-21
+
+- Bumped the GitHub OAuth HTTP timeout from 20s to 30s in
+  `requestJson` and `requestFormJson` (github-team-store.js) and made
+  the timeout error message actionable: it now names the host that
+  failed and suggests using a Personal Access Token as a workaround
+  when GitHub is unreachable from the host network.
+
 ## [4.1.12] - 2026-07-21
 
 - Hid the "Runs / Drafts" sidebar nav entry. All registered projects

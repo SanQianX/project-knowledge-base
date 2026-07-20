@@ -217,7 +217,7 @@ function proxyAgentForTarget(parsed, env = process.env) {
     : new HttpsProxyAgent(proxyUrl);
 }
 
-function requestJson({ method = 'GET', url, token = '', provider = 'github', body = null, headers = {}, timeoutMs = 20000 }) {
+function requestJson({ method = 'GET', url, token = '', provider = 'github', body = null, headers = {}, timeoutMs = 30000 }) {
   return new Promise((resolve) => {
     let parsed;
     try {
@@ -264,7 +264,8 @@ function requestJson({ method = 'GET', url, token = '', provider = 'github', bod
       });
     });
     req.on('timeout', () => {
-      req.destroy(new Error(`request timed out after ${timeoutMs}ms`));
+      const host = parsed.hostname || 'github.com';
+      req.destroy(new Error(`GitHub API timeout after ${timeoutMs}ms connecting to ${host}; check your network/proxy, or use a Personal Access Token instead.`));
     });
     req.on('error', e => resolve({ ok: false, status: 0, error: e.message, data: null, headers: {} }));
     if (payload) req.write(payload);
@@ -272,7 +273,7 @@ function requestJson({ method = 'GET', url, token = '', provider = 'github', bod
   });
 }
 
-function requestFormJson({ method = 'POST', url, form = {}, headers = {}, timeoutMs = 20000 }) {
+function requestFormJson({ method = 'POST', url, form = {}, headers = {}, timeoutMs = 30000 }) {
   return new Promise((resolve) => {
     let parsed;
     try {
@@ -318,7 +319,8 @@ function requestFormJson({ method = 'POST', url, form = {}, headers = {}, timeou
       });
     });
     req.on('timeout', () => {
-      req.destroy(new Error(`request timed out after ${timeoutMs}ms`));
+      const host = parsed.hostname || 'github.com';
+      req.destroy(new Error(`GitHub API timeout after ${timeoutMs}ms connecting to ${host}; check your network/proxy, or use a Personal Access Token instead.`));
     });
     req.on('error', e => resolve({ ok: false, status: 0, error: e.message, data: null, headers: {} }));
     req.write(payload);
