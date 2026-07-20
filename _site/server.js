@@ -1638,6 +1638,9 @@ async function importProjectFromLocalPath({ localPath, knowledgeLanguage = DEFAU
   const kbPath = teamBinding
     ? teamBinding.kbPath
     : (recoveredCfg && recoveredCfg.kbPath ? recoveredCfg.kbPath : defaultProjectKbPath(slug));
+  if (pathsReferToSameLocation(kbPath, resolvedLocalPath) || pathsReferToSameLocation(kbPath, repoPath)) {
+    return { ok: false, status: 400, error: `kbPath must not equal the project source path (both resolve to ${resolvedLocalPath}); the knowledge base must live in a separate directory.` };
+  }
   const kbAlreadyInitialized = fs.existsSync(path.join(kbPath, 'README.md')) || kbFramework.isCurrentKb(kbPath);
   if (teamBinding && !kbAlreadyInitialized) {
     return { ok: false, status: 400, error: `selected team knowledge base is not initialized: ${kbPath}` };
@@ -2727,6 +2730,10 @@ const server = http.createServer(async (req, res) => {
         if (!isSafeSlug(body.slug)) return send(res, 400, { error: 'Invalid slug' });
         if (typeof body.config !== 'object' || body.config === null) {
           return send(res, 400, { error: 'Invalid config' });
+        }
+        const upsertTargetPath = body.config.gitPath || body.config.localPath;
+        if (body.config.kbPath && upsertTargetPath && pathsReferToSameLocation(body.config.kbPath, upsertTargetPath)) {
+          return send(res, 400, { error: `kbPath must not equal the project source path (both resolve to ${upsertTargetPath}); the knowledge base must live in a separate directory.` });
         }
         const importOptions = body.importOptions && typeof body.importOptions === 'object' ? body.importOptions : {};
         const targetPathBeforeImport = body.config.gitPath || body.config.localPath;

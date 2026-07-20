@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.1.9] - 2026-07-21
+
+- Refused to import or upsert a project whose `kbPath` resolves to the
+  same directory as `gitPath` / `localPath`. Writing the knowledge base
+  inside the source tree pollutes the repo (and trips Windows symlink
+  errors in the staging workspace), so both entry points now return 400.
+
 ## [4.1.8] - 2026-07-21
 
 - Stopped the post-commit automation worker from being auto-paused when a
