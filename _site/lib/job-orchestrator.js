@@ -132,7 +132,7 @@ async function runCommits(projects, slug, job, options = {}) {
   for (const p of list) {
     const kbPath = p.kbPath || resolveKbPath(p.slug);
     if (!fs.existsSync(kbPath)) { appendLine(job, `[analyze-commits] ${p.slug} → skipped (no KB)`); continue; }
-    const result = await runCommitAnalysis({ slug: p.slug, ...p, kbPath });
+    const result = await runCommitAnalysis({ projects: { [p.slug]: p }, slug: p.slug, kbPath });
     if (result.ok) {
       if (result.noop) { noop++; appendLine(job, `[analyze-commits] ${p.slug} → no pending commits`); }
       else { ran++; appendLine(job, `[analyze-commits] ${p.slug} → ${result.succeededCount}/${result.totalCommits} commits analyzed (${(result.runIds || []).length} runs)`); }

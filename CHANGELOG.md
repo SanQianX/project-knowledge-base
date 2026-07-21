@@ -1,5 +1,16 @@
 # Changelog
 
+## [4.1.14] - 2026-07-21
+
+- Fixed `runCommitAnalysis` to mutate the projects map entry directly
+  (`projects[slug].lastAnalyzedCommit`) instead of a copy. The v4.1.11
+  one-by-one refactor accepted `project = { slug, ...projects[slug],
+  kbPath }`, so `project.lastAnalyzedCommit = ...` mutated a throwaway
+  copy and the `writeProjects` callback persisted the unchanged value.
+  Symptom: the "待分析" count never decreases after analysis; the
+  pending count appears stuck or oscillates between runs because the
+  scan counter and the manual analysis counter diverge.
+
 ## [4.1.13] - 2026-07-21
 
 - Bumped the GitHub OAuth HTTP timeout from 20s to 30s in

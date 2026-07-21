@@ -135,15 +135,16 @@ function renderChangeDraft(project, change, commit) {
   return rendered.replace('## Reviewer Notes', proposal + '\n\n## Reviewer Notes');
 }
 
-async function runCommitAnalysis(project, options = {}) {
-  const slug = project.slug;
-  const kbPath = path.resolve(project.kbPath);
+async function runCommitAnalysis({ projects, slug, kbPath, writeProjects, options = {} }) {
+  const project = projects && projects[slug];
+  if (!project) return { ok: false, status: 404, error: 'project not found' };
+  const resolvedKbPath = path.resolve(kbPath || project.kbPath);
   const aiProfileId = project.aiProfileId;
-  const writeProjects = options.writeProjects || null;
+  const persist = typeof writeProjects === 'function' ? writeProjects : null;
   const profileCheck = validateUsableProfile(aiProfileId);
   if (!profileCheck.ok) return profileCheck;
   const adapter = profileCheck.adapter;
-  if (!fs.existsSync(kbPath)) return { ok: false, status: 400, error: 'project KB not initialized' };
+  if (!fs.existsSync(resolvedKbPath)) return { ok: false, status: 400, error: 'project KB not initialized' };
   // Run the scanner to discover pending commits since lastAnalyzedCommit.
   const scan = await scanProject({ slug, ...project }, { maxCommits: options.maxCommits || 200 });
   if (scan.repoStatus !== 'ok') {
@@ -156,8 +157,8 @@ async function runCommitAnalysis(project, options = {}) {
   // Analyze each pending commit as its own run. scan.commits is ordered
   // oldest-first (git log --reverse), so the analysis queue is FIFO in
   // chronological order. After every successful single-commit run we
-  // advance project.lastAnalyzedCommit so the "pending" count drops by
-  // one, matching the "待分析" UI label.
+  // advance projects[slug].lastAnalyzedCommit so the "pending" count drops
+  // by one, matching the "待分析" UI label.
   const aiRoot = aiWorkspace.ensureProjectAIPath(slug);
   const runsDir = path.join(aiRoot, 'runs');
   fs.mkdirSync(runsDir, { recursive: true });
@@ -166,19 +167,30 @@ async function runCommitAnalysis(project, options = {}) {
   for (let i = 0; i < scan.commits.length; i++) {
     const commit = scan.commits[i];
     const result = await _runSingleCommitAnalysis({
-      slug, kbPath, adapter, project, commit,
+      slug, kbPath: resolvedKbPath, adapter, project, commit,
       runIndex: i, totalCount: scan.commits.length, runsDir, aiRoot,
     });
     runResults.push(result);
     if (result.ok && result.runRecord.headCommitAtRun) {
       const headCommitAtRun = result.runRecord.headCommitAtRun;
-      project.lastAnalyzedCommit = headCommitAtRun;
-      const knownHead = project.headCommit || project.lastSeenCommit || null;
+      projects[slug].lastAnalyzedCommit = headCommitAtRun;
+      const knownHead = projects[slug].headCommit || projects[slug].lastSeenCommit || null;
       if (!knownHead || knownHead === headCommitAtRun) {
-        project.lastSeenCommit = headCommitAtRun;
-        project.headCommit = headCommitAtRun;
+        projects[slug].lastSeenCommit = headCommitAtRun;
+        projects[slug].headCommit = headCommitAtRun;
       }
-      if (writeProjects) writeProjects();
+      // The scan at the top of this function was computed against the OLD
+      // lastAnalyzedCommit. After each successful commit, decrement the
+      // cached count by one so the sidebar "待分析" badge stays in sync
+      // with the checkpoint we just advanced. Failed runs (result.ok = false)
+      // don't reduce the count because their commit is still pending.
+      if (result.ok) {
+        projects[slug].lastScanPendingCount = Math.max(
+          0,
+          (scan.pendingCount || 0) - runResults.filter(r => r.ok).length
+        );
+      }
+      if (persist) persist();
     }
   }
 
@@ -202,7 +214,11 @@ async function _runSingleCommitAnalysis({ slug, kbPath, adapter, project, commit
   const runId = `commits-${shortRunId(Date.now().toString(36) + Math.random().toString(36))}-${runIndex + 1}-of-${totalCount}`;
   const draftsDir = path.join(aiRoot, 'drafts', runId);
   fs.mkdirSync(path.join(draftsDir, 'changes'), { recursive: true });
-  const meta = sourceMeta(project, commit.hash);
+  // The cfg object from projects[slug] does not have a `slug` field of its own
+  // (slug is the map key). Re-attach it so downstream helpers that validate
+  // `project.slug`/`project.kbPath` see a complete record.
+  const projectForHelpers = { ...project, slug, kbPath };
+  const meta = sourceMeta(projectForHelpers, commit.hash);
 
   const runRecord = {
     schema: 'ai-run/v1',
@@ -228,7 +244,7 @@ async function _runSingleCommitAnalysis({ slug, kbPath, adapter, project, commit
   try {
     // 1. Build a commit-aware context pack for THIS commit only
     const pack = await buildContextPack({
-      project,
+      project: projectForHelpers,
       runId,
       trigger: 'commits',
       commits: [commit],

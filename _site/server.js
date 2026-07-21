@@ -1754,7 +1754,7 @@ async function runKnowledgeUpdate(slug) {
   let reviewReason = '';
 
   if ((scan.pendingCount || 0) > 0) {
-    analysis = await runCommitAnalysis({ slug, ...project, kbPath }, { writeProjects: () => writeJson(PROJECTS_PATH, projects) });
+    analysis = await runCommitAnalysis({ projects, slug, kbPath, writeProjects: () => writeJson(PROJECTS_PATH, projects) });
     if (analysis.ok && !analysis.noop) {
       // Each successful single-commit run gets its own draft + apply. The
       // lastAnalyzedCommit pointer was already advanced inside the
@@ -3510,7 +3510,7 @@ const server = http.createServer(async (req, res) => {
       const projects = readProjects({ persistMigrations: false });
       if (!projects[slug]) return send(res, 404, { error: 'Slug not in projects.json' });
       const kbPath = projects[slug].kbPath || defaultProjectKbPath(slug);
-      const result = await runCommitAnalysis({ slug, ...projects[slug], kbPath }, { writeProjects: () => writeJson(PROJECTS_PATH, projects) });
+      const result = await runCommitAnalysis({ projects, slug, kbPath, writeProjects: () => writeJson(PROJECTS_PATH, projects) });
       if (!result.ok) {
         return send(res, result.status, { ok: false, error: result.error, runIds: result.runIds, totalCommits: result.totalCommits });
       }

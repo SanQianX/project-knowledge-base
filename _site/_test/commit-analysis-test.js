@@ -82,7 +82,7 @@ async function cleanup() {
   };
 
   // 1. Missing profile fails fast
-  let r = await runCommitAnalysis(project);
+  let r = await runCommitAnalysis({ projects: { [TEMP_SLUG]: project }, slug: TEMP_SLUG });
   assert(!r.ok, `commit analysis without configured profile should fail, got: ${JSON.stringify(r)}`);
   assert(/AI profile not configured/.test(r.error || ''), `expected "AI profile not configured" error, got: ${r.error}`);
   assert(r.status === 400, `expected 400, got ${r.status}`);
@@ -93,7 +93,7 @@ async function cleanup() {
 
   // 3. Bad git path also fails (with a different error)
   const badProject = { ...project, gitPath: 'D:\\__no_such_repo__' };
-  r = await runCommitAnalysis(badProject);
+  r = await runCommitAnalysis({ projects: { [TEMP_SLUG]: badProject }, slug: TEMP_SLUG });
   assert(!r.ok, 'bad git path should fail');
 
   repo.cleanup();
