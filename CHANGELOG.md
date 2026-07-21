@@ -1,5 +1,16 @@
 # Changelog
 
+## [4.1.15] - 2026-07-21
+
+- Replaced the dashboard's fixed-interval polling with a server-sent-events
+  (SSE) push model. The backend now emits a `state/changed` event over a new
+  `/api/state-stream` channel whenever project state is written or a job
+  starts/finishes, and the frontend refreshes only in response (300 ms
+  debounced). A slow 60 s poll remains as a fallback. Result: changes such as
+  the sidebar pending count and summary cards update within ~1-2 s of the
+  per-commit analysis cycle, while an idle dashboard makes almost no requests
+  instead of hitting the server every 5 s.
+
 ## [4.1.14] - 2026-07-21
 
 - Fixed `runCommitAnalysis` to mutate the projects map entry directly

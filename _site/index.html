@@ -2946,6 +2946,8 @@ const app = createApp({
     const terminalScrollRef = ref(null);
     let claudeEventSource = null;
     let claudeSessionsStream = null;
+    let dashboardStateStream = null;
+    let stateRefreshTimer = null;
     const activeSessionsBySlug = reactive({}); // { slug: count of active sessions }
     const activeSessionMetaById = new Map(); // sessionId -> { slug }
     // When assistant emits text deltas, accumulate into the last text-kind line so chunks
@@ -3659,8 +3661,10 @@ const app = createApp({
     }
 
     async function refreshAll({ force = false } = {}) {
-      // The 30s poller exists to keep dashboard data fresh. Editing views
-      // keep local drafts, so polling is skipped unless the user refreshes.
+      // Dashboard data is kept fresh by the SSE state-stream (see
+      // openDashboardStateStream), which calls this on backend changes; the
+      // interval below is only a slow 60s fallback. Editing views keep local
+      // drafts, so refreshing is skipped unless the user forces it.
       if (["ai", "settings", "prompts"].includes(activeView.value) && !force) return;
       loading.value = true;
       pollError.value = "";
@@ -3887,6 +3891,27 @@ const app = createApp({
         try { claudeSessionsStream.close(); } catch {}
         claudeSessionsStream = null;
       }
+    }
+
+    function openDashboardStateStream() {
+      if (dashboardStateStream) return;
+      try { dashboardStateStream = new EventSource('/api/state-stream'); }
+      catch (e) { console.error('open state stream failed', e); return; }
+      dashboardStateStream.addEventListener('state/changed', () => {
+        // 300ms debounce so a burst of events triggers one refresh. No `force`,
+        // so the ai/settings/prompts editing views keep their draft-protecting skip.
+        if (stateRefreshTimer) clearTimeout(stateRefreshTimer);
+        stateRefreshTimer = setTimeout(() => { refreshAll().catch(() => {}); }, 300);
+      });
+      dashboardStateStream.onerror = () => {}; // EventSource auto-reconnects
+    }
+
+    function closeDashboardStateStream() {
+      if (dashboardStateStream) {
+        try { dashboardStateStream.close(); } catch {}
+        dashboardStateStream = null;
+      }
+      if (stateRefreshTimer) { clearTimeout(stateRefreshTimer); stateRefreshTimer = null; }
     }
 
     function isActiveState(state) {
@@ -6284,11 +6309,13 @@ const app = createApp({
       loadDesktopUpdateState();
       loadClaudeMdAudit(true).catch(() => {});
       openClaudeSessionsStream();
+      openDashboardStateStream();
     });
-    const pollTimer = setInterval(refreshAll, 30000);
+    const pollTimer = setInterval(refreshAll, 60000);
     onUnmounted(() => {
       clearInterval(pollTimer);
       closeClaudeSessionsStream();
+      closeDashboardStateStream();
       stopProjectGoalDrag();
       clearGithubOAuthPoll();
       clearGiteaOAuthPoll();

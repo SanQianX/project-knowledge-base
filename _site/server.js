@@ -495,9 +495,28 @@ function readJson(p) {
   return JSON.parse(fs.readFileSync(p, 'utf-8'));
 }
 
+// Lightweight state event bus so the dashboard can react to backend changes
+// via SSE instead of polling. Same Set-based pattern as claudeCliRunner.subscribeList.
+const stateSubscribers = new Set();
+let stateNotifyTimer = null;
+function subscribeState(cb) {
+  stateSubscribers.add(cb);
+  return () => stateSubscribers.delete(cb);
+}
+function notifyStateChanged(reason) {
+  // Coalesce bursts (e.g. per-commit batch writes) into one frame.
+  if (stateNotifyTimer) return;
+  stateNotifyTimer = setTimeout(() => {
+    stateNotifyTimer = null;
+    const evt = { type: 'state/changed', reason, time: new Date().toISOString() };
+    for (const cb of stateSubscribers) { try { cb(evt); } catch {} }
+  }, 150);
+}
+
 function writeJson(p, obj) {
   fs.mkdirSync(path.dirname(p), { recursive: true });
   fs.writeFileSync(p, JSON.stringify(obj, null, 2) + '\n', 'utf-8');
+  if (p === PROJECTS_PATH) notifyStateChanged('projects');
 }
 
 function backupInvalidJson(filePath, raw) {
@@ -1294,6 +1313,7 @@ function startJob({ mode, slug }) {
   if (!KNOWN_MODES.has(mode)) return { ok: false, status: 400, error: `unknown mode: ${mode}` };
   const job = makeJob({ mode, slug: slug || 'ALL' });
   runningJobs.set(job.jobId, job);
+  notifyStateChanged('job-start');
   logEvent('info', 'job_started', `${job.mode} job started`, { source: 'job-orchestrator', jobId: job.jobId, projectSlug: job.slug, mode: job.mode });
   // Run the job in the background so the HTTP request returns immediately.
   // The job orchestrator updates `job` in place; the route handler returns
@@ -1318,6 +1338,7 @@ function startJob({ mode, slug }) {
       logEvent('error', 'job_dispatch_failed', e.message, { source: 'job-orchestrator', jobId: job.jobId, projectSlug: job.slug });
     } finally {
       lastRun = { time: job.endTime, status: job.status, slug: job.slug, mode: job.mode, output: (job.output || '').slice(-6000) };
+      notifyStateChanged('job-end');
       logEvent(job.status === 'success' ? 'info' : 'warn', 'job_finished', `${job.mode} job ${job.status}`, { source: 'job-orchestrator', jobId: job.jobId, projectSlug: job.slug, mode: job.mode, status: job.status });
       // Keep the live record for 10 minutes so the UI can poll completion.
       setTimeout(() => runningJobs.delete(job.jobId), 10 * 60 * 1000);
@@ -3420,7 +3441,30 @@ const server = http.createServer(async (req, res) => {
       return; // do NOT call send() — connection stays open
     }
 
-    // POST /api/claude/sessions/:id/input — send follow-up prompt (uses --resume)
+    // GET /api/state-stream — SSE channel for dashboard state changes
+    if (m === 'GET' && p === '/api/state-stream') {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-store, no-transform',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+        'X-Accel-Buffering': 'no',
+      });
+      res.write(`event: state/hello\ndata: ${JSON.stringify({ time: new Date().toISOString() })}\n\n`);
+      const unsubscribe = subscribeState((event) => {
+        try { res.write(`event: state/changed\ndata: ${JSON.stringify(event)}\n\n`); } catch { /* client gone */ }
+      });
+      const heartbeat = setInterval(() => {
+        try { res.write(`: keepalive ${Date.now()}\n\n`); } catch {}
+      }, 15000);
+      const cleanup = () => {
+        clearInterval(heartbeat);
+        try { unsubscribe(); } catch {}
+      };
+      req.on('close', cleanup);
+      req.on('error', cleanup);
+      return; // do NOT call send() — connection stays open
+    }
     if (m === 'POST' && p.startsWith('/api/claude/sessions/') && p.endsWith('/input')) {
       const sessionId = p.split('/')[4];
       if (!claudeCliRunner.getSession(sessionId)) return send(res, 404, { error: 'session not found' });
