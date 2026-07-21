@@ -1,5 +1,29 @@
 # Changelog
 
+## [4.1.16] - 2026-07-22
+
+- Fixed the desktop client timing out / hanging on the loading screen for large
+  knowledge bases (many projects, multi-GB DB) while the web dashboard opened
+  fine. Root cause was several compounding issues:
+  - Desktop startup probe was too impatient: raised the per-request `/api/state`
+    timeout (1.5 s → 30 s) and the overall backend-ready budgets (owned backend
+    45 s → 180 s, existing backend 20 s → 60 s) so it waits like a browser does.
+  - Server startup no longer blocks the event loop: the CLAUDE.md audit and
+    orphaned-run cleanup now run in `setImmediate`, so `/api/state` can answer
+    immediately after `listen()`.
+  - `getScheduleInfo()` (which spawns `schtasks`) is now cached for 5 s so
+    repeated `/api/state` hits don't each pay process-spawn latency.
+  - `isProcessAlive` now treats `EPERM` as alive, so a running backend's
+    runtime-endpoint file is no longer deleted (and a duplicate cold-started)
+    when the desktop and CLI run at different privilege levels on Windows.
+  - The dashboard now retries the initial connection every 3 s until it first
+    succeeds, instead of waiting up to 60 s, so a slow-starting backend no
+    longer leaves the page spinning.
+- Stopped the knowledge-storage relocation from logging
+  `target ... is not empty` on every startup: relocation is now skipped (with a
+  single warning) when the configured storage directory already holds unrelated
+  content, and the existing storage location keeps being used.
+
 ## [4.1.15] - 2026-07-21
 
 - Replaced the dashboard's fixed-interval polling with a server-sent-events

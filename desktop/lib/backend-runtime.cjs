@@ -4,7 +4,7 @@ const net = require('net');
 const path = require('path');
 const { spawn } = require('child_process');
 
-function requestState(endpoint, timeoutMs = 1500) {
+function requestState(endpoint, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
     const req = http.request({
       host: endpoint.host,

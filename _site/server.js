@@ -90,11 +90,21 @@ function initializeKnowledgeStorageLayout() {
   const desired = knowledgeStorageLocation.configuredLayout(config.rootPath);
   const legacy = knowledgeStorageLocation.legacyLayout(DATA_DIR);
   if (fs.existsSync(legacy.dbPath) && !fs.existsSync(desired.dbPath)) {
-    try {
-      knowledgeStorageLocation.relocateLayout(legacy, desired);
-      knowledgeStorageLocation.rebaseMaintenanceState(legacy, desired);
-    } catch (error) {
-      console.error(`[knowledge-storage] ${error.message}`);
+    // Only attempt the legacy→configured move when the target storage dir is
+    // absent or empty. If it already holds unrelated content (but no DB), the
+    // move can't complete cleanly — skip it (warn once) and keep using the
+    // active layout instead of throwing the same error on every startup.
+    const targetOccupied = fs.existsSync(desired.storageRoot)
+      && (() => { try { return fs.readdirSync(desired.storageRoot).length > 0; } catch { return true; } })();
+    if (targetOccupied) {
+      console.warn(`[knowledge-storage] skip relocation: target not empty (${desired.storageRoot}); continuing with existing storage at ${legacy.storageRoot}`);
+    } else {
+      try {
+        knowledgeStorageLocation.relocateLayout(legacy, desired);
+        knowledgeStorageLocation.rebaseMaintenanceState(legacy, desired);
+      } catch (error) {
+        console.error(`[knowledge-storage] ${error.message}`);
+      }
     }
   }
   return knowledgeStorageLocation.resolveActiveLayout(config.rootPath, DATA_DIR);
@@ -1254,23 +1264,37 @@ function schtasksQuery() {
   });
 }
 
+let scheduleInfoCache = { at: 0, value: null };
 function getScheduleInfo() {
+  // schtasks spawns a child process; /api/state (polled + probed on startup)
+  // calls this on every hit. Cache for 5s so repeated calls don't each pay the
+  // process-spawn latency, which otherwise slows /api/state under load.
+  const now = Date.now();
+  if (scheduleInfoCache.value && now - scheduleInfoCache.at < 5000) {
+    return Promise.resolve(scheduleInfoCache.value);
+  }
   return schtasksQuery().then(r => {
-    if (!r.registered) return r;
-    const m = r.raw;
-    return {
-      registered: true,
-      hostName: m['HostName'] || m['主机名'] || '',
-      taskName: m['TaskName'] || m['任务名称'] || TASK_NAME,
-      nextRun: m['Next Run Time'] || m['下次运行时间'] || '',
-      lastRun: m['Last Run Time'] || m['上次运行时间'] || '',
-      lastResult: m['Last Result'] || m['上次结果'] || '',
-      status: m['Status'] || m['状态'] || '',
-      scheduleType: m['Schedule Type'] || m['计划类型'] || '',
-      startTime: m['Start Time'] || m['开始时间'] || '',
-      runAsUser: m['Run As User'] || m['以用户身份运行'] || '',
-      raw: m,
-    };
+    let value;
+    if (!r.registered) {
+      value = r;
+    } else {
+      const m = r.raw;
+      value = {
+        registered: true,
+        hostName: m['HostName'] || m['主机名'] || '',
+        taskName: m['TaskName'] || m['任务名称'] || TASK_NAME,
+        nextRun: m['Next Run Time'] || m['下次运行时间'] || '',
+        lastRun: m['Last Run Time'] || m['上次运行时间'] || '',
+        lastResult: m['Last Result'] || m['上次结果'] || '',
+        status: m['Status'] || m['状态'] || '',
+        scheduleType: m['Schedule Type'] || m['计划类型'] || '',
+        startTime: m['Start Time'] || m['开始时间'] || '',
+        runAsUser: m['Run As User'] || m['以用户身份运行'] || '',
+        raw: m,
+      };
+    }
+    scheduleInfoCache = { at: Date.now(), value };
+    return value;
   });
 }
 
@@ -3833,24 +3857,30 @@ server.listen(PORT, HOST, () => {
   console.log(`[kb-site] KB root: ${KB_ROOT}`);
   console.log(`[kb-site] data dir: ${DATA_DIR}`);
   console.log(`[kb-site] task:    ${TASK_NAME}`);
-  try {
-    const centralRules = ensureSharedClaudeRules();
-    if (!centralRules.ok) throw new Error(centralRules.error || 'failed to prepare central Claude rules');
-    const audit = auditClaudeMdProjects(readProjects({ persistMigrations: false }));
-    console.log(`[kb-site] CLAUDE.md: ${audit.summary.current} current, ${audit.summary.refreshable} need refresh`);
-  } catch (e) {
-    console.error('[kb-site] CLAUDE.md startup check failed:', e.message);
-  }
-  try {
-    const orphanSummary = postCommitAutomation.cleanupOrphanedRuns(readProjects({ persistMigrations: false }));
-    const orphanTotal = (orphanSummary.queued || 0) + (orphanSummary.dispatched || 0) + (orphanSummary.dispatching || 0);
-    if (orphanTotal > 0) {
-      console.log(`[kb-site] automation cleanup: ${orphanTotal} orphaned run(s) marked abandoned`, orphanSummary);
-      logEvent('info', 'automation_cleanup', 'orphaned automation runs marked abandoned on server start', orphanSummary);
+  // Run startup housekeeping asynchronously so it never blocks the event loop
+  // between listen() and the first /api/state response. On large installs
+  // (many projects / big KB) the synchronous versions could delay readiness
+  // long enough for the desktop shell's startup probe to time out.
+  setImmediate(() => {
+    try {
+      const centralRules = ensureSharedClaudeRules();
+      if (!centralRules.ok) throw new Error(centralRules.error || 'failed to prepare central Claude rules');
+      const audit = auditClaudeMdProjects(readProjects({ persistMigrations: false }));
+      console.log(`[kb-site] CLAUDE.md: ${audit.summary.current} current, ${audit.summary.refreshable} need refresh`);
+    } catch (e) {
+      console.error('[kb-site] CLAUDE.md startup check failed:', e.message);
     }
-  } catch (e) {
-    console.error('[kb-site] automation cleanup failed:', e.message);
-  }
+    try {
+      const orphanSummary = postCommitAutomation.cleanupOrphanedRuns(readProjects({ persistMigrations: false }));
+      const orphanTotal = (orphanSummary.queued || 0) + (orphanSummary.dispatched || 0) + (orphanSummary.dispatching || 0);
+      if (orphanTotal > 0) {
+        console.log(`[kb-site] automation cleanup: ${orphanTotal} orphaned run(s) marked abandoned`, orphanSummary);
+        logEvent('info', 'automation_cleanup', 'orphaned automation runs marked abandoned on server start', orphanSummary);
+      }
+    } catch (e) {
+      console.error('[kb-site] automation cleanup failed:', e.message);
+    }
+  });
   setImmediate(async () => {
     try {
       let projects = readProjects({ persistMigrations: false });

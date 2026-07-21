@@ -122,7 +122,7 @@ async function resolveBackend() {
     return backendRuntime.waitForBackend({
       readLiveEndpoint: runtimeEndpoint.readLiveEndpoint,
       dataDir,
-      timeoutMs: 20000,
+      timeoutMs: 60000,
     });
   }
 
@@ -150,7 +150,7 @@ async function resolveBackend() {
     child: ownedBackend,
     readLiveEndpoint: runtimeEndpoint.readLiveEndpoint,
     dataDir,
-    timeoutMs: 45000,
+    timeoutMs: 180000,
     expectedPid: ownedBackend.pid,
   });
 }

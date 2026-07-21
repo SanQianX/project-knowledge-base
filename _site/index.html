@@ -3660,6 +3660,8 @@ const app = createApp({
       return data;
     }
 
+    let hasConnectedOnce = false;
+    let initialConnectTimer = null;
     async function refreshAll({ force = false } = {}) {
       // Dashboard data is kept fresh by the SSE state-stream (see
       // openDashboardStateStream), which calls this on backend changes; the
@@ -3686,8 +3688,19 @@ const app = createApp({
         if (shouldShowOnboarding.value && (setup.required || !onboardingDismissed.value)) {
           onboardingModalOpen.value = true;
         }
+        hasConnectedOnce = true;
+        if (initialConnectTimer) { clearTimeout(initialConnectTimer); initialConnectTimer = null; }
       } catch (e) {
         pollError.value = e.message;
+        // Before the first successful connection the backend may still be
+        // starting (large KB cold start). Retry every 3s so the page opens as
+        // soon as the backend answers, instead of waiting for the 60s poll.
+        if (!hasConnectedOnce && !initialConnectTimer) {
+          initialConnectTimer = setTimeout(() => {
+            initialConnectTimer = null;
+            refreshAll().catch(() => {});
+          }, 3000);
+        }
       } finally {
         loading.value = false;
       }
@@ -6314,6 +6327,7 @@ const app = createApp({
     const pollTimer = setInterval(refreshAll, 60000);
     onUnmounted(() => {
       clearInterval(pollTimer);
+      if (initialConnectTimer) { clearTimeout(initialConnectTimer); initialConnectTimer = null; }
       closeClaudeSessionsStream();
       closeDashboardStateStream();
       stopProjectGoalDrag();

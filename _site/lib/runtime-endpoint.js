@@ -54,7 +54,13 @@ function isProcessAlive(pid) {
   try {
     process.kill(Number(pid), 0);
     return true;
-  } catch {
+  } catch (error) {
+    // EPERM means the process exists but we lack permission to signal it
+    // (common on Windows when the daemon and this process run at different
+    // privilege levels). Treat that as alive — only ESRCH/ENOENT mean dead.
+    // Misjudging a live process as dead would delete a running backend's
+    // endpoint file (see readLiveEndpoint) and spawn a duplicate.
+    if (error && error.code === 'EPERM') return true;
     return false;
   }
 }
