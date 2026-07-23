@@ -49,8 +49,8 @@ async function waitFor(fn, label, ms = 15000) {
 }
 
 (async () => {
-  // Pre-create an isolated temp data dir and seed a project so the flow
-  // test can switch projects on the dashboard.
+  // Pre-create an isolated temp data dir and seed projects for the Claude
+  // workbench project switch flow.
   const FLOW_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), `kb-data-task15-20-ui-flow-${process.pid}-`));
   fs.writeFileSync(path.join(FLOW_DATA_DIR, 'projects.json'), '{}\n', 'utf-8');
   const flowProjects = {
@@ -136,33 +136,20 @@ async function waitFor(fn, label, ms = 15000) {
     await send('Page.navigate', { url: TARGET_URL });
     await waitFor(() => evalJs('document.readyState === "complete"'), 'document ready');
     await evalJs('localStorage.setItem("kb-ui-language", "en"); location.reload()');
-    await waitFor(() => evalJs('document.querySelector("#app") && document.querySelector("#app").innerText.includes("Project Supervision")'), 'app english dashboard');
+    await waitFor(() => evalJs('document.querySelector("#app") && document.querySelector("#app").innerText.includes("Claude Code")'), 'app English Claude workbench');
     await new Promise(resolve => setTimeout(resolve, 800));
     const dashboardShot = await screenshot('task15-20-dashboard.png');
 
-    await evalJs(`[...document.querySelectorAll('button')].find(b => b.innerText.includes('Pending') && b.className.includes('panel'))?.click()`);
-    await waitFor(() => evalJs('document.body.innerText.includes("Pending commit details")'), 'pending panel open');
-    const pendingItems = await evalJs('document.querySelectorAll("section details").length');
-    if (pendingItems > 0) assert(pendingItems > 0, 'pending panel should render collapsible details when it has items');
-    assert(!(await evalJs('document.body.innerText.includes("Project Operations")')), 'project detail should be hidden while summary panel is open');
-    const pendingShot = await screenshot('task15-20-pending-panel.png');
+    assert(await evalJs(`(() => {
+      const view = document.querySelector('.dashboard-view');
+      const panel = view?.querySelector(':scope > section');
+      return !!(view && panel && !document.body.innerText.includes('Pending commit details')
+        && !document.body.innerText.includes('Issue center')
+        && !document.body.innerText.includes('Project Operations'));
+    })()`), 'daily page should contain only the full-width Claude workbench');
 
-    await evalJs(`[...document.querySelectorAll('button')].find(b => b.innerText.includes('Pending') && b.className.includes('panel'))?.click()`);
-    await evalJs(`[...document.querySelectorAll('button')].find(b => b.innerText.includes('Recent issues') || b.innerText.includes('Issues'))?.click()`);
-    await waitFor(() => evalJs('document.body.innerText.includes("Issue center")'), 'issues panel open');
-    const issueGroups = await evalJs('document.querySelectorAll("section details").length');
-    if (await evalJs('!document.body.innerText.includes("No blocking issue detected.")')) {
-      assert(issueGroups > 0, 'issues panel should render per-project collapsible details when issues exist');
-    }
-
-    await evalJs(`[...document.querySelectorAll('aside .scrollbar-thin button')].find(b => !b.innerText.includes('Import Project'))?.click()`);
-    await waitFor(() => evalJs('!document.body.innerText.includes("Pending commit details") && !document.body.innerText.includes("Issue center")'), 'summary panel closes on project switch');
-
-    await evalJs(`[...document.querySelectorAll('button')].find(b => b.innerText.includes('Remove Project'))?.click()`);
-    await waitFor(() => evalJs('document.body.innerText.includes("Also delete KB files")'), 'remove modal open');
-    await waitFor(() => evalJs('document.body.innerText.includes("KB path") && !document.body.innerText.includes("Not found")'), 'remove preview loaded');
-    const removeShot = await screenshot('task15-20-remove-modal.png');
-    await evalJs(`[...document.querySelectorAll('button')].find(b => b.innerText.trim() === '×')?.click()`);
+    await evalJs(`[...document.querySelectorAll('aside button')].find(b => b.innerText.includes('Flow B'))?.click()`);
+    await waitFor(() => evalJs('document.body.innerText.includes("Claude Code")'), 'Claude workbench remains available after project switch');
 
     assert(await evalJs(`![...document.querySelectorAll('button')].some(b => b.innerText.includes('Runs / Drafts'))`),
       'legacy review/drafts navigation should be removed');
@@ -171,7 +158,7 @@ async function waitFor(fn, label, ms = 15000) {
 
     assert(errors.length === 0, `console errors: ${errors.join('\\n')}`);
     console.log('TASK-015..020 UI flow test passed');
-    console.log(`screenshots:\n${dashboardShot}\n${pendingShot}\n${removeShot}`);
+    console.log(`screenshots:\n${dashboardShot}`);
   } catch (e) {
     console.error('TASK-015..020 UI flow test failed:', e.message);
     process.exitCode = 1;

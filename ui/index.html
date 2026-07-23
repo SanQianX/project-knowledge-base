@@ -213,11 +213,6 @@
         <div class="flex flex-wrap items-center gap-2">
           <span v-if="pollError" class="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm" style="color: var(--bad)">{{ pollError }}</span>
           <span v-else-if="loading" class="px-1 text-sm muted">{{ t("refreshing") }}</span>
-          <button v-if="activeView === 'dashboard' && isNarrow"
-                  class="narrow-only btn-primary"
-                  @click="setNarrowPane(narrowPane.dashboard === 'detail' ? 'workbench' : 'detail')">
-            {{ narrowPane.dashboard === 'detail' ? t('narrowOpenClaude') : t('narrowBackToProject') }}
-          </button>
           <button v-if="activeView === 'import' && isNarrow"
                   class="narrow-only btn-primary"
                   @click="setNarrowPane(narrowPane.import === 'form' ? 'preview' : 'form')">
@@ -246,156 +241,8 @@
         <button @click="activeView = 'import'" class="mobile-project-pill">{{ t("importProject") }}</button>
       </div>
 
-      <section v-if="activeView === 'dashboard'" class="dashboard-view flex min-h-0 flex-1 flex-col gap-5 overflow-hidden">
-        <div class="summary-grid grid shrink-0 gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <button v-for="s in summaryCards" :key="s.label" @click="openSummaryPanel(s.key)"
-            class="panel rounded-xl border p-4 text-left transition hover:brightness-[0.98]">
-            <div class="text-sm muted">{{ s.label }}</div>
-            <div class="mt-2 text-2xl font-semibold">{{ s.value }}</div>
-            <div class="mt-1 text-xs muted">{{ s.note }}</div>
-          </button>
-        </div>
-
-        <section v-if="summaryPanel === 'pending'" class="panel shrink-0 rounded-xl border p-5">
-          <div class="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <h2 class="text-lg font-semibold">{{ t("pendingCommitDetails") }}</h2>
-              <div class="mt-1 text-sm muted">{{ t("pendingCommitDetailsHelp") }}</div>
-            </div>
-            <button @click="loadPendingCommits" class="btn">{{ t("refresh") }}</button>
-          </div>
-          <div class="grid gap-3">
-            <details v-for="item in pendingCommitItems" :key="item.slug" class="rounded-lg border p-3 panel2 group" :open="(item.pendingCount || 0) > 0 || !!item.error">
-              <summary class="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2">
-                <div class="font-medium">{{ item.displayName }}</div>
-                <div class="flex items-center gap-2">
-                  <span class="chip">{{ item.pendingCount }} {{ t("pending") }}</span>
-                  <span class="muted transition group-open:rotate-90">›</span>
-                </div>
-              </summary>
-              <div class="mt-1 text-xs muted">{{ item.range || item.repoStatus || "-" }}</div>
-              <div v-if="item.error" class="mt-2 text-sm" style="color: var(--bad)">{{ item.error }}</div>
-              <div v-if="item.commits && item.commits.length" class="mt-3 overflow-auto">
-                <table class="w-full text-left text-xs">
-                  <thead class="muted"><tr><th class="py-1 pr-3">Hash</th><th class="py-1 pr-3">{{ t("time") }}</th><th class="py-1 pr-3">Author</th><th class="py-1">{{ t("subject") }}</th></tr></thead>
-                  <tbody>
-                    <tr v-for="c in item.commits" :key="c.hash" class="border-t line">
-                      <td class="py-1 pr-3 font-mono">{{ c.short || (c.hash || '').slice(0, 7) }}</td>
-                      <td class="py-1 pr-3">{{ c.date || "-" }}</td>
-                      <td class="py-1 pr-3">{{ c.author || "-" }}</td>
-                      <td class="py-1">{{ c.subject || "-" }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </details>
-          </div>
-        </section>
-
-        <section v-if="summaryPanel === 'issues'" class="panel min-h-0 shrink-0 rounded-xl border p-5">
-          <div class="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <h2 class="text-lg font-semibold">{{ t("issueCenter") }}</h2>
-              <div class="mt-1 text-sm muted">{{ t("issueCenterHelp") }}</div>
-            </div>
-            <button @click="loadIssues" class="btn">{{ t("refresh") }}</button>
-          </div>
-          <div v-if="!supervisionIssues.length" class="rounded-lg border p-3 text-sm panel2">{{ t("noIssue") }}</div>
-          <div v-else class="grid gap-2">
-            <details v-for="group in issuesByProject" :key="group.slug" class="rounded-lg border p-3 panel2 group" :open="group.hasWarnOrError">
-              <summary class="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2">
-                <div class="flex items-center gap-2">
-                  <span :class="['dot', group.levelClass]"></span>
-                  <span class="font-medium">{{ group.displayName }}</span>
-                </div>
-                <div class="flex items-center gap-2">
-                  <span class="chip">{{ group.issues.length }}</span>
-                  <span class="muted transition group-open:rotate-90">›</span>
-                </div>
-              </summary>
-              <div class="mt-3 grid gap-2">
-                <div v-for="issue in group.issues" :key="issue.issueId" class="rounded-lg border p-3 panel">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <span :class="['dot', issue.level === 'error' ? 'bad' : issue.level === 'warn' ? 'warn' : 'idle']"></span>
-                    <span class="font-medium">{{ issue.message }}</span>
-                    <span class="chip">{{ issue.source }}</span>
-                  </div>
-                  <pre v-if="issue.meta && Object.keys(issue.meta).length" class="mt-2 max-h-32 overflow-auto rounded-lg bg-slate-950 p-2 text-xs text-slate-100">{{ JSON.stringify(issue.meta, null, 2) }}</pre>
-                </div>
-              </div>
-            </details>
-          </div>
-        </section>
-
-        <div v-if="!summaryPanel" class="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <split-pane storage-key="kb-dashboard-side-width" :default-side-px="390" :min-side-px="320" :max-side-px="900" :min-main-px="380">
-            <template #main>
-            <div class="pane-wrap" v-show="!isNarrow || narrowPane.dashboard === 'detail'">
-          <section class="panel flex h-full flex-col rounded-xl border p-5">
-            <div v-if="!selectedProject" class="py-20 text-center muted">{{ t("selectProject") }}</div>
-            <div v-else class="min-h-0 flex-1 overflow-auto scrollbar-thin pr-1">
-              <div class="flex flex-col gap-3 border-b pb-5 line xl:flex-row xl:items-start xl:justify-between">
-                <div>
-                  <div class="flex items-center gap-2">
-                    <span :class="['dot', projectStatusClass(selectedSlug)]"></span>
-                    <h2 class="text-xl font-semibold">{{ selectedProject.displayName }}</h2>
-                    <span v-if="selectedProject.isReference" class="chip">{{ t("reference") }}</span>
-                  </div>
-                  <div class="mt-2 break-all text-xs muted">{{ selectedProject.localPath }}</div>
-                </div>
-                <div class="flex flex-wrap gap-2">
-                  <button @click="openRemoveProject(selectedSlug)" class="btn-danger">{{ t("removeProject") }}</button>
-                </div>
-              </div>
-
-              <div class="mt-5 grid gap-4 xl:grid-cols-4">
-                <status-card :label="t('repo')" :value="selectedProject.repoStatus || 'unknown'" :status="repoStatusLevel(selectedProject.repoStatus)"></status-card>
-                <status-card :label="t('pending')" :value="String(selectedProject.lastScanPendingCount || 0)" :status="(selectedProject.lastScanPendingCount || 0) > 0 ? 'warn' : 'good'"></status-card>
-                <button type="button" @click="openProjectGoalModal(selectedSlug)" class="panel2 rounded-xl border p-4 text-left transition hover:brightness-105 focus:outline-none focus:ring-2 focus:ring-sky-500/50" data-dashboard-goal-card>
-                  <div class="text-sm muted">{{ t('goal') }}</div>
-                  <div class="mt-3 flex items-center gap-2">
-                    <span :class="['dot', selectedProject.goalStatus === 'accepted' ? 'good' : 'warn']"></span>
-                    <span class="text-lg font-semibold">{{ selectedProject.goalStatus || 'not-created' }}</span>
-                  </div>
-                </button>
-                <status-card :label="t('kb')" :value="isKbInit(selectedSlug) ? 'ready' : 'missing'" :status="isKbInit(selectedSlug) ? 'good' : 'bad'"></status-card>
-              </div>
-
-              <div class="mt-5 grid gap-4" :class="!isKbInit(selectedSlug) ? 'xl:grid-cols-2' : ''">
-                <div v-if="!isKbInit(selectedSlug)" class="panel2 rounded-xl border p-4">
-                  <div class="mb-3 flex items-center justify-between">
-                    <h3 class="font-medium">{{ t("projectOperations") }}</h3>
-                    <span class="chip" :class="!projectEffectiveAiProfileId(selectedProject) ? 'chip-warn' : ''">{{ projectEffectiveAiProfileId(selectedProject) || t("noProfileAssigned") }}</span>
-                  </div>
-                  <div class="grid gap-2">
-                    <button @click="initProject(selectedSlug)" class="btn">{{ t("initKb") }}</button>
-                    <div v-if="actionMessage" class="rounded-lg border p-3 text-sm panel">{{ actionMessage }}</div>
-                  </div>
-                </div>
-
-                <div class="panel2 rounded-xl border p-4">
-                  <div class="mb-3 flex items-center justify-between">
-                    <h3 class="font-medium">{{ t("issues") }}</h3>
-                    <span class="chip">{{ projectIssues(selectedSlug).length }}</span>
-                  </div>
-                  <div v-if="projectIssues(selectedSlug).length" class="space-y-2">
-                    <div v-for="issue in projectIssues(selectedSlug)" :key="issue" class="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm" style="color: var(--warn)">
-                      {{ issue }}
-                    </div>
-                  </div>
-                  <div v-else class="rounded-lg border p-3 text-sm panel">{{ t("noIssue") }}</div>
-                </div>
-              </div>
-
-            </div>
-          </section>
-            </div>
-            </template>
-
-            <template #side>
-              <div class="pane-wrap" v-show="!isNarrow || narrowPane.dashboard === 'workbench'">
-              <aside class="flex h-full min-h-0 flex-col">
-            <section class="panel flex h-full min-h-0 flex-col rounded-xl border p-0 overflow-hidden">
+      <section v-if="activeView === 'dashboard'" class="dashboard-view flex min-h-0 flex-1 overflow-hidden">
+        <section class="panel flex h-full min-h-0 w-full flex-1 flex-col rounded-xl border p-0 overflow-hidden">
               <div class="flex items-center gap-2 border-b px-3 py-2 line shrink-0">
                 <span :class="['dot shrink-0', terminalStatusDot]"></span>
                 <span class="text-sm font-semibold truncate">{{ t("claudeWorkbench") }}</span>
@@ -557,11 +404,6 @@
                 </div>
               </div>
             </section>
-              </aside>
-              </div>
-            </template>
-          </split-pane>
-        </div>
       </section>
 
       <section v-else-if="activeView === 'import'" class="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -1156,24 +998,8 @@
                 </label>
                 <div class="flex flex-wrap gap-2">
                   <button type="button" @click.prevent="saveAutomationSettings(settingsProjectSlug)" class="btn-primary" :disabled="settingsAutomationSaving">{{ settingsAutomationSaving ? t("saving") : t("saveHookSettings") }}</button>
-                  <button type="button" @click.prevent="previewAutomationPrompt(settingsProjectSlug)" class="btn">{{ t("previewPrompt") }}</button>
-                  <button type="button" @click.prevent="simulateAutomation(settingsProjectSlug)" class="btn">{{ t("simulateTrigger") }}</button>
-                  <button type="button" @click.prevent="loadAutomationRuns(settingsProjectSlug)" class="btn">{{ t("refresh") }}</button>
                 </div>
                 <div v-if="automationMessage || settingsAutomationDirty" class="text-xs muted">{{ automationMessage || t("unsavedChanges") }}</div>
-                <pre v-if="automationPromptPreview" class="max-h-64 overflow-auto rounded-lg bg-slate-950 p-3 text-xs text-slate-100 whitespace-pre-wrap">{{ automationPromptPreview }}</pre>
-                <div class="grid gap-2">
-                  <div class="text-xs font-semibold muted">{{ t("recentAutomationRuns") }}</div>
-                  <div v-if="!automationRuns.length" class="text-xs muted">{{ t("noAutomationRuns") }}</div>
-                  <div v-for="run in automationRuns" :key="run.runId" class="rounded-lg border p-2 text-xs panel">
-                    <div class="flex items-center justify-between gap-2">
-                      <span class="font-mono">{{ run.runId }}</span>
-                      <span class="chip">{{ run.status }}</span>
-                    </div>
-                    <div class="mt-1 muted">{{ run.permissionMode }} · {{ run.commitHash ? run.commitHash.slice(0, 7) : "-" }}</div>
-                    <div class="mt-1 muted">{{ run.startedAt || "-" }}</div>
-                  </div>
-                </div>
               </div>
             </div>
             <div class="panel2 rounded-xl border p-4 xl:col-span-2" data-knowledge-relations>
@@ -2646,9 +2472,6 @@ const app = createApp({
   setup() {
     const kbRoot = ref("");
     const projects = ref(null);
-    const summaryPanel = ref("");
-    const pendingCommitItems = ref([]);
-    const supervisionIssues = ref([]);
     const structuredLogs = ref([]);
     const selectedLog = ref(null);
     const logFilters = reactive({ dateFrom: new Date().toISOString().slice(0, 10), level: "all", projectSlug: "all", source: "all", q: "" });
@@ -2695,7 +2518,6 @@ const app = createApp({
     const isNarrow = ref(narrowMedia.matches);
     narrowMedia.addEventListener('change', e => { isNarrow.value = e.matches; });
     const NARROW_PANE_DEFAULTS = {
-      dashboard: 'detail',
       import: 'form',
       ai: 'list',
     };
@@ -2882,7 +2704,6 @@ const app = createApp({
       }
     }
     watch(() => activeView.value, (v) => {
-      if (v !== 'dashboard') summaryPanel.value = "";
       if (v === 'prompts' && !promptsConfig.value) loadPrompts();
       if (v === 'logs') loadStructuredLogs().catch(() => {});
       if (v === 'settings') {
@@ -2970,11 +2791,8 @@ const app = createApp({
     const projectGoalSaving = ref(false);
     const projectGoalMessage = ref("");
     const projectGoalModal = reactive({ open: false, slug: "", x: 0, y: 0, width: 720, height: 760, dragging: false });
-    const automationRuns = ref([]);
-    const automationPromptPreview = ref("");
     const automationMessage = ref("");
     const pickingFolder = ref(false);
-    let automationActionSeq = 0;
     let settingsProjectChangeSeq = 0;
     let loadingAutomationForm = false;
     let loadingProjectGoal = false;
@@ -3142,19 +2960,6 @@ const app = createApp({
         if (projectGoalMessage.value === "saved.") projectGoalMessage.value = "";
       }
     });
-    const issuesByProject = computed(() => {
-      const map = new Map();
-      for (const issue of supervisionIssues.value || []) {
-        const slug = issue.projectSlug || "system";
-        if (!map.has(slug)) map.set(slug, { slug, displayName: slug === "system" ? "System" : ((projects.value && projects.value[slug] && projects.value[slug].displayName) || slug), issues: [] });
-        map.get(slug).issues.push(issue);
-      }
-      return [...map.values()].map(group => {
-        const hasError = group.issues.some(i => i.level === "error");
-        const hasWarn = group.issues.some(i => i.level === "warn");
-        return { ...group, hasWarnOrError: hasError || hasWarn, levelClass: hasError ? "bad" : hasWarn ? "warn" : "idle" };
-      });
-    });
     const removeProjectDisabled = computed(() => removeDialog.busy || removeDialog.preview.hasRunningJobs || (removeDialog.deleteKb && removeDialog.confirmText !== removeDialog.slug));
     const desktopUpdateBusy = computed(() => ["checking", "downloading", "installing"].includes(desktopUpdate.status));
     const desktopUpdateActionLabel = computed(() => {
@@ -3187,22 +2992,12 @@ const app = createApp({
     }
 
     const pageTitle = computed(() => ({
-      dashboard: t("projectSupervision"),
+      dashboard: t("claudeWorkbench"),
       import: t("importProject"),
       ai: t("aiProfiles"),
       logs: t("logs"),
       settings: t("settings")
-    }[activeView.value] || t("projectSupervision")));
-
-    const summaryCards = computed(() => {
-      const list = projectList.value;
-      const pending = list.reduce((sum, p) => sum + Number(p.cfg.lastScanPendingCount || 0), 0);
-      return [
-        { key: "projects", label: t("projects"), value: list.length, note: t("registeredProjects") },
-        { key: "pending", label: t("pendingCommits"), value: pending, note: t("pendingFromLastScan") },
-        { key: "issues", label: t("recentIssues"), value: supervisionIssues.value.length, note: t("failedOrPartialJobs") }
-      ];
-    });
+    }[activeView.value] || t("claudeWorkbench")));
 
     const navItems = computed(() => []);
 
@@ -3318,7 +3113,6 @@ const app = createApp({
     }
 
     function selectProject(slug) {
-      summaryPanel.value = "";
       selectedSlug.value = slug;
       closeEventSource();
       terminalLines.value = [];
@@ -3353,17 +3147,6 @@ const app = createApp({
       if (repoStatusLevel(cfg.repoStatus) === "bad") return "bad";
       if ((cfg.lastScanPendingCount || 0) > 0) return "warn";
       return "good";
-    }
-
-    function projectIssues(slug) {
-      const cfg = projects.value && projects.value[slug];
-      if (!cfg) return [];
-      const out = [];
-      if (repoStatusLevel(cfg.repoStatus) === "bad") out.push(t("issueGitStatusBad", { status: cfg.repoStatus, error: cfg.lastScanError || "" }));
-      if (cfg.repoStatus === "empty") out.push(t("issueRepoNoCommits"));
-      if (!cfg.lastAnalyzedCommit) out.push(t("issueLastAnalyzedEmpty"));
-      if ((cfg.lastScanPendingCount || 0) > 0) out.push(t("issuePendingCommits", { count: cfg.lastScanPendingCount }));
-      return out;
     }
 
     function kbUrl(slug) {
@@ -3417,7 +3200,7 @@ const app = createApp({
         const aiProfileTask = activeView.value === "ai" && aiProfileFormDirty.value
           ? Promise.resolve()
           : loadAiProfiles(false);
-        await Promise.all([aiProfileTask, loadIssues(), loadGithubStatus()]);
+        await Promise.all([aiProfileTask, loadGithubStatus()]);
         if (shouldShowOnboarding.value && (setup.required || !onboardingDismissed.value)) {
           onboardingModalOpen.value = true;
         }
@@ -4269,28 +4052,6 @@ const app = createApp({
       }
     }
 
-    async function loadIssues() {
-      const data = await api("GET", "/api/supervision/issues");
-      supervisionIssues.value = data.issues || [];
-      return data;
-    }
-
-    async function loadPendingCommits() {
-      const data = await api("GET", "/api/supervision/pending-commits");
-      pendingCommitItems.value = data.items || [];
-      return data;
-    }
-
-    async function openSummaryPanel(key) {
-      if (key === "pending") {
-        summaryPanel.value = summaryPanel.value === "pending" ? "" : "pending";
-        if (summaryPanel.value) await loadPendingCommits();
-      } else if (key === "issues") {
-        summaryPanel.value = summaryPanel.value === "issues" ? "" : "issues";
-        if (summaryPanel.value) await loadIssues();
-      }
-    }
-
     async function loadStructuredLogs() {
       const params = new URLSearchParams();
       if (logFilters.dateFrom) {
@@ -4940,13 +4701,11 @@ const app = createApp({
     async function loadSettingsProject(slug) {
       settingsAutomationLoaded.value = false;
       loadAutomationFormFromProject(slug);
-      automationPromptPreview.value = "";
       automationMessage.value = "";
       projectGoalMessage.value = "";
       await Promise.all([
         loadProjectGoal(slug),
         loadHookStatus(slug),
-        loadAutomationRuns(slug),
         loadKnowledgeRelations(slug),
       ]);
     }
@@ -5234,11 +4993,9 @@ const app = createApp({
       nextTick(() => { loadingAutomationForm = false; });
     }
 
-    async function saveAutomationSettings(slug, options = {}) {
+    async function saveAutomationSettings(slug) {
       if (!slug || !projects.value || !projects.value[slug]) return;
-      const quiet = options && options.quiet === true;
-      const actionSeq = quiet ? automationActionSeq : ++automationActionSeq;
-      if (!quiet) automationMessage.value = "";
+      automationMessage.value = "";
       settingsAutomationSaving.value = true;
       try {
         await nextTick();
@@ -5255,48 +5012,13 @@ const app = createApp({
         }
         settingsAutomationDirty.value = false;
         if (settingsAutomationProjectSlug.value === slug) loadAutomationFormFromProject(slug);
-        if (!quiet && actionSeq === automationActionSeq) automationMessage.value = "saved.";
+        automationMessage.value = "saved.";
         return data.automation;
       } catch (e) {
-        if (!quiet && actionSeq === automationActionSeq) automationMessage.value = e.message;
+        automationMessage.value = e.message;
         throw e;
       } finally {
         settingsAutomationSaving.value = false;
-      }
-    }
-
-    async function previewAutomationPrompt(slug) {
-      if (!slug) return;
-      const actionSeq = ++automationActionSeq;
-      automationMessage.value = "";
-      const data = await api("POST", `/api/projects/${slug}/automation/preview`, {
-        automation: automationFormPayload(),
-      });
-      if (actionSeq !== automationActionSeq) return;
-      automationPromptPreview.value = data.prompt || "";
-      automationMessage.value = data.ok ? "preview rendered." : "";
-    }
-
-    async function simulateAutomation(slug) {
-      if (!slug) return;
-      const actionSeq = ++automationActionSeq;
-      automationMessage.value = "";
-      await saveAutomationSettings(slug, { quiet: true });
-      const data = await api("POST", `/api/projects/${slug}/automation/init`, {
-        automation: automationFormPayload(),
-      });
-      if (actionSeq !== automationActionSeq) return;
-      automationMessage.value = data.skipped ? (data.reason || "skipped.") : `dispatched: ${data.runId || "-"}`;
-      await loadAutomationRuns(slug);
-    }
-
-    async function loadAutomationRuns(slug) {
-      if (!slug) return;
-      try {
-        const data = await api("GET", `/api/projects/${slug}/automation/runs`);
-        automationRuns.value = data.runs || [];
-      } catch {
-        automationRuns.value = [];
       }
     }
 
@@ -5967,14 +5689,14 @@ const app = createApp({
 
     return {
       kbRoot, projects,
-      summaryPanel, pendingCommitItems, supervisionIssues, issuesByProject, structuredLogs, selectedLog, logFilters,
+      structuredLogs, selectedLog, logFilters,
       knowledgeStoreConfig, knowledgeStorage, knowledgeMigrationPlan, loggingConfig,
       markdownMaintenance, markdownMaintenanceBusy, markdownMaintenanceMessage, loadMarkdownMaintenance, startMarkdownMaintenance,
       vectorMigration, vectorMigrationBusy, vectorMigrationMessage, vectorModelStatus, embeddingConfig, modelSetupMessage, migrationFailureSummary, knowledgeMaintenance, keepDatabaseBackup, loadVectorMigration, startVectorMigration, retryVectorMigration, rollbackVectorMigration, saveEmbeddingConfig, downloadEmbeddingModel, startKnowledgeMaintenance, rollbackKnowledgeMaintenance,
       githubAuthForm, githubProviderForm, githubStatus, githubOAuth, gitProviders, githubAuthModal, githubStores, githubStoresMessage, githubBusy, selectedTeamStoreKey, selectedTeamKbKey, teamKbStorePath,
       teamStoreSetup, teamStorePreview, teamStoreBusy, teamStoreMessage, teamStoreError, pickingTeamStoreFolder,
       selectedTeamStore, selectedTeamStoreKnowledgeBases, selectedTeamKb, githubStatusText, githubHeaderLabel, gitOAuthAvailable, giteaProvider, giteaOAuthRedirectUri,
-      loading, pollError, activeView, selectedSlug, selectedProject, settingsProjectSlug, settingsProject, pageTitle, projectList, summaryCards, navItems, settingsDrawerOpen, setup,
+      loading, pollError, activeView, selectedSlug, selectedProject, settingsProjectSlug, settingsProject, pageTitle, projectList, navItems, settingsDrawerOpen, setup,
       desktopUpdate, desktopUpdateBusy, desktopUpdateActionLabel, desktopUpdateSummary, handleDesktopUpdate,
       onboardingModalOpen, onboardingSteps, currentOnboardingStep, dismissOnboarding, runOnboardingAction,
       theme, uiLanguage, t, toggleTheme, form, importSlugPreview, submitting, formError, formOk, pickingFolder, pickProjectFolder, addProject, resetForm, busySlug, initProject,
@@ -5985,17 +5707,17 @@ const app = createApp({
       knowledgeScopes, knowledgeRelationSelection, knowledgeRelationCandidates, knowledgeRelationsSaving, knowledgeRelationsMessage, loadKnowledgeRelations, saveKnowledgeRelations,
       claudeMdAudit, claudeMdRefreshing, claudeMdMessage, claudeMdSkippedCount, loadClaudeMdAudit, refreshAllClaudeMd,
       projectGoalForm, projectGoalLoaded, projectGoalDirty, projectGoalSaving, projectGoalMessage, projectGoalModal, projectGoalModalStyle,
-      automationRuns, automationPromptPreview, automationMessage, actionMessage, importPreflight,
-      selectProject, isKbInit, isProjectRunning, repoStatusLevel, projectStatusClass, projectIssues,
+      automationMessage, actionMessage, importPreflight,
+      selectProject, isKbInit, isProjectRunning, repoStatusLevel, projectStatusClass,
       kbUrl, goalUrl, displayProjectKbPath, formatTime, formatBytes,
       profileOptionLabel, projectEffectiveAiProfileId,
       refreshAll, loadAiProfiles, loadProfileForm, markAiProfileDirty, addProfile, deleteCurrentProfile, saveAiProfiles, saveCurrentProfile, testCurrentProfile, setProjectAiProfile, onProviderPicked, onProviderFocus, clearProviderSelection, openAiSetup,
-      openSummaryPanel, loadPendingCommits, loadIssues, loadStructuredLogs,
+      loadStructuredLogs,
       loadKnowledgeStoreConfig, saveKnowledgeStoreConfig, previewKnowledgeMigration, executeKnowledgeMigration, loadLoggingConfig, saveLoggingConfig,
       validateGit, scanProject, validateKb, migrateFramework, runImportPreflight, loadHookStatus, loadSettingsProject, changeSettingsProject, loadProjectGoal, saveProjectGoal, openProjectGoalModal, closeProjectGoalModal, saveProjectGoalAndClose, startProjectGoalDrag, installHook, uninstallHook,
       pickTeamStoreFolder, scanLocalTeamStore, configureLocalTeamStore,
       saveGithubAuth, saveGithubProvider, inferGithubApiBaseUrl, onGitProviderTypeChanged, selectGitLoginProvider, openGithubAuthModal, closeGithubAuthModal, startGithubOAuth, startGiteaOAuth, openGithubVerification, copyGithubDeviceCode, copyGiteaRedirectUri, logoutGithub, loadGithubStores, onTeamStoreChanged,
-      saveAutomationSettings, previewAutomationPrompt, simulateAutomation, loadAutomationRuns,
+      saveAutomationSettings,
       openRemoveProject, closeRemoveProject, confirmRemoveProject,
       terminalLines, terminalSessionId, terminalSession, terminalSessions, terminalPermission, terminalPermissionBusy, terminalInput, terminalInputRef, terminalScrollRef,
       terminalStatusDot, terminalInputPlaceholder, isClaudeRunning, terminalProfileLabel, permissionSummaryText, renderMarkdown,

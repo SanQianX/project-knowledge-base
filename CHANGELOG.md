@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.1.18] - 2026-07-23
+
+- Simplified the daily workspace into a full-width Claude Code interface.
+- Removed the project-supervision summary, pending-commit and issue panels,
+  dashboard status/goal cards, and manual automation preview/simulation UI.
+
 ## [4.1.17] - 2026-07-23
 
 - Rebuilt commit-triggered knowledge automation around persistent per-commit

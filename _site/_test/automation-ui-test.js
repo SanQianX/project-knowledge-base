@@ -266,56 +266,14 @@ async function waitFor(fn, label, ms = 20000) {
     await send('Page.navigate', { url: `${BASE_URL}/` });
     await waitFor(() => evalJs('document.readyState === "complete"'), 'document ready');
     await evalJs('localStorage.setItem("kb-ui-language", "en"); location.reload()');
-    await waitFor(() => evalJs('document.querySelector("#app") && document.body.innerText.includes("Project Supervision")'), 'app ready');
+    await waitFor(() => evalJs('document.querySelector("#app") && document.body.innerText.includes("Claude Code")'), 'app ready');
 
     await evalJs(`(() => {
       const projectBtn = [...document.querySelectorAll('aside button')].find(b => b.innerText.includes('Automation UI Test'));
       projectBtn && projectBtn.click();
       return !!projectBtn;
     })()`);
-    await waitFor(() => evalJs('document.body.innerText.includes("Automation UI Test") && document.body.innerText.includes("Goal")'), 'dashboard project selected');
-    await evalJs(`(() => {
-      const goalBtn = document.querySelector('[data-dashboard-goal-card]');
-      goalBtn && goalBtn.click();
-      return !!goalBtn;
-    })()`);
-    await waitFor(() => evalJs('document.querySelector("[data-project-goal-modal-field=\\"content\\"]")'), 'dashboard goal modal open');
-    await waitFor(() => evalJs(`(() => {
-      const panel = document.querySelector('[data-project-goal-floating]');
-      const ta = document.querySelector('[data-project-goal-modal-field="content"]');
-      const input = document.querySelector('textarea[placeholder*="Claude"], textarea');
-      const pr = panel && panel.getBoundingClientRect();
-      const tr = ta && ta.getBoundingClientRect();
-      return !!(panel && ta && pr.left > 240 && pr.left < 520 && pr.width >= 560 && pr.height >= 720 && tr.width >= 560 && tr.height >= 400 && document.body.innerText.includes('Claude Code'));
-    })()`), 'dashboard goal editor is non-modal and spacious');
-    await evalJs(`(() => {
-      const panel = document.querySelector('[data-project-goal-floating]');
-      const handle = document.querySelector('[data-project-goal-drag-handle]');
-      if (!panel || !handle) return false;
-      window.__goalLeftBefore = panel.getBoundingClientRect().left;
-      handle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 520, clientY: 140 }));
-      window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 680, clientY: 210 }));
-      window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: 680, clientY: 210 }));
-      return true;
-    })()`);
-    await waitFor(() => evalJs(`(() => {
-      const panel = document.querySelector('[data-project-goal-floating]');
-      return !!(panel && Math.abs(panel.getBoundingClientRect().left - window.__goalLeftBefore) > 40);
-    })()`), 'dashboard goal editor can be dragged');
-    await evalJs(`(() => {
-      const ta = document.querySelector('[data-project-goal-modal-field="content"]');
-      if (!ta) return false;
-      ta.value = '# Goal\\n\\nDashboard modal saved project goal.';
-      ta.dispatchEvent(new Event('input', { bubbles: true }));
-      const btn = [...document.querySelectorAll('button')].find(b => b.innerText.includes('Save Project Goal'));
-      btn && btn.click();
-      return !!btn;
-    })()`);
-    await waitFor(async () => {
-      const state = await fetchJson(`${BASE_URL}/api/projects`);
-      return state[SLUG] && state[SLUG].goalStatus === 'accepted';
-    }, 'dashboard goal modal saved status');
-    await waitFor(() => evalJs(`!document.querySelector('[data-project-goal-modal-field="content"]') && document.body.innerText.includes('accepted')`), 'dashboard goal card updated');
+    await waitFor(() => evalJs('document.body.innerText.includes("Automation UI Test") && document.body.innerText.includes("Claude Code")'), 'Claude workbench project selected');
 
     await evalJs(`(() => {
       const btn = [...document.querySelectorAll('button')].find(b => /^Settings/.test(b.innerText.trim()));
@@ -337,9 +295,9 @@ async function waitFor(fn, label, ms = 20000) {
       select.dispatchEvent(new Event('change', { bubbles: true }));
       return true;
     })()`);
-    await waitFor(() => evalJs('document.body.innerText.includes("Enable automation") && document.body.innerText.includes("Preview prompt")'), 'automation controls');
-    const savedGoal = await fetchJson(`${BASE_URL}/api/projects/${SLUG}/goal`);
-    assert(savedGoal.content.includes('Dashboard modal saved project goal.'), 'goal content should persist through API');
+    await waitFor(() => evalJs('document.body.innerText.includes("Enable automation") && document.body.innerText.includes("Save Hook settings")'), 'automation controls');
+    assert(await evalJs('!document.body.innerText.includes("Preview prompt") && !document.body.innerText.includes("Simulate trigger")'),
+      'automation settings should not expose manual preview or simulation controls');
 
     await evalJs(`(() => {
       const label = [...document.querySelectorAll('label')].find(l => l.innerText.includes('Enable automation'));
@@ -362,12 +320,6 @@ async function waitFor(fn, label, ms = 20000) {
       const ta = [...document.querySelectorAll('textarea')].find(t => t.value.includes('UI automation') || t.value.includes('{{projectSlug}}'));
       return !!(enabled && enabled.checked && post && post.checked && ta && ta.value.includes('UI automation'));
     })()`), 'automation draft survived settings poll');
-    await evalJs(`(() => {
-      const btn = [...document.querySelectorAll('button')].find(b => b.innerText.includes('Preview prompt'));
-      btn && btn.click();
-      return !!btn;
-    })()`);
-    await waitFor(() => evalJs('document.body.innerText.includes("feature.txt")'), 'unsaved draft preview rendered');
     await evalJs(`(() => {
       const select = [...document.querySelectorAll('select')].find(s => [...s.options].some(o => o.value === '${SLUG2}'));
       if (!select) return false;
@@ -420,20 +372,6 @@ async function waitFor(fn, label, ms = 20000) {
       const obsoleteMode = root?.querySelector('[data-automation-field="knowledgeMode"]');
       return !!(enabled?.checked && post?.checked && bash?.checked && !obsoleteMode && ta?.value.includes('UI automation'));
     })()`), 'automation settings retained after explicit save');
-
-    await evalJs(`(() => {
-      const btn = [...document.querySelectorAll('button')].find(b => b.innerText.includes('Preview prompt'));
-      btn && btn.click();
-      return !!btn;
-    })()`);
-    await waitFor(() => evalJs('document.body.innerText.includes("feature.txt")'), 'preview prompt rendered');
-
-    await evalJs(`(() => {
-      const btn = [...document.querySelectorAll('button')].find(b => b.innerText.includes('Init project KB') || b.innerText.includes('Simulate trigger'));
-      btn && btn.click();
-      return !!btn;
-    })()`);
-    await waitFor(() => evalJs('document.body.innerText.includes("dispatched:")'), 'simulate trigger dispatched');
 
     await evalJs(`(() => {
       const projectBtn = [...document.querySelectorAll('aside button')].find(b => b.innerText.includes('Automation UI Test'));

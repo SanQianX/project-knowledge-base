@@ -215,7 +215,7 @@ function assert(cond, msg) {
       expression: 'document.querySelector("h1") ? document.querySelector("h1").innerText : ""',
       returnByValue: true,
     });
-    assert(/Project Supervision|项目监督/.test(r.result.value), 'header missing');
+    assert(/Claude Code/.test(r.result.value), 'Claude workbench header missing');
 
     r = await send('Runtime.evaluate', {
       expression: 'Array.from(document.querySelectorAll("button, a")).map(e => e.innerText.trim()).filter(Boolean)',
@@ -235,7 +235,7 @@ function assert(cond, msg) {
     });
     const bodyText = r.result.value;
     assert(!/Running Jobs|运行中的任务/.test(bodyText), 'legacy running jobs panel should be removed');
-    assert(/Repo|仓库/.test(bodyText), 'repo status missing');
+    assert(/Claude Code/.test(bodyText), 'Claude workbench missing');
     assert(!/Run Knowledge Update|运行知识库更新/.test(bodyText), 'deprecated knowledge update button should not render');
     assert(!/Edit Project Goal|编辑项目目标/.test(bodyText), 'deprecated edit goal button should not render');
     assert(!/Open KB|打开知识库/.test(bodyText), 'deprecated open KB button should not render');
@@ -251,10 +251,10 @@ function assert(cond, msg) {
     await send('Page.reload', { ignoreCache: true });
     await new Promise(resolve => setTimeout(resolve, 5000));
     r = await send('Runtime.evaluate', {
-      expression: '/Project Supervision|项目监督/.test(document.body.innerText) && /Repo|仓库/.test(document.body.innerText)',
+      expression: '/Claude Code/.test(document.body.innerText)',
       returnByValue: true,
     });
-    assert(r.result.value, 'after reload dashboard did not render');
+    assert(r.result.value, 'after reload Claude workbench did not render');
 
     r = await send('Runtime.evaluate', {
       expression: '(() => { const settings = Array.from(document.querySelectorAll("button, a")).find(b => /^Settings|^设置|^璁剧疆/.test(b.innerText)); if (settings) settings.click(); return !!settings; })()',

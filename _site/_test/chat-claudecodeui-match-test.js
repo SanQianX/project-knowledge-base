@@ -255,9 +255,9 @@ function assert(cond, msg) { if (!cond) throw new Error(msg); }
       'CSS should define .narrow-only class hidden by default');
     assert(/@media\s*\(max-width:\s*1279px\)\s*\{\s*\.narrow-only\s*\{\s*display:\s*inline-flex/.test(html),
       'CSS should show .narrow-only at <=1279px');
-    assert(/v-show="!isNarrow\s*\|\|\s*narrowPane\.dashboard\s*===\s*'detail'"/.test(html)
-        && /v-show="!isNarrow\s*\|\|\s*narrowPane\.dashboard\s*===\s*'workbench'"/.test(html),
-      'dashboard split-pane should v-show both columns based on narrowPane.dashboard');
+    assert(/activeView === 'dashboard'" class="dashboard-view flex min-h-0 flex-1 overflow-hidden"/.test(html)
+        && /dashboard-view[\s\S]{0,240}class="panel flex h-full min-h-0 w-full flex-1 flex-col/.test(html),
+      'dashboard should render the Claude workbench as one full-width panel');
     assert(/v-show="!isNarrow\s*\|\|\s*narrowPane\.import\s*===\s*'form'"/.test(html)
         && /v-show="!isNarrow\s*\|\|\s*narrowPane\.import\s*===\s*'preview'"/.test(html),
       'import split-pane should v-show both columns based on narrowPane.import');
@@ -269,8 +269,8 @@ function assert(cond, msg) { if (!cond) throw new Error(msg); }
       'i18n should declare narrow-mode toggle button labels');
     assert(/\.pane-wrap\s*\{\s*display:\s*flex;\s*flex-direction:\s*column;\s*height:\s*100%;\s*min-height:\s*0/.test(html),
       'CSS should define .pane-wrap so v-show wrappers fill their slot (otherwise inner h-full collapses and clips bottom controls)');
-    assert((html.match(/class="pane-wrap"\s+v-show="!isNarrow \|\| narrowPane\.\w+ === '[^']+'"/g) || []).length === 6,
-      'all 6 split-pane slot wrappers (3 views × main+side) should carry class="pane-wrap"');
+    assert((html.match(/class="pane-wrap"\s+v-show="!isNarrow \|\| narrowPane\.\w+ === '[^']+'"/g) || []).length === 4,
+      'the two remaining split views should carry class="pane-wrap" on both slots');
 
     runner.deleteSession(started.sessionId);
     console.log('chat-claudecodeui-match test passed');
