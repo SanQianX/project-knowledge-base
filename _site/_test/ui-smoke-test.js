@@ -224,7 +224,7 @@ function assert(cond, msg) {
     const navText = r.result.value;
     assert(!navText.some(t => /^Dashboard|^仪表盘/.test(t)), 'Dashboard nav should not render as a standalone control');
     assert(navText.some(t => /^Import Project|^导入项目/.test(t)), 'Import project action missing');
-    assert(!navText.some(t => /^Runs \/ Drafts|^运行 \/ 草稿/.test(t)), 'Runs / Drafts nav should be hidden for autoApply-only installs');
+    assert(!navText.some(t => /^Runs \/ Drafts|^运行 \/ 草稿/.test(t)), 'legacy Runs / Drafts nav should be removed');
     assert(!navText.some(t => /^Logs|^日志/.test(t)), 'Logs should live inside settings, not the top bar');
     assert(navText.some(t => /^Log in to Git|^登录 Git|GitHub:|Gitea:/.test(t)), 'Git account trigger missing');
     assert(navText.some(t => /^Settings|^设置|^璁剧疆/.test(t)), 'Settings drawer trigger missing');
@@ -234,7 +234,7 @@ function assert(cond, msg) {
       returnByValue: true,
     });
     const bodyText = r.result.value;
-    assert(/Running Jobs|运行中的任务/.test(bodyText), 'running jobs panel missing');
+    assert(!/Running Jobs|运行中的任务/.test(bodyText), 'legacy running jobs panel should be removed');
     assert(/Repo|仓库/.test(bodyText), 'repo status missing');
     assert(!/Run Knowledge Update|运行知识库更新/.test(bodyText), 'deprecated knowledge update button should not render');
     assert(!/Edit Project Goal|编辑项目目标/.test(bodyText), 'deprecated edit goal button should not render');
@@ -268,27 +268,10 @@ function assert(cond, msg) {
     });
     assert(r.result.value, 'Settings drawer should include Logs and omit the generic Refresh block');
     r = await send('Runtime.evaluate', {
-      expression: '(() => { const btn = Array.from(document.querySelectorAll("button, a")).find(b => /^Schedule|^定时任务/.test(b.innerText)); if (btn) btn.click(); return btn ? btn.innerText : "NO BTN"; })()',
+      expression: '!Array.from(document.querySelectorAll("button, a")).some(b => /^Schedule|^定时任务|Runs \\/ Drafts|运行 \\/ 草稿/.test(b.innerText))',
       returnByValue: true,
     });
-    assert(r.result.value !== 'NO BTN', 'Schedule drawer action missing');
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    r = await send('Runtime.evaluate', {
-      expression: '/Schedule|定时任务/.test(document.body.innerText) && /Controls|控制/.test(document.body.innerText)',
-      returnByValue: true,
-    });
-    assert(r.result.value, 'Schedule tab did not render its content');
-
-    r = await send('Runtime.evaluate', {
-      expression: '(() => { const btn = Array.from(document.querySelectorAll("button, a")).find(b => /Runs \\/ Drafts|运行 \\/ 草稿/.test(b.innerText)); if (btn) btn.click(); return btn ? btn.innerText : "NO BTN"; })()',
-      returnByValue: true,
-    });
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    r = await send('Runtime.evaluate', {
-      expression: '!document.body.innerText.includes("Runs / Drafts") && !document.body.innerText.includes("运行 / 草稿")',
-      returnByValue: true,
-    });
-    assert(r.result.value, 'Runs / Drafts tab should not be reachable for autoApply-only installs');
+    assert(r.result.value, 'legacy Schedule and Runs / Drafts actions should be absent');
 
     r = await send('Runtime.evaluate', {
       expression: '(() => { const settings = Array.from(document.querySelectorAll("button, a")).find(b => /^Settings|^设置|^璁剧疆/.test(b.innerText)); if (settings) settings.click(); return !!settings; })()',

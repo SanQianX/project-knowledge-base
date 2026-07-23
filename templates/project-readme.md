@@ -10,14 +10,14 @@ This knowledge base stores only useful, reviewed project memory. It is not a dum
 | Path | Purpose | Policy |
 |---|---|---|
 | `README.md` | Framework design, reading rules, and examples | Auto-maintained |
-| `GOAL.md` | Stable project goal, boundaries, and non-goals | Human review required |
-| `ARCHITECTURE.md` | Current architecture and key decisions | Human review required |
+| `GOAL.md` | Stable project goal, boundaries, and non-goals | Updated conservatively from committed evidence |
+| `ARCHITECTURE.md` | Current architecture and key decisions | Updated conservatively from committed evidence |
 | `modules/00-index.md` | Module lookup index for relevant memory search | Auto-maintained |
 | `modules/<module>.md` | Useful module knowledge tied to source paths, routes, symbols, and tests | Auto-apply allowed |
 | `changes/00-index.md` | Change lookup index for related development history | Auto-maintained |
 | `changes/<change>.md` | Accepted change memory with intent, result, and evidence | Auto-apply allowed |
 
-AI run records, drafts, backups, and context packs live outside the knowledge base under `_site/_ai/<project-slug>/`.
+AI run records, per-commit automation state, backups, and context packs live outside the knowledge base.
 
 ## Design Principles
 
@@ -25,7 +25,7 @@ AI run records, drafts, backups, and context packs live outside the knowledge ba
 2. Use indexes first: Claude Code should read `GOAL.md`, `modules/00-index.md`, and `changes/00-index.md` before opening detail files.
 3. Read only relevant memory: choose module and change files by tags, source paths, routes, symbols, and affected modules.
 4. Store development intent, not raw prompts: summarize the user's request in `changes/<change>.md` under `## Development Intent`.
-5. Treat `GOAL.md` and `ARCHITECTURE.md` as reviewed documents: AI may draft changes, but should not silently overwrite them.
+5. Update `GOAL.md` and `ARCHITECTURE.md` only when committed evidence clearly changes their current facts.
 
 ## Claude Code Reading Rule
 
@@ -44,10 +44,10 @@ When starting work on a feature or fix:
 Add a branch-aware knowledge update flow so AI records the user's feature intent without storing raw prompts.
 
 ## Implementation Result
-- Added source branch metadata to generated drafts.
-- Kept AI drafts outside the trusted KB.
+- Added durable per-commit state and exact commit metadata.
+- Kept completed commits from being dispatched again.
 
 ## Evidence
-- `_site/lib/analysis-orchestrator.js`
-- `_site/lib/draft-apply.js`
+- `_site/lib/post-commit-automation.js`
+- `_site/lib/commit-automation-store.js`
 ```

@@ -1,32 +1,33 @@
 # Testing Strategy
 
 Status: current
-Date: 2026-06-21
-
-The regression suite should verify the final minimal KB framework rather than older saved layouts.
+Date: 2026-07-23
 
 ## Framework Tests
 
-- New initialization creates only `README.md`, `GOAL.md`, `ARCHITECTURE.md`, `modules/`, and `changes/`.
-- `modules/00-index.md` and `changes/00-index.md` are regenerated after draft apply.
-- Validation rejects old framework artifacts such as `kb-manifest.json`, `features/`, `commits/`, and KB-local `_ai/`.
-- Migration consolidates legacy commit notes into `changes/legacy-change-*.md` and moves AI artifacts to `_site/_ai/<slug>/`.
+- New initialization creates the minimal KB structure.
+- Generated `00-index.md` files remain protected from AI writes.
+- Validation rejects legacy framework artifacts and KB-local AI workspaces.
 
-## Analysis Tests
+## Commit Automation Tests
 
-- Initial analysis produces drafts for `GOAL.md`, `ARCHITECTURE.md`, and `modules/<module>.md`.
-- Commit analysis produces `changes/<change>.md` drafts only.
-- Change drafts contain `## Development Intent`, `## Implementation Result`, and `## Evidence`.
-- AI output stores summarized intent and does not require raw prompt logs.
+- One source Git commit renders one exact prompt.
+- A project processes commits oldest-to-newest through a FIFO queue.
+- Repeated Hook and startup reconciliation cannot create duplicate tasks.
+- A completed commit is never automatically dispatched again.
+- `queued` and `running` records recover after a restart.
+- Failed tasks remain retryable and do not become silently completed.
+- Different projects may run independently.
 
-## Apply Tests
+## Write-boundary Tests
 
-- `GOAL.md` and `ARCHITECTURE.md` require explicit review.
-- `modules/` and `changes/` drafts can be applied when they pass path validation.
-- Draft apply refuses `_ai/`, old framework paths, absolute paths, and traversal.
+- Automation can write only inside the selected project's KB.
+- The source repository and other project KBs remain read-only.
+- Bash is restricted to the read-only allowlist.
+- There is no draft apply/reject or human-review API.
 
 ## Consumer Tests
 
-- `buildPrContextPack` reads the final layout directly.
-- The pack includes goal, architecture, indexes, and trusted markdown files.
-- The pack never includes AI workspace files.
+- `buildPrContextPack` reads the final KB layout directly.
+- The pack includes goal, architecture, indexes, and trusted Markdown files.
+- The pack never includes AI workspace state.

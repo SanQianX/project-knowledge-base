@@ -228,11 +228,6 @@
                   @click="setNarrowPane(narrowPane.ai === 'list' ? 'editor' : 'list')">
             {{ narrowPane.ai === 'list' ? t('narrowEditProfile') : t('narrowBackToList') }}
           </button>
-          <button v-if="activeView === 'runs' && isNarrow"
-                  class="narrow-only btn-primary"
-                  @click="setNarrowPane(narrowPane.runs === 'detail' ? 'list' : 'detail')">
-            {{ narrowPane.runs === 'detail' ? t('narrowShowRunsList') : t('narrowBackToDetail') }}
-          </button>
           <select v-model="uiLanguage" class="input py-2 text-sm">
             <option value="zh">{{ t("chinese") }}</option>
             <option value="en">{{ t("english") }}</option>
@@ -839,123 +834,6 @@
         </div>
       </section>
 
-      <section v-else-if="activeView === 'runs'" class="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <split-pane storage-key="kb-runs-side-width" :default-side-px="360" :min-side-px="240" :max-side-px="600" :min-main-px="400" position="left">
-          <template #side>
-          <div class="pane-wrap" v-show="!isNarrow || narrowPane.runs === 'list'">
-        <aside class="panel h-full overflow-auto rounded-xl border p-5 scrollbar-thin">
-          <div class="mb-3 flex items-center justify-between">
-            <h2 class="font-semibold">{{ t("runsAndDrafts") }}</h2>
-            <button @click="loadRuns(selectedSlug)" class="btn">{{ t("reload") }}</button>
-          </div>
-          <div class="space-y-2">
-            <button v-for="run in runs" :key="run.runId" @click="selectRun(run.runId)"
-              :class="['w-full rounded-lg border p-3 text-left text-sm', selectedRunId === run.runId ? 'panel2 selected-run' : 'panel border']">
-              <div class="font-medium">{{ run.type }} / {{ run.status }}</div>
-              <div class="mt-1 truncate text-xs muted">{{ run.runId }}</div>
-              <div class="mt-1 text-xs muted">{{ formatTime(run.startedAt) }}</div>
-            </button>
-          </div>
-        </aside>
-        </aside>
-          </div>
-          </template>
-          <template #main>
-            <div class="pane-wrap" v-show="!isNarrow || narrowPane.runs === 'detail'">
-        <section class="panel h-full overflow-auto rounded-xl border p-5 scrollbar-thin">
-          <div v-if="!selectedRun" class="py-16 text-center muted">{{ t("selectRun") }}</div>
-          <div v-else>
-            <div class="flex flex-col gap-3 border-b pb-4 line xl:flex-row xl:items-start xl:justify-between">
-              <div>
-                <h2 class="text-lg font-semibold">{{ selectedRun.type }} / {{ selectedRun.status }}</h2>
-                <div class="mt-1 text-xs muted">{{ selectedRun.runId }}</div>
-              </div>
-              <div class="flex flex-wrap gap-2">
-                <button @click="loadRunDetail(selectedSlug, selectedRun.runId)" class="btn">{{ t("refreshRun") }}</button>
-                <button @click="applySelectedDrafts" class="btn-primary">{{ applyDraftButtonLabel }}</button>
-                <button @click="rejectRun" class="btn-danger">{{ t("rejectRun") }}</button>
-              </div>
-            </div>
-
-            <div class="mt-4 flex flex-wrap items-center gap-3 text-sm">
-              <label class="flex items-center gap-2"><input type="checkbox" v-model="allowGoalEdit" /> {{ t("allowGoalEdit") }}</label>
-              <select v-model="draftBranchFilter" class="input py-2 text-sm">
-                <option value="">{{ t("allBranches") }}</option>
-                <option v-for="b in draftBranches" :key="b" :value="b">{{ b }}</option>
-              </select>
-              <span class="muted">{{ filteredDrafts.length }} / {{ drafts.length }} {{ t("draftFiles") }}</span>
-            </div>
-
-            <div class="mt-4 grid gap-4 xl:grid-cols-[320px_1fr]">
-              <div class="space-y-2">
-                <label v-for="d in filteredDrafts" :key="d.path" class="flex cursor-pointer items-center justify-between gap-3 rounded-lg border p-3 text-sm panel2">
-                  <span class="min-w-0">
-                    <span class="block truncate">{{ d.path }}</span>
-                    <span class="chip mt-1">{{ d.sourceBranch || t("unknownBranch") }}</span>
-                  </span>
-                  <input type="checkbox" v-model="draftSelection[d.path]" />
-                </label>
-              </div>
-              <div>
-                <select v-model="previewDraftPath" @change="loadDraftPreview" class="input mb-3 w-full">
-                  <option value="">{{ t("selectDraftPreview") }}</option>
-                  <option v-for="d in filteredDrafts" :key="d.path" :value="d.path">{{ d.path }}</option>
-                </select>
-                <pre class="max-h-[62vh] overflow-auto rounded-xl bg-slate-950 p-4 text-xs text-slate-100 scrollbar-thin whitespace-pre-wrap">{{ draftPreview || t("noPreview") }}</pre>
-              </div>
-            </div>
-          </div>
-        </section>
-            </div>
-          </template>
-        </split-pane>
-      </section>
-
-      <section v-else-if="activeView === 'schedule'" class="grid min-h-0 flex-1 gap-5 overflow-auto scrollbar-thin pr-1 xl:grid-cols-2">
-        <div class="panel rounded-xl border p-5">
-          <h2 class="text-lg font-semibold">{{ t("schedule") }}</h2>
-          <div v-if="!schedule" class="mt-4 muted">{{ t("loading") }}</div>
-          <div v-else-if="!schedule.registered" class="mt-4 rounded-lg border p-3 panel2 muted">
-            {{ t("noSchedule") }} {{ schedule.error || "" }}
-          </div>
-          <div v-else class="mt-4 grid gap-3 text-sm">
-            <div class="flex justify-between gap-3"><span class="muted">{{ t("task") }}</span><code>KB-GitCommits-Daily</code></div>
-            <div class="flex justify-between gap-3"><span class="muted">{{ t("state") }}</span><span>{{ schedule.status || "-" }}</span></div>
-            <div class="flex justify-between gap-3"><span class="muted">{{ t("nextRun") }}</span><span>{{ schedule.nextRun ? new Date(schedule.nextRun).toLocaleString() : "-" }}</span></div>
-            <div class="flex justify-between gap-3"><span class="muted">{{ t("lastResult") }}</span><span>{{ schedule.lastResult || "-" }}</span></div>
-          </div>
-        </div>
-        <div class="panel rounded-xl border p-5">
-          <h2 class="text-lg font-semibold">{{ t("controls") }}</h2>
-          <div class="mt-4 grid gap-4">
-            <label class="grid gap-1 text-sm">{{ t("frequency") }}
-              <select v-model="freq.frequency" class="input">
-                <option value="off">{{ t("freqOff") }}</option>
-                <option value="hourly">{{ t("freqHourly") }}</option>
-                <option value="every6h">{{ t("freqEvery6h") }}</option>
-                <option value="every12h">{{ t("freqEvery12h") }}</option>
-                <option value="daily">{{ t("freqDaily") }}</option>
-                <option value="weekly">{{ t("freqWeekly") }}</option>
-              </select>
-            </label>
-            <label v-if="['daily', 'weekly'].includes(freq.frequency)" class="grid gap-1 text-sm">{{ t("time") }}
-              <input v-model="freq.time" type="time" class="input" />
-            </label>
-            <label class="grid gap-1 text-sm">{{ t("runner") }}
-              <select v-model="freq.runner" class="input">
-                <option value="safe">{{ t("runnerSafe") }}</option>
-                <option value="legacy">{{ t("runnerLegacy") }}</option>
-              </select>
-            </label>
-            <div v-if="scheduleMsg" class="rounded-lg border p-3 text-sm panel2">{{ scheduleMsg }}</div>
-            <div class="flex gap-2">
-              <button @click="applySchedule" class="btn-primary">{{ t("apply") }}</button>
-              <button @click="deleteSchedule" class="btn-danger">{{ t("stop") }}</button>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <section v-else-if="activeView === 'logs'" class="grid min-h-0 flex-1 gap-5 overflow-auto scrollbar-thin pr-1">
         <section class="panel rounded-xl border p-5">
           <div class="mb-4 flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
@@ -1273,13 +1151,6 @@
                   <label class="flex items-center gap-2"><input type="checkbox" data-automation-field="postCommitEnabled" v-model="settingsAutomationForm.postCommitEnabled" /> {{ t("postCommitEnabled") }}</label>
                   <label class="flex items-center gap-2"><input type="checkbox" data-automation-field="allowReadOnlyBash" v-model="settingsAutomationForm.allowReadOnlyBash" /> {{ t("allowReadOnlyBash") }}</label>
                 </div>
-                <label class="grid gap-1 text-sm">{{ t("knowledgeMode") }}
-                  <select data-automation-field="knowledgeMode" v-model="settingsAutomationForm.knowledgeMode" class="input">
-                    <option value="requestApproval">{{ t("knowledgeModeRequest") }}</option>
-                    <option value="autoApply">{{ t("knowledgeModeAutoApply") }}</option>
-                    <option value="directWriteKb">{{ t("knowledgeModeDirect") }}</option>
-                  </select>
-                </label>
                 <label class="grid gap-1 text-sm">{{ t("hookPromptTemplate") }}
                   <textarea data-automation-field="hookPromptTemplate" v-model="settingsAutomationForm.hookPromptTemplate" rows="9" class="input font-mono text-xs"></textarea>
                 </label>
@@ -1299,7 +1170,7 @@
                       <span class="font-mono">{{ run.runId }}</span>
                       <span class="chip">{{ run.status }}</span>
                     </div>
-                    <div class="mt-1 muted">{{ run.knowledgeMode }} · {{ run.permissionMode }} · {{ run.commitHash ? run.commitHash.slice(0, 7) : "-" }}</div>
+                    <div class="mt-1 muted">{{ run.permissionMode }} · {{ run.commitHash ? run.commitHash.slice(0, 7) : "-" }}</div>
                     <div class="mt-1 muted">{{ run.startedAt || "-" }}</div>
                   </div>
                 </div>
@@ -1529,11 +1400,6 @@
           <div v-if="teamStoreError" class="mt-3 rounded-lg border border-red-500/25 bg-red-500/10 p-3 text-sm" style="color: var(--bad)">{{ teamStoreError }}</div>
         </section>
         <section class="panel2 rounded-xl border p-4">
-          <div class="font-medium">{{ t("schedule") }}</div>
-          <p class="mt-1 text-sm muted">{{ t("scheduleSettingsHelp") }}</p>
-          <button @click="activeView = 'schedule'; settingsDrawerOpen = false" class="btn mt-3">{{ t("schedule") }}</button>
-        </section>
-        <section class="panel2 rounded-xl border p-4">
           <div class="font-medium">{{ t("logs") }}</div>
           <p class="mt-1 text-sm muted">{{ t("logsSettingsHelp") }}</p>
           <div class="mt-3 flex flex-wrap gap-2">
@@ -1633,13 +1499,10 @@ const I18N = {
     dashboard: "Dashboard",
     import: "Import",
     aiProfiles: "AI Profiles",
-    runsDrafts: "Runs / Drafts",
-    schedule: "Schedule",
     logs: "Logs",
     settings: "Settings",
     settingsDrawerHelp: "Low-frequency controls are grouped here to keep the main workspace focused.",
     refreshSettingsHelp: "Force reload backend state only when the automatic polling has not caught up.",
-    scheduleSettingsHelp: "Manage the Windows scheduled task and runner frequency.",
     logsSettingsHelp: "Open activity logs or adjust log retention and storage settings.",
     desktopClient: "Desktop client",
     desktopUpdateHelp: "Check GitHub Releases and install a verified Squirrel update without leaving the client.",
@@ -1735,19 +1598,14 @@ const I18N = {
     sparsePartialCloneSuccess: "Repository cloned with sparse-checkout.",
     sparsePartialCloneFallback: "Sparse-checkout unavailable; cloned full repository.",
     projectSupervision: "Project Supervision",
-    runsAndDrafts: "Runs and Drafts",
     selectProject: "Select a project from the left sidebar.",
     reference: "reference",
     validateGit: "Validate Git",
     scan: "Scan",
     safeAnalyze: "Safe Analyze",
-    runKnowledgeUpdate: "Run Knowledge Update",
     editProjectGoal: "Edit Project Goal",
     showAdvanced: "Show advanced diagnostics",
     hideAdvanced: "Hide advanced diagnostics",
-    knowledgeUpdateRunning: "Knowledge update is running...",
-    knowledgeUpdateDone: "Knowledge update completed.",
-    knowledgeUpdateReviewRequired: "Review required",
     repo: "Repo",
     pending: "Pending",
     goal: "Goal",
@@ -1804,10 +1662,6 @@ const I18N = {
     automationEnabled: "Enable automation",
     postCommitEnabled: "Run after commit",
     allowReadOnlyBash: "Allow read-only Bash",
-    knowledgeMode: "Knowledge mode",
-    knowledgeModeRequest: "Request approval",
-    knowledgeModeAutoApply: "Approve for me",
-    knowledgeModeDirect: "Full access",
     hookPromptTemplate: "Hook prompt template",
     saveHookSettings: "Save Hook settings",
     unsavedChanges: "Unsaved changes.",
@@ -1878,9 +1732,7 @@ const I18N = {
     noRelatedProjects: "No other projects are available.",
     saveRelations: "Save relationships",
     knowledgeRelationsBoundary: "Search includes only the selected spaces; updates still write only to this project's primary space.",
-    runningJobs: "Running Jobs",
     noRunningJob: "No running job.",
-    lastResult: "Last Result",
     claudeTerminal: "Claude Terminal",
     claudeWorkbench: "Claude Code",
     claudeRunningHint: "Claude SDK session is running for this project.",
@@ -1890,8 +1742,6 @@ const I18N = {
     narrowBackToForm: "← Back to form",
     narrowEditProfile: "Edit profile →",
     narrowBackToList: "← Back to list",
-    narrowShowRunsList: "Show runs list →",
-    narrowBackToDetail: "← Back to detail",
     autoQueueBadgeHint: "{n} queued — waiting for the current run to finish",
     restoreSession: "Restore",
     continuity: "Context",
@@ -2098,34 +1948,18 @@ const I18N = {
     english: "English",
     reload: "Reload",
     back: "Back",
-    selectRun: "Select a run to review drafts.",
-    refreshRun: "Refresh run",
-    applySelected: "Apply selected",
-    rejectRun: "Reject run",
-    allowGoalEdit: "allow GOAL / architecture edits",
-    allBranches: "All branches",
-    unknownBranch: "unknown",
-    draftFiles: "draft files",
-    selectDraftPreview: "Select draft preview",
-    noPreview: "(no preview)",
     loading: "Loading...",
-    noSchedule: "No scheduled task found.",
     task: "Task",
     state: "State",
-    nextRun: "Next run",
     controls: "Controls",
-    frequency: "Frequency",
     time: "Time",
-    runner: "Runner",
     apply: "Apply",
     stop: "Stop",
-    jobHistory: "Job History",
     logOutput: "Log Output",
     noOutput: "(no output yet)",
     darkMode: "Dark mode",
     lightMode: "Light mode",
     registeredProjects: "registered projects",
-    activeBackendJobs: "active backend jobs",
     pendingFromLastScan: "from last scan",
     failedOrPartialJobs: "failed or partial jobs",
     recentIssues: "Recent issues",
@@ -2162,8 +1996,6 @@ const I18N = {
     dashboard: "仪表盘",
     import: "导入",
     aiProfiles: "AI 配置",
-    runsDrafts: "运行 / 草稿",
-    schedule: "定时任务",
     logs: "日志",
     consoleSubtitle: "由后端真实状态驱动的项目监督控制台",
     refreshing: "刷新中",
@@ -2248,7 +2080,6 @@ const I18N = {
     sparsePartialCloneSuccess: "已通过 sparse-checkout 克隆仓库。",
     sparsePartialCloneFallback: "sparse-checkout 不可用，已克隆完整仓库。",
     projectSupervision: "项目监督",
-    runsAndDrafts: "运行与草稿",
     selectProject: "请从左侧选择一个项目。",
     reference: "参考项目",
     validateGit: "校验 Git",
@@ -2309,10 +2140,6 @@ const I18N = {
     automationEnabled: "启用自动化",
     postCommitEnabled: "提交后运行",
     allowReadOnlyBash: "允许只读 Bash",
-    knowledgeMode: "知识库模式",
-    knowledgeModeRequest: "请求批准",
-    knowledgeModeAutoApply: "替我批准",
-    knowledgeModeDirect: "完全访问",
     hookPromptTemplate: "Hook 提示词模板",
     saveHookSettings: "保存 Hook 设置",
     unsavedChanges: "有未保存的更改。",
@@ -2383,9 +2210,7 @@ const I18N = {
     noRelatedProjects: "当前没有其他可关联项目。",
     saveRelations: "保存关联关系",
     knowledgeRelationsBoundary: "检索只覆盖明确勾选的空间；提交后的更新仍只写入当前项目的主空间。",
-    runningJobs: "运行中的任务",
     noRunningJob: "当前没有运行中的任务。",
-    lastResult: "最近结果",
     claudeTerminal: "Claude 终端",
     claudeWorkbench: "Claude Code",
     claudeRunningHint: "此项目有 Claude SDK session 正在运行。",
@@ -2395,8 +2220,6 @@ const I18N = {
     narrowBackToForm: "← 返回表单",
     narrowEditProfile: "编辑配置 →",
     narrowBackToList: "← 返回列表",
-    narrowShowRunsList: "显示运行列表 →",
-    narrowBackToDetail: "← 返回详情",
     autoQueueBadgeHint: "{n} 条排队中 — 等当前 run 结束后自动执行",
     restoreSession: "恢复",
     continuity: "上下文",
@@ -2553,34 +2376,18 @@ const I18N = {
     english: "英文",
     reload: "重新加载",
     back: "返回",
-    selectRun: "选择一次运行来审核草稿。",
-    refreshRun: "刷新运行",
-    applySelected: "应用选中草稿",
-    rejectRun: "拒绝运行",
-    allowGoalEdit: "允许修改 GOAL / 架构",
-    allBranches: "全部分支",
-    unknownBranch: "未知分支",
-    draftFiles: "个草稿文件",
-    selectDraftPreview: "选择草稿预览",
-    noPreview: "（暂无预览）",
     loading: "加载中...",
-    noSchedule: "未找到定时任务。",
     task: "任务",
     state: "状态",
-    nextRun: "下次运行",
     controls: "控制",
-    frequency: "频率",
     time: "时间",
-    runner: "运行器",
     apply: "应用",
     stop: "停止",
-    jobHistory: "任务历史",
     logOutput: "日志输出",
     noOutput: "（暂无输出）",
     darkMode: "深色模式",
     lightMode: "浅色模式",
     registeredProjects: "已登记项目",
-    activeBackendJobs: "活跃后端任务",
     pendingFromLastScan: "来自上次扫描",
     failedOrPartialJobs: "失败或部分成功任务",
     recentIssues: "近期异常",
@@ -2592,7 +2399,6 @@ Object.assign(I18N.zh, {
   settings: "设置",
   settingsDrawerHelp: "低频控制项集中放在这里，主工作区只保留项目上下文相关操作。",
   refreshSettingsHelp: "自动轮询未及时同步时，再手动强制刷新后端状态。",
-  scheduleSettingsHelp: "管理 Windows 定时任务、运行器和执行频率。",
   logsSettingsHelp: "打开活动日志，或调整日志保留与存储设置。",
   desktopClient: "桌面客户端",
   desktopUpdateHelp: "直接检查 GitHub Release，并在客户端内下载和安装经过校验的 Squirrel 更新。",
@@ -2626,13 +2432,9 @@ Object.assign(I18N.zh, {
   retentionDays: "保留天数",
   previewMigration: "预览迁移",
   executeMigration: "执行迁移",
-  runKnowledgeUpdate: "运行知识库更新",
   editProjectGoal: "编辑项目目标",
   showAdvanced: "显示高级诊断",
   hideAdvanced: "隐藏高级诊断",
-  knowledgeUpdateRunning: "知识库更新正在运行...",
-  knowledgeUpdateDone: "知识库更新完成。",
-  knowledgeUpdateReviewRequired: "需要人工审核",
   gitImportPreflight: "Git 导入预检",
   gitImportPreflightHelp: "导入前检查所选路径是否已经是 Git 仓库。",
   check: "检查",
@@ -2695,22 +2497,11 @@ Object.assign(I18N.zh, {
   issueLastAnalyzedEmpty: "尚未分析任何提交。请先执行整体分析或提交分析，再应用草稿推进。",
   issueGoalNotAccepted: "项目目标尚未被接受。",
   issuePendingCommits: "有 {count} 个待分析提交。",
-  freqOff: "关闭",
-  freqHourly: "每小时",
-  freqEvery6h: "每 6 小时",
-  freqEvery12h: "每 12 小时",
-  freqDaily: "每天",
-  freqWeekly: "每周",
-  runnerSafe: "安全运行器",
-  runnerLegacy: "旧版 PowerShell",
   aiProfilesSaved: "AI 配置已保存。",
   modelTestCompleted: "模型测试完成。",
   modelTestFailed: "模型测试失败：{error}",
   kbContractValid: "知识库契约校验通过。",
   kbContractInvalid: "知识库契约校验失败。",
-  scheduleUpdated: "已更新：{mode} / {runner}",
-  scheduleRemoved: "定时任务已删除。",
-  scheduleFailed: "操作失败",
   dragToResize: "拖动以调整宽度",
 });
 
@@ -2721,7 +2512,7 @@ Object.assign(I18N.en, {
   issueKbNotInit: "KB directory is not initialized.",
   issueGitStatusBad: "Git status is {status}: {error}",
   issueRepoNoCommits: "Repository has no commits.",
-  issueLastAnalyzedEmpty: "lastAnalyzedCommit is empty. Apply drafts after analysis to advance it.",
+  issueLastAnalyzedEmpty: "lastAnalyzedCommit is empty. Successful commit automation will advance it.",
   issueGoalNotAccepted: "Project goal is not accepted yet.",
   issuePendingCommits: "{count} pending commits need analysis.",
   setupAiRequiredTitle: "AI model setup required",
@@ -2733,22 +2524,11 @@ Object.assign(I18N.en, {
   profileMainModelHelp: "The single model this project uses at runtime. Save will mirror it to compatibility fields.",
   saveProfileForm: "Save profile",
   profileKeyHint: "Stored in the local data directory; do not commit it to your repo.",
-  freqOff: "Off",
-  freqHourly: "Every hour",
-  freqEvery6h: "Every 6 hours",
-  freqEvery12h: "Every 12 hours",
-  freqDaily: "Daily",
-  freqWeekly: "Weekly",
-  runnerSafe: "safe runner",
-  runnerLegacy: "legacy PowerShell",
   aiProfilesSaved: "AI profiles saved.",
   modelTestCompleted: "Model test completed.",
   modelTestFailed: "Model test failed: {error}",
   kbContractValid: "KB contract valid.",
   kbContractInvalid: "KB contract invalid.",
-  scheduleUpdated: "Updated: {mode} / {runner}",
-  scheduleRemoved: "Schedule removed.",
-  scheduleFailed: "Failed",
   dragToResize: "Drag to resize",
 });
 
@@ -2866,11 +2646,6 @@ const app = createApp({
   setup() {
     const kbRoot = ref("");
     const projects = ref(null);
-    const schedule = ref(null);
-    const lastRun = ref({ time: null, status: null, slug: null, mode: null, output: "" });
-    const runningJobs = ref([]);
-    const jobHistory = ref([]);
-    const selectedJob = ref(null);
     const summaryPanel = ref("");
     const pendingCommitItems = ref([]);
     const supervisionIssues = ref([]);
@@ -2923,7 +2698,6 @@ const app = createApp({
       dashboard: 'detail',
       import: 'form',
       ai: 'list',
-      runs: 'list',
     };
     const narrowPane = reactive({ ...NARROW_PANE_DEFAULTS });
     function setNarrowPane(value) {
@@ -3121,15 +2895,6 @@ const app = createApp({
       }
     });
 
-    const runs = ref([]);
-    const selectedRunId = ref("");
-    const selectedRun = ref(null);
-    const drafts = ref([]);
-    const draftSelection = reactive({});
-    const previewDraftPath = ref("");
-    const draftPreview = ref("");
-    const allowGoalEdit = ref(false);
-    const draftBranchFilter = ref("");
     const removeDialog = reactive({ open: false, slug: "", preview: {}, deleteKb: false, reason: "", confirmText: "", error: "", busy: false });
     const settingsDrawerOpen = ref(false);
     const desktopUpdate = reactive({ supported: false, currentVersion: "", latestVersion: "", status: "unsupported", updateAvailable: false, error: "" });
@@ -3188,7 +2953,6 @@ const app = createApp({
     const settingsAutomationForm = reactive({
       enabled: false,
       postCommitEnabled: false,
-      knowledgeMode: "requestApproval",
       allowReadOnlyBash: true,
       hookPromptTemplate: "",
     });
@@ -3246,9 +3010,6 @@ const app = createApp({
     let importNoticeTimer = null;
     const busySlug = ref("");
     const settingsProjectSlug = ref("");
-
-    const freq = reactive({ frequency: "daily", time: "08:00", runner: "safe" });
-    const scheduleMsg = ref("");
 
     const projectList = computed(() => Object.entries(projects.value || {}).map(([slug, cfg]) => ({ slug, cfg })));
     const selectedProject = computed(() => selectedSlug.value && projects.value ? projects.value[selectedSlug.value] : null);
@@ -3359,7 +3120,6 @@ const app = createApp({
       Object.assign(settingsAutomationForm, {
         enabled: cfg.enabled === true,
         postCommitEnabled: cfg.postCommitEnabled === true,
-        knowledgeMode: cfg.knowledgeMode || "requestApproval",
         allowReadOnlyBash: cfg.allowReadOnlyBash !== false,
         hookPromptTemplate: cfg.hookPromptTemplate || "",
       });
@@ -3395,12 +3155,6 @@ const app = createApp({
         return { ...group, hasWarnOrError: hasError || hasWarn, levelClass: hasError ? "bad" : hasWarn ? "warn" : "idle" };
       });
     });
-    const draftBranches = computed(() => [...new Set((drafts.value || []).map(d => d.sourceBranch || t("unknownBranch")))].sort());
-    const filteredDrafts = computed(() => {
-      if (!draftBranchFilter.value) return drafts.value || [];
-      return (drafts.value || []).filter(d => (d.sourceBranch || t("unknownBranch")) === draftBranchFilter.value);
-    });
-    const applyDraftButtonLabel = computed(() => draftBranchFilter.value ? `${t("applySelected")} · ${draftBranchFilter.value}` : t("applySelected"));
     const removeProjectDisabled = computed(() => removeDialog.busy || removeDialog.preview.hasRunningJobs || (removeDialog.deleteKb && removeDialog.confirmText !== removeDialog.slug));
     const desktopUpdateBusy = computed(() => ["checking", "downloading", "installing"].includes(desktopUpdate.status));
     const desktopUpdateActionLabel = computed(() => {
@@ -3436,8 +3190,6 @@ const app = createApp({
       dashboard: t("projectSupervision"),
       import: t("importProject"),
       ai: t("aiProfiles"),
-      runs: t("runsAndDrafts"),
-      schedule: t("schedule"),
       logs: t("logs"),
       settings: t("settings")
     }[activeView.value] || t("projectSupervision")));
@@ -3445,24 +3197,14 @@ const app = createApp({
     const summaryCards = computed(() => {
       const list = projectList.value;
       const pending = list.reduce((sum, p) => sum + Number(p.cfg.lastScanPendingCount || 0), 0);
-      const failed = jobHistory.value.filter(j => j.status === "failed" || j.status === "partial").length;
       return [
         { key: "projects", label: t("projects"), value: list.length, note: t("registeredProjects") },
-        { key: "running", label: t("runningJobs"), value: runningJobs.value.length, note: t("activeBackendJobs") },
         { key: "pending", label: t("pendingCommits"), value: pending, note: t("pendingFromLastScan") },
-        { key: "issues", label: t("recentIssues"), value: supervisionIssues.value.length || failed, note: t("failedOrPartialJobs") }
+        { key: "issues", label: t("recentIssues"), value: supervisionIssues.value.length, note: t("failedOrPartialJobs") }
       ];
     });
 
-    const navItems = computed(() => [
-      // All projects on this install are autoApply, so the Runs/Drafts
-      // sidebar entry is hidden. Restore by uncommenting this line; the
-      // runs view itself stays intact for programmatic navigation.
-      // { key: "runs", label: t("runsDrafts"), badge: runs.value.length || "" }
-    ]);
-
-    const logOutput = computed(() => selectedJob.value ? (selectedJob.value.output || "") : (lastRun.value.output || ""));
-    const logTitle = computed(() => selectedJob.value ? `${selectedJob.value.mode} / ${selectedJob.value.slug} / ${selectedJob.value.status}` : `${lastRun.value.mode || "last"} / ${lastRun.value.slug || "none"} / ${lastRun.value.status || "none"}`);
+    const navItems = computed(() => []);
 
     watch(uiLanguage, value => {
       localStorage.setItem("kb-ui-language", value);
@@ -3578,12 +3320,6 @@ const app = createApp({
     function selectProject(slug) {
       summaryPanel.value = "";
       selectedSlug.value = slug;
-      selectedRunId.value = "";
-      selectedRun.value = null;
-      drafts.value = [];
-      draftBranchFilter.value = "";
-      previewDraftPath.value = "";
-      draftPreview.value = "";
       closeEventSource();
       terminalLines.value = [];
       resetChatPointers();
@@ -3591,7 +3327,6 @@ const app = createApp({
       terminalPermission.value = null;
       terminalSession.value = { state: 'idle', model: null, aiProfileId: projects.value && projects.value[slug] && projects.value[slug].aiProfileId || null, claudeSessionId: null, turns: 0 };
       loadPermissionModeForSession(null);
-      loadRuns(slug);
       loadClaudeSessions(slug, true);
     }
 
@@ -3600,7 +3335,7 @@ const app = createApp({
     }
 
     function isProjectRunning(slug) {
-      return runningJobs.value.some(j => j.slug === slug || j.slug === "ALL");
+      return (activeSessionsBySlug[slug] || 0) > 0;
     }
 
     function repoStatusLevel(status) {
@@ -3674,17 +3409,15 @@ const app = createApp({
         const state = await api("GET", "/api/state");
         kbRoot.value = state.kbRoot;
         projects.value = state.projects;
-        schedule.value = state.schedule;
         if (state.setup) Object.assign(setup, state.setup);
         if (state.knowledgeStore) Object.assign(knowledgeStoreConfig, state.knowledgeStore);
         if (state.logging) Object.assign(loggingConfig, state.logging);
-        lastRun.value = state.lastRun || lastRun.value;
         if (!selectedSlug.value && projectList.value.length) selectProject(projectList.value[0].slug);
         ensureSettingsProjectSlug();
         const aiProfileTask = activeView.value === "ai" && aiProfileFormDirty.value
           ? Promise.resolve()
           : loadAiProfiles(false);
-        await Promise.all([loadJobs(), aiProfileTask, loadIssues(), loadGithubStatus()]);
+        await Promise.all([aiProfileTask, loadIssues(), loadGithubStatus()]);
         if (shouldShowOnboarding.value && (setup.required || !onboardingDismissed.value)) {
           onboardingModalOpen.value = true;
         }
@@ -4536,14 +4269,6 @@ const app = createApp({
       }
     }
 
-    async function loadJobs() {
-      const data = await api("GET", "/api/jobs");
-      runningJobs.value = data.running || [];
-      jobHistory.value = data.history || [];
-      if (data.lastRun) lastRun.value = data.lastRun;
-      return data;
-    }
-
     async function loadIssues() {
       const data = await api("GET", "/api/supervision/issues");
       supervisionIssues.value = data.issues || [];
@@ -4623,12 +4348,6 @@ const app = createApp({
       if (data.config) Object.assign(loggingConfig, data.config);
       await loadStructuredLogs();
       return data;
-    }
-
-    async function loadJobDetail(jobId) {
-      const data = await api("GET", `/api/jobs/${jobId}`);
-      selectedJob.value = data.job;
-      activeView.value = "logs";
     }
 
     async function loadAiProfiles(updateText = true) {
@@ -4901,7 +4620,6 @@ const app = createApp({
         contextWindow: null,
         timeoutMs: 300000,
         // New profiles default to SDK runner with hardened system prompt.
-        runner: "sdk",
         systemPrompt: { type: "preset", preset: "claude_code" },
       });
       selectedConfigProfileId.value = finalId;
@@ -5060,23 +4778,6 @@ const app = createApp({
       }
     }
 
-    async function runKnowledgeUpdate(slug) {
-      if (!slug) return;
-      actionMessage.value = t("knowledgeUpdateRunning");
-      try {
-        const data = await api("POST", `/api/projects/${slug}/knowledge-update`, {});
-        actionMessage.value = data.reviewRequired
-          ? `${t("knowledgeUpdateReviewRequired")}: ${data.reviewReason || ""}`
-          : t("knowledgeUpdateDone");
-        await refreshAll();
-        if (data.reviewRequired) {
-          await loadRuns(slug);
-        }
-      } catch (e) {
-        actionMessage.value = e.message;
-      }
-    }
-
     async function initProject(slug) {
       busySlug.value = slug;
       try {
@@ -5085,13 +4786,6 @@ const app = createApp({
       } finally {
         busySlug.value = "";
       }
-    }
-
-    async function runJob(mode, slug) {
-      const data = await api("POST", "/api/jobs/run", { mode, slug: slug || "ALL" });
-      activeView.value = "logs";
-      await refreshAll();
-      if (data.jobId) loadJobDetail(data.jobId).catch(() => {});
     }
 
     async function loadHookStatus(slug) {
@@ -5518,7 +5212,6 @@ const app = createApp({
       return {
         enabled: settingsAutomationForm.enabled === true,
         postCommitEnabled: settingsAutomationForm.postCommitEnabled === true,
-        knowledgeMode: settingsAutomationForm.knowledgeMode || "requestApproval",
         allowReadOnlyBash: settingsAutomationForm.allowReadOnlyBash !== false,
         hookPromptTemplate: settingsAutomationForm.hookPromptTemplate || "",
       };
@@ -5530,14 +5223,12 @@ const app = createApp({
       const enabled = root.querySelector('[data-automation-field="enabled"]');
       const postCommitEnabled = root.querySelector('[data-automation-field="postCommitEnabled"]');
       const allowReadOnlyBash = root.querySelector('[data-automation-field="allowReadOnlyBash"]');
-      const knowledgeMode = root.querySelector('[data-automation-field="knowledgeMode"]');
       const hookPromptTemplate = root.querySelector('[data-automation-field="hookPromptTemplate"]');
       loadingAutomationForm = true;
       Object.assign(settingsAutomationForm, {
         enabled: !!(enabled && enabled.checked),
         postCommitEnabled: !!(postCommitEnabled && postCommitEnabled.checked),
         allowReadOnlyBash: allowReadOnlyBash ? allowReadOnlyBash.checked !== false : settingsAutomationForm.allowReadOnlyBash !== false,
-        knowledgeMode: knowledgeMode && knowledgeMode.value || settingsAutomationForm.knowledgeMode || "requestApproval",
         hookPromptTemplate: hookPromptTemplate ? hookPromptTemplate.value : settingsAutomationForm.hookPromptTemplate || "",
       });
       nextTick(() => { loadingAutomationForm = false; });
@@ -6243,73 +5934,6 @@ const app = createApp({
       }
     }
 
-    async function loadRuns(slug) {
-      if (!slug) return;
-      try {
-        const data = await api("GET", `/api/projects/${slug}/runs`);
-        runs.value = (data.runs || []).sort((a, b) => String(b.startedAt || "").localeCompare(String(a.startedAt || "")));
-      } catch {
-        runs.value = [];
-      }
-    }
-
-    async function selectRun(runId) {
-      selectedRunId.value = runId;
-      await loadRunDetail(selectedSlug.value, runId);
-    }
-
-    async function loadRunDetail(slug, runId) {
-      const data = await api("GET", `/api/projects/${slug}/runs/${runId}`);
-      selectedRun.value = data.run;
-      drafts.value = data.drafts || [];
-      if (draftBranchFilter.value && !draftBranches.value.includes(draftBranchFilter.value)) draftBranchFilter.value = "";
-      for (const d of drafts.value) {
-        if (!(d.path in draftSelection)) draftSelection[d.path] = true;
-      }
-    }
-
-    async function loadDraftPreview() {
-      draftPreview.value = "";
-      if (!selectedSlug.value || !selectedRunId.value || !previewDraftPath.value) return;
-      const data = await api("GET", `/api/projects/${selectedSlug.value}/drafts/${selectedRunId.value}/raw?path=${encodeURIComponent(previewDraftPath.value)}`);
-      draftPreview.value = data.content || "";
-    }
-
-    async function applySelectedDrafts() {
-      if (!selectedSlug.value || !selectedRunId.value) return;
-      const selected = filteredDrafts.value.filter(d => draftSelection[d.path]);
-      if (!selected.length) throw new Error("No selected drafts.");
-      const draftPayload = [];
-      for (const d of selected) {
-        const raw = await api("GET", `/api/projects/${selectedSlug.value}/drafts/${selectedRunId.value}/raw?path=${encodeURIComponent(d.path)}`);
-        draftPayload.push({ path: d.path, content: raw.content || "", sourceBranch: d.sourceBranch, sourceHeadCommit: d.sourceHeadCommit });
-      }
-      await api("POST", `/api/projects/${selectedSlug.value}/drafts/${selectedRunId.value}/apply`, {
-        drafts: draftPayload,
-        allowGoalEdit: allowGoalEdit.value
-      });
-      await refreshAll();
-      await loadRunDetail(selectedSlug.value, selectedRunId.value);
-    }
-
-    async function rejectRun() {
-      if (!selectedSlug.value || !selectedRunId.value) return;
-      await api("POST", `/api/projects/${selectedSlug.value}/drafts/${selectedRunId.value}/reject`, { reason: "rejected from UI" });
-      await loadRunDetail(selectedSlug.value, selectedRunId.value);
-    }
-
-    async function applySchedule() {
-      const data = await api("PUT", "/api/schedule", { frequency: freq.frequency, time: freq.time, runner: freq.runner });
-      scheduleMsg.value = data.ok ? t("scheduleUpdated", { mode: data.mode, runner: data.runner || freq.runner }) : t("scheduleFailed");
-      await refreshAll();
-    }
-
-    async function deleteSchedule() {
-      const data = await api("PUT", "/api/schedule", { frequency: "off" });
-      scheduleMsg.value = data.ok ? t("scheduleRemoved") : t("scheduleFailed");
-      await refreshAll();
-    }
-
     function toggleTheme() {
       theme.value = theme.value === "dark" ? "light" : "dark";
       localStorage.setItem("kb-theme", theme.value);
@@ -6342,7 +5966,7 @@ const app = createApp({
     });
 
     return {
-      kbRoot, projects, schedule, lastRun, runningJobs, jobHistory, selectedJob, logOutput, logTitle,
+      kbRoot, projects,
       summaryPanel, pendingCommitItems, supervisionIssues, issuesByProject, structuredLogs, selectedLog, logFilters,
       knowledgeStoreConfig, knowledgeStorage, knowledgeMigrationPlan, loggingConfig,
       markdownMaintenance, markdownMaintenanceBusy, markdownMaintenanceMessage, loadMarkdownMaintenance, startMarkdownMaintenance,
@@ -6355,8 +5979,6 @@ const app = createApp({
       onboardingModalOpen, onboardingSteps, currentOnboardingStep, dismissOnboarding, runOnboardingAction,
       theme, uiLanguage, t, toggleTheme, form, importSlugPreview, submitting, formError, formOk, pickingFolder, pickProjectFolder, addProject, resetForm, busySlug, initProject,
       isNarrow, narrowPane, setNarrowPane,
-      freq, scheduleMsg, applySchedule, deleteSchedule,
-      runs, selectedRunId, selectedRun, drafts, filteredDrafts, draftBranches, draftBranchFilter, applyDraftButtonLabel, draftSelection, previewDraftPath, draftPreview, allowGoalEdit,
       removeDialog, removeProjectDisabled,
       aiConfig, aiProfilesText, adapters, aiMessage, aiMessageStyle, selectedConfigProfileId, profileForm, testPrompt, testResult, testingProfile, vendorPresetNames, usableAiProfiles, defaultAiProfile, defaultAiProfileLabel, nonDefaultAiProfiles,
       hookStatus, settingsAutomationForm, settingsAutomationLoaded, settingsAutomationDirty, settingsAutomationSaving,
@@ -6367,15 +5989,14 @@ const app = createApp({
       selectProject, isKbInit, isProjectRunning, repoStatusLevel, projectStatusClass, projectIssues,
       kbUrl, goalUrl, displayProjectKbPath, formatTime, formatBytes,
       profileOptionLabel, projectEffectiveAiProfileId,
-      refreshAll, loadJobs, loadJobDetail, loadAiProfiles, loadProfileForm, markAiProfileDirty, addProfile, deleteCurrentProfile, saveAiProfiles, saveCurrentProfile, testCurrentProfile, setProjectAiProfile, onProviderPicked, onProviderFocus, clearProviderSelection, openAiSetup,
+      refreshAll, loadAiProfiles, loadProfileForm, markAiProfileDirty, addProfile, deleteCurrentProfile, saveAiProfiles, saveCurrentProfile, testCurrentProfile, setProjectAiProfile, onProviderPicked, onProviderFocus, clearProviderSelection, openAiSetup,
       openSummaryPanel, loadPendingCommits, loadIssues, loadStructuredLogs,
       loadKnowledgeStoreConfig, saveKnowledgeStoreConfig, previewKnowledgeMigration, executeKnowledgeMigration, loadLoggingConfig, saveLoggingConfig,
-      validateGit, scanProject, validateKb, migrateFramework, runKnowledgeUpdate, runImportPreflight, runJob, loadHookStatus, loadSettingsProject, changeSettingsProject, loadProjectGoal, saveProjectGoal, openProjectGoalModal, closeProjectGoalModal, saveProjectGoalAndClose, startProjectGoalDrag, installHook, uninstallHook,
+      validateGit, scanProject, validateKb, migrateFramework, runImportPreflight, loadHookStatus, loadSettingsProject, changeSettingsProject, loadProjectGoal, saveProjectGoal, openProjectGoalModal, closeProjectGoalModal, saveProjectGoalAndClose, startProjectGoalDrag, installHook, uninstallHook,
       pickTeamStoreFolder, scanLocalTeamStore, configureLocalTeamStore,
       saveGithubAuth, saveGithubProvider, inferGithubApiBaseUrl, onGitProviderTypeChanged, selectGitLoginProvider, openGithubAuthModal, closeGithubAuthModal, startGithubOAuth, startGiteaOAuth, openGithubVerification, copyGithubDeviceCode, copyGiteaRedirectUri, logoutGithub, loadGithubStores, onTeamStoreChanged,
       saveAutomationSettings, previewAutomationPrompt, simulateAutomation, loadAutomationRuns,
       openRemoveProject, closeRemoveProject, confirmRemoveProject,
-      loadRuns, selectRun, loadRunDetail, loadDraftPreview, applySelectedDrafts, rejectRun,
       terminalLines, terminalSessionId, terminalSession, terminalSessions, terminalPermission, terminalPermissionBusy, terminalInput, terminalInputRef, terminalScrollRef,
       terminalStatusDot, terminalInputPlaceholder, isClaudeRunning, terminalProfileLabel, permissionSummaryText, renderMarkdown,
       sendClaudeInput, stopClaudeSession, resumeProjectAutomation, clearTerminal, restoreLatestClaudeSession, autoresizeTerminalInput, startNewClaudeSession, approveClaudePermission, denyClaudePermission,

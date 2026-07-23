@@ -4,7 +4,7 @@
 
 <p align="center">
   <strong>面向 Git 项目的本地知识库管理器。</strong><br>
-  扫描历史、生成可审查的 AI 草稿、沉淀中英双语知识库。
+   对账 Git 历史、每个 commit 一个任务、自动维护知识库。
 </p>
 
 <p align="center">
@@ -125,7 +125,7 @@ project-knowledge --no-open     # 不自动打开浏览器
 ```
 
 需要 **Node.js 18+** 与 **Git（PATH 中可执行）**。可选：任一
-Anthropic 兼容 API Profile 用于生成 AI 草稿。
+Anthropic 兼容 API Profile 用于自动更新知识库。
 
 首次启动的预期输出：
 
@@ -149,23 +149,14 @@ Ctrl+C in this window, or run `project-knowledge stop` elsewhere.
 
 ## 它做什么
 
-```
-   git commit ──► post-commit 钩子 ──► scanner ──► orchestrator ──► AI
-                                                          │            │
-                                                          ▼            ▼
-                          ~/.project-knowledge/      drafts/      Anthropic 兼容
-                                                          │
-                                                          ▼
-                                              浏览器 diff 审阅
-                                                          │
-                                                          ▼
-                                           KB 只按你的指令增长
+```text
+git commit -> post-commit Hook -> 持久化对账器 -> 项目 FIFO -> Claude Code -> KB
+应用启动 ------------------------^  （发现关闭期间新增的 commit）
 ```
 
-`project-knowledge` 监听你的本地 Git 项目，调用 Anthropic 兼容的 LLM
-从每次提交或分支生成知识条目草稿，所有草稿都以 side-by-side diff 在
-浏览器里呈现。你**采纳**、**编辑**或**拒绝**每一条。可信 KB
-（`modules/`、`changes/`）只按你的指令增长。
+`project-knowledge` 监听本地 Git 项目，每个 commit 创建一个独立的
+Claude Code 后台任务并直接增量更新对应 KB。启动对账会发现应用关闭期间
+产生的 commit，中断任务可以恢复，已完成任务不会重复派发。
 
 ---
 
@@ -202,10 +193,11 @@ Ctrl+C in this window, or run `project-knowledge stop` elsewhere.
   <tr>
     <td valign="top">
 
-**草稿可审查**
+**Commit 自动化**
 
-- AI 的每一处变更先进入 `drafts/`，绝不直接写 KB。
-- 浏览器 diff 视图，应用 / 编辑 / 拒绝。
+- 每个 commit 生成一个独立 Claude Code 后台任务。
+- 同一项目按提交顺序串行执行，并直接增量更新 KB。
+- Hook 与启动恢复共用持久化去重状态，完成的 commit 不会重复派发。
 - 默认中英双语（zh-CN / en-US）模块与变更文档。
 - 厂商中立：Claude、GLM、DeepSeek、Kimi、自建网关。
 
@@ -236,20 +228,11 @@ goal / KB）、异常中心面板，以及右侧 Claude 工作台，可针对该
 
 ---
 
-## 审完再写入
+## 自动处理提交
 
-<p align="center">
-  <img src="../assets/runs-drafts.png" alt="Run / Draft" width="1280">
-</p>
-
-每次分析产出一组草稿。点击一次运行即可看到其草稿——勾选要写入的条目，
-然后 **Apply selected** 把它们写入 KB；**Reject run** 整批丢弃。
-
-<p align="center">
-  <img src="../assets/draft-review.png" alt="Draft 审阅" width="1280">
-</p>
-
-想看逐条 diff 时，直接在编辑器里打开单条草稿。
+应用运行时由 `post-commit` Hook 实时触发。应用关闭期间产生的 commit
+会在下次启动时被发现，并按从旧到新的顺序继续执行。中断的任务会恢复，
+已完成任务不会重新分析。
 
 ---
 
@@ -259,8 +242,8 @@ goal / KB）、异常中心面板，以及右侧 Claude 工作台，可针对该
   <img src="../assets/settings.png" alt="设置抽屉" width="1280">
 </p>
 
-设置抽屉集中管理 AI Profile、team-knowledge 仓库绑定、Windows
-计划任务、日志保留，以及语言 / 主题。所有操作都在本地完成；除 AI
+设置抽屉集中管理 AI Profile、team-knowledge 仓库绑定、
+日志保留，以及语言 / 主题。所有操作都在本地完成；除 AI
 请求体本身外，没有任何数据离开你的机器。
 
 ---
@@ -330,7 +313,7 @@ CLI 在 `os.tmpdir()/.project-knowledge.pid` 写入 PID 文件。**关闭终端
 ## 运行时数据
 
 全部数据保存在 npm 包**之外**的单一目录里，`npm install -g
-project-knowledge` 升级绝不触碰：项目注册、AI Profile、KB、草稿、日志
+project-knowledge` 升级绝不触碰：项目注册、AI Profile、KB、commit 状态、日志
 全部安全。
 
 **默认：** `~/.project-knowledge/` &nbsp;·&nbsp; **覆盖：** `KB_DATA_DIR`
@@ -350,7 +333,7 @@ KB_DATA_DIR=D:/data/project-knowledge project-knowledge
 │   ├── GOAL.md
 │   ├── modules/<area>.md      # 精选模块文档
 │   └── changes/release-v*.md  # 精选变更记录
-├── _ai/<slug>/drafts/         # 可审查的 AI 草稿（绝不自动应用）
+├── _ai/<slug>/commit-automation-state.json # 每个 commit 的持久化状态
 ├── ai-profiles.json           # AI Profile 配置 + Key
 ├── knowledge-store.json       # 外部 / 团队 KB 设置
 ├── logging.json               # 日志保留
@@ -363,15 +346,16 @@ KB_DATA_DIR=D:/data/project-knowledge project-knowledge
 ## 仓库结构
 
 ```
+ui/
+└── index.html                # 仪表盘 UI（Vue + Tailwind，单文件）
 _site/
-├── index.html                # 仪表盘 UI（Vue + Tailwind，单文件）
 ├── server.js                 # 本地 HTTP 服务（REST + WebSocket）
 └── lib/
     ├── scanner.js              # git 状态扫描
-    ├── analysis-orchestrator.js  # 初始 / 提交分析
+    ├── post-commit-automation.js # Hook + 启动对账
+    ├── commit-automation-store.js # commit 状态与去重
     ├── context-pack-builder.js   # AI prompt 装配
     ├── kb-framework.js          # KB 布局 / 写入 / 校验
-    ├── draft-apply.js           # 草稿应用 / 拒绝
     ├── knowledge-store.js       # 外部 KB 配置
     ├── github-team-store.js     # 团队模式 · Gitea OAuth · sparse checkout
     ├── hook-manager.js          # post-commit 钩子安装 / 卸载
@@ -414,9 +398,9 @@ npm test
 回归套件位于 `_site/_test/`，覆盖：
 
 - AI Profile 校验、scanner 行为、context pack 生成
-- 初始与提交分析
-- 草稿应用 / 拒绝、知识库、结构化日志
-- 项目控制台流程、Run / Draft UI 流程
+- 单 commit 提示词、持久化去重、串行恢复
+- KB 写入边界、知识库、结构化日志
+- 项目控制台与真实 Hook 自动化流程
 - CLI 启动 / 停止 / 状态
 - Gitea OAuth + sparse checkout
 - 36 个用例，0 失败，冷启动约 110s
@@ -432,7 +416,7 @@ npm publish --provenance --access public
 ```
 
 工作流需要仓库 secret `NPM_TOKEN`。发布前请完成 checklist，并确认
-运行时数据、KB、草稿、日志、凭据都不在 Git 树或 npm 包内：
+运行时数据、KB、commit 自动化状态、日志、凭据都不在 Git 树或 npm 包内：
 
 ```bash
 npm test
@@ -451,9 +435,9 @@ npm view project-knowledge version dist-tags
 
 - **Node.js 18+**——使用原生 `fetch` 与 ES2022 特性
 - **Git** 在 `PATH` 中——所有扫描都通过它执行
-- **Windows / macOS / Linux**——只有 Windows 计划任务部分依赖平台
+- **Windows / macOS / Linux**
 - **可选**——Claude Code CLI 或任一 Anthropic 兼容 API Profile。
-  没有也不影响仪表盘与扫描，只是无法生成 AI 草稿
+  没有也不影响仪表盘与扫描，只是无法执行自动知识更新
 
 服务默认仅绑定 `127.0.0.1`，**不要**对外暴露。
 

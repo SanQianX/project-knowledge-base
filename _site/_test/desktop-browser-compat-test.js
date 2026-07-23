@@ -7,7 +7,7 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-const ui = fs.readFileSync(path.join(ROOT, '_site', 'index.html'), 'utf-8');
+const ui = fs.readFileSync(path.join(ROOT, 'ui', 'index.html'), 'utf-8');
 const preload = fs.readFileSync(path.join(ROOT, 'desktop', 'preload.cjs'), 'utf-8');
 const main = fs.readFileSync(path.join(ROOT, 'desktop', 'main.cjs'), 'utf-8');
 const runtime = require(path.join(ROOT, 'desktop', 'lib', 'backend-runtime.cjs'));

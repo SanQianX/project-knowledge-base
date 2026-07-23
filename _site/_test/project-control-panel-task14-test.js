@@ -126,21 +126,13 @@ async function json(method, url, body) {
     assert(r.res.ok, 'KB init should succeed');
 
     r = await json('POST', `/api/projects/${TEMP_SLUG}/knowledge-update`, {});
-    assert(r.res.ok, `knowledge update HTTP should succeed: ${r.data.error || ''}`);
-    assert(r.data.scan && r.data.scan.pendingCount >= 1, 'knowledge update should scan pending commits');
-    // Without a configured AI profile, the analysis stage must fail with a
-    // clear error. The endpoint itself should still respond 200 with the
-    // per-stage breakdown so the UI can show what happened.
-    assert(r.data.analysis && !r.data.analysis.ok, `analysis should fail without profile, got ${JSON.stringify(r.data.analysis)}`);
-    assert(/AI profile not (assigned|configured|disabled)/.test(r.data.analysis.error || ''),
-      `expected profile error in analysis, got: ${r.data.analysis.error}`);
-    assert(!r.data.applyResult || !r.data.applyResult.ok,
-      'auto-apply must be skipped when analysis fails');
-    assert(!r.data.ok, 'overall result should be ok=false when analysis fails');
+    assert(r.res.status === 404, 'manual knowledge-update/auto-apply endpoint should be removed');
+
+    r = await json('GET', `/api/projects/${TEMP_SLUG}/scan`);
+    assert(r.res.ok && r.data.pendingCount >= 1, 'read-only scanner should still report pending commits');
 
     r = await json('GET', '/api/projects');
-    // lastAnalyzedCommit must NOT advance when analysis failed
-    assert(r.data[TEMP_SLUG].lastAnalyzedCommit === firstCommit, 'lastAnalyzedCommit should NOT advance when analysis fails');
+    assert(r.data[TEMP_SLUG].lastAnalyzedCommit === firstCommit, 'read-only scan must not advance lastAnalyzedCommit');
 
     console.log('TASK-014 project control panel simplification test passed');
   } catch (e) {

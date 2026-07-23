@@ -180,7 +180,7 @@ function cleanup() {
 
     // The UI input's :disabled must no longer block on null claudeSessionId,
     // otherwise the user is stuck after a kbPath-driven history clear.
-    const indexHtml = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf-8');
+    const indexHtml = fs.readFileSync(path.join(__dirname, '..', '..', 'ui', 'index.html'), 'utf-8');
     assert(!/terminalSession\.claudeSessionId\s*==\s*null/.test(indexHtml),
       'UI input :disabled should no longer check claudeSessionId == null');
     assert(/claude\/kbpath-updated/.test(indexHtml),

@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.1.17] - 2026-07-23
+
+- Rebuilt commit-triggered knowledge automation around persistent per-commit
+  state, ordered recovery, and exactly one AI task per Git commit.
+- Removed manual draft review, auto-apply controls, and scheduled-task paths;
+  generated knowledge is now written directly through the automated pipeline.
+
 ## [4.1.16] - 2026-07-22
 
 - Fixed the desktop client timing out / hanging on the loading screen for large

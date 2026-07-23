@@ -96,9 +96,9 @@ async function json(method, url, body) {
     assert(r.data.config.automation.enabled === true, 'automation should be enabled');
     assert(r.data.config.automation.postCommitEnabled === true, 'post-commit automation should be enabled');
     assert(r.data.config.automation.allowReadOnlyBash === true, 'read-only Bash should be enabled');
-    assert(r.data.config.automation.knowledgeMode === 'autoApply', 'knowledge mode should default to autoApply');
-    assert(r.data.config.automation.hookPromptTemplate.includes('知识库更新原则'), 'default hook prompt should be rich');
-    assert(r.data.config.automation.initPromptTemplate.includes('初始化当前项目知识库'), 'init prompt should be stored');
+    assert(!Object.prototype.hasOwnProperty.call(r.data.config.automation, 'knowledgeMode'), 'legacy knowledge mode should be absent');
+    assert(r.data.config.automation.hookPromptTemplate.includes('单个 Git 提交'), 'default hook prompt should enforce one commit per task');
+    assert(r.data.config.automation.initPromptTemplate.includes('直接初始化知识库'), 'init prompt should be stored');
     assert(r.data.config.claudeWorkbench.permissionMode === 'acceptEdits', 'permission mode should default to acceptEdits');
     assert(fs.existsSync(path.join(r.data.config.kbPath, 'README.md')), 'KB README should be initialized');
     assert(r.data.hookResult && r.data.hookResult.ok === true, 'managed hook should be installed');

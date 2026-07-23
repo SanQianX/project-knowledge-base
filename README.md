@@ -4,7 +4,7 @@
 
 <p align="center">
   <strong>Local knowledge-base manager for Git projects.</strong><br>
-  Scan history. Generate reviewable AI drafts. Ship a curated bilingual KB.
+  Reconcile Git history. Process one commit per task. Keep the KB current automatically.
 </p>
 
 <p align="center">
@@ -66,7 +66,7 @@ project-knowledge --no-open     # don't auto-open browser
 ```
 
 Requires **Node.js 18+** and **Git on `PATH`**. Optional: any
-Anthropic-compatible API profile for AI drafts.
+Anthropic-compatible API profile for automatic knowledge updates.
 
 Expected output on first launch:
 
@@ -90,24 +90,16 @@ Ctrl+C in this window, or run `project-knowledge stop` elsewhere.
 
 ## What it does
 
-```
-   git commit ──► post-commit hook ──► scanner ──► orchestrator ──► AI
-                                                          │            │
-                                                          ▼            ▼
-                          ~/.project-knowledge/      drafts/      Anthropic-compat
-                                                          │
-                                                          ▼
-                                              browser diff review
-                                                          │
-                                                          ▼
-                                           your KB grows only by your click
+```text
+git commit -> post-commit Hook -> persistent reconciler -> per-project FIFO -> Claude Code -> KB
+app startup --------------------^  (discovers commits created while offline)
 ```
 
-`project-knowledge` watches your local Git projects, asks an
-Anthropic-compatible LLM to draft knowledge entries from each commit or
-branch, and surfaces those drafts in a side-by-side diff. You **apply**,
-**edit**, or **reject** each one. The trusted KB (`modules/`, `changes/`)
-only grows when you say so.
+`project-knowledge` watches local Git projects and sends exactly one commit to
+each background Claude Code task. A task writes the resulting incremental
+update directly into that project's KB. On startup, the same reconciler finds
+commits created while the app was closed and resumes interrupted work without
+dispatching completed commits again.
 
 ---
 
@@ -276,23 +268,12 @@ conversation.
 
 ---
 
-## Review before it ships
+## Automatic commit processing
 
-<p align="center">
-  <img src="docs/assets/runs-drafts.png" alt="Runs / Drafts" width="1280">
-</p>
-
-Each analysis run produces a list of drafts. Click a run to see its
-drafts — check the ones you want to apply, then **Apply selected**
-writes them into the KB. **Reject run** discards everything.
-
-<p align="center">
-  <img src="docs/assets/draft-review.png" alt="Draft review" width="1280">
-</p>
-
-For per-draft diffs, open a draft directly in the editor.
-
----
+The post-commit Hook and startup recovery use the same persistent reconciler.
+Each source commit has one durable state record and one Claude Code prompt.
+Tasks run oldest-to-newest within a project; completed commits are never
+automatically dispatched again.
 
 ## Configuration
 
@@ -301,7 +282,7 @@ For per-draft diffs, open a draft directly in the editor.
 </p>
 
 The settings drawer manages AI profiles, team-knowledge repository
-binding, Windows scheduled task, log retention, and language/theme.
+binding, log retention, and language/theme.
 Every action is local; nothing leaves your machine except the AI
 request body itself.
 
@@ -395,7 +376,7 @@ pauses that project's worker without losing pending commits.
 
 Everything lives in a single directory **outside** the npm package, so
 `npm install -g project-knowledge` upgrades never touch your registry,
-profiles, KBs, drafts, or logs.
+profiles, KBs, commit automation state, or logs.
 
 **Default:** `~/.project-knowledge/` &nbsp;·&nbsp; **Override:** `KB_DATA_DIR`
 
@@ -415,7 +396,7 @@ never overwrites anything in the new location, and never prompts.
 │   ├── GOAL.md
 │   ├── modules/<area>.md      # curated module docs
 │   └── changes/release-v*.md  # curated change records
-├── _ai/<slug>/drafts/         # reviewable AI drafts (never auto-applied)
+├── _ai/<slug>/commit-automation-state.json  # durable per-commit state
 ├── ai-profiles.json           # AI profile config + API keys
 ├── knowledge-store.json       # external / team KB settings
 ├── logging.json               # log retention
@@ -428,15 +409,16 @@ never overwrites anything in the new location, and never prompts.
 ## Repository layout
 
 ```
+ui/
+└── index.html                # dashboard UI (Vue + Tailwind, single file)
 _site/
-├── index.html                # dashboard UI (Vue + Tailwind, single file)
 ├── server.js                 # local HTTP API (REST + WebSocket)
 └── lib/
     ├── scanner.js              # git state walker
-    ├── analysis-orchestrator.js  # initial / commit analysis
+    ├── post-commit-automation.js # Hook + startup reconciliation
+    ├── commit-automation-store.js # durable commit de-duplication
     ├── context-pack-builder.js   # AI prompt assembly
     ├── kb-framework.js          # KB layout, write, validate
-    ├── draft-apply.js           # apply / reject drafts
     ├── knowledge-store.js       # external KB config
     ├── github-team-store.js     # team mode · Gitea OAuth · sparse checkout
     ├── hook-manager.js          # post-commit hook install / uninstall
@@ -481,9 +463,9 @@ npm test
 The regression suite under `_site/_test/` covers:
 
 - AI profile validation, scanner behavior, context pack generation
-- Initial and commit analysis
-- Draft apply / reject, knowledge-store, structured logs
-- Project control panel flows, Runs / Drafts UI flow
+- One-commit prompt rendering, persistent de-duplication, FIFO recovery
+- Direct KB write boundaries, knowledge-store, structured logs
+- Project control panel and Hook automation flows
 - CLI startup / stop / status
 - Gitea OAuth + sparse checkout
 - 48 tests, 0 failures
@@ -507,7 +489,7 @@ npm view project-knowledge version dist-tags
 ```
 
 The workflow expects the `NPM_TOKEN` repository secret. Verify that
-runtime data, KBs, drafts, logs, and credentials are not part of the Git
+runtime data, KBs, commit automation state, logs, and credentials are not part of the Git
 tree or npm package before tagging.
 
 ---
@@ -516,10 +498,9 @@ tree or npm package before tagging.
 
 - **Node.js 18+** — uses native `fetch` and ES2022 features
 - **Git** on `PATH` — every scanner call goes through it
-- **Windows, macOS, or Linux** — only the Windows scheduled-task workflow
-  is platform-specific
+- **Windows, macOS, or Linux**
 - **Optional** — Claude Code CLI or any Anthropic-compatible API profile
-  for drafts. Without one, the dashboard still scans and visualizes git
+  for automatic updates. Without one, the dashboard still scans and visualizes git
   state.
 
 The server binds to `127.0.0.1` by default. Do not expose it publicly.

@@ -5,7 +5,7 @@ const { getDataDir } = require('./data-dir');
 const APP_ROOT = getDataDir();
 const SITE_ROOT = path.resolve(__dirname, '..');
 const AI_ROOT = path.join(APP_ROOT, '_ai');
-const STANDARD_SUBDIRS = ['drafts', 'runs', 'context-packs', 'backups', 'claude-workbench'];
+const STANDARD_SUBDIRS = ['runs', 'context-packs', 'backups', 'claude-workbench'];
 
 function safeSlug(slug) {
   return typeof slug === 'string' && /^[a-z0-9][a-z0-9-]{0,40}$/.test(slug);
@@ -63,21 +63,12 @@ function runPath(slug, runId) {
   return path.join(projectAIPath(slug), 'runs', `${runId}.json`);
 }
 
-function draftDir(slug, runId) {
-  return path.join(projectAIPath(slug), 'drafts', runId);
-}
-
 function contextPackDir(slug, runId) {
   return path.join(projectAIPath(slug), 'context-packs', runId);
 }
 
 function findExistingRunPath({ slug, kbPath, runId }) {
   const primary = path.join(projectAIPath(slug), 'runs', `${runId}.json`);
-  return primary;
-}
-
-function findExistingDraftDir({ slug, kbPath, runId }) {
-  const primary = path.join(projectAIPath(slug), 'drafts', runId);
   return primary;
 }
 
@@ -107,9 +98,7 @@ module.exports = {
   legacyAIPath,
   migrateAIWorkspace,
   runPath,
-  draftDir,
   contextPackDir,
   findExistingRunPath,
-  findExistingDraftDir,
   listProjectDirs,
 };

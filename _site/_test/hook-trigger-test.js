@@ -283,6 +283,9 @@ async function waitForAutomationRun(slug, timeoutMs = 30000) {
   const server = serverHandle.child;
   const serverDataDir = serverHandle.dataDir;
   DATA_DIR = serverDataDir;
+  // The real Git hook is spawned by this test process, so point its
+  // hook-trigger child at the isolated server data directory.
+  process.env.KB_DATA_DIR = serverDataDir;
   // Override the test's PROJECTS_JSON so it writes into the same data dir
   // the spawned server reads from.
   PROJECTS_JSON = path.join(serverDataDir, 'projects.json');
@@ -334,9 +337,8 @@ async function waitForAutomationRun(slug, timeoutMs = 30000) {
       automation: {
         enabled: true,
         postCommitEnabled: true,
-        knowledgeMode: 'directWriteKb',
         allowReadOnlyBash: true,
-        hookPromptTemplate: 'Hook test {{projectSlug}} {{shortHash}} {{changedFiles}} {{knowledgeMode}} {{permissionMode}}',
+        hookPromptTemplate: 'Hook test {{projectSlug}} {{shortHash}} {{changedFiles}} {{permissionMode}}',
       },
       claudeWorkbench: { permissionMode: 'bypassPermissions' },
     };
@@ -370,9 +372,9 @@ async function waitForAutomationRun(slug, timeoutMs = 30000) {
 
     const run = await waitForAutomationRun(SLUG, 30000);
     assert(run, `no automation run for ${SLUG} appeared within 30s; server output: ${serverOutput.slice(-1000)}`);
-    assert(run.knowledgeMode === 'directWriteKb', 'wrong knowledge mode: ' + run.knowledgeMode);
+    assert(!Object.prototype.hasOwnProperty.call(run, 'knowledgeMode'), 'legacy knowledge mode should not be persisted');
     assert(run.permissionMode === 'bypassPermissions', 'wrong permission mode: ' + run.permissionMode);
-    assert(run.allowedTools.includes('Write'), 'directWriteKb should allow Write in the automation policy');
+    assert(run.allowedTools.includes('Write'), 'automatic KB policy should allow Write');
     await new Promise(resolve => setTimeout(resolve, 500));
     const afterCommitRuns = await json('GET', `/api/projects/${SLUG}/automation/runs`);
     assert((afterCommitRuns.data.runs || []).filter(item => item.source === 'git-hook').length === 1,
@@ -399,6 +401,7 @@ async function waitForAutomationRun(slug, timeoutMs = 30000) {
     rmrf(projKb);
     rmrf(path.join(serverDataDir, '_ai', SLUG));
     try { fs.rmSync(serverDataDir, { recursive: true, force: true }); } catch {}
+    delete process.env.KB_DATA_DIR;
     try {
       const projects = JSON.parse(fs.readFileSync(PROJECTS_JSON, 'utf-8'));
       if (projects[SLUG]) {

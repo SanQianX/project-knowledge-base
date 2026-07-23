@@ -29,11 +29,10 @@ function createAutomationQueue() {
     return true;
   }
 
-  // Enqueue a run behind the active one. Returns true if accepted, false if
-  // the queue is at capacity (caller should reject the run).
-  function enqueue(key, runId, maxSize) {
+  // Enqueue a run behind the active one. Commit tasks are never discarded
+  // because of an arbitrary in-memory capacity.
+  function enqueue(key, runId) {
     const s = slot(key);
-    if (typeof maxSize === 'number' && s.queuedRunIds.length >= maxSize) return false;
     s.queuedRunIds.push(runId);
     return true;
   }

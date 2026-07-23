@@ -245,9 +245,8 @@ async function waitFor(predicate, timeoutMs = 5000, intervalMs = 50) {
       automation: {
         enabled: true,
         postCommitEnabled: true,
-        knowledgeMode: 'directWriteKb',
         allowReadOnlyBash: true,
-        hookPromptTemplate: 'SSE test {{projectSlug}} {{shortHash}} {{changedFiles}} {{knowledgeMode}} {{permissionMode}}',
+        hookPromptTemplate: 'SSE test {{projectSlug}} {{shortHash}} {{changedFiles}} {{permissionMode}}',
       },
       claudeWorkbench: { permissionMode: 'bypassPermissions' },
     };
@@ -273,7 +272,7 @@ async function waitFor(predicate, timeoutMs = 5000, intervalMs = 50) {
       commitHash: '',
       branch: 'main',
     });
-    assert(dispatch.status === 202 && dispatch.data.accepted === true,
+    assert(dispatch.status === 200 && dispatch.data.ok === true && dispatch.data.dispatched === 1,
       `dispatch failed: HTTP ${dispatch.status} ${JSON.stringify(dispatch.data)}`);
 
     // Wait for at least one 'create' frame followed by a state transition.

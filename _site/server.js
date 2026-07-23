@@ -5,14 +5,11 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { spawn, exec } = require('child_process');
+const { spawn } = require('child_process');
 const { getAdapter, listAdapters, validateCommitBatchOutput } = require('./lib/ai-adapter');
 const { execGit } = require('./lib/git-runner');
 const { buildContextPack } = require('./lib/context-pack-builder');
 const { scanProject, applyScanResult } = require('./lib/scanner');
-const { runCommitAnalysis, readRun, listRuns, listDrafts } = require('./lib/analysis-orchestrator');
-const { applyDrafts, rejectDrafts, readDraftContent } = require('./lib/draft-apply');
-const { runJob, makeJob, readJobLog, KNOWN_MODES } = require('./lib/job-orchestrator');
 const { validateKb, buildPrContextPack } = require('./lib/kb-validator');
 const { installHook, uninstallHook, readHookStatus } = require('./lib/hook-manager');
 const {
@@ -37,7 +34,6 @@ const {
   pathsReferToSameLocation,
 } = require('./lib/automation-config');
 const postCommitAutomation = require('./lib/post-commit-automation');
-const { selectedDirectoryFromOutput } = require('./lib/folder-picker-output');
 const { KnowledgeScopeRegistry, defaultPrimarySpaceId } = require('./lib/knowledge-scope-registry');
 const { KnowledgeDatabase } = require('./lib/knowledge-db');
 const { LocalEmbeddingService, DEFAULT_MODEL_ID } = require('./lib/embedding-service');
@@ -52,12 +48,11 @@ const { EMBEDDING_DIMENSIONS } = require('./lib/knowledge-schema');
 const { KnowledgeQueryService } = require('./lib/knowledge-query-service');
 
 const KB_ROOT = path.resolve(__dirname, '..');
-const SITE_ROOT = __dirname;
+const BACKEND_ROOT = __dirname;
+const SITE_ROOT = path.resolve(__dirname, '..', 'ui');
 const dataDir = require('./lib/data-dir');
 const PORT = parseInt(process.env.KB_SITE_PORT || '5757', 10);
 const HOST = process.env.KB_SITE_HOST || '127.0.0.1';
-const TASK_NAME = 'KB-GitCommits-Daily';
-const SAFE_RUNNER = path.join(SITE_ROOT, 'scripts', 'safe-runner.js');
 const PROJECT_SCHEMA_VERSION = kbFramework.PROJECT_SCHEMA_VERSION;
 const DEFAULT_KNOWLEDGE_LANGUAGE = 'zh-CN';
 
@@ -72,7 +67,6 @@ const DATA_DIR = dataDir.getDataDir();
 const PROJECTS_PATH = path.join(DATA_DIR, 'projects.json');
 const REMOVED_PROJECTS_PATH = path.join(DATA_DIR, 'removed-projects.json');
 const AI_PROFILES_PATH = path.join(DATA_DIR, 'ai-profiles.json');
-const JOBS_LOG_PATH = path.join(DATA_DIR, '.jobs-log.json');
 const KNOWLEDGE_STORE_PATH = path.join(DATA_DIR, 'knowledge-store.json');
 const LOGGING_CONFIG_PATH = path.join(DATA_DIR, 'logging.json');
 const CLAUDE_PROMPTS_PATH = path.join(DATA_DIR, 'claude-prompts.json');
@@ -90,29 +84,17 @@ function initializeKnowledgeStorageLayout() {
   const desired = knowledgeStorageLocation.configuredLayout(config.rootPath);
   const legacy = knowledgeStorageLocation.legacyLayout(DATA_DIR);
   if (fs.existsSync(legacy.dbPath) && !fs.existsSync(desired.dbPath)) {
-    // Only attempt the legacy→configured move when the target storage dir is
-    // absent or empty. If it already holds unrelated content (but no DB), the
-    // move can't complete cleanly — skip it (warn once) and keep using the
-    // active layout instead of throwing the same error on every startup.
-    const targetOccupied = fs.existsSync(desired.storageRoot)
-      && (() => { try { return fs.readdirSync(desired.storageRoot).length > 0; } catch { return true; } })();
-    if (targetOccupied) {
-      console.warn(`[knowledge-storage] skip relocation: target not empty (${desired.storageRoot}); continuing with existing storage at ${legacy.storageRoot}`);
-    } else {
-      try {
-        knowledgeStorageLocation.relocateLayout(legacy, desired);
-        knowledgeStorageLocation.rebaseMaintenanceState(legacy, desired);
-      } catch (error) {
-        console.error(`[knowledge-storage] ${error.message}`);
-      }
+    try {
+      knowledgeStorageLocation.relocateLayout(legacy, desired);
+      knowledgeStorageLocation.rebaseMaintenanceState(legacy, desired);
+    } catch (error) {
+      console.error(`[knowledge-storage] ${error.message}`);
     }
   }
   return knowledgeStorageLocation.resolveActiveLayout(config.rootPath, DATA_DIR);
 }
 
 // ---- state ----
-let lastRun = { time: null, status: null, slug: null, output: '' };
-const runningJobs = new Map();
 const giteaOAuthStates = new Map();
 let claudeMdAuditCache = null;
 let claudeMdRefreshRunning = false;
@@ -324,8 +306,7 @@ function knowledgeStorageBusy() {
     || knowledgeStorageRelocationRunning
     || markdownMaintenanceRunning
     || knowledgeActiveQueries > 0
-    || knowledgeActiveUpdates > 0
-    || [...runningJobs.values()].some(job => job?.status === 'running');
+    || knowledgeActiveUpdates > 0;
 }
 
 async function applyKnowledgeStoreConfig(body) {
@@ -405,12 +386,6 @@ function createKnowledgeQueryService() {
     scopeRegistry: new KnowledgeScopeRegistry({ filePath: KNOWLEDGE_SCOPES_PATH }),
     readProjects: () => readProjects({ persistMigrations: true }),
   });
-}
-
-// Read a fresh copy of projects.json (re-loaded on every dispatch so that
-// background jobs see the latest registry state).
-function readProjectsForJob() {
-  return readProjects({ persistMigrations: true });
 }
 
 function readTeamGitProvidersConfig() {
@@ -505,28 +480,11 @@ function readJson(p) {
   return JSON.parse(fs.readFileSync(p, 'utf-8'));
 }
 
-// Lightweight state event bus so the dashboard can react to backend changes
-// via SSE instead of polling. Same Set-based pattern as claudeCliRunner.subscribeList.
-const stateSubscribers = new Set();
-let stateNotifyTimer = null;
-function subscribeState(cb) {
-  stateSubscribers.add(cb);
-  return () => stateSubscribers.delete(cb);
-}
-function notifyStateChanged(reason) {
-  // Coalesce bursts (e.g. per-commit batch writes) into one frame.
-  if (stateNotifyTimer) return;
-  stateNotifyTimer = setTimeout(() => {
-    stateNotifyTimer = null;
-    const evt = { type: 'state/changed', reason, time: new Date().toISOString() };
-    for (const cb of stateSubscribers) { try { cb(evt); } catch {} }
-  }, 150);
-}
-
 function writeJson(p, obj) {
   fs.mkdirSync(path.dirname(p), { recursive: true });
-  fs.writeFileSync(p, JSON.stringify(obj, null, 2) + '\n', 'utf-8');
-  if (p === PROJECTS_PATH) notifyStateChanged('projects');
+  const tempPath = `${p}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`;
+  fs.writeFileSync(tempPath, JSON.stringify(obj, null, 2) + '\n', 'utf-8');
+  fs.renameSync(tempPath, p);
 }
 
 function backupInvalidJson(filePath, raw) {
@@ -906,7 +864,6 @@ function defaultProjectAutomationConfig(input = {}) {
   return normalizeAutomationConfig({
     enabled: true,
     postCommitEnabled: true,
-    knowledgeMode: 'autoApply',
     allowReadOnlyBash: true,
     ...(input || {}),
   });
@@ -1154,14 +1111,6 @@ function dirStats(root) {
   return result;
 }
 
-function hasRunningProjectJob(slug) {
-  for (const job of runningJobs.values()) {
-    if (!job || job.status !== 'running') continue;
-    if (job.slug === slug || job.slug === 'ALL') return true;
-  }
-  return false;
-}
-
 function allowedKbDeletionRootPaths() {
   const cfg = readKnowledgeStore();
   return [
@@ -1204,7 +1153,7 @@ function projectRemovePreview(slug, cfg) {
     kbExists: fs.existsSync(kbPath),
     kbSizeBytes: stats.kbSizeBytes,
     fileCount: stats.fileCount,
-    hasRunningJobs: hasRunningProjectJob(slug),
+    hasRunningJobs: false,
     hookInstalled: hook.installed === true,
     kbManagedHook: hook.kbManaged === true,
     isReference: cfg.isReference === true,
@@ -1228,149 +1177,6 @@ async function scanAndPersistProject(slug, projects, options = {}) {
 }
 
 // ---- schedule (uses schtasks.exe directly to avoid PowerShell module load issues) ----
-function schtasksQuery() {
-  return new Promise((resolve) => {
-    // Force UTF-8 console output by setting code page 65001 first.
-    // The chcp message goes to stderr; the >nul redirects chcp's "Active code page" stdout message.
-    const cmd = `chcp 65001 >nul 2>&1 & schtasks /query /tn "${TASK_NAME}" /v /fo list`;
-    exec(cmd, { encoding: 'utf8', windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
-      if (err) {
-        const msg = (stderr || '').toString().trim();
-        if (/the system cannot find/i.test(msg) || /cannot find the specified file/i.test(msg) || /指定的文件|找不到/i.test(msg)) {
-          return resolve({ registered: false, error: 'task not registered' });
-        }
-        return resolve({ registered: false, error: msg || err.message });
-      }
-      // Strip leading chcp echo line if present
-      let text = stdout;
-      const lines = text.split(/\r?\n/);
-      if (lines.length && !/^\s*\S+:.+/.test(lines[0])) {
-        lines.shift();
-        text = lines.join('\n');
-      }
-      // Parse "Key: Value" lines
-      const map = {};
-      text.split(/\r?\n/).forEach(line => {
-        const m = line.match(/^([^:]+):\s*(.*)$/);
-        if (m) {
-          const k = m[1].trim();
-          const v = m[2].trim();
-          if (k && v) map[k] = v;
-        }
-      });
-      if (Object.keys(map).length === 0) return resolve({ registered: false, error: 'empty output', raw: stdout.slice(0, 500) });
-      resolve({ registered: true, raw: map });
-    });
-  });
-}
-
-let scheduleInfoCache = { at: 0, value: null };
-function getScheduleInfo() {
-  // schtasks spawns a child process; /api/state (polled + probed on startup)
-  // calls this on every hit. Cache for 5s so repeated calls don't each pay the
-  // process-spawn latency, which otherwise slows /api/state under load.
-  const now = Date.now();
-  if (scheduleInfoCache.value && now - scheduleInfoCache.at < 5000) {
-    return Promise.resolve(scheduleInfoCache.value);
-  }
-  return schtasksQuery().then(r => {
-    let value;
-    if (!r.registered) {
-      value = r;
-    } else {
-      const m = r.raw;
-      value = {
-        registered: true,
-        hostName: m['HostName'] || m['主机名'] || '',
-        taskName: m['TaskName'] || m['任务名称'] || TASK_NAME,
-        nextRun: m['Next Run Time'] || m['下次运行时间'] || '',
-        lastRun: m['Last Run Time'] || m['上次运行时间'] || '',
-        lastResult: m['Last Result'] || m['上次结果'] || '',
-        status: m['Status'] || m['状态'] || '',
-        scheduleType: m['Schedule Type'] || m['计划类型'] || '',
-        startTime: m['Start Time'] || m['开始时间'] || '',
-        runAsUser: m['Run As User'] || m['以用户身份运行'] || '',
-        raw: m,
-      };
-    }
-    scheduleInfoCache = { at: Date.now(), value };
-    return value;
-  });
-}
-
-function buildScheduleArgs(frequency, time, options = {}) {
-  // Default to the safe-runner (scan + analyze-commits; never apply).
-  const tr = `node "${SAFE_RUNNER}" --slug ALL`;
-  switch (frequency) {
-    case 'off':      return null;
-    case 'hourly':   return ['/create', '/tn', TASK_NAME, '/tr', tr, '/sc', 'hourly', '/f'];
-    case 'every6h':  return ['/create', '/tn', TASK_NAME, '/tr', tr, '/sc', 'hourly', '/mo', '6', '/f'];
-    case 'every12h': return ['/create', '/tn', TASK_NAME, '/tr', tr, '/sc', 'hourly', '/mo', '12', '/f'];
-    case 'daily':    return ['/create', '/tn', TASK_NAME, '/tr', tr, '/sc', 'daily', '/st', time || '08:00', '/f'];
-    case 'weekly':   return ['/create', '/tn', TASK_NAME, '/tr', tr, '/sc', 'weekly', '/d', 'MON', '/st', time || '08:00', '/f'];
-    default: throw new Error('Unknown frequency: ' + frequency);
-  }
-}
-
-function updateSchedule(frequency, time, options = {}) {
-  return new Promise((resolve) => {
-    // Always delete first
-    const del = spawn('schtasks', ['/delete', '/tn', TASK_NAME, '/f'], { windowsHide: true });
-    del.on('close', () => {
-      if (frequency === 'off') return resolve({ ok: true, mode: 'off' });
-      const args = buildScheduleArgs(frequency, time, options);
-      const p = spawn('schtasks', args, { windowsHide: true });
-      let out = '', err = '';
-      p.stdout.on('data', d => out += d);
-      p.stderr.on('data', d => err += d);
-      p.on('close', code => {
-        if (code !== 0) return resolve({ ok: false, error: (err || out).trim(), code });
-        resolve({ ok: true, mode: frequency, time: time || '08:00', runner: options.runner || 'safe' });
-      });
-      p.on('error', e => resolve({ ok: false, error: e.message }));
-    });
-    del.on('error', e => resolve({ ok: false, error: e.message }));
-  });
-}
-
-function startJob({ mode, slug }) {
-  if (!KNOWN_MODES.has(mode)) return { ok: false, status: 400, error: `unknown mode: ${mode}` };
-  const job = makeJob({ mode, slug: slug || 'ALL' });
-  runningJobs.set(job.jobId, job);
-  notifyStateChanged('job-start');
-  logEvent('info', 'job_started', `${job.mode} job started`, { source: 'job-orchestrator', jobId: job.jobId, projectSlug: job.slug, mode: job.mode });
-  // Run the job in the background so the HTTP request returns immediately.
-  // The job orchestrator updates `job` in place; the route handler returns
-  // just the jobId so the UI can poll.
-  (async () => {
-    try {
-      const projects = readProjectsForJob();
-      await runJob({
-        job,
-        projects,
-        projectsPath: PROJECTS_PATH,
-        jobsLogPath: JOBS_LOG_PATH,
-        writeProjects: () => writeJson(PROJECTS_PATH, projects),
-        defaultProjectKbPath,
-        log: (level, event, message, meta = {}) => logEvent(level, event, message, { ...meta, source: meta.source || 'job-orchestrator', jobId: job.jobId, projectSlug: meta.projectSlug || job.slug }),
-      });
-    } catch (e) {
-      job.status = 'failed';
-      job.endTime = new Date().toISOString();
-      job.exitCode = 1;
-      job.output += `\n[dispatch error] ${e.message}\n${e.stack || ''}`;
-      logEvent('error', 'job_dispatch_failed', e.message, { source: 'job-orchestrator', jobId: job.jobId, projectSlug: job.slug });
-    } finally {
-      lastRun = { time: job.endTime, status: job.status, slug: job.slug, mode: job.mode, output: (job.output || '').slice(-6000) };
-      notifyStateChanged('job-end');
-      logEvent(job.status === 'success' ? 'info' : 'warn', 'job_finished', `${job.mode} job ${job.status}`, { source: 'job-orchestrator', jobId: job.jobId, projectSlug: job.slug, mode: job.mode, status: job.status });
-      // Keep the live record for 10 minutes so the UI can poll completion.
-      setTimeout(() => runningJobs.delete(job.jobId), 10 * 60 * 1000);
-    }
-  })();
-  return { ok: true, jobId: job.jobId, mode: job.mode, slug: job.slug };
-}
-
 function automationDeps(projects) {
   return {
     projects,
@@ -1619,19 +1425,15 @@ async function pickLocalFolder() {
     // Modern Vista+ IFileOpenDialog folder picker (the same dialog VS Code
     // shows). Default initial folder is "This PC". Returns the selected
     // folder path on stdout; nothing on cancel.
-    const packedScript = path.join(__dirname, 'scripts', 'folder-picker.ps1');
-    const unpackedScript = packedScript.replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`);
-    const pickerScript = unpackedScript !== packedScript && fs.existsSync(unpackedScript) ? unpackedScript : packedScript;
+    const pickerScript = path.join(__dirname, 'scripts', 'folder-picker.ps1');
     const result = await runPickerCommand('powershell.exe', [
       '-NoProfile', '-STA', '-WindowStyle', 'Hidden',
       '-ExecutionPolicy', 'Bypass',
       '-File', pickerScript,
       '选择要导入的本地项目目录',
     ]);
-    const folder = selectedDirectoryFromOutput(result.stdout);
-    return folder
-      ? { ok: true, path: folder }
-      : { ok: false, cancelled: result.ok === true && !(result.stdout || '').trim(), error: result.error || 'Folder picker returned no valid directory.' };
+    const folder = (result.stdout || '').trim().split(/\r?\n/).filter(Boolean).pop() || '';
+    return folder ? { ok: true, path: folder } : { ok: false, cancelled: true, error: result.error || 'folder selection cancelled' };
   }
   if (process.platform === 'darwin') {
     const result = await runPickerCommand('osascript', ['-e', 'POSIX path of (choose folder with prompt "Select project folder")']);
@@ -1683,9 +1485,6 @@ async function importProjectFromLocalPath({ localPath, knowledgeLanguage = DEFAU
   const kbPath = teamBinding
     ? teamBinding.kbPath
     : (recoveredCfg && recoveredCfg.kbPath ? recoveredCfg.kbPath : defaultProjectKbPath(slug));
-  if (pathsReferToSameLocation(kbPath, resolvedLocalPath) || pathsReferToSameLocation(kbPath, repoPath)) {
-    return { ok: false, status: 400, error: `kbPath must not equal the project source path (both resolve to ${resolvedLocalPath}); the knowledge base must live in a separate directory.` };
-  }
   const kbAlreadyInitialized = fs.existsSync(path.join(kbPath, 'README.md')) || kbFramework.isCurrentKb(kbPath);
   if (teamBinding && !kbAlreadyInitialized) {
     return { ok: false, status: 400, error: `selected team knowledge base is not initialized: ${kbPath}` };
@@ -1771,105 +1570,6 @@ async function importProjectFromLocalPath({ localPath, knowledgeLanguage = DEFAU
   };
 }
 
-async function runKnowledgeUpdate(slug) {
-  const projects = readProjects({ persistMigrations: true });
-  if (!projects[slug]) return { ok: false, status: 404, error: 'Slug not in projects.json' };
-  const project = projects[slug];
-  const kbPath = project.kbPath || defaultProjectKbPath(slug);
-  if (!fs.existsSync(kbPath) || !fs.existsSync(path.join(kbPath, 'README.md'))) {
-    const init = initProjectDirs(slug, kbPath);
-    project.kbSchemaVersion = init.kbSchemaVersion || PROJECT_SCHEMA_VERSION;
-    logEvent('info', 'kb_initialized', 'Knowledge base initialized before update.', { source: 'knowledge-update', projectSlug: slug, kbPath });
-    init.created = init.created || [];
-  }
-
-  const scanResult = await scanAndPersistProject(slug, projects, { maxCommits: 200 });
-  if (!scanResult.ok) return scanResult;
-  const scan = scanResult.scan;
-  if (scan.repoStatus !== 'ok') {
-    writeJson(PROJECTS_PATH, projects);
-    logEvent('error', 'knowledge_update_blocked', `Knowledge update blocked: git status ${scan.repoStatus}`, { source: 'knowledge-update', projectSlug: slug, repoStatus: scan.repoStatus, error: scan.error });
-    return { ok: false, status: 400, slug, stage: 'scan', scan, error: scan.error || `git status ${scan.repoStatus}` };
-  }
-
-  let analysis = null;
-  let applyResult = null;
-  let validation = null;
-  let reviewRequired = false;
-  let reviewReason = '';
-
-  if ((scan.pendingCount || 0) > 0) {
-    analysis = await runCommitAnalysis({ projects, slug, kbPath, writeProjects: () => writeJson(PROJECTS_PATH, projects) });
-    if (analysis.ok && !analysis.noop) {
-      // Each successful single-commit run gets its own draft + apply. The
-      // lastAnalyzedCommit pointer was already advanced inside the
-      // analysis loop, so we only need to track aggregate apply result.
-      applyResult = { ok: true, applied: [], backups: [], indexes: [] };
-      for (const runResult of analysis.runResults || []) {
-        if (!runResult.ok) continue;
-        const runDrafts = listDrafts(kbPath, runResult.runId);
-        const safeDrafts = [];
-        const blocked = [];
-        for (const draft of runDrafts) {
-          if (draft.path === 'GOAL.md' || draft.path === 'ARCHITECTURE.md') {
-            blocked.push(draft.path);
-            continue;
-          }
-          const content = readDraftContent(kbPath, runResult.runId, draft.path);
-          if (content != null) safeDrafts.push({ path: draft.path, content });
-        }
-        if (safeDrafts.length) {
-          const singleApply = applyDrafts({
-            kbPath,
-            slug,
-            runId: runResult.runId,
-            drafts: safeDrafts,
-            allowGoalEdit: false,
-            headCommitAtRun: runResult.runRecord.headCommitAtRun,
-          });
-          if (singleApply.ok) {
-            applyResult.applied = applyResult.applied.concat(singleApply.applied || []);
-            applyResult.backups = applyResult.backups.concat(singleApply.backups || []);
-            if (singleApply.indexes) applyResult.indexes = singleApply.indexes;
-          } else {
-            applyResult.ok = false;
-            reviewRequired = true;
-            reviewReason = singleApply.error || 'auto apply failed';
-          }
-        }
-        if (blocked.length) {
-          reviewRequired = true;
-          reviewReason = `blocked goal-related drafts: ${blocked.join(', ')}`;
-        }
-      }
-      logEvent(applyResult.ok ? 'info' : 'warn', 'commit_analysis_auto_apply', applyResult.ok ? 'Commit analysis drafts auto-applied.' : 'Commit analysis requires review.', { source: 'knowledge-update', projectSlug: slug, runIds: analysis.runIds, applied: applyResult.applied, reviewRequired });
-    } else if (analysis.ok && analysis.noop) {
-      logEvent('info', 'knowledge_update_noop', 'No pending commits to analyze.', { source: 'knowledge-update', projectSlug: slug });
-    } else if (!analysis.ok) {
-      logEvent('error', 'commit_analysis_failed', analysis.error, { source: 'knowledge-update', projectSlug: slug, runIds: analysis.runIds || [] });
-    }
-  } else {
-    analysis = { ok: true, noop: true, message: 'no pending commits' };
-    logEvent('info', 'knowledge_update_noop', 'No knowledge update needed.', { source: 'knowledge-update', projectSlug: slug });
-  }
-
-  validation = validateKb(kbPath);
-  writeJson(PROJECTS_PATH, projects);
-  return {
-    ok: !!(analysis && analysis.ok) && validation.ok !== false,
-    status: validation.ok === false ? validation.status || 422 : 200,
-    slug,
-    kbPath,
-    scan,
-    analysis,
-    applyResult,
-    validation,
-    reviewRequired,
-    reviewReason,
-  };
-}
-
-// ---- project init (create dir structure) ----
 function readTemplate(name) {
   const p = path.join(KB_ROOT, 'templates', name);
   if (!fs.existsSync(p)) return null;
@@ -1976,35 +1676,14 @@ const server = http.createServer(async (req, res) => {
         }
         projects[slug].automationQueueCount = postCommitAutomation.getQueueSize(slug);
       }
-      const schedule = await getScheduleInfo();
       return send(res, 200, {
         projects,
-        schedule,
-        lastRun,
         kbRoot: DATA_DIR,
         setup: aiSetupState(),
         knowledgeStore: readKnowledgeStore(),
         logging: readLoggingConfig(),
         projectSchemaVersion: PROJECT_SCHEMA_VERSION,
       });
-    }
-
-    // POST /api/projects/:slug/automation/resume — resume the Git-backed
-    // per-commit worker from the oldest pending commit.
-    if (m === 'POST' && p.startsWith('/api/projects/') && p.endsWith('/automation/resume')) {
-      const slug = p.split('/')[3];
-      if (!isSafeSlug(slug)) return send(res, 400, { error: 'Invalid slug' });
-      const projects = readProjects({ persistMigrations: true });
-      if (!projects[slug]) return send(res, 404, { error: 'Slug not in projects.json' });
-      projects[slug].automation = normalizeAutomationConfig({
-        ...(projects[slug].automation || {}),
-        paused: false,
-      });
-      writeJson(PROJECTS_PATH, projects);
-      send(res, 202, { ok: true, accepted: true, slug, paused: false });
-      setImmediate(() => postCommitAutomation.wakeProjectAutomation(slug, { source: 'user-resume' }, automationDeps(projects))
-        .catch(error => logEvent('error', 'automation_resume_failed', error.message, { source: 'user-resume', projectSlug: slug })));
-      return;
     }
 
     // GET /api/knowledge-store/config
@@ -2087,12 +1766,10 @@ const server = http.createServer(async (req, res) => {
     // GET /api/supervision/issues
     if (m === 'GET' && p === '/api/supervision/issues') {
       const projects = readProjects({ persistMigrations: false });
-      const history = readJobLog(JOBS_LOG_PATH);
       const issues = [];
       for (const [slug, cfg] of Object.entries(projects)) {
         issues.push(...supervision.projectIssues(slug, cfg, cfg.kbPath || defaultProjectKbPath(slug)));
       }
-      issues.push(...supervision.jobIssues(history));
       return send(res, 200, { ok: true, issues });
     }
 
@@ -2106,12 +1783,9 @@ const server = http.createServer(async (req, res) => {
     // GET /api/supervision/summary
     if (m === 'GET' && p === '/api/supervision/summary') {
       const projects = readProjects({ persistMigrations: false });
-      const history = readJobLog(JOBS_LOG_PATH);
-      const issues = [
-        ...Object.entries(projects).flatMap(([slug, cfg]) => supervision.projectIssues(slug, cfg, cfg.kbPath || defaultProjectKbPath(slug))),
-        ...supervision.jobIssues(history),
-      ];
-      return send(res, 200, { ok: true, summary: supervision.summary(projects, [...runningJobs.values()], issues), issues });
+      const issues = Object.entries(projects)
+        .flatMap(([slug, cfg]) => supervision.projectIssues(slug, cfg, cfg.kbPath || defaultProjectKbPath(slug)));
+      return send(res, 200, { ok: true, summary: supervision.summary(projects, [], issues), issues });
     }
 
     // POST /api/system/pick-folder — open a native local folder picker when available.
@@ -2498,7 +2172,7 @@ const server = http.createServer(async (req, res) => {
       if (knowledgeMigrationRunning || knowledgeMaintenanceRunning || knowledgeStorageRelocationRunning || knowledgeModelDownloadRunning) {
         return send(res, 409, { ok: false, error: 'wait for active knowledge maintenance and model operations to finish' });
       }
-      if (knowledgeActiveQueries > 0 || knowledgeActiveUpdates > 0 || [...runningJobs.values()].some(job => job?.status === 'running') || claudeCliRunner.listSessions({}).some(session => session.active)) {
+      if (knowledgeActiveQueries > 0 || knowledgeActiveUpdates > 0 || claudeCliRunner.listSessions({}).some(session => session.active)) {
         return send(res, 409, { ok: false, error: 'wait for active knowledge queries, jobs, and Claude sessions to finish' });
       }
       const body = await readBody(req).catch(() => '{}');
@@ -2581,7 +2255,7 @@ const server = http.createServer(async (req, res) => {
       if (knowledgeMaintenanceRunning) return send(res, 409, { ok: false, error: 'knowledge database maintenance is already running' });
       if (knowledgeMigrationRunning) return send(res, 409, { ok: false, error: 'knowledge migration is running' });
       if (knowledgeStorageRelocationRunning) return send(res, 409, { ok: false, error: 'knowledge database relocation is running' });
-      if (knowledgeActiveQueries > 0 || knowledgeActiveUpdates > 0 || [...runningJobs.values()].some(job => job?.status === 'running')) {
+      if (knowledgeActiveQueries > 0 || knowledgeActiveUpdates > 0) {
         return send(res, 409, { ok: false, error: 'wait for active knowledge queries and jobs to finish' });
       }
       const body = await readBody(req).catch(() => '{}');
@@ -2604,7 +2278,7 @@ const server = http.createServer(async (req, res) => {
 
     if (m === 'POST' && p === '/api/knowledge/maintenance/rollback') {
       if (knowledgeMaintenanceRunning || knowledgeMigrationRunning || knowledgeStorageRelocationRunning) return send(res, 409, { ok: false, error: 'knowledge database is busy' });
-      if (knowledgeActiveQueries > 0 || knowledgeActiveUpdates > 0 || [...runningJobs.values()].some(job => job?.status === 'running')) {
+      if (knowledgeActiveQueries > 0 || knowledgeActiveUpdates > 0) {
         return send(res, 409, { ok: false, error: 'wait for active knowledge queries and jobs to finish' });
       }
       try {
@@ -2786,10 +2460,6 @@ const server = http.createServer(async (req, res) => {
         if (typeof body.config !== 'object' || body.config === null) {
           return send(res, 400, { error: 'Invalid config' });
         }
-        const upsertTargetPath = body.config.gitPath || body.config.localPath;
-        if (body.config.kbPath && upsertTargetPath && pathsReferToSameLocation(body.config.kbPath, upsertTargetPath)) {
-          return send(res, 400, { error: `kbPath must not equal the project source path (both resolve to ${upsertTargetPath}); the knowledge base must live in a separate directory.` });
-        }
         const importOptions = body.importOptions && typeof body.importOptions === 'object' ? body.importOptions : {};
         const targetPathBeforeImport = body.config.gitPath || body.config.localPath;
         if (importOptions.initGit === true) {
@@ -2841,7 +2511,6 @@ const server = http.createServer(async (req, res) => {
       const parsed = (() => { try { return JSON.parse(body); } catch { return {}; } })();
       const projects = readProjects({ persistMigrations: false });
       if (!projects[slug]) return send(res, 404, { error: 'Slug not in projects.json' });
-      if (hasRunningProjectJob(slug)) return send(res, 409, { ok: false, error: 'project has a running job' });
       const cfg = projects[slug];
       const kbPath = path.resolve(cfg.kbPath || defaultProjectKbPath(slug));
       const deleteKb = parsed.deleteKb === true;
@@ -2978,39 +2647,21 @@ const server = http.createServer(async (req, res) => {
     if (m === 'POST' && p === '/api/hooks/post-commit') {
       let body;
       try { body = JSON.parse(await readBody(req)); } catch { return send(res, 400, { ok: false, error: 'invalid JSON body' }); }
+      const projects = readProjects({ persistMigrations: true });
       const repoPath = body.repoPath || body.repo || '';
-      if (!repoPath) return send(res, 400, { ok: false, error: 'repoPath required' });
-      const event = {
+      const result = await postCommitAutomation.handlePostCommitEvent({
         repoPath,
         commitHash: body.commitHash || body.commit || '',
         branch: body.branch || '',
         source: 'git-hook',
-      };
-
-      // A Git hook only needs to know that the event reached the desktop
-      // runtime. Commit inspection and Claude startup can take several
-      // seconds, so acknowledge first and perform the dispatch in the
-      // background. This prevents a successfully-created run from being
-      // misreported by hook-trigger.js as an HTTP timeout.
-      send(res, 202, { ok: true, accepted: true, status: 'accepted', repoPath });
-      setImmediate(async () => {
-        try {
-          const projects = readProjects({ persistMigrations: true });
-          const result = await postCommitAutomation.handlePostCommitEvent(event, automationDeps(projects));
-          logEvent(result.ok ? 'info' : 'error', result.ok ? 'post_commit_automation' : 'post_commit_automation_failed', result.reason || result.error || 'post-commit automation dispatched', {
-            source: 'git-hook',
-            projectSlug: result.slug || '',
-            runId: result.runId || '',
-            repoPath,
-          });
-        } catch (error) {
-          logEvent('error', 'post_commit_automation_failed', error && error.message || 'post-commit automation dispatch failed', {
-            source: 'git-hook',
-            repoPath,
-          });
-        }
+      }, automationDeps(projects));
+      logEvent(result.ok ? 'info' : 'error', result.ok ? 'post_commit_automation' : 'post_commit_automation_failed', result.reason || result.error || 'post-commit automation dispatched', {
+        source: 'git-hook',
+        projectSlug: result.slug || '',
+        runId: result.runId || '',
+        repoPath,
       });
-      return;
+      return send(res, result.ok ? 200 : result.status || 500, result);
     }
 
     if (m === 'POST' && p.startsWith('/api/projects/') && p.endsWith('/automation/preview')) {
@@ -3148,13 +2799,6 @@ const server = http.createServer(async (req, res) => {
     }
 
     // POST /api/scan-all — scan every enabled project
-    if (m === 'POST' && p.startsWith('/api/projects/') && p.endsWith('/knowledge-update')) {
-      const slug = p.split('/')[3];
-      if (!isSafeSlug(slug)) return send(res, 400, { error: 'Invalid slug' });
-      const result = await runKnowledgeUpdate(slug);
-      return send(res, result.status || (result.ok ? 200 : 500), result);
-    }
-
     if (m === 'POST' && p === '/api/scan-all') {
       const projects = readProjects({ persistMigrations: false });
       const results = [];
@@ -3465,30 +3109,7 @@ const server = http.createServer(async (req, res) => {
       return; // do NOT call send() — connection stays open
     }
 
-    // GET /api/state-stream — SSE channel for dashboard state changes
-    if (m === 'GET' && p === '/api/state-stream') {
-      res.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-store, no-transform',
-        'Connection': 'keep-alive',
-        'Access-Control-Allow-Origin': '*',
-        'X-Accel-Buffering': 'no',
-      });
-      res.write(`event: state/hello\ndata: ${JSON.stringify({ time: new Date().toISOString() })}\n\n`);
-      const unsubscribe = subscribeState((event) => {
-        try { res.write(`event: state/changed\ndata: ${JSON.stringify(event)}\n\n`); } catch { /* client gone */ }
-      });
-      const heartbeat = setInterval(() => {
-        try { res.write(`: keepalive ${Date.now()}\n\n`); } catch {}
-      }, 15000);
-      const cleanup = () => {
-        clearInterval(heartbeat);
-        try { unsubscribe(); } catch {}
-      };
-      req.on('close', cleanup);
-      req.on('error', cleanup);
-      return; // do NOT call send() — connection stays open
-    }
+    // POST /api/claude/sessions/:id/input — send follow-up prompt (uses --resume)
     if (m === 'POST' && p.startsWith('/api/claude/sessions/') && p.endsWith('/input')) {
       const sessionId = p.split('/')[4];
       if (!claudeCliRunner.getSession(sessionId)) return send(res, 404, { error: 'session not found' });
@@ -3544,11 +3165,10 @@ const server = http.createServer(async (req, res) => {
     // POST /api/claude/sessions/:id/abort — terminate current subprocess
     if (m === 'POST' && p.startsWith('/api/claude/sessions/') && p.endsWith('/abort')) {
       const sessionId = p.split('/')[4];
-      const session = claudeCliRunner.getSession(sessionId);
-      if (!session) return send(res, 404, { error: 'session not found' });
+      if (!claudeCliRunner.getSession(sessionId)) return send(res, 404, { error: 'session not found' });
       try {
         claudeCliRunner.abort(sessionId);
-        return send(res, 200, { ok: true, sessionId, automationPaused: false });
+        return send(res, 200, { ok: true, sessionId });
       } catch (e) {
         return send(res, 400, { ok: false, error: e.message });
       }
@@ -3571,125 +3191,6 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    // POST /api/projects/:slug/analyze/commits — run incremental commit analysis (TASK-008)
-    if (m === 'POST' && p.startsWith('/api/projects/') && p.endsWith('/analyze/commits')) {
-      const slug = p.split('/')[3];
-      if (!isSafeSlug(slug)) return send(res, 400, { error: 'Invalid slug' });
-      const projects = readProjects({ persistMigrations: false });
-      if (!projects[slug]) return send(res, 404, { error: 'Slug not in projects.json' });
-      const kbPath = projects[slug].kbPath || defaultProjectKbPath(slug);
-      const result = await runCommitAnalysis({ projects, slug, kbPath, writeProjects: () => writeJson(PROJECTS_PATH, projects) });
-      if (!result.ok) {
-        return send(res, result.status, { ok: false, error: result.error, runIds: result.runIds, totalCommits: result.totalCommits });
-      }
-      return send(res, 200, { ok: true, slug, runIds: result.runIds, noop: !!result.noop, totalCommits: result.totalCommits, succeededCount: result.succeededCount, failedCount: result.failedCount });
-    }
-
-    // GET /api/projects/:slug/runs — list run records
-    if (m === 'GET' && p.startsWith('/api/projects/') && p.endsWith('/runs')) {
-      const slug = p.split('/')[3];
-      if (!isSafeSlug(slug)) return send(res, 400, { error: 'Invalid slug' });
-      const projects = readProjects({ persistMigrations: false });
-      if (!projects[slug]) return send(res, 404, { error: 'Slug not in projects.json' });
-      const kbPath = projects[slug].kbPath || defaultProjectKbPath(slug);
-      return send(res, 200, { ok: true, slug, runs: listRuns(kbPath) });
-    }
-
-    // GET /api/projects/:slug/runs/:runId — read a single run
-    if (m === 'GET' && p.match(/^\/api\/projects\/[a-z0-9-]+\/runs\/[A-Za-z0-9_-]+$/)) {
-      const parts = p.split('/');
-      const slug = parts[3];
-      const runId = parts[5];
-      if (!isSafeSlug(slug)) return send(res, 400, { error: 'Invalid slug' });
-      const projects = readProjects({ persistMigrations: false });
-      if (!projects[slug]) return send(res, 404, { error: 'Slug not in projects.json' });
-      const kbPath = projects[slug].kbPath || defaultProjectKbPath(slug);
-      const run = readRun(kbPath, runId);
-      if (!run) return send(res, 404, { error: 'run not found' });
-      return send(res, 200, { ok: true, slug, run, drafts: listDrafts(kbPath, runId) });
-    }
-
-    // GET /api/projects/:slug/drafts/:runId — list drafts in a run
-    if (m === 'GET' && p.match(/^\/api\/projects\/[a-z0-9-]+\/drafts\/[A-Za-z0-9_-]+$/)) {
-      const parts = p.split('/');
-      const slug = parts[3];
-      const runId = parts[5];
-      if (!isSafeSlug(slug)) return send(res, 400, { error: 'Invalid slug' });
-      const projects = readProjects({ persistMigrations: false });
-      if (!projects[slug]) return send(res, 404, { error: 'Slug not in projects.json' });
-      const kbPath = projects[slug].kbPath || defaultProjectKbPath(slug);
-      return send(res, 200, { ok: true, slug, runId, drafts: listDrafts(kbPath, runId) });
-    }
-
-    // GET /api/projects/:slug/drafts/:runId/raw?path=... — read a single draft's text
-    if (m === 'GET' && p.match(/^\/api\/projects\/[a-z0-9-]+\/drafts-by-branch$/)) {
-      const slug = p.split('/')[3];
-      if (!isSafeSlug(slug)) return send(res, 400, { error: 'Invalid slug' });
-      const branch = url.searchParams.get('branch') || '';
-      const status = url.searchParams.get('status') || 'pending';
-      const projects = readProjects({ persistMigrations: false });
-      if (!projects[slug]) return send(res, 404, { error: 'Slug not in projects.json' });
-      const kbPath = projects[slug].kbPath || defaultProjectKbPath(slug);
-      const runs = listRuns(kbPath);
-      const drafts = [];
-      for (const run of runs) {
-        if (status === 'pending' && (run.applyStatus === 'applied' || run.applyStatus === 'rejected')) continue;
-        const sourceBranch = run.sourceBranch ?? 'unknown (pre-TASK-016)';
-        if (branch && sourceBranch !== branch) continue;
-        for (const draft of listDrafts(kbPath, run.runId)) {
-          drafts.push({ ...draft, runId: run.runId, runStatus: run.status, applyStatus: run.applyStatus || 'pending', sourceBranch });
-        }
-      }
-      return send(res, 200, { ok: true, slug, branch: branch || null, status, drafts });
-    }
-
-    if (m === 'GET' && p.match(/^\/api\/projects\/[a-z0-9-]+\/drafts\/[A-Za-z0-9_-]+\/raw$/)) {
-      const parts = p.split('/');
-      const slug = parts[3];
-      const runId = parts[5];
-      const rel = url.searchParams.get('path') || '';
-      if (!isSafeSlug(slug)) return send(res, 400, { error: 'Invalid slug' });
-      const projects = readProjects({ persistMigrations: false });
-      if (!projects[slug]) return send(res, 404, { error: 'Slug not in projects.json' });
-      const kbPath = projects[slug].kbPath || defaultProjectKbPath(slug);
-      const text = readDraftContent(kbPath, runId, rel);
-      if (text == null) return send(res, 404, { error: 'draft not found' });
-      return send(res, 200, { ok: true, slug, runId, path: rel, content: text }, 'text/plain');
-    }
-
-    // POST /api/projects/:slug/drafts/:runId/apply — apply selected drafts to the KB (TASK-009)
-    if (m === 'POST' && p.match(/^\/api\/projects\/[a-z0-9-]+\/drafts\/[A-Za-z0-9_-]+\/apply$/)) {
-      const parts = p.split('/');
-      const slug = parts[3];
-      const runId = parts[5];
-      if (!isSafeSlug(slug)) return send(res, 400, { error: 'Invalid slug' });
-      const projects = readProjects({ persistMigrations: false });
-      if (!projects[slug]) return send(res, 404, { error: 'Slug not in projects.json' });
-      const kbPath = projects[slug].kbPath || defaultProjectKbPath(slug);
-      const body = await readBody(req).catch(() => '{}');
-      const parsed = (() => { try { return JSON.parse(body); } catch { return {}; } })();
-      if (!Array.isArray(parsed.drafts)) return send(res, 400, { error: 'drafts array required' });
-      // Default headCommitAtRun to the value recorded in the run record so callers
-      // can just POST {drafts, allowGoalEdit} and have lastAnalyzedCommit advance correctly.
-      const runRecord = readRun(kbPath, runId);
-      const headCommitAtRun = parsed.headCommitAtRun || (runRecord && runRecord.headCommitAtRun) || null;
-      const result = applyDrafts({
-        kbPath,
-        slug,
-        runId,
-        drafts: parsed.drafts,
-        allowGoalEdit: !!parsed.allowGoalEdit,
-        headCommitAtRun,
-      });
-      if (!result.ok) return send(res, result.status, { ok: false, error: result.error, ...result });
-      // On successful apply, advance the project's lastAnalyzedCommit to the run's head commit
-      if (headCommitAtRun) {
-        projects[slug].lastAnalyzedCommit = headCommitAtRun;
-        writeJson(PROJECTS_PATH, projects);
-      }
-      return send(res, 200, { ok: true, ...result });
-    }
-
     // POST /api/projects/:slug/validate-kb — validate KB contract (TASK-011)
     if (m === 'POST' && p.startsWith('/api/projects/') && p.endsWith('/validate-kb')) {
       const slug = p.split('/')[3];
@@ -3710,97 +3211,6 @@ const server = http.createServer(async (req, res) => {
       const kbPath = projects[slug].kbPath || defaultProjectKbPath(slug);
       const result = buildPrContextPack(kbPath);
       return send(res, result.status || (result.ok ? 200 : 422), { ok: result.ok, ...result });
-    }
-
-    // POST /api/projects/:slug/drafts/:runId/reject — reject all drafts in a run (TASK-009)
-    if (m === 'POST' && p.match(/^\/api\/projects\/[a-z0-9-]+\/drafts\/[A-Za-z0-9_-]+\/reject$/)) {
-      const parts = p.split('/');
-      const slug = parts[3];
-      const runId = parts[5];
-      if (!isSafeSlug(slug)) return send(res, 400, { error: 'Invalid slug' });
-      const projects = readProjects({ persistMigrations: false });
-      if (!projects[slug]) return send(res, 404, { error: 'Slug not in projects.json' });
-      const kbPath = projects[slug].kbPath || defaultProjectKbPath(slug);
-      const body = await readBody(req).catch(() => '{}');
-      const parsed = (() => { try { return JSON.parse(body); } catch { return {}; } })();
-      const result = rejectDrafts({ kbPath, runId, reason: parsed.reason });
-      if (!result.ok) return send(res, result.status, result);
-      return send(res, 200, { ok: true, ...result });
-    }
-
-    // GET /api/schedule
-    if (m === 'GET' && p === '/api/schedule') {
-      return send(res, 200, await getScheduleInfo());
-    }
-
-    // PUT /api/schedule  { frequency, time?, runner? }
-    if (m === 'PUT' && p === '/api/schedule') {
-      const body = JSON.parse(await readBody(req));
-      if (!body.frequency) return send(res, 400, { error: 'frequency required' });
-      const result = await updateSchedule(body.frequency, body.time, { runner: body.runner });
-      return send(res, 200, result);
-    }
-
-    // POST /api/jobs/run — run a job in one of the supported modes (TASK-010)
-    if (m === 'POST' && p === '/api/jobs/run') {
-      const body = await readBody(req).catch(() => '{}');
-      const parsed = (() => { try { return JSON.parse(body); } catch { return {}; } })();
-      const mode = parsed.mode || 'safe';
-      const slug = parsed.slug || 'ALL';
-      const result = startJob({ mode, slug });
-      if (!result.ok) return send(res, result.status, result);
-      return send(res, 200, result);
-    }
-
-    // GET /api/jobs — recent job history (persisted to .jobs-log.json)
-    if (m === 'GET' && p === '/api/jobs') {
-      const history = readJobLog(JOBS_LOG_PATH);
-      return send(res, 200, {
-        ok: true,
-        history,
-        running: [...runningJobs.values()].map(j => ({
-          jobId: j.jobId, mode: j.mode, slug: j.slug, status: j.status,
-          startTime: j.startTime, endTime: j.endTime,
-        })),
-        knownModes: [...KNOWN_MODES],
-        lastRun,
-      });
-    }
-
-    // GET /api/jobs/:jobId — read a single job (live or persisted)
-    if (m === 'GET' && p.match(/^\/api\/jobs\/job-[0-9]+-[0-9]+$/)) {
-      const jobId = p.split('/')[3];
-      const live = runningJobs.get(jobId);
-      if (live) {
-        return send(res, 200, {
-          ok: true, job: {
-            jobId: live.jobId, mode: live.mode, slug: live.slug,
-            status: live.status, startTime: live.startTime, endTime: live.endTime,
-            exitCode: live.exitCode, summary: live.summary,
-            output: (live.output || '').slice(-6000),
-          }
-        });
-      }
-      const history = readJobLog(JOBS_LOG_PATH);
-      const persisted = history.find(j => j.jobId === jobId);
-      if (!persisted) return send(res, 404, { error: 'job not found' });
-      return send(res, 200, { ok: true, job: persisted });
-    }
-
-    // POST /api/script/run — backward-compat alias for /api/jobs/run with mode=safe
-    if (m === 'POST' && p === '/api/script/run') {
-      const body = await readBody(req).catch(() => '{}');
-      const parsed = (() => { try { return JSON.parse(body); } catch { return {}; } })();
-      const mode = parsed.mode || 'safe';
-      const slug = parsed.slug || 'ALL';
-      const result = startJob({ mode, slug });
-      if (!result.ok) return send(res, result.status, result);
-      return send(res, 200, result);
-    }
-
-    // GET /api/script/status — backward-compat alias
-    if (m === 'GET' && p === '/api/script/status') {
-      return send(res, 200, { lastRun, running: [...runningJobs.values()] });
     }
 
     // GET /api/dirs/:slug
@@ -3856,50 +3266,35 @@ server.listen(PORT, HOST, () => {
   console.log(`[kb-site] listening on http://${HOST}:${PORT}`);
   console.log(`[kb-site] KB root: ${KB_ROOT}`);
   console.log(`[kb-site] data dir: ${DATA_DIR}`);
-  console.log(`[kb-site] task:    ${TASK_NAME}`);
-  // Run startup housekeeping asynchronously so it never blocks the event loop
-  // between listen() and the first /api/state response. On large installs
-  // (many projects / big KB) the synchronous versions could delay readiness
-  // long enough for the desktop shell's startup probe to time out.
-  setImmediate(() => {
-    try {
-      const centralRules = ensureSharedClaudeRules();
-      if (!centralRules.ok) throw new Error(centralRules.error || 'failed to prepare central Claude rules');
-      const audit = auditClaudeMdProjects(readProjects({ persistMigrations: false }));
-      console.log(`[kb-site] CLAUDE.md: ${audit.summary.current} current, ${audit.summary.refreshable} need refresh`);
-    } catch (e) {
-      console.error('[kb-site] CLAUDE.md startup check failed:', e.message);
+  try {
+    const centralRules = ensureSharedClaudeRules();
+    if (!centralRules.ok) throw new Error(centralRules.error || 'failed to prepare central Claude rules');
+    const audit = auditClaudeMdProjects(readProjects({ persistMigrations: false }));
+    console.log(`[kb-site] CLAUDE.md: ${audit.summary.current} current, ${audit.summary.refreshable} need refresh`);
+  } catch (e) {
+    console.error('[kb-site] CLAUDE.md startup check failed:', e.message);
+  }
+  try {
+    const orphanSummary = postCommitAutomation.cleanupOrphanedRuns(readProjects({ persistMigrations: false }));
+    const orphanTotal = (orphanSummary.queued || 0) + (orphanSummary.dispatched || 0) + (orphanSummary.dispatching || 0);
+    if (orphanTotal > 0) {
+      console.log(`[kb-site] automation cleanup: ${orphanTotal} orphaned run(s) marked abandoned`, orphanSummary);
+      logEvent('info', 'automation_cleanup', 'orphaned automation runs marked abandoned on server start', orphanSummary);
     }
-    try {
-      const orphanSummary = postCommitAutomation.cleanupOrphanedRuns(readProjects({ persistMigrations: false }));
-      const orphanTotal = (orphanSummary.queued || 0) + (orphanSummary.dispatched || 0) + (orphanSummary.dispatching || 0);
-      if (orphanTotal > 0) {
-        console.log(`[kb-site] automation cleanup: ${orphanTotal} orphaned run(s) marked abandoned`, orphanSummary);
-        logEvent('info', 'automation_cleanup', 'orphaned automation runs marked abandoned on server start', orphanSummary);
-      }
-    } catch (e) {
-      console.error('[kb-site] automation cleanup failed:', e.message);
-    }
-  });
-  setImmediate(async () => {
-    try {
-      let projects = readProjects({ persistMigrations: false });
-      const recovered = await postCommitAutomation.resumePendingFinalizations(projects, automationDeps(projects));
-      projects = readProjects({ persistMigrations: false });
-      const recovery = await postCommitAutomation.dispatchPendingAutomations({
-        triggerSlug: null,
-        triggerEvent: { source: 'startup-recovery' },
-      }, automationDeps(projects));
-      const resumed = recovered.filter(item => item.completed).length;
-      console.log(`[kb-site] startup recovery: ${recovery.dispatched} project worker(s) started, ${resumed} finalization(s) resumed`);
-      logEvent('info', 'startup_commit_recovery', 'startup pending commit recovery completed', {
-        source: 'startup-recovery',
-        dispatched: recovery.dispatched,
-        resumedFinalizations: resumed,
+  } catch (e) {
+    console.error('[kb-site] automation cleanup failed:', e.message);
+  }
+  const startupProjects = readProjects({ persistMigrations: false });
+  postCommitAutomation.dispatchPendingAutomations({}, automationDeps(startupProjects))
+    .then(result => {
+      console.log(`[kb-site] startup commit reconciliation: ${result.dispatched || 0} commit task(s) dispatched`);
+      logEvent('info', 'commit_reconciliation', 'startup commit reconciliation completed', {
+        source: 'startup',
+        dispatched: result.dispatched || 0,
       });
-    } catch (e) {
-      console.error('[kb-site] startup commit recovery failed:', e.message);
-      logEvent('error', 'startup_commit_recovery_failed', e.message, { source: 'startup-recovery' });
-    }
-  });
+    })
+    .catch(error => {
+      console.error('[kb-site] startup commit reconciliation failed:', error.message);
+      logEvent('error', 'commit_reconciliation_failed', error.message, { source: 'startup' });
+    });
 });

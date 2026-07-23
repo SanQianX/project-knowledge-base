@@ -10,9 +10,9 @@
 //   changes/
 //     00-index.md
 //
-// Everything inside this layout is trusted project memory. AI working files,
-// drafts, context packs, backups, and Claude workbench sessions live under
-// `_site/_ai/<slug>/`, outside the project KB.
+// Everything inside this layout is trusted project memory. AI run state,
+// context packs, backups, and Claude workbench sessions live under the
+// application data directory, outside the project KB.
 
 const fs = require('fs');
 const path = require('path');

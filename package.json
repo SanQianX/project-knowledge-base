@@ -1,6 +1,6 @@
 {
   "name": "project-knowledge",
-  "version": "4.1.16",
+  "version": "4.1.17",
   "description": "Knowledge base manager with Git integration, AI-driven analysis, and bilingual (zh-CN/en-US) knowledge output",
   "main": "_site/server.js",
   "scripts": {
@@ -16,11 +16,11 @@
   },
   "files": [
     "_site/server.js",
-    "_site/index.html",
-    "_site/favicon.svg",
+    "ui/index.html",
+    "ui/favicon.svg",
     "_site/lib/",
     "_site/scripts/",
-    "_site/vendor/",
+    "ui/vendor/",
     "_site/_test/*.js",
     "_site/_test/fixtures/",
     "_site/start.bat",
@@ -28,7 +28,6 @@
     "claude-prompts.json",
     "bin/",
     "templates/",
-    "scripts/register-scheduled-task.bat",
     "docs/",
     "README.md",
     "NOTICE",

@@ -68,7 +68,7 @@ function assert(cond, msg) { if (!cond) throw new Error(msg); }
       'getSessionTokenUsage should account for input + output + cache tokens');
 
     // 3. The chat panel template wires the new controls.
-    const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf-8');
+    const html = fs.readFileSync(path.join(__dirname, '..', '..', 'ui', 'index.html'), 'utf-8');
     assert(/slashMenuOpen/.test(html), 'template should reference slashMenuOpen');
     assert(/v-if="slashMenuOpen"/.test(html), 'template should gate slash palette on slashMenuOpen');
     assert(/filteredSlashCommands/.test(html), 'template should iterate filteredSlashCommands');
@@ -264,16 +264,13 @@ function assert(cond, msg) { if (!cond) throw new Error(msg); }
     assert(/v-show="!isNarrow\s*\|\|\s*narrowPane\.ai\s*===\s*'list'"/.test(html)
         && /v-show="!isNarrow\s*\|\|\s*narrowPane\.ai\s*===\s*'editor'"/.test(html),
       'ai split-pane should v-show both columns based on narrowPane.ai');
-    assert(/v-show="!isNarrow\s*\|\|\s*narrowPane\.runs\s*===\s*'list'"/.test(html)
-        && /v-show="!isNarrow\s*\|\|\s*narrowPane\.runs\s*===\s*'detail'"/.test(html),
-      'runs split-pane should v-show both columns based on narrowPane.runs');
     assert(/narrowOpenClaude/.test(html) && /narrowShowTarget/.test(html)
-        && /narrowEditProfile/.test(html) && /narrowShowRunsList/.test(html),
+        && /narrowEditProfile/.test(html),
       'i18n should declare narrow-mode toggle button labels');
     assert(/\.pane-wrap\s*\{\s*display:\s*flex;\s*flex-direction:\s*column;\s*height:\s*100%;\s*min-height:\s*0/.test(html),
       'CSS should define .pane-wrap so v-show wrappers fill their slot (otherwise inner h-full collapses and clips bottom controls)');
-    assert((html.match(/class="pane-wrap"\s+v-show="!isNarrow \|\| narrowPane\.\w+ === '[^']+'"/g) || []).length === 8,
-      'all 8 split-pane slot wrappers (4 views × main+side) should carry class="pane-wrap"');
+    assert((html.match(/class="pane-wrap"\s+v-show="!isNarrow \|\| narrowPane\.\w+ === '[^']+'"/g) || []).length === 6,
+      'all 6 split-pane slot wrappers (3 views × main+side) should carry class="pane-wrap"');
 
     runner.deleteSession(started.sessionId);
     console.log('chat-claudecodeui-match test passed');

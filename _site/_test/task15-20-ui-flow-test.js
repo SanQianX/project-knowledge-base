@@ -164,14 +164,14 @@ async function waitFor(fn, label, ms = 15000) {
     const removeShot = await screenshot('task15-20-remove-modal.png');
     await evalJs(`[...document.querySelectorAll('button')].find(b => b.innerText.trim() === '×')?.click()`);
 
-    // v4.1.12: Runs/Drafts nav hidden by default for autoApply-only installs.
-    // Re-enable the sidebar entry by uncommenting navItems in index.html
-    // to restore this assertion.
-    const runsShot = await screenshot('task15-20-after-remove.png');
+    assert(await evalJs(`![...document.querySelectorAll('button')].some(b => b.innerText.includes('Runs / Drafts'))`),
+      'legacy review/drafts navigation should be removed');
+    assert(await evalJs(`![...document.querySelectorAll('button')].some(b => b.innerText.trim() === 'Schedule')`),
+      'legacy schedule navigation should be removed');
 
     assert(errors.length === 0, `console errors: ${errors.join('\\n')}`);
     console.log('TASK-015..020 UI flow test passed');
-    console.log(`screenshots:\n${dashboardShot}\n${pendingShot}\n${removeShot}\n${runsShot}`);
+    console.log(`screenshots:\n${dashboardShot}\n${pendingShot}\n${removeShot}`);
   } catch (e) {
     console.error('TASK-015..020 UI flow test failed:', e.message);
     process.exitCode = 1;

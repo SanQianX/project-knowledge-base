@@ -67,11 +67,16 @@ async function waitForServer() {
       assert.equal(after.resolved.api.spaces.length, 2);
       assert.equal(after.resolved.docs.spaces.length, 1);
     } finally {
-      runtime.cleanup();
+      try { runtime.child.kill(); } catch {}
+      await Promise.race([
+        new Promise(resolve => runtime.child.once('exit', resolve)),
+        new Promise(resolve => setTimeout(resolve, 2000)),
+      ]);
+      try { fs.rmSync(runtime.dataDir, { recursive: true, force: true }); } catch {}
     }
     console.log('knowledge-scopes-test: PASS');
   } finally {
-    fs.rmSync(temp, { recursive: true, force: true });
+    try { fs.rmSync(temp, { recursive: true, force: true }); } catch {}
   }
 })().catch(error => {
   console.error(error);

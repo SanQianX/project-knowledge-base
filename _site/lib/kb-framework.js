@@ -6,9 +6,6 @@ const { regenerateIndexes } = require('./index-builder');
 const PROJECT_SCHEMA_VERSION = 'minimal';
 const KB_FRAMEWORK_SCHEMA = 'minimal-kb/v1';
 const TOP_LEVEL = ['README.md', 'GOAL.md', 'ARCHITECTURE.md', 'modules', 'changes'];
-const TRUSTED_AUTO_PATHS = ['README.md', 'modules/', 'modules/00-index.md', 'changes/', 'changes/00-index.md'];
-const REVIEW_REQUIRED_PATHS = ['GOAL.md', 'ARCHITECTURE.md'];
-const NEVER_TOUCH_PREFIXES = ['.git/', '.gitignore', '_meta/', '_ai/'];
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -200,36 +197,14 @@ function migrateToFramework({ slug, kbPath, preserveLegacyAI = true }) {
   };
 }
 
-function normalizeApplyPath(rel) {
-  return String(rel || '').replace(/\\/g, '/').replace(/^\/+/, '');
-}
-
-function applyPolicyForPath(rel, allowGoalEdit = false) {
-  const norm = normalizeApplyPath(rel);
-  if (!norm || norm.includes('../') || norm.startsWith('../')) return { ok: false, reason: 'unsafe path' };
-  if (NEVER_TOUCH_PREFIXES.some(prefix => norm === prefix.replace(/\/$/, '') || norm.startsWith(prefix))) {
-    return { ok: false, reason: 'path is reserved and cannot be written by AI' };
-  }
-  if (REVIEW_REQUIRED_PATHS.includes(norm)) {
-    return allowGoalEdit ? { ok: true, reviewRequired: true } : { ok: false, status: 409, reviewRequired: true, reason: `${norm} requires human review` };
-  }
-  if (norm === 'README.md') return { ok: true, autoApply: true };
-  if (norm.startsWith('modules/') || norm.startsWith('changes/')) return { ok: true, autoApply: true };
-  return { ok: false, reason: `path is outside the trusted KB allowlist: ${norm}` };
-}
-
 module.exports = {
   PROJECT_SCHEMA_VERSION,
   KB_FRAMEWORK_SCHEMA,
   TOP_LEVEL,
-  TRUSTED_AUTO_PATHS,
-  REVIEW_REQUIRED_PATHS,
-  NEVER_TOUCH_PREFIXES,
   initProjectDirs,
   migrateToFramework,
   consolidateLegacyCommits,
   isCurrentKb,
   visibleTopLevel,
-  applyPolicyForPath,
   frontmatter,
 };

@@ -4,8 +4,8 @@
 //   analyzeCommitBatch({ project, commits, contextPack }) -> { changes: [...] }
 //   validateOutput(output) -> { valid: boolean, errors: string[] }
 //
-// All adapters MUST return objects that pass validateOutput. The orchestrator never
-// writes drafts to disk unless the output validates.
+// All adapters MUST return objects that pass validateOutput before callers
+// consume structured analysis results.
 
 const fs = require('fs');
 const path = require('path');

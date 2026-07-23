@@ -124,9 +124,8 @@ function registerProject() {
     automation: {
       enabled: false,
       postCommitEnabled: false,
-      knowledgeMode: 'requestApproval',
       allowReadOnlyBash: true,
-      hookPromptTemplate: 'UI automation {{projectSlug}} {{shortHash}} {{changedFiles}} {{knowledgeMode}} {{permissionMode}}',
+      hookPromptTemplate: 'UI automation {{projectSlug}} {{shortHash}} {{changedFiles}} {{permissionMode}}',
     },
     claudeWorkbench: { permissionMode: 'default' },
   };
@@ -150,7 +149,6 @@ function registerProject() {
     automation: {
       enabled: false,
       postCommitEnabled: false,
-      knowledgeMode: 'requestApproval',
       allowReadOnlyBash: true,
       hookPromptTemplate: 'Other automation {{projectSlug}}',
     },
@@ -349,10 +347,8 @@ async function waitFor(fn, label, ms = 20000) {
       if (input && !input.checked) input.click();
       const post = [...document.querySelectorAll('label')].find(l => l.innerText.includes('Run after commit'))?.querySelector('input');
       if (post && !post.checked) post.click();
-      const mode = [...document.querySelectorAll('select')].find(s => [...s.options].some(o => o.value === 'directWriteKb'));
-      if (mode) { mode.value = 'directWriteKb'; mode.dispatchEvent(new Event('change', { bubbles: true })); }
       const ta = [...document.querySelectorAll('textarea')].find(t => t.value.includes('UI automation') || t.value.includes('{{projectSlug}}'));
-      if (ta) { ta.value = 'UI automation {{projectSlug}} {{shortHash}} {{changedFiles}} {{knowledgeMode}} {{permissionMode}}'; ta.dispatchEvent(new Event('input', { bubbles: true })); }
+      if (ta) { ta.value = 'UI automation {{projectSlug}} {{shortHash}} {{changedFiles}} {{permissionMode}}'; ta.dispatchEvent(new Event('input', { bubbles: true })); }
       return !!label;
     })()`);
     await evalJs(`(() => {
@@ -363,16 +359,15 @@ async function waitFor(fn, label, ms = 20000) {
     await waitFor(() => evalJs(`(() => {
       const enabled = [...document.querySelectorAll('label')].find(l => l.innerText.includes('Enable automation'))?.querySelector('input');
       const post = [...document.querySelectorAll('label')].find(l => l.innerText.includes('Run after commit'))?.querySelector('input');
-      const mode = [...document.querySelectorAll('select')].find(s => [...s.options].some(o => o.value === 'directWriteKb'));
       const ta = [...document.querySelectorAll('textarea')].find(t => t.value.includes('UI automation') || t.value.includes('{{projectSlug}}'));
-      return !!(enabled && enabled.checked && post && post.checked && mode && mode.value === 'directWriteKb' && ta && ta.value.includes('UI automation'));
+      return !!(enabled && enabled.checked && post && post.checked && ta && ta.value.includes('UI automation'));
     })()`), 'automation draft survived settings poll');
     await evalJs(`(() => {
       const btn = [...document.querySelectorAll('button')].find(b => b.innerText.includes('Preview prompt'));
       btn && btn.click();
       return !!btn;
     })()`);
-    await waitFor(() => evalJs('document.body.innerText.includes("feature.txt") && document.body.innerText.includes("directWriteKb")'), 'unsaved draft preview rendered');
+    await waitFor(() => evalJs('document.body.innerText.includes("feature.txt")'), 'unsaved draft preview rendered');
     await evalJs(`(() => {
       const select = [...document.querySelectorAll('select')].find(s => [...s.options].some(o => o.value === '${SLUG2}'));
       if (!select) return false;
@@ -386,15 +381,14 @@ async function waitFor(fn, label, ms = 20000) {
         && state[SLUG].automation
         && state[SLUG].automation.enabled === true
         && state[SLUG].automation.postCommitEnabled === true
-        && state[SLUG].automation.knowledgeMode === 'directWriteKb'
         && state[SLUG].automation.hookPromptTemplate.includes('UI automation');
     }, 'automation draft autosaved on project switch');
     await waitFor(() => evalJs(`(() => {
       const root = document.querySelector('[data-automation-settings]');
       const enabled = root?.querySelector('[data-automation-field="enabled"]');
-      const mode = root?.querySelector('[data-automation-field="knowledgeMode"]');
       const ta = root?.querySelector('[data-automation-field="hookPromptTemplate"]');
-      return !!(enabled && !enabled.checked && mode?.value === 'requestApproval' && ta?.value.includes('Other automation'));
+      const obsoleteMode = root?.querySelector('[data-automation-field="knowledgeMode"]');
+      return !!(enabled && !enabled.checked && !obsoleteMode && ta?.value.includes('Other automation'));
     })()`), 'new settings project loaded after autosave');
     await evalJs(`(() => {
       const select = [...document.querySelectorAll('select')].find(s => [...s.options].some(o => o.value === '${SLUG}'));
@@ -406,9 +400,8 @@ async function waitFor(fn, label, ms = 20000) {
     await waitFor(() => evalJs(`(() => {
       const enabled = [...document.querySelectorAll('label')].find(l => l.innerText.includes('Enable automation'))?.querySelector('input');
       const post = [...document.querySelectorAll('label')].find(l => l.innerText.includes('Run after commit'))?.querySelector('input');
-      const mode = [...document.querySelectorAll('select')].find(s => [...s.options].some(o => o.value === 'directWriteKb'));
       const ta = [...document.querySelectorAll('textarea')].find(t => t.value.includes('UI automation') || t.value.includes('{{projectSlug}}'));
-      return !!(enabled && enabled.checked && post && post.checked && mode && mode.value === 'directWriteKb' && ta && ta.value.includes('UI automation'));
+      return !!(enabled && enabled.checked && post && post.checked && ta && ta.value.includes('UI automation'));
     })()`), 'autosaved automation settings restored after switching back');
     await evalJs(`(() => {
       const ta = [...document.querySelectorAll('textarea')].find(t => t.value.includes('UI automation'));
@@ -423,9 +416,9 @@ async function waitFor(fn, label, ms = 20000) {
       const enabled = root?.querySelector('[data-automation-field="enabled"]');
       const post = root?.querySelector('[data-automation-field="postCommitEnabled"]');
       const bash = root?.querySelector('[data-automation-field="allowReadOnlyBash"]');
-      const mode = root?.querySelector('[data-automation-field="knowledgeMode"]');
       const ta = root?.querySelector('[data-automation-field="hookPromptTemplate"]');
-      return !!(enabled?.checked && post?.checked && bash?.checked && mode?.value === 'directWriteKb' && ta?.value.includes('UI automation'));
+      const obsoleteMode = root?.querySelector('[data-automation-field="knowledgeMode"]');
+      return !!(enabled?.checked && post?.checked && bash?.checked && !obsoleteMode && ta?.value.includes('UI automation'));
     })()`), 'automation settings retained after explicit save');
 
     await evalJs(`(() => {
@@ -433,14 +426,14 @@ async function waitFor(fn, label, ms = 20000) {
       btn && btn.click();
       return !!btn;
     })()`);
-    await waitFor(() => evalJs('document.body.innerText.includes("feature.txt") && document.body.innerText.includes("directWriteKb")'), 'preview prompt rendered');
+    await waitFor(() => evalJs('document.body.innerText.includes("feature.txt")'), 'preview prompt rendered');
 
     await evalJs(`(() => {
       const btn = [...document.querySelectorAll('button')].find(b => b.innerText.includes('Init project KB') || b.innerText.includes('Simulate trigger'));
       btn && btn.click();
       return !!btn;
     })()`);
-    await waitFor(() => evalJs('document.body.innerText.includes("dispatched:") && document.body.innerText.includes("directWriteKb")'), 'simulate trigger dispatched');
+    await waitFor(() => evalJs('document.body.innerText.includes("dispatched:")'), 'simulate trigger dispatched');
 
     await evalJs(`(() => {
       const projectBtn = [...document.querySelectorAll('aside button')].find(b => b.innerText.includes('Automation UI Test'));
