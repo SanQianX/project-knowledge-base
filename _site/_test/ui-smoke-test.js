@@ -164,7 +164,13 @@ function assert(cond, msg) {
         if (type === 'error') errors.push(text);
         else if (type === 'warning') warnings.push(text);
       } else if (msg.method === 'Network.loadingFailed') {
-        requestFailures.push(msg.params);
+        // Reloading the page deliberately replaces the state-stream
+        // EventSource. Chromium reports that expected teardown as an aborted
+        // network request; it is not a failed application request.
+        const expectedEventSourceCancellation = msg.params.type === 'EventSource'
+          && msg.params.canceled === true
+          && msg.params.errorText === 'net::ERR_ABORTED';
+        if (!expectedEventSourceCancellation) requestFailures.push(msg.params);
       } else if (msg.method === 'Network.responseReceived' && msg.params.response.status >= 500) {
         requestFailures.push({ url: msg.params.response.url, status: msg.params.response.status });
       }

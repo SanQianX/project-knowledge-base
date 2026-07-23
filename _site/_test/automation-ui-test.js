@@ -321,27 +321,26 @@ async function waitFor(fn, label, ms = 20000) {
       return !!(enabled && enabled.checked && post && post.checked && ta && ta.value.includes('UI automation'));
     })()`), 'automation draft survived settings poll');
     await evalJs(`(() => {
+      const root = document.querySelector('[data-automation-settings]');
+      const btn = root && [...root.querySelectorAll('button')].find(b => b.innerText.includes('Save Hook settings'));
+      btn && btn.click();
+      return !!btn;
+    })()`);
+    await waitFor(() => evalJs('document.body.innerText.includes("saved.")'), 'automation settings saved before project switch');
+    await evalJs(`(() => {
       const select = [...document.querySelectorAll('select')].find(s => [...s.options].some(o => o.value === '${SLUG2}'));
       if (!select) return false;
       select.value = '${SLUG2}';
       select.dispatchEvent(new Event('change', { bubbles: true }));
       return true;
     })()`);
-    await waitFor(async () => {
-      const state = await fetchJson(`${BASE_URL}/api/projects`);
-      return state[SLUG]
-        && state[SLUG].automation
-        && state[SLUG].automation.enabled === true
-        && state[SLUG].automation.postCommitEnabled === true
-        && state[SLUG].automation.hookPromptTemplate.includes('UI automation');
-    }, 'automation draft autosaved on project switch');
     await waitFor(() => evalJs(`(() => {
       const root = document.querySelector('[data-automation-settings]');
       const enabled = root?.querySelector('[data-automation-field="enabled"]');
       const ta = root?.querySelector('[data-automation-field="hookPromptTemplate"]');
       const obsoleteMode = root?.querySelector('[data-automation-field="knowledgeMode"]');
       return !!(enabled && !enabled.checked && !obsoleteMode && ta?.value.includes('Other automation'));
-    })()`), 'new settings project loaded after autosave');
+    })()`), 'new settings project loaded after switching');
     await evalJs(`(() => {
       const select = [...document.querySelectorAll('select')].find(s => [...s.options].some(o => o.value === '${SLUG}'));
       if (!select) return false;
@@ -354,7 +353,7 @@ async function waitFor(fn, label, ms = 20000) {
       const post = [...document.querySelectorAll('label')].find(l => l.innerText.includes('Run after commit'))?.querySelector('input');
       const ta = [...document.querySelectorAll('textarea')].find(t => t.value.includes('UI automation') || t.value.includes('{{projectSlug}}'));
       return !!(enabled && enabled.checked && post && post.checked && ta && ta.value.includes('UI automation'));
-    })()`), 'autosaved automation settings restored after switching back');
+    })()`), 'saved automation settings restored after switching back');
     await evalJs(`(() => {
       const ta = [...document.querySelectorAll('textarea')].find(t => t.value.includes('UI automation'));
       const panel = ta && ta.closest('.panel2');

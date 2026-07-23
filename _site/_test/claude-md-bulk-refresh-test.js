@@ -105,7 +105,24 @@ async function json(method, url, body) {
     if (output) console.error(output.slice(-2000));
     process.exitCode = 1;
   } finally {
-    server.cleanup();
-    fs.rmSync(TMP, { recursive: true, force: true });
+    // On Windows, removing the temporary directory immediately after
+    // child.kill() races the server process while it still owns files in it.
+    // That can produce EPERM and crash Node during shutdown. Wait for the
+    // server to exit before removing the whole test fixture.
+    if (server.child.exitCode === null) {
+      const exited = new Promise(resolve => server.child.once('exit', resolve));
+      if (!server.child.killed) {
+        try { server.child.kill(); } catch {}
+      }
+      await Promise.race([exited, new Promise(resolve => setTimeout(resolve, 5000))]);
+    }
+    // Node 24 on Windows can abort in libuv when this test recursively
+    // removes a directory that was just used by the spawned server, even
+    // after the child has exited. The runner's temporary workspace is
+    // discarded after CI, so keep this short-lived fixture on Windows rather
+    // than turning a successful assertion run into a process crash.
+    if (process.platform !== 'win32') {
+      fs.rmSync(TMP, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    }
   }
 })();

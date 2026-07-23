@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.1.19] - 2026-07-24
+
+- Stabilized release tests: expected EventSource cancellation during a page
+  reload is no longer treated as a failed request, and the Windows CLAUDE.md
+  refresh test no longer removes a just-used temporary server directory.
+
 ## [4.1.18] - 2026-07-23
 
 - Simplified the daily workspace into a full-width Claude Code interface.
