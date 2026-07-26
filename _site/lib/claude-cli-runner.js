@@ -923,6 +923,7 @@ function findClaudeExecutable() {
 async function findClaudeExecutableForSdk(options = {}) {
   const env = options.env || process.env;
   const platform = options.platform || process.platform;
+  const runtimeExecutable = String(options.runtimeExecutable || process.execPath || '').trim();
   const exists = options.exists || fs.existsSync;
   const runCommand = options.runCommand || ((command, args) => new Promise((resolve) => {
     const child = spawn(command, args, { encoding: 'utf8', windowsHide: true });
@@ -964,9 +965,19 @@ async function findClaudeExecutableForSdk(options = {}) {
     if (platform === 'win32' && isWindowsShellShim(candidate)) return npmCliForShim(candidate);
     return usable(candidate);
   };
+  const launchInfo = (candidate, source) => {
+    const extension = path.extname(clean(candidate)).toLowerCase();
+    const needsRuntime = ['.js', '.mjs', '.cjs'].includes(extension);
+    return {
+      cmd: candidate,
+      shell: false,
+      source,
+      runtimeExecutable: needsRuntime ? runtimeExecutable : null,
+    };
+  };
 
   const configured = resolveCandidate(env.CLAUDE_CODE_EXECPATH);
-  if (configured) return { cmd: configured, shell: false, source: 'CLAUDE_CODE_EXECPATH' };
+  if (configured) return launchInfo(configured, 'CLAUDE_CODE_EXECPATH');
 
   if (platform === 'win32') {
     let discovered = [];
@@ -976,7 +987,7 @@ async function findClaudeExecutableForSdk(options = {}) {
     } catch {}
     for (const found of discovered) {
       const candidate = resolveCandidate(found);
-      if (candidate) return { cmd: candidate, shell: false, source: 'PATH' };
+      if (candidate) return launchInfo(candidate, 'PATH');
     }
 
     const npmRoot = env.APPDATA && path.join(env.APPDATA, 'npm');
@@ -987,7 +998,7 @@ async function findClaudeExecutableForSdk(options = {}) {
       ];
       for (const file of candidates) {
         const candidate = usable(file);
-        if (candidate) return { cmd: candidate, shell: false, source: 'npm-global' };
+        if (candidate) return launchInfo(candidate, 'npm-global');
       }
     }
     return {
@@ -1096,6 +1107,11 @@ async function runSdkTurn(session, opts, isResume) {
     },
   };
   sdkOptions.pathToClaudeCodeExecutable = claudeBin.cmd;
+  // The desktop backend runs through Electron with ELECTRON_RUN_AS_NODE=1.
+  // Use that exact executable (or the current node binary in CLI mode) for a
+  // JavaScript Claude entry point instead of relying on `node` being present
+  // in the desktop process PATH.
+  if (claudeBin.runtimeExecutable) sdkOptions.executable = claudeBin.runtimeExecutable;
   if (opts.resumeSessionId) sdkOptions.resume = opts.resumeSessionId;
 
   try {

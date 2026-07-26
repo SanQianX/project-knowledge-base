@@ -27,6 +27,22 @@ function assert(condition, message) {
   const endpoint = { host: '127.0.0.1', port: server.address().port, pid: process.pid };
   const result = await runtime.requestState(endpoint);
   assert(result === endpoint, 'requestState should return the ready endpoint');
+
+  const slowServer = http.createServer((_req, res) => {
+    setTimeout(() => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('{}');
+    }, 1800);
+  });
+  await new Promise((resolve, reject) => {
+    slowServer.once('error', reject);
+    slowServer.listen(0, '127.0.0.1', resolve);
+  });
+  const slowEndpoint = { host: '127.0.0.1', port: slowServer.address().port, pid: process.pid };
+  const slowResult = await runtime.requestState(slowEndpoint);
+  assert(slowResult === slowEndpoint,
+    'desktop backend probe must tolerate responses slower than the legacy 1.5 second timeout');
+  await new Promise(resolve => slowServer.close(resolve));
   assert(runtime.isAllowedNavigation(`http://127.0.0.1:${endpoint.port}/settings`, endpoint), 'same origin should be allowed');
   assert(!runtime.isAllowedNavigation('https://example.com', endpoint), 'remote navigation must be blocked');
   assert(runtime.isAllowedExternalUrl('https://github.com/test'), 'https external link should be allowed');

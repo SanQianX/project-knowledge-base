@@ -140,6 +140,26 @@ function stopTree(pid) {
       `packaged LanceDB test failed: ${nativeResult.stdout}\n${nativeResult.stderr}`);
     assert(/PASS/.test(nativeResult.stdout), 'packaged LanceDB test did not report PASS');
 
+    const claudeExecutableTest = path.join(
+      asarRoot,
+      'node_modules',
+      'project-knowledge',
+      '_site',
+      '_test',
+      'claude-executable-discovery-test.js'
+    );
+    const claudeExecutableResult = spawnSync(executable, [claudeExecutableTest], {
+      cwd: projectRoot,
+      env: { ...env, ELECTRON_RUN_AS_NODE: '1' },
+      encoding: 'utf-8',
+      timeout: 120000,
+      windowsHide: true,
+    });
+    assert(claudeExecutableResult.status === 0,
+      `packaged Claude script launch test failed: ${claudeExecutableResult.stdout}\n${claudeExecutableResult.stderr}`);
+    assert(/PASS/.test(claudeExecutableResult.stdout),
+      'packaged executable did not launch Claude cli.js through its embedded Node runtime');
+
     const runtimeProbe = path.join(dataDir, 'vector-runtime-probe.cjs');
     fs.writeFileSync(runtimeProbe, `
       const assert = require('assert');

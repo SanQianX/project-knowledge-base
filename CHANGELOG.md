@@ -1,5 +1,14 @@
 # Changelog
 
+## [4.1.21] - 2026-07-27
+
+- Fixed Windows desktop Claude sessions failing with “executable exists but
+  failed to launch” when a global Claude Code installation exposes `cli.js`
+  but `node` is unavailable in the desktop process PATH. JavaScript Claude
+  entry points now use the application's own Node/Electron runtime.
+- Added slow-backend and packaged-client regressions covering desktop startup
+  readiness and Claude script launch through the installed Windows executable.
+
 ## [4.1.20] - 2026-07-27
 
 - Rebuilt the daily workspace around Claude Code while keeping GitHub/Gitea

@@ -100,7 +100,7 @@ function assert(cond, msg) {
   assert(switchedState.model === 'glm-5.2', `profile switch should update model, got ${switchedState.model}`);
   runner.deleteSession(chat.sessionId);
 
-  const executable = runner.findClaudeExecutableForSdk();
+  const executable = await runner.findClaudeExecutableForSdk();
   if (process.platform === 'win32' && executable.cmd) {
     assert(!/\.(cmd|bat|ps1)$/i.test(executable.cmd),
       `SDK executable must not be a Windows shell shim: ${executable.cmd}`);

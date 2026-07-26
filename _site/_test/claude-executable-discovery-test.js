@@ -2,6 +2,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const runner = require('../lib/claude-cli-runner');
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-discovery-test-'));
@@ -52,6 +53,26 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-discovery-test-'));
     });
     assert.equal(fromCmdNpmShim.cmd, npmExe,
       'configured npm .cmd shim should resolve to the package native executable');
+    assert.equal(fromCmdNpmShim.runtimeExecutable, null,
+      'native Claude executable should not need a JavaScript runtime launcher');
+
+    fs.rmSync(npmExe);
+    const fromCliScript = await runner.findClaudeExecutableForSdk({
+      platform: 'win32',
+      env: { CLAUDE_CODE_EXECPATH: npmShim },
+      runtimeExecutable: process.execPath,
+      runCommand: () => ({ status: 1, stdout: '' }),
+    });
+    assert.equal(fromCliScript.cmd, npmCli,
+      'npm shim should fall back to the installed Claude cli.js');
+    assert.equal(fromCliScript.runtimeExecutable, process.execPath,
+      'Claude cli.js must use the current runtime instead of PATH node');
+    const scriptLaunch = spawnSync(fromCliScript.runtimeExecutable, [fromCliScript.cmd], {
+      encoding: 'utf8',
+      windowsHide: true,
+    });
+    assert.equal(scriptLaunch.status, 0,
+      `resolved Claude cli.js should launch through the selected runtime: ${scriptLaunch.stderr}`);
 
     const missing = await runner.findClaudeExecutableForSdk({
       platform: 'win32',
