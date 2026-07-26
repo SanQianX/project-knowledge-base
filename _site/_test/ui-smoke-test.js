@@ -289,13 +289,13 @@ function assert(cond, msg) {
       expression: '(() => { const btn = Array.from(document.querySelectorAll("button, a")).find(b => /Project Git \\/ Hook Settings|项目 Git \\/ Hook 设置|椤圭洰 Git \\/ Hook 璁剧疆/.test(b.innerText)); if (btn) btn.click(); return btn ? btn.innerText : "NO BTN"; })()',
       returnByValue: true,
     });
-    assert(r.result.value !== 'NO BTN', 'Project Git / Hook drawer action missing');
+    assert(r.result.value === 'NO BTN', 'deprecated Project Git / Hook drawer action should be absent');
     await new Promise(resolve => setTimeout(resolve, 1000));
     r = await send('Runtime.evaluate', {
       expression: '/Project Git \\/ Hook Settings|椤圭洰 Git \\/ Hook 璁剧疆/.test(document.body.innerText) && /Git Snapshot|Git 蹇収/.test(document.body.innerText) && /Check hook|妫€鏌?Hook/.test(document.body.innerText)',
       returnByValue: true,
     });
-    assert(r.result.value, 'project Git / Hook settings did not render');
+    assert(!r.result.value, 'deprecated project Git / Hook settings should not render');
     r = await send('Runtime.evaluate', {
       expression: '!!document.querySelector("[data-vector-migration] [data-embedding-model-setup]") && !!document.querySelector("[data-vector-migration] [data-model-download]")',
       returnByValue: true,
@@ -305,7 +305,7 @@ function assert(cond, msg) {
       expression: '!!document.querySelector("[data-markdown-maintenance] [data-markdown-optimize-all]")',
       returnByValue: true,
     });
-    assert(r.result.value, 'settings should render Markdown knowledge audit and optimization controls');
+    assert(!r.result.value, 'deprecated Markdown maintenance controls should not render in the focused settings drawer');
 
     r = await send('Runtime.evaluate', {
       expression: '(() => { const settings = Array.from(document.querySelectorAll("button, a")).find(b => /^Settings|^设置|^璁剧疆/.test(b.innerText)); if (settings) settings.click(); return !!settings; })()',
@@ -328,7 +328,21 @@ function assert(cond, msg) {
       expression: '/AI Profiles/.test(document.body.innerText) && /Profile editor/.test(document.body.innerText) && /Test model/.test(document.body.innerText) && /Request URL/.test(document.body.innerText) && /\\bModel\\b/.test(document.body.innerText) && /Provider name/.test(document.body.innerText)',
       returnByValue: true,
     });
-    assert(r.result.value, 'AI model settings did not render');
+    r = await send('Runtime.evaluate', {
+      expression: `(() => {
+        const drawer = document.querySelector('[data-settings-drawer]');
+        const sections = ['ai', 'automation', 'relations', 'knowledge', 'model', 'logs', 'client'];
+        const ai = drawer && drawer.querySelector('[data-settings-section="ai"]');
+        return !!drawer
+          && sections.every(key => drawer.querySelector('[data-settings-section="' + key + '"]'))
+          && !!ai
+          && !!ai.querySelector('input[type="password"]')
+          && !!drawer.querySelector('[data-automation-field="hookPromptTemplate"]')
+          && !!drawer.querySelector('[data-model-download]');
+      })()`,
+      returnByValue: true,
+    });
+    assert(r.result.value, 'focused settings drawer contract did not render');
 
     const shot = await send('Page.captureScreenshot', { format: 'png', fullPage: true });
     fs.writeFileSync(path.join(OUT_DIR, 'smoke-final.png'), Buffer.from(shot.data, 'base64'));

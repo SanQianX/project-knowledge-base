@@ -37,6 +37,14 @@
     .mobile-project-strip { display: none; }
     .settings-backdrop { position: fixed; inset: 0; z-index: 40; background: rgba(2, 6, 23, 0.42); }
     .settings-drawer { position: fixed; inset: 0 0 0 auto; z-index: 50; width: min(520px, 100vw); overflow: auto; box-shadow: -24px 0 64px rgba(2, 6, 23, 0.22); }
+    .settings-drawer.workspace-settings { width: min(920px, 100vw); display: grid; grid-template-columns: 170px minmax(0, 1fr); overflow: hidden; padding: 0; }
+    .settings-nav { overflow-y: auto; padding: 20px 12px; border-right: 1px solid var(--line); background: var(--panel2); }
+    .settings-nav button { width: 100%; margin-top: 4px; padding: 9px 10px; border: 0; border-radius: 8px; color: var(--muted); background: transparent; text-align: left; font-size: 13px; }
+    .settings-nav button:hover, .settings-nav button.active { color: var(--text); background: var(--panel); }
+    .settings-content { min-width: 0; overflow-y: auto; padding: 22px; }
+    .project-context-menu { position: fixed; z-index: 65; width: 200px; padding: 5px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); box-shadow: 0 16px 40px rgba(2, 6, 23, 0.35); }
+    .project-context-menu button { width: 100%; padding: 9px 10px; border: 0; border-radius: 7px; color: var(--bad); background: transparent; text-align: left; font-size: 13px; }
+    .project-context-menu button:hover { background: color-mix(in srgb, var(--bad) 10%, transparent); }
     .side { background: var(--side); color: var(--sideText); }
     .side .side-toggle:hover { background: var(--sideHover) !important; }
     .side2 { background: var(--side2); }
@@ -125,6 +133,11 @@
       .mobile-project-pill { flex: 0 0 auto; max-width: 220px; border: 1px solid var(--line); border-radius: 999px; padding: 8px 11px; background: var(--panel); color: var(--text); font-size: 13px; }
       .dashboard-view { overflow: visible !important; }
       .summary-grid { grid-template-columns: 1fr !important; }
+      .settings-drawer.workspace-settings { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+      .settings-nav { display: flex; gap: 4px; overflow-x: auto; overflow-y: hidden; padding: 10px; border-right: 0; border-bottom: 1px solid var(--line); }
+      .settings-nav > div { display: none; }
+      .settings-nav button { width: auto; flex: 0 0 auto; margin-top: 0; white-space: nowrap; }
+      .settings-content { padding: 16px; }
     }
     /* Narrow-layout pane switching: 1024-1279px range shows only one
        split-pane column at a time. v-show in the template decides which
@@ -152,7 +165,7 @@
 <body>
 <div id="app" v-cloak>
   <div :class="['shell', theme === 'dark' ? 'theme-dark' : 'theme-light']">
-    <div class="app-grid">
+    <div class="app-grid" data-workspace-shell>
     <aside class="desktop-sidebar side flex h-full flex-col overflow-hidden">
       <div class="border-b p-5" style="border-color: var(--sideBorder)">
         <div class="text-xs uppercase tracking-[0.18em]" style="color: var(--sideMuted)">{{ t("appName") }}</div>
@@ -162,15 +175,17 @@
 
       <div class="flex min-h-0 flex-1 flex-col p-3">
         <div class="mb-2 flex items-center justify-between px-1">
-          <span class="text-xs font-medium uppercase tracking-[0.14em]" style="color: var(--sideMuted)">{{ t("projects") }}</span>
+          <span class="text-xs font-medium uppercase tracking-[0.14em]" style="color: var(--sideMuted)">{{ t("projects") }} · {{ t("rightClickToManage") }}</span>
           <button @click="activeView = 'import'" class="rounded-lg border px-2 py-1 text-xs transition"
             style="border-color: var(--sideBorder); color: var(--sideText); background: var(--sideHover)">
             {{ t("importProject") }}
           </button>
         </div>
-        <div class="min-h-0 flex-1 overflow-auto pr-1 scrollbar-thin">
+        <div class="min-h-0 flex-1 overflow-auto pr-1 scrollbar-thin" data-project-list>
           <button v-for="p in projectList" :key="p.slug"
             @click="selectProject(p.slug); activeView = 'dashboard'"
+            @contextmenu.prevent="openProjectContextMenu($event, p.slug)"
+            data-project-item
             :class="['mb-2 w-full rounded-xl border p-3 text-left transition']"
             :style="selectedSlug === p.slug ? { background: 'var(--sideActive)', borderColor: 'var(--accent)' } : { background: 'var(--sideHover)', borderColor: 'var(--sideBorder)' }">
             <div class="flex items-start justify-between gap-2">
@@ -186,10 +201,7 @@
                 </div>
               </div>
             </div>
-            <div class="mt-3 flex flex-wrap gap-1">
-              <span class="rounded px-1.5 py-0.5 text-[10px]" style="background: var(--sideChip); color: var(--sideChipFg)">{{ p.cfg.repoStatus || "unknown" }}</span>
-              <span class="rounded px-1.5 py-0.5 text-[10px]" style="background: var(--sideChip); color: var(--sideChipFg)">{{ p.cfg.lastScanPendingCount || 0 }} {{ t("pending") }}</span>
-            </div>
+            <div class="mt-1 truncate text-[11px]" style="color: var(--sideMuted)">{{ p.cfg.gitPath || p.cfg.localPath || "-" }}</div>
           </button>
         </div>
       </div>
@@ -228,7 +240,7 @@
             <option value="en">{{ t("english") }}</option>
           </select>
           <button @click="toggleTheme" class="btn">{{ theme === "dark" ? t("lightMode") : t("darkMode") }}</button>
-          <button @click="settingsDrawerOpen = true" class="btn">{{ t("settings") }}</button>
+          <button @click="openSettingsDrawer('ai')" class="btn">{{ t("settings") }}</button>
           <button @click="openGithubAuthModal" class="btn" :title="githubStatusText">{{ githubHeaderLabel }}</button>
         </div>
       </header>
@@ -406,7 +418,7 @@
             </section>
       </section>
 
-      <section v-else-if="activeView === 'import'" class="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <section v-else-if="activeView === 'import'" class="flex min-h-0 flex-1 flex-col overflow-hidden" data-import-drawer>
         <split-pane storage-key="kb-import-side-width" :default-side-px="760" :min-side-px="500" :max-side-px="1100" :min-main-px="300" position="left">
           <template #side>
           <div class="pane-wrap" v-show="!isNarrow || narrowPane.import === 'form'">
@@ -962,7 +974,6 @@
             <div class="panel2 rounded-xl border p-4">
               <div class="mb-3 flex items-center justify-between">
                 <h3 class="font-medium">{{ t("gitSnapshot") }}</h3>
-                <button @click="validateGit(settingsProjectSlug)" class="btn text-xs px-2 py-1">{{ t("validateGit") }}</button>
               </div>
               <dl class="grid gap-2 text-sm">
                 <div class="flex justify-between gap-3"><dt class="muted">{{ t("repo") }}</dt><dd>{{ settingsProject.repoStatus || "unknown" }}</dd></div>
@@ -980,11 +991,6 @@
                 <span class="chip">{{ hookStatus.installed ? t("installed") : t("notInstalled") }}</span>
               </div>
               <p class="mb-3 text-xs muted">{{ t("hookSettingsHelp") }}</p>
-              <div class="grid gap-2 md:grid-cols-3">
-                <button type="button" @click.prevent="loadHookStatus(settingsProjectSlug)" class="btn">{{ t("checkHook") }}</button>
-                <button type="button" @click.prevent="installHook(settingsProjectSlug)" class="btn">{{ t("install") }}</button>
-                <button type="button" @click.prevent="uninstallHook(settingsProjectSlug)" class="btn-danger">{{ t("uninstall") }}</button>
-              </div>
               <div class="mt-3 break-all text-xs muted">{{ hookStatus.message || hookStatus.hookPath || hookStatus.path || t("hookNotLoaded") }}</div>
 
               <div v-if="settingsAutomationLoaded" class="mt-4 grid gap-3 border-t pt-4 line" data-automation-settings>
@@ -1073,7 +1079,16 @@
         </div>
       </section>
 
-      <div v-if="removeDialog.open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+    <div
+      v-if="projectContextMenu.open"
+      class="project-context-menu"
+      data-project-context-menu
+      :style="{ left: projectContextMenu.x + 'px', top: projectContextMenu.y + 'px' }"
+      @click.stop>
+      <div class="truncate px-2 py-1 text-xs muted">{{ projectContextMenu.slug }}</div>
+      <button type="button" @click="openRemoveProject(projectContextMenu.slug)">{{ t("removeProject") }}…</button>
+    </div>
+    <div v-if="removeDialog.open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4" data-remove-project-dialog>
         <div class="panel w-full max-w-2xl rounded-xl border p-5 shadow-xl">
           <div class="flex items-start justify-between gap-4">
             <div>
@@ -1177,71 +1192,162 @@
         </div>
       </div>
     </div>
-    <div v-if="settingsDrawerOpen" class="settings-backdrop" @click="settingsDrawerOpen = false"></div>
-    <aside v-if="settingsDrawerOpen" class="settings-drawer panel border-l p-5">
-      <div class="mb-5 flex items-start justify-between gap-4 border-b pb-4 line">
-        <div>
-          <h2 class="text-lg font-semibold">{{ t("settings") }}</h2>
-          <p class="mt-1 text-sm muted">{{ t("settingsDrawerHelp") }}</p>
+    <div v-if="settingsDrawerOpen" class="settings-backdrop" @click="closeSettingsDrawer"></div>
+    <aside v-if="settingsDrawerOpen" class="settings-drawer workspace-settings panel border-l" data-settings-drawer>
+      <nav class="settings-nav">
+        <div class="px-2 pb-3 text-base font-semibold">{{ t("settings") }}</div>
+        <button v-for="item in settingsSections" :key="item.key"
+          type="button"
+          :class="{ active: settingsSection === item.key }"
+          @click="selectSettingsSection(item.key)">
+          {{ item.label }}
+        </button>
+      </nav>
+      <div class="settings-content scrollbar-thin">
+        <div class="mb-5 flex items-start justify-between gap-4 border-b pb-4 line">
+          <div>
+            <h2 class="text-lg font-semibold">{{ settingsSectionTitle }}</h2>
+            <p class="mt-1 text-sm muted">{{ settingsSectionHelp }}</p>
+          </div>
+          <button type="button" @click="closeSettingsDrawer" class="btn">×</button>
         </div>
-        <button @click="settingsDrawerOpen = false" class="btn">×</button>
-      </div>
-      <div class="grid gap-3">
-        <section class="panel2 rounded-xl border p-4">
-          <div class="flex items-center justify-between gap-3">
-            <div class="font-medium">{{ t("desktopClient") }}</div>
-            <span class="chip">v{{ desktopUpdate.currentVersion || "-" }}</span>
+
+        <section v-show="settingsSection === 'ai'" class="grid gap-4" data-settings-section="ai">
+          <div class="panel2 rounded-xl border p-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div class="font-medium">{{ t("aiProfiles") }}</div>
+                <p class="mt-1 text-xs muted">{{ t("projectAssignmentsHelp") }}</p>
+              </div>
+              <div class="flex gap-2">
+                <button type="button" @click="addProfile" class="btn">{{ t("addProfile") }}</button>
+                <button type="button" @click="saveCurrentProfile" :disabled="testingProfile" class="btn-primary">{{ testingProfile ? t("testing") : t("saveProfileForm") }}</button>
+              </div>
+            </div>
+            <div class="mt-4 grid gap-3 md:grid-cols-2" @input.capture="markAiProfileDirty" @change.capture="markAiProfileDirty">
+              <label class="grid gap-1 text-sm">{{ t("profileId") }}
+                <select v-model="selectedConfigProfileId" @change="loadProfileForm" class="input">
+                  <option v-for="p in aiConfig.profiles" :key="p.id" :value="p.id">{{ profileOptionLabel(p) }}</option>
+                </select>
+              </label>
+              <label class="grid gap-1 text-sm">{{ t("profileProvider") }}<input v-model="profileForm.provider" class="input" /></label>
+              <label class="grid gap-1 text-sm md:col-span-2">{{ t("apiKey") }}<input v-model="profileForm.apiKey" type="password" class="input font-mono text-xs" /></label>
+              <label class="grid gap-1 text-sm md:col-span-2">{{ t("profileEndpoint") }}<input v-model="profileForm.baseUrl" class="input font-mono text-xs" /></label>
+              <label class="grid gap-1 text-sm md:col-span-2">{{ t("profileMainModel") }}<input v-model="profileForm.mainModel" class="input font-mono text-xs" /></label>
+              <label class="grid gap-1 text-sm">{{ t("timeoutMs") }}<input v-model.number="profileForm.timeoutMs" type="number" class="input" /></label>
+              <label class="grid gap-1 text-sm">{{ t("profileContextWindow") }}<input v-model.number="profileForm.contextWindow" type="number" class="input" /></label>
+            </div>
+            <div v-if="aiMessage" class="mt-3 rounded-lg border p-3 text-sm" :style="aiMessageStyle">{{ aiMessage }}</div>
           </div>
-          <p class="mt-2 text-sm muted">{{ desktopUpdateSummary }}</p>
-          <div v-if="desktopUpdate.error" class="mt-2 text-xs" style="color: var(--bad)">{{ desktopUpdate.error }}</div>
-          <button v-if="desktopUpdate.supported" type="button" @click="handleDesktopUpdate" :disabled="desktopUpdateBusy" class="btn mt-3">
-            {{ desktopUpdateActionLabel }}
-          </button>
-        </section>
-        <section class="panel2 rounded-xl border p-4">
-          <div class="font-medium">{{ t("aiProfiles") }}</div>
-          <p class="mt-1 text-sm muted">{{ t("projectAssignmentsHelp") }}</p>
-          <button @click="openAiSetup" class="btn mt-3">{{ t("aiProfiles") }}</button>
-        </section>
-        <section class="panel2 rounded-xl border p-4">
-          <div class="font-medium">{{ t("teamStoreOwnerSetup") }}</div>
-          <p class="mt-1 text-sm muted">{{ t("teamStoreOwnerSetupHelp") }}</p>
-          <div class="mt-3 flex gap-2">
-            <input v-model="teamStoreSetup.localPath" class="input min-w-0 flex-1" :placeholder="t('teamStoreLocalPathPlaceholder')" />
-            <button type="button" @click="pickTeamStoreFolder" :disabled="pickingTeamStoreFolder || teamStoreBusy" class="btn shrink-0">{{ pickingTeamStoreFolder ? t("opening") : t("chooseFolder") }}</button>
-          </div>
-          <div class="mt-3 flex flex-wrap gap-2">
-            <button type="button" @click="scanLocalTeamStore" :disabled="teamStoreBusy || !teamStoreSetup.localPath" class="btn">{{ t("scanTeamStore") }}</button>
-            <button type="button" @click="configureLocalTeamStore" :disabled="teamStoreBusy || !teamStoreSetup.localPath" class="btn-primary">{{ teamStoreBusy ? t("saving") : t("configureAndPushTeamStore") }}</button>
-          </div>
-          <div v-if="teamStorePreview" class="mt-3 rounded-lg border p-3 text-sm panel">
-            <div class="flex justify-between gap-3"><span class="muted">{{ t("remote") }}</span><span class="truncate text-xs">{{ teamStorePreview.remoteUrl || teamStorePreview.cloneUrl || "-" }}</span></div>
-            <div class="mt-1 flex justify-between gap-3"><span class="muted">{{ t("branch") }}</span><span>{{ teamStorePreview.branch || teamStorePreview.defaultBranch || "-" }}</span></div>
-            <div class="mt-3 text-xs muted">{{ t("teamStoreDetectedBases", { count: teamStorePreview.knowledgeBases.length }) }}</div>
-            <div class="mt-2 flex max-h-28 flex-wrap gap-2 overflow-auto">
-              <span v-for="kb in teamStorePreview.knowledgeBases" :key="kb.kbId" class="rounded-md border px-2 py-1 text-xs">{{ kb.path }}</span>
+          <div class="panel2 rounded-xl border p-4">
+            <div class="font-medium">{{ t("projectAssignments") }}</div>
+            <div class="mt-3 grid gap-2">
+              <label v-for="(proj, slug) in projects" :key="slug" class="flex items-center justify-between gap-3 rounded-lg border p-3 panel">
+                <span class="min-w-0 truncate">{{ proj.displayName || slug }}</span>
+                <select :value="projectEffectiveAiProfileId(proj)" @change="setProjectAiProfile(slug, $event.target.value || null)" class="input max-w-[280px]">
+                  <option v-for="prof in usableAiProfiles" :key="prof.id" :value="prof.id">{{ profileOptionLabel(prof) }}</option>
+                </select>
+              </label>
             </div>
           </div>
-          <div v-if="teamStoreMessage" class="mt-3 rounded-lg border border-emerald-500/25 bg-emerald-500/10 p-3 text-sm" style="color: var(--good)">{{ teamStoreMessage }}</div>
-          <div v-if="teamStoreError" class="mt-3 rounded-lg border border-red-500/25 bg-red-500/10 p-3 text-sm" style="color: var(--bad)">{{ teamStoreError }}</div>
         </section>
-        <section class="panel2 rounded-xl border p-4">
-          <div class="font-medium">{{ t("logs") }}</div>
-          <p class="mt-1 text-sm muted">{{ t("logsSettingsHelp") }}</p>
-          <div class="mt-3 flex flex-wrap gap-2">
-            <button @click="activeView = 'logs'; settingsDrawerOpen = false" class="btn">{{ t("logs") }}</button>
-            <button @click="activeView = 'settings'; settingsDrawerOpen = false" class="btn">{{ t("loggingSettings") }}</button>
+
+        <section v-show="settingsSection === 'automation'" data-settings-section="automation">
+          <div class="panel2 rounded-xl border p-4">
+            <label class="grid gap-1 text-sm">{{ t("selectProject") }}
+              <select v-model="settingsProjectSlug" @change="changeSettingsProject" class="input">
+                <option v-for="p in projectList" :key="p.slug" :value="p.slug">{{ p.cfg.displayName || p.slug }}</option>
+              </select>
+            </label>
+            <div v-if="settingsAutomationLoaded" class="mt-4 grid gap-3" data-automation-settings>
+              <div class="flex flex-wrap gap-3 text-sm">
+                <label class="flex items-center gap-2"><input type="checkbox" data-automation-field="enabled" v-model="settingsAutomationForm.enabled" /> {{ t("automationEnabled") }}</label>
+                <label class="flex items-center gap-2"><input type="checkbox" data-automation-field="postCommitEnabled" v-model="settingsAutomationForm.postCommitEnabled" /> {{ t("postCommitEnabled") }}</label>
+                <label class="flex items-center gap-2"><input type="checkbox" data-automation-field="allowReadOnlyBash" v-model="settingsAutomationForm.allowReadOnlyBash" /> {{ t("allowReadOnlyBash") }}</label>
+              </div>
+              <label class="grid gap-1 text-sm">{{ t("hookPromptTemplate") }}
+                <textarea data-automation-field="hookPromptTemplate" v-model="settingsAutomationForm.hookPromptTemplate" rows="12" class="input font-mono text-xs"></textarea>
+              </label>
+              <div class="flex items-center gap-3">
+                <button type="button" @click="saveAutomationSettings(settingsProjectSlug)" class="btn-primary" :disabled="settingsAutomationSaving">{{ settingsAutomationSaving ? t("saving") : t("saveHookSettings") }}</button>
+                <span class="text-xs muted">{{ automationMessage || (settingsAutomationDirty ? t("unsavedChanges") : "") }}</span>
+              </div>
+            </div>
           </div>
         </section>
-        <section class="panel2 rounded-xl border p-4">
-          <div class="font-medium">{{ t("projectGitSettings") }}</div>
-          <p class="mt-1 text-sm muted">{{ t("projectGitSettingsHelp") }}</p>
-          <button @click="activeView = 'settings'; settingsDrawerOpen = false" class="btn mt-3">{{ t("projectGitSettings") }}</button>
+
+        <section v-show="settingsSection === 'relations'" data-settings-section="relations" data-knowledge-relations>
+          <div class="panel2 rounded-xl border p-4">
+            <div class="font-medium">{{ t("knowledgeRelations") }}</div>
+            <p class="mt-1 text-xs muted">{{ t("knowledgeRelationsHelp") }}</p>
+            <div class="mt-3 grid gap-2 md:grid-cols-2">
+              <label v-for="item in knowledgeRelationCandidates" :key="item.slug" class="flex items-start gap-2 rounded-lg border p-3 panel">
+                <input type="checkbox" :value="item.slug" v-model="knowledgeRelationSelection" />
+                <span>{{ item.cfg.displayName || item.slug }}</span>
+              </label>
+            </div>
+            <button type="button" @click="saveKnowledgeRelations(settingsProjectSlug)" class="btn-primary mt-4" :disabled="knowledgeRelationsSaving">{{ knowledgeRelationsSaving ? t("saving") : t("saveRelations") }}</button>
+            <div class="mt-2 text-xs muted">{{ knowledgeRelationsMessage }}</div>
+          </div>
+        </section>
+
+        <section v-show="settingsSection === 'knowledge'" data-settings-section="knowledge">
+          <div class="panel2 rounded-xl border p-4">
+            <label class="grid gap-1 text-sm">{{ t("knowledgeStoreRoot") }}<input v-model="knowledgeStoreConfig.rootPath" class="input font-mono text-xs" /></label>
+            <div class="mt-3 rounded-lg border p-3 panel">
+              <div class="text-xs muted">{{ t("vectorDatabasePath") }}</div>
+              <div class="mt-1 break-all font-mono text-xs">{{ knowledgeStorage.databasePath || "-" }}</div>
+            </div>
+            <button type="button" @click="saveKnowledgeStoreConfig" class="btn-primary mt-4">{{ t("save") }}</button>
+          </div>
+        </section>
+
+        <section v-show="settingsSection === 'model'" data-settings-section="model" data-vector-migration>
+          <div class="panel2 rounded-xl border p-4" data-embedding-model-setup>
+            <div class="flex items-start justify-between gap-3">
+              <div><div class="font-medium">{{ t("embeddingModelSetup") }}</div><div class="mt-1 text-xs muted">{{ vectorModelStatus.modelId || "Xenova/bge-small-zh-v1.5" }}</div></div>
+              <span class="chip">{{ vectorModelStatus.installed ? t("modelReady") : t("modelNotReady") }}</span>
+            </div>
+            <label class="mt-4 grid gap-1 text-sm">{{ t("modelRemoteHost") }}<input v-model="embeddingConfig.remoteHost" class="input font-mono text-xs" /></label>
+            <label class="mt-3 grid gap-1 text-sm">{{ t("localModelPath") }}<input v-model="embeddingConfig.localModelPath" class="input font-mono text-xs" /></label>
+            <label class="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" v-model="embeddingConfig.localFilesOnly" /> {{ t("localFilesOnly") }}</label>
+            <div class="mt-4 flex flex-wrap gap-2">
+              <button type="button" @click="saveEmbeddingConfig" class="btn">{{ t("saveModelConfig") }}</button>
+              <button type="button" data-model-download @click="downloadEmbeddingModel" class="btn-primary" :disabled="vectorMigrationBusy">{{ t("downloadAndVerifyModel") }}</button>
+            </div>
+            <div class="mt-2 text-xs muted">{{ modelSetupMessage }}</div>
+          </div>
+        </section>
+
+        <section v-show="settingsSection === 'logs'" data-settings-section="logs">
+          <div class="panel2 rounded-xl border p-4">
+            <div class="grid gap-2 md:grid-cols-4">
+              <input v-model="logFilters.dateFrom" type="date" class="input text-sm" />
+              <select v-model="logFilters.level" class="input text-sm"><option value="all">{{ t("all") }}</option><option value="info">info</option><option value="warn">warn</option><option value="error">error</option></select>
+              <input v-model="logFilters.q" class="input text-sm" :placeholder="t('searchLogs')" />
+              <button type="button" @click="loadStructuredLogs" class="btn">{{ t("refresh") }}</button>
+            </div>
+            <div class="mt-4 max-h-[58vh] overflow-auto scrollbar-thin">
+              <button v-for="log in structuredLogs" :key="log.ts + log.event" @click="selectedLog = log" class="mb-2 w-full rounded-lg border p-3 text-left panel">
+                <div class="flex justify-between gap-3 text-xs"><span>{{ log.level }} · {{ log.event }}</span><span class="muted">{{ formatTime(log.ts) }}</span></div>
+                <div class="mt-1 text-sm">{{ log.message }}</div>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section v-show="settingsSection === 'client'" data-settings-section="client">
+          <div class="panel2 rounded-xl border p-4">
+            <div class="flex items-center justify-between gap-3"><div class="font-medium">{{ t("desktopClient") }}</div><span class="chip">v{{ desktopUpdate.currentVersion || "-" }}</span></div>
+            <p class="mt-2 text-sm muted">{{ desktopUpdateSummary }}</p>
+            <div v-if="desktopUpdate.error" class="mt-2 text-xs" style="color: var(--bad)">{{ desktopUpdate.error }}</div>
+            <button v-if="desktopUpdate.supported" type="button" @click="handleDesktopUpdate" :disabled="desktopUpdateBusy" class="btn mt-3">{{ desktopUpdateActionLabel }}</button>
+          </div>
         </section>
       </div>
     </aside>
     <div v-if="githubAuthModal.open" class="settings-backdrop" @click="closeGithubAuthModal"></div>
-    <aside v-if="githubAuthModal.open" class="settings-drawer panel border-l p-5">
+    <aside v-if="githubAuthModal.open" class="settings-drawer panel border-l p-5" data-git-account-drawer>
       <div class="mb-5 flex items-start justify-between gap-4 border-b pb-4 line">
         <div>
           <h2 class="text-lg font-semibold">{{ t("githubAccount") }}</h2>
@@ -1322,6 +1428,7 @@ const I18N = {
     close: "Close",
     logout: "Log out",
     projects: "Projects",
+    rightClickToManage: "right-click to manage",
     dashboard: "Dashboard",
     import: "Import",
     aiProfiles: "AI Profiles",
@@ -2223,6 +2330,7 @@ const I18N = {
 
 Object.assign(I18N.zh, {
   settings: "设置",
+  rightClickToManage: "右键管理",
   settingsDrawerHelp: "低频控制项集中放在这里，主工作区只保留项目上下文相关操作。",
   refreshSettingsHelp: "自动轮询未及时同步时，再手动强制刷新后端状态。",
   logsSettingsHelp: "打开活动日志，或调整日志保留与存储设置。",
@@ -2718,6 +2826,8 @@ const app = createApp({
 
     const removeDialog = reactive({ open: false, slug: "", preview: {}, deleteKb: false, reason: "", confirmText: "", error: "", busy: false });
     const settingsDrawerOpen = ref(false);
+    const settingsSection = ref("ai");
+    const projectContextMenu = reactive({ open: false, slug: "", x: 0, y: 0 });
     const desktopUpdate = reactive({ supported: false, currentVersion: "", latestVersion: "", status: "unsupported", updateAvailable: false, error: "" });
     let removeDesktopUpdateListener = null;
 
@@ -2852,6 +2962,23 @@ const app = createApp({
     const defaultAiProfile = computed(() => usableAiProfiles.value[0] || null);
     const defaultAiProfileLabel = computed(() => defaultAiProfile.value ? profileOptionLabel(defaultAiProfile.value) : t("noProfilesAvailable"));
     const nonDefaultAiProfiles = computed(() => usableAiProfiles.value.filter(profile => !defaultAiProfile.value || profile.id !== defaultAiProfile.value.id));
+    const settingsSections = computed(() => [
+      { key: "ai", label: t("aiProfiles"), help: t("projectAssignmentsHelp") },
+      { key: "automation", label: t("hookPromptTemplate"), help: t("hookSettingsHelp") },
+      { key: "relations", label: t("knowledgeRelations"), help: t("knowledgeRelationsHelp") },
+      { key: "knowledge", label: t("knowledgeStoreSettings"), help: t("settingsDrawerHelp") },
+      { key: "model", label: t("embeddingModelSetup"), help: t("embeddingModelSetupHelp") },
+      { key: "logs", label: t("logs"), help: t("logsSettingsHelp") },
+      { key: "client", label: t("desktopClient"), help: t("desktopUpdateHelp") },
+    ]);
+    const settingsSectionTitle = computed(() => {
+      const item = settingsSections.value.find(candidate => candidate.key === settingsSection.value);
+      return item ? item.label : t("settings");
+    });
+    const settingsSectionHelp = computed(() => {
+      const item = settingsSections.value.find(candidate => candidate.key === settingsSection.value);
+      return item ? item.help : "";
+    });
     const onboardingSteps = computed(() => {
       const aiDone = setup.required !== true;
       const storeDone = knowledgeStoreConfig.configured === true;
@@ -3079,13 +3206,12 @@ const app = createApp({
     }
 
     function openAiSetup() {
-      activeView.value = "ai";
-      settingsDrawerOpen.value = false;
       onboardingModalOpen.value = false;
       nextTick(() => {
         narrowPane.ai = "editor";
         if (!aiConfig.profiles.length) addProfile();
       });
+      return openSettingsDrawer("ai");
     }
 
     function dismissOnboarding() {
@@ -3101,8 +3227,7 @@ const app = createApp({
       if (step.key === "ai") {
         openAiSetup();
       } else if (step.key === "store") {
-        activeView.value = "settings";
-        settingsDrawerOpen.value = false;
+        openSettingsDrawer("knowledge");
       } else if (step.key === "project") {
         activeView.value = "import";
         settingsDrawerOpen.value = false;
@@ -3113,6 +3238,7 @@ const app = createApp({
     }
 
     function selectProject(slug) {
+      closeProjectContextMenu();
       selectedSlug.value = slug;
       closeEventSource();
       terminalLines.value = [];
@@ -3122,6 +3248,53 @@ const app = createApp({
       terminalSession.value = { state: 'idle', model: null, aiProfileId: projects.value && projects.value[slug] && projects.value[slug].aiProfileId || null, claudeSessionId: null, turns: 0 };
       loadPermissionModeForSession(null);
       loadClaudeSessions(slug, true);
+    }
+
+    function closeProjectContextMenu() {
+      projectContextMenu.open = false;
+      projectContextMenu.slug = "";
+    }
+
+    function openProjectContextMenu(event, slug) {
+      const menuWidth = 200;
+      const menuHeight = 76;
+      projectContextMenu.slug = slug;
+      projectContextMenu.x = Math.max(8, Math.min(event.clientX, window.innerWidth - menuWidth - 8));
+      projectContextMenu.y = Math.max(8, Math.min(event.clientY, window.innerHeight - menuHeight - 8));
+      projectContextMenu.open = true;
+    }
+
+    function closeSettingsDrawer() {
+      settingsDrawerOpen.value = false;
+    }
+
+    async function openSettingsDrawer(section = "ai") {
+      settingsSection.value = settingsSections.value.some(item => item.key === section) ? section : "ai";
+      settingsDrawerOpen.value = true;
+      closeProjectContextMenu();
+      ensureSettingsProjectSlug();
+      if (settingsSection.value === "ai") {
+        await loadAiProfiles();
+        if (!selectedConfigProfileId.value && !aiConfig.profiles.length) addProfile();
+      } else if (settingsSection.value === "automation") {
+        if (settingsProjectSlug.value) await loadSettingsProject(settingsProjectSlug.value);
+      } else if (settingsSection.value === "relations") {
+        if (settingsProjectSlug.value) await loadKnowledgeRelations(settingsProjectSlug.value);
+      } else if (settingsSection.value === "knowledge") {
+        await loadKnowledgeStoreConfig();
+      } else if (settingsSection.value === "model") {
+        await loadVectorMigration();
+      } else if (settingsSection.value === "logs") {
+        await Promise.all([loadStructuredLogs(), loadLoggingConfig()]);
+      } else if (settingsSection.value === "client") {
+        await loadDesktopUpdateState();
+      }
+    }
+
+    function selectSettingsSection(section) {
+      openSettingsDrawer(section).catch(error => {
+        pollError.value = error.message;
+      });
     }
 
     function isKbInit(slug) {
@@ -4493,6 +4666,7 @@ const app = createApp({
     }
 
     async function openRemoveProject(slug) {
+      closeProjectContextMenu();
       removeDialog.open = true;
       removeDialog.slug = slug;
       removeDialog.preview = {};
@@ -4500,11 +4674,14 @@ const app = createApp({
       removeDialog.reason = "";
       removeDialog.confirmText = "";
       removeDialog.error = "";
+      removeDialog.busy = true;
       try {
         const data = await api("GET", `/api/projects/${slug}/remove-preview`);
-        removeDialog.preview = data.preview || {};
+        if (removeDialog.slug === slug) removeDialog.preview = data.preview || {};
       } catch (e) {
-        removeDialog.error = e.message;
+        if (removeDialog.slug === slug) removeDialog.error = e.message;
+      } finally {
+        if (removeDialog.slug === slug) removeDialog.busy = false;
       }
     }
 
@@ -5664,6 +5841,8 @@ const app = createApp({
     onMounted(() => {
       document.documentElement.lang = uiLanguage.value === "zh" ? "zh-CN" : "en";
       window.addEventListener("message", handleGiteaOAuthMessage);
+      window.addEventListener("click", closeProjectContextMenu);
+      window.addEventListener("blur", closeProjectContextMenu);
       refreshAll();
       loadDesktopUpdateState();
       loadClaudeMdAudit(true).catch(() => {});
@@ -5685,6 +5864,8 @@ const app = createApp({
       if (removeDesktopUpdateListener) removeDesktopUpdateListener();
       removeDesktopUpdateListener = null;
       window.removeEventListener("message", handleGiteaOAuthMessage);
+      window.removeEventListener("click", closeProjectContextMenu);
+      window.removeEventListener("blur", closeProjectContextMenu);
     });
 
     return {
@@ -5696,7 +5877,7 @@ const app = createApp({
       githubAuthForm, githubProviderForm, githubStatus, githubOAuth, gitProviders, githubAuthModal, githubStores, githubStoresMessage, githubBusy, selectedTeamStoreKey, selectedTeamKbKey, teamKbStorePath,
       teamStoreSetup, teamStorePreview, teamStoreBusy, teamStoreMessage, teamStoreError, pickingTeamStoreFolder,
       selectedTeamStore, selectedTeamStoreKnowledgeBases, selectedTeamKb, githubStatusText, githubHeaderLabel, gitOAuthAvailable, giteaProvider, giteaOAuthRedirectUri,
-      loading, pollError, activeView, selectedSlug, selectedProject, settingsProjectSlug, settingsProject, pageTitle, projectList, navItems, settingsDrawerOpen, setup,
+      loading, pollError, activeView, selectedSlug, selectedProject, settingsProjectSlug, settingsProject, pageTitle, projectList, navItems, settingsDrawerOpen, settingsSection, settingsSections, settingsSectionTitle, settingsSectionHelp, setup,
       desktopUpdate, desktopUpdateBusy, desktopUpdateActionLabel, desktopUpdateSummary, handleDesktopUpdate,
       onboardingModalOpen, onboardingSteps, currentOnboardingStep, dismissOnboarding, runOnboardingAction,
       theme, uiLanguage, t, toggleTheme, form, importSlugPreview, submitting, formError, formOk, pickingFolder, pickProjectFolder, addProject, resetForm, busySlug, initProject,
@@ -5709,6 +5890,7 @@ const app = createApp({
       projectGoalForm, projectGoalLoaded, projectGoalDirty, projectGoalSaving, projectGoalMessage, projectGoalModal, projectGoalModalStyle,
       automationMessage, actionMessage, importPreflight,
       selectProject, isKbInit, isProjectRunning, repoStatusLevel, projectStatusClass,
+      projectContextMenu, openProjectContextMenu, closeProjectContextMenu, openSettingsDrawer, closeSettingsDrawer, selectSettingsSection,
       kbUrl, goalUrl, displayProjectKbPath, formatTime, formatBytes,
       profileOptionLabel, projectEffectiveAiProfileId,
       refreshAll, loadAiProfiles, loadProfileForm, markAiProfileDirty, addProfile, deleteCurrentProfile, saveAiProfiles, saveCurrentProfile, testCurrentProfile, setProjectAiProfile, onProviderPicked, onProviderFocus, clearProviderSelection, openAiSetup,

@@ -1142,6 +1142,13 @@ function removeKnowledgeStoreProjectOverride(slug) {
   }
 }
 
+function projectHasRunningJobs(slug) {
+  const hasActiveClaudeSession = claudeCliRunner
+    .listSessions({ projectSlug: slug })
+    .some(session => session && claudeCliRunner.ACTIVE_STATES.has(session.state));
+  return hasActiveClaudeSession || postCommitAutomation.getQueueSize(slug) > 0;
+}
+
 function projectRemovePreview(slug, cfg) {
   const kbPath = path.resolve(cfg.kbPath || defaultProjectKbPath(slug));
   const stats = dirStats(kbPath);
@@ -1153,7 +1160,7 @@ function projectRemovePreview(slug, cfg) {
     kbExists: fs.existsSync(kbPath),
     kbSizeBytes: stats.kbSizeBytes,
     fileCount: stats.fileCount,
-    hasRunningJobs: false,
+    hasRunningJobs: projectHasRunningJobs(slug),
     hookInstalled: hook.installed === true,
     kbManagedHook: hook.kbManaged === true,
     isReference: cfg.isReference === true,
@@ -2511,6 +2518,14 @@ const server = http.createServer(async (req, res) => {
       const parsed = (() => { try { return JSON.parse(body); } catch { return {}; } })();
       const projects = readProjects({ persistMigrations: false });
       if (!projects[slug]) return send(res, 404, { error: 'Slug not in projects.json' });
+      if (projectHasRunningJobs(slug)) {
+        return send(res, 409, {
+          ok: false,
+          status: 409,
+          code: 'project_has_running_jobs',
+          error: 'Project has an active Claude session or queued automation task',
+        });
+      }
       const cfg = projects[slug];
       const kbPath = path.resolve(cfg.kbPath || defaultProjectKbPath(slug));
       const deleteKb = parsed.deleteKb === true;

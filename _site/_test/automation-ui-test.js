@@ -280,13 +280,14 @@ async function waitFor(fn, label, ms = 20000) {
       btn && btn.click();
       return !!btn;
     })()`);
-    await waitFor(() => evalJs('document.body.innerText.includes("Project Git / Hook Settings")'), 'settings drawer open');
+    await waitFor(() => evalJs('!!document.querySelector("[data-settings-drawer]")'), 'settings drawer open');
     await evalJs(`(() => {
-      const btn = [...document.querySelectorAll('button')].find(b => b.innerText.includes('Project Git / Hook Settings'));
+      const drawer = document.querySelector('[data-settings-drawer]');
+      const btn = drawer && [...drawer.querySelectorAll('.settings-nav button')].find(b => b.innerText.includes('Hook prompt template'));
       btn && btn.click();
       return !!btn;
     })()`);
-    await waitFor(() => evalJs('document.body.innerText.includes("Git Snapshot")'), 'project git settings');
+    await waitFor(() => evalJs('!!document.querySelector("[data-settings-section=\\"automation\\"] [data-automation-settings]")'), 'automation settings');
 
     await evalJs(`(() => {
       const select = [...document.querySelectorAll('select')].find(s => [...s.options].some(o => o.value === '${SLUG}'));

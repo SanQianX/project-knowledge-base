@@ -1,5 +1,15 @@
 # Changelog
 
+## [4.1.20] - 2026-07-27
+
+- Rebuilt the daily workspace around Claude Code while keeping GitHub/Gitea
+  sign-in, project import, AI setup, project knowledge relations, knowledge
+  storage, embedding model setup, logs, and desktop updates available from one
+  settings drawer.
+- Moved project removal to a right-click project-list action with confirmation.
+  Projects with a running Claude session or queued automation task now cannot
+  be removed.
+
 ## [4.1.19] - 2026-07-24
 
 - Stabilized release tests: expected EventSource cancellation during a page
