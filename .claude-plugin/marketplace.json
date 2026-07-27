@@ -1,0 +1,17 @@
+{
+  "name": "project-knowledge",
+  "owner": {
+    "name": "SanQianX"
+  },
+  "metadata": {
+    "description": "Project Knowledge integrations for coding agents"
+  },
+  "plugins": [
+    {
+      "name": "project-knowledge",
+      "version": "4.1.22",
+      "source": "./plugins/project-knowledge",
+      "description": "Search durable project decisions and implementation history through MCP."
+    }
+  ]
+}

@@ -253,6 +253,49 @@ project-knowledge-kb get --project my-api --entry "modules/auth.md" --json
 project-knowledge-kb history --project my-api --json
 ```
 
+### Claude Code, OpenCode, and Codex integrations
+
+Install every detected coding-agent integration with one command:
+
+```bash
+npx project-knowledge@latest install
+```
+
+Or select one client:
+
+```bash
+npx project-knowledge@latest install --ide claude
+npx project-knowledge@latest install --ide opencode
+npx project-knowledge@latest install --ide codex
+```
+
+Claude Code and Codex receive a native plugin containing both the MCP
+configuration and the `project-knowledge` Skill. OpenCode receives the same
+read-only MCP plus a global Skill in its standard configuration directory.
+Repeated installation is idempotent.
+
+Claude Code can also install the plugin directly inside a conversation:
+
+```text
+/plugin marketplace add SanQianX/project-knowledge-base
+/plugin install project-knowledge@project-knowledge
+```
+
+Manage all integrations from the same CLI:
+
+```bash
+npx project-knowledge@latest update
+npx project-knowledge@latest uninstall
+project-knowledge integrations status
+```
+
+Use `--ide claude|opencode|codex|all`, `--scope user|project|local`, or
+`--dry-run` as needed. `project-knowledge-mcp` remains available for manual
+MCP configuration and exposes five read-only tools: resolve the current Git
+project, search, ask, get one entry, and read history. The server enforces the
+configured related-project scope and never writes knowledge; post-commit
+automation remains the only routine writer.
+
 ---
 
 ## Dashboard
@@ -295,15 +338,14 @@ request body itself.
 </p>
 
 The flow above shows the four layers: user-facing UI (browser + CLI +
-hook + Claude Code), the local Node.js server with its specialized
+hook + coding agents), the local Node.js server with its specialized
 modules, the data layer (`~/.project-knowledge/` + your Git repos +
 generated KB), and the external LLM endpoint.
 
-The dashed line on the right represents the **KB reading rule**: when
-Claude Code (or any Anthropic-compatible agent) opens a project that has
-this app's `CLAUDE.md` block, it reads `GOAL.md` and the module / change
-indexes before opening detail files. That keeps context window usage
-linear with task size, not with KB size.
+The dashed line on the right represents the **KB reading rule**. Claude Code
+receives it through the managed `CLAUDE.md` import; OpenCode and Codex receive
+the equivalent search-first workflow and read-only tools through MCP. That
+keeps context window usage linear with task size, not with KB size.
 
 ---
 
@@ -324,6 +366,10 @@ linear with task size, not with KB size.
 | `project-knowledge-kb ask …` | Human-readable answer with source citations |
 | `project-knowledge-kb get …` | Read one stored entry's original chunks |
 | `project-knowledge-kb history …` | Read scoped change history |
+| `project-knowledge-mcp` | Start the read-only stdio MCP server for coding agents |
+| `project-knowledge install/update/uninstall` | Manage detected coding-agent integrations |
+| `project-knowledge integrations status` | Inspect Claude Code, OpenCode, and Codex integration state |
+| `project-knowledge-integrations …` | Direct integration-manager entry point |
 
 The CLI writes a PID file at `os.tmpdir()/.project-knowledge.pid`.
 Closing the original terminal does **not** stop the dashboard — use

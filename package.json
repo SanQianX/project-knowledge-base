@@ -1,6 +1,6 @@
 {
   "name": "project-knowledge",
-  "version": "4.1.21",
+  "version": "4.1.22",
   "description": "Knowledge base manager with Git integration, AI-driven analysis, and bilingual (zh-CN/en-US) knowledge output",
   "main": "_site/server.js",
   "scripts": {
@@ -9,7 +9,9 @@
   },
   "bin": {
     "project-knowledge": "bin/project-knowledge.js",
-    "project-knowledge-kb": "bin/project-knowledge-kb.js"
+    "project-knowledge-kb": "bin/project-knowledge-kb.js",
+    "project-knowledge-mcp": "bin/project-knowledge-mcp.js",
+    "project-knowledge-integrations": "bin/project-knowledge-integrations.js"
   },
   "engines": {
     "node": ">=18"
@@ -27,6 +29,9 @@
     "_site/stop.bat",
     "claude-prompts.json",
     "bin/",
+    "plugins/",
+    ".claude-plugin/",
+    ".agents/plugins/",
     "templates/",
     "docs/",
     "README.md",
@@ -42,6 +47,9 @@
     "git",
     "ai",
     "claude",
+    "codex",
+    "opencode",
+    "mcp",
     "documentation",
     "scanner",
     "context-pack",
@@ -53,6 +61,9 @@
     "@anthropic-ai/claude-agent-sdk": "^0.2.141",
     "@huggingface/transformers": "3.8.1",
     "@lancedb/lancedb": "0.31.0",
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "cross-spawn": "7.0.6",
+    "jsonc-parser": "3.3.1",
     "http-proxy-agent": "7.0.2",
     "https-proxy-agent": "7.0.6",
     "socks-proxy-agent": "8.0.5",

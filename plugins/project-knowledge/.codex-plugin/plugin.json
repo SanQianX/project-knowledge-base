@@ -1,0 +1,38 @@
+{
+  "name": "project-knowledge",
+  "version": "4.1.22",
+  "description": "Read durable project decisions and implementation history from Project Knowledge.",
+  "author": {
+    "name": "SanQianX",
+    "url": "https://github.com/SanQianX"
+  },
+  "homepage": "https://github.com/SanQianX/project-knowledge-base#readme",
+  "repository": "https://github.com/SanQianX/project-knowledge-base",
+  "license": "Apache-2.0",
+  "keywords": [
+    "knowledge-base",
+    "codex",
+    "mcp",
+    "project-history"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Project Knowledge",
+    "shortDescription": "Query durable knowledge from registered projects.",
+    "longDescription": "Resolve the current repository, search prior decisions and implementation history, and retrieve focused knowledge before making non-trivial changes.",
+    "developerName": "SanQianX",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Read"
+    ],
+    "websiteURL": "https://github.com/SanQianX/project-knowledge-base",
+    "defaultPrompt": [
+      "Find prior decisions relevant to the task I am about to start.",
+      "Search the project knowledge base before changing this implementation.",
+      "Show the recent history for the current registered project."
+    ],
+    "brandColor": "#2563EB"
+  }
+}

@@ -1,0 +1,11 @@
+interface:
+  display_name: "Project Knowledge"
+  short_description: "Query durable knowledge from registered projects"
+  default_prompt: "Use $project-knowledge to find prior decisions relevant to this task."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "project-knowledge"
+      description: "Read-only project knowledge search and history tools"
+policy:
+  allow_implicit_invocation: true

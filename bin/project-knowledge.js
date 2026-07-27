@@ -5,7 +5,7 @@
 // Run `project-knowledge --help` for usage.
 
 const path = require('path');
-const { spawn, exec, execSync } = require('child_process');
+const { spawn, spawnSync, exec, execSync } = require('child_process');
 const { existsSync, readFileSync, writeFileSync, unlinkSync } = require('fs');
 const net = require('net');
 const os = require('os');
@@ -242,6 +242,11 @@ Usage:
   project-knowledge --fg         Start in foreground (Ctrl+C to stop)
   project-knowledge stop         Stop the background process
   project-knowledge status       Check if running
+  project-knowledge install      Install coding-agent integrations
+  project-knowledge update       Update coding-agent integrations
+  project-knowledge uninstall    Remove coding-agent integrations
+  project-knowledge integrations status
+                                Check Claude Code, OpenCode, and Codex integrations
 
 Options:
   -p, --port <port>   Port to run on (default: ${DEFAULT_PORT}, auto-fallback ±${PORT_RANGE})
@@ -258,6 +263,19 @@ Runtime data lives next to the npm global root; PID file at ${PID_FILE}.
 
 // ── Parse args ──
 const args = process.argv.slice(2);
+
+const integrationCommands = new Set(['install', 'update', 'uninstall', 'integrations']);
+if (integrationCommands.has(args[0])) {
+  const forwarded = args[0] === 'integrations'
+    ? (args.slice(1).length ? args.slice(1) : ['status'])
+    : args;
+  const result = spawnSync(
+    process.execPath,
+    [path.join(__dirname, 'project-knowledge-integrations.js'), ...forwarded],
+    { stdio: 'inherit', windowsHide: true }
+  );
+  process.exit(result.status == null ? 1 : result.status);
+}
 
 // Subcommands first
 if (args[0] === 'stop') cmdStop();

@@ -1,5 +1,20 @@
 # Changelog
 
+## [4.1.22] - 2026-07-27
+
+- Added a read-only `project-knowledge-mcp` server for OpenCode, Codex, and
+  other MCP-compatible coding agents. It resolves the current Git project,
+  exposes scoped search/ask/get/history tools, and includes the search-first
+  workflow without depending on `CLAUDE.md`.
+- Added a safe keyword-search fallback for legacy Markdown knowledge bases and
+  kept routine knowledge writes exclusively in post-commit automation.
+- Added a shared Claude Code/Codex plugin with MCP configuration and a
+  search-first `project-knowledge` Skill, plus a native Claude marketplace and
+  Codex marketplace manifest.
+- Added an OpenCode adapter and a universal, idempotent integration manager for
+  installation, updates, removal, dry-runs, and status checks across Claude
+  Code, OpenCode, and Codex.
+
 ## [4.1.21] - 2026-07-27
 
 - Fixed Windows desktop Claude sessions failing with “executable exists but

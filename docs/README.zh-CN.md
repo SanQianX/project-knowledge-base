@@ -111,6 +111,47 @@ project-knowledge-kb get --project my-api --entry "modules/auth.md" --json
 project-knowledge-kb history --project my-api --json
 ```
 
+### 接入 Claude Code、OpenCode 和 Codex
+
+一个命令即可为本机检测到的编码代理安装集成：
+
+```bash
+npx project-knowledge@latest install
+```
+
+也可以只安装指定客户端：
+
+```bash
+npx project-knowledge@latest install --ide claude
+npx project-knowledge@latest install --ide opencode
+npx project-knowledge@latest install --ide codex
+```
+
+Claude Code 和 Codex 安装原生插件，插件同时包含 MCP 配置与
+`project-knowledge` Skill；OpenCode 安装同一个只读 MCP，并把 Skill 放入其
+标准全局配置目录。重复执行安装不会生成重复配置。
+
+Claude Code 也支持直接在对话框中安装：
+
+```text
+/plugin marketplace add SanQianX/project-knowledge-base
+/plugin install project-knowledge@project-knowledge
+```
+
+安装、更新、卸载和状态检查使用同一个入口：
+
+```bash
+npx project-knowledge@latest update
+npx project-knowledge@latest uninstall
+project-knowledge integrations status
+```
+
+可以配合 `--ide claude|opencode|codex|all`、`--scope user|project|local`
+以及 `--dry-run`。`project-knowledge-mcp` 仍保留给手工 MCP 配置使用，
+提供识别当前 Git 项目、搜索、问答、读取单条知识和读取历史五个只读工具。
+它严格遵守项目间知识关联范围，并且不会写入知识库；日常写入仍然只由
+post-commit 自动化负责。
+
 仪表盘自动打开 **http://127.0.0.1:5757**。5757 被占时 CLI 会在
 `5757–5776` 内寻找可用端口并打印实际地址。后台守护进程独立于终端，
 `project-knowledge stop` 关闭它。

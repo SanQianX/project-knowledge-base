@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "project-knowledge": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "--package",
+        "project-knowledge@4.1.22",
+        "project-knowledge-mcp"
+      ]
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "project-knowledge",
+  "version": "4.1.22",
+  "description": "Read durable project decisions and implementation history from Project Knowledge.",
+  "author": {
+    "name": "SanQianX",
+    "url": "https://github.com/SanQianX"
+  },
+  "homepage": "https://github.com/SanQianX/project-knowledge-base#readme",
+  "repository": "https://github.com/SanQianX/project-knowledge-base",
+  "license": "Apache-2.0",
+  "keywords": [
+    "knowledge-base",
+    "claude-code",
+    "mcp",
+    "project-history"
+  ]
+}
