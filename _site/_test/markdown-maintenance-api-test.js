@@ -2,79 +2,73 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawnServer, defaultDataDir } = require('./helpers/spawn-server');
+const { execFileSync } = require('child_process');
+const { spawnServer } = require('./helpers/spawn-server');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const PORT = 7931;
+const PORT = 7932;
+const BASE_URL = `http://127.0.0.1:${PORT}`;
+const TEMP = fs.mkdtempSync(path.join(os.tmpdir(), 'index-maintenance-api-v2-'));
+const DATA_DIR = path.join(TEMP, 'data');
+const REPO = path.join(TEMP, 'repo');
 
-async function request(method, route, body) {
-  const response = await fetch(`http://127.0.0.1:${PORT}${route}`, {
+function git(args) { return execFileSync('git', args, { cwd: REPO, encoding: 'utf8' }).trim(); }
+
+async function json(method, route, body) {
+  const response = await fetch(`${BASE_URL}${route}`, {
     method,
-    headers: body ? { 'content-type': 'application/json' } : {},
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
-  const data = await response.json();
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : {};
   if (!response.ok) throw new Error(`${response.status}: ${JSON.stringify(data)}`);
   return data;
 }
 
-async function waitForServer() {
-  for (let i = 0; i < 80; i++) {
-    try { await request('GET', '/api/projects'); return; } catch {}
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
-  throw new Error('server did not start');
-}
-
 (async () => {
-  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'markdown-maintenance-api-'));
-  const dataDir = defaultDataDir('markdown-maintenance-api');
-  const knowledgeRoot = path.join(temp, 'knowledge');
-  const kbPath = path.join(knowledgeRoot, 'demo');
-  fs.mkdirSync(path.join(kbPath, 'modules'), { recursive: true });
-  fs.mkdirSync(path.join(kbPath, 'changes'), { recursive: true });
-  fs.writeFileSync(path.join(kbPath, 'README.md'), '# Demo\n', 'utf8');
-  fs.writeFileSync(path.join(kbPath, 'GOAL.md'), '# Goal\n', 'utf8');
-  fs.writeFileSync(path.join(kbPath, 'ARCHITECTURE.md'), '# Architecture\n', 'utf8');
-  fs.writeFileSync(path.join(kbPath, 'modules', 'core.md'), '---\ntitle: Core\n---\n# Core\n', 'utf8');
-  fs.writeFileSync(path.join(kbPath, 'modules', '00-index.md'), '# Old\n\nTags: all, old, tags\n', 'utf8');
-  fs.writeFileSync(path.join(kbPath, 'changes', '00-index.md'), '# Old\n', 'utf8');
-  fs.writeFileSync(path.join(dataDir, 'projects.json'), JSON.stringify({
-    demo: { displayName: 'Demo', kbPath, enabled: true, knowledgeBackend: 'lancedb', primarySpaceId: 'project:demo' },
-  }, null, 2));
-  fs.writeFileSync(path.join(dataDir, 'knowledge-store.json'), JSON.stringify({
-    schema: 'knowledge-store/v1', rootPath: knowledgeRoot, configured: true, git: { enabled: false },
-  }, null, 2));
-
-  const runtime = spawnServer({ root: ROOT, port: PORT, dataDir, tag: 'markdown-maintenance-api', extraEnv: { KB_EMBEDDING_FAKE: '1' } });
+  fs.mkdirSync(REPO, { recursive: true });
+  git(['init', '--initial-branch=main']);
+  git(['config', 'user.name', 'Index Test']);
+  git(['config', 'user.email', 'index@example.test']);
+  fs.writeFileSync(path.join(REPO, 'README.md'), '# source\n', 'utf8');
+  git(['add', '.']);
+  git(['commit', '-m', 'baseline']);
+  const spawned = spawnServer({ root: ROOT, port: PORT, dataDir: DATA_DIR, tag: 'index-maintenance-v2', extraEnv: { KB_EMBEDDING_FAKE: '1' } });
   try {
-    await waitForServer();
-    const before = await request('GET', '/api/knowledge/markdown-maintenance');
-    assert.equal(before.summary.projects, 1);
-    assert(before.summary.fixable >= 2, 'API audit should expose stale indexes');
-    assert.equal(before.backupRoot, path.join(knowledgeRoot, '.project-knowledge', '_backup', 'markdown-maintenance'));
-
-    const started = await request('POST', '/api/knowledge/markdown-maintenance/optimize', {});
-    assert.equal(started.started, true);
-    let after;
-    for (let i = 0; i < 100; i++) {
-      after = await request('GET', '/api/knowledge/markdown-maintenance');
-      if (!after.running) break;
-      await new Promise(resolve => setTimeout(resolve, 50));
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      try { await json('GET', '/api/health'); break; } catch {
+        if (attempt === 99) throw new Error('server did not start');
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
     }
-    assert.equal(after.lastRun.status, 'completed');
-    assert.equal(after.summary.fixable, 0);
-    assert.equal(after.lastRun.projects.demo.vectorIndexes[0].status, 'succeeded', 'optimized migrated projects should refresh their vector space');
-    assert(!/^Tags:/m.test(fs.readFileSync(path.join(kbPath, 'modules', '00-index.md'), 'utf8')));
-    assert(fs.existsSync(after.lastRun.projects.demo.backupDir), 'backup directory should be retained under the configured knowledge root');
-    const search = await request('POST', '/api/knowledge/search', { projectSlug: 'demo', query: 'Core', limit: 3 });
-    assert(search.results.some(item => item.entry_id === 'modules/core.md'), 'refreshed vector database should return optimized Markdown content');
+    await json('PATCH', '/api/settings', { knowledge: { rootPath: path.join(TEMP, 'knowledge') } });
+    const imported = await json('POST', '/api/projects/import', { projectId: 'maintenance-demo', localPath: REPO, displayName: 'Maintenance demo' });
+    const kbPath = imported.config.knowledgePath;
+    fs.mkdirSync(path.join(kbPath, 'modules'), { recursive: true });
+    fs.writeFileSync(path.join(kbPath, 'GOAL.md'), '# Goal\n\nBuild reliable derived indexes.\n', 'utf8');
+    fs.writeFileSync(path.join(kbPath, 'modules', 'core.md'), '# Core\n\nSingle writer atomic rebuild content.\n', 'utf8');
+    const markdownBefore = fs.readFileSync(path.join(kbPath, 'modules', 'core.md'), 'utf8');
+
+    const before = await json('GET', '/api/knowledge/maintenance');
+    assert.strictEqual(before.indexPath, path.join(DATA_DIR, 'index', 'knowledge.lancedb'));
+    const rebuilt = await json('POST', '/api/knowledge/maintenance/rebuild', {});
+    assert(rebuilt.ok && rebuilt.validation.ok, JSON.stringify(rebuilt));
+    assert(fs.existsSync(before.indexPath));
+    assert.strictEqual(fs.readFileSync(path.join(kbPath, 'modules', 'core.md'), 'utf8'), markdownBefore, 'index maintenance must not rewrite authoritative Markdown');
+    let search = await json('POST', '/api/knowledge/search', { projectId: 'maintenance-demo', query: 'atomic rebuild', limit: 5 });
+    assert.strictEqual(search.source, 'derived-index');
+    assert(search.results.some(item => item.entry_id === 'modules/core.md'));
+
+    fs.writeFileSync(path.join(kbPath, 'modules', 'core.md'), `${markdownBefore}\nSecond rebuild evidence.\n`, 'utf8');
+    const second = await json('POST', '/api/knowledge/maintenance/rebuild', {});
+    assert(second.ok && second.backup && fs.existsSync(second.backup), 'replacing a live index should retain the previous index under recovery');
+    search = await json('POST', '/api/knowledge/search', { projectId: 'maintenance-demo', query: 'Second rebuild evidence', limit: 5 });
+    assert(search.results.some(item => /Second rebuild evidence/.test(item.chunk_text)));
+    const after = await json('GET', '/api/knowledge/maintenance');
+    assert(after.projects.every(project => project.index.dirty === false));
     console.log('markdown-maintenance-api-test: PASS');
   } finally {
-    runtime.cleanup();
-    fs.rmSync(temp, { recursive: true, force: true });
+    spawned.child.kill();
   }
-})().catch(error => {
-  console.error(error);
-  process.exit(1);
-});
+})().catch(error => { console.error(error); process.exitCode = 1; });

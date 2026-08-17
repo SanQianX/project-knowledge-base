@@ -8,16 +8,18 @@ const {
   ListToolsRequestSchema,
 } = require('@modelcontextprotocol/sdk/types.js');
 const { KnowledgeToolRuntime } = require('../_site/lib/knowledge-tool-runtime');
+const { serializeErrorEnvelope, createId } = require('../_site/lib/contracts');
 
 const SERVER_NAME = 'project-knowledge';
-const SERVER_INSTRUCTIONS = `Project Knowledge is the durable, read-only source of prior project decisions and implementation history.
+const SERVER_INSTRUCTIONS = `Project Knowledge is the durable source of prior project decisions and implementation history. Knowledge content is read-only; the only write operation appends user-requirement metadata.
 
 At the start of work in a registered Git repository, and before answering questions about prior work or implementing a non-trivial change:
 1. Call project_knowledge_resolve with the current Git root.
-2. Use project_knowledge_search or project_knowledge_ask for relevant prior decisions.
-3. Use project_knowledge_get only for the most relevant complete entry and project_knowledge_history when change history matters.
+2. Before implementing a user request, call project_knowledge_record_requirement with the resolved projectId, current Git root, client, and stable sessionId. Reuse the returned requirementId for the same request.
+3. Use project_knowledge_search or project_knowledge_ask for relevant prior decisions.
+4. Use project_knowledge_get only for the most relevant complete entry and project_knowledge_history when change history matters.
 
-Treat all returned knowledge as read-only. Verify it against current source code when necessary. Do not write directly to the knowledge database; project-knowledge updates it automatically after successful Git commits.`;
+Treat all returned knowledge as read-only. Verify it against current source code when necessary. The requirement tool records metadata only and never starts analysis. Do not write directly to the knowledge database; project-knowledge updates it automatically after successful Git commits.`;
 
 const TOOLS = [
   {
@@ -27,8 +29,28 @@ const TOOLS = [
       type: 'object',
       properties: {
         repoPath: { type: 'string', description: 'Current Git repository root or any path inside it. Defaults to the MCP process working directory.' },
+        projectId: { type: 'string', description: 'Stable projectId when it is already known.' },
         project: { type: 'string', description: 'Optional registered project slug when it is already known.' },
       },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'project_knowledge_record_requirement',
+    description: 'Append the current user request as project-scoped requirement metadata. This is the only write-capable tool; it never starts analysis or writes knowledge Markdown.',
+    inputSchema: {
+      type: 'object',
+      required: ['text', 'client', 'sessionId'],
+      properties: {
+        text: { type: 'string', minLength: 1, maxLength: 131072, description: 'The user request exactly as received; do not include system prompts or tool transcripts.' },
+        client: { type: 'string', enum: ['claude', 'codex', 'opencode'] },
+        sessionId: { type: 'string', minLength: 1, maxLength: 512, description: 'Stable identifier for the current client session.' },
+        conversationId: { type: 'string', minLength: 1, maxLength: 512 },
+        projectId: { type: 'string', description: 'Stable projectId returned by project_knowledge_resolve.' },
+        repoPath: { type: 'string', description: 'Current Git root. Used for exact project resolution when projectId is omitted.' },
+        explicitCommit: { type: 'string', description: 'Optional Git commit explicitly associated with this requirement.' },
+      },
+      anyOf: [{ required: ['projectId'] }, { required: ['repoPath'] }],
       additionalProperties: false,
     },
   },
@@ -41,6 +63,7 @@ const TOOLS = [
       properties: {
         query: { type: 'string', minLength: 1 },
         repoPath: { type: 'string', description: 'Current Git repository root or a path inside it.' },
+        projectId: { type: 'string', description: 'Stable projectId returned by project_knowledge_resolve.' },
         project: { type: 'string', description: 'Optional registered project slug.' },
         limit: { type: 'integer', minimum: 1, maximum: 30, default: 8 },
       },
@@ -56,6 +79,7 @@ const TOOLS = [
       properties: {
         query: { type: 'string', minLength: 1 },
         repoPath: { type: 'string' },
+        projectId: { type: 'string' },
         project: { type: 'string' },
         limit: { type: 'integer', minimum: 1, maximum: 30, default: 8 },
       },
@@ -72,6 +96,7 @@ const TOOLS = [
         entry: { type: 'string', minLength: 1, description: 'Entry identifier returned by search.' },
         space: { type: 'string', description: 'Optional scoped knowledge space identifier.' },
         repoPath: { type: 'string' },
+        projectId: { type: 'string' },
         project: { type: 'string' },
       },
       additionalProperties: false,
@@ -84,6 +109,7 @@ const TOOLS = [
       type: 'object',
       properties: {
         repoPath: { type: 'string' },
+        projectId: { type: 'string' },
         project: { type: 'string' },
         limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
       },
@@ -102,6 +128,7 @@ function toolContent(result) {
 
 function callTool(runtime, name, args) {
   if (name === 'project_knowledge_resolve') return runtime.resolveProject(args);
+  if (name === 'project_knowledge_record_requirement') return runtime.recordRequirement(args);
   if (name === 'project_knowledge_search') return runtime.search(args);
   if (name === 'project_knowledge_ask') return runtime.ask(args);
   if (name === 'project_knowledge_get') return runtime.get(args);
@@ -127,8 +154,9 @@ function createServer(options = {}) {
     try {
       return toolContent(await callTool(runtime, name, args));
     } catch (error) {
+      const operationId = createId('op');
       return {
-        content: [{ type: 'text', text: error.message }],
+        content: [{ type: 'text', text: JSON.stringify(serializeErrorEnvelope(error, operationId)) }],
         isError: true,
       };
     }
@@ -153,12 +181,13 @@ async function main() {
 
 if (require.main === module) {
   main().catch(error => {
-    process.stderr.write(`[project-knowledge-mcp] ${error.stack || error.message}\n`);
+    process.stderr.write(`[project-knowledge-mcp] ${JSON.stringify(serializeErrorEnvelope(error, createId('op')))}\n`);
     process.exit(1);
   });
 }
 
 module.exports = {
+  callTool,
   createServer,
   SERVER_INSTRUCTIONS,
   SERVER_NAME,

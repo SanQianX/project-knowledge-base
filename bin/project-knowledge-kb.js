@@ -1,65 +1,65 @@
 #!/usr/bin/env node
 
-const fs = require('fs');
-const path = require('path');
-const { getDataDir } = require('../_site/lib/data-dir');
-const { KnowledgeDatabase } = require('../_site/lib/knowledge-db');
-const { LocalEmbeddingService } = require('../_site/lib/embedding-service');
-const { KnowledgeScopeRegistry } = require('../_site/lib/knowledge-scope-registry');
-const { KnowledgeQueryService } = require('../_site/lib/knowledge-query-service');
+const { KnowledgeToolRuntime } = require('../_site/lib/knowledge-tool-runtime');
+const { serializeErrorEnvelope, createId } = require('../_site/lib/contracts');
 
-function options(args) {
+function parseOptions(args) {
   const first = args[0] || 'help';
-  const out = { command: first === '--help' || first === '-h' ? 'help' : first };
-  for (let i = 1; i < args.length; i++) {
-    const key = args[i];
+  const output = { command: first === '--help' || first === '-h' ? 'help' : first };
+  for (let index = 1; index < args.length; index += 1) {
+    const key = args[index];
     if (!key.startsWith('--')) continue;
-    const name = key.slice(2).replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
-    if (args[i + 1] && !args[i + 1].startsWith('--')) out[name] = args[++i];
-    else out[name] = true;
+    const name = key.slice(2).replace(/-([a-z])/g, (_match, letter) => letter.toUpperCase());
+    if (args[index + 1] && !args[index + 1].startsWith('--')) output[name] = args[++index];
+    else output[name] = true;
   }
-  return out;
+  return output;
 }
 
 function help() {
-  console.log(`project-knowledge-kb
+  process.stdout.write(`project-knowledge-kb
 
 Read-only local knowledge tools:
-  project-knowledge-kb search  --project <slug> --query <text> [--limit 8]
-  project-knowledge-kb ask     --project <slug> --query <text> [--limit 8]
-  project-knowledge-kb get     --project <slug> --entry <path> [--space <space-id>]
-  project-knowledge-kb history --project <slug> [--limit 20]
+  project-knowledge-kb search  --project <projectId-or-legacy-slug> --query <text> [--limit 8]
+  project-knowledge-kb ask     --project <projectId-or-legacy-slug> --query <text> [--limit 8]
+  project-knowledge-kb get     --project <projectId-or-legacy-slug> --entry <path>
+  project-knowledge-kb history --project <projectId-or-legacy-slug> [--limit 20]
 
-Add --json for machine-readable output. These commands never modify knowledge.`);
+Add --json for machine-readable output. These commands never modify knowledge or project configuration.\n`);
 }
 
-async function main() {
-  const args = options(process.argv.slice(2));
-  if (args.command === 'help' || args.help) return help();
+async function main(argv = process.argv.slice(2), options = {}) {
+  const args = parseOptions(argv);
+  if (args.command === 'help' || args.help) {
+    help();
+    return 0;
+  }
   if (!['search', 'ask', 'get', 'history'].includes(args.command)) throw new Error(`unknown command: ${args.command}`);
   if (!args.project) throw new Error('--project is required');
-  const dataDir = getDataDir();
-  const projectsPath = path.join(dataDir, 'projects.json');
-  const projects = JSON.parse(fs.readFileSync(projectsPath, 'utf8'));
-  const database = new KnowledgeDatabase({ dbPath: path.join(dataDir, 'knowledge.lancedb') });
-  const embedder = new LocalEmbeddingService({ cacheDir: path.join(dataDir, 'models') });
-  const scopeRegistry = new KnowledgeScopeRegistry({ filePath: path.join(dataDir, 'knowledge-scopes.json') });
-  const service = new KnowledgeQueryService({ database, embedder, scopeRegistry, readProjects: () => projects });
+  const runtime = options.runtime || new KnowledgeToolRuntime(options);
   try {
+    const input = { project: args.project, query: args.query, limit: args.limit, entry: args.entry };
     let result;
-    if (args.command === 'search') result = await service.search({ projectSlug: args.project, query: args.query, limit: args.limit });
-    else if (args.command === 'ask') result = await service.ask({ projectSlug: args.project, query: args.query, limit: args.limit });
-    else if (args.command === 'get') result = await service.get({ projectSlug: args.project, entryId: args.entry, spaceId: args.space });
-    else result = await service.history({ projectSlug: args.project, limit: args.limit });
-    if (args.json) console.log(JSON.stringify(result, null, 2));
-    else if (args.command === 'ask') console.log(result.answer);
-    else console.log(JSON.stringify(result, null, 2));
+    if (args.command === 'search') result = await runtime.search(input);
+    else if (args.command === 'ask') result = await runtime.ask(input);
+    else if (args.command === 'get') result = await runtime.get(input);
+    else result = await runtime.history(input);
+    if (args.json || args.command !== 'ask') process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    else process.stdout.write(`${result.answer}\n`);
+    return 0;
   } finally {
-    await database.close();
+    await runtime.close();
   }
 }
 
-main().catch(error => {
-  console.error(`project-knowledge-kb: ${error.message}`);
-  process.exit(1);
-});
+if (require.main === module) {
+  const jsonMode = process.argv.includes('--json');
+  const operationId = createId('op');
+  main().catch(error => {
+    if (jsonMode) process.stderr.write(`${JSON.stringify(serializeErrorEnvelope(error, operationId))}\n`);
+    else process.stderr.write(`project-knowledge-kb: ${String(error && error.message || 'The operation failed.')} [${operationId}]\n`);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { main, parseOptions };

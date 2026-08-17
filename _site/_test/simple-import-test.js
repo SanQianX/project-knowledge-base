@@ -1,121 +1,98 @@
-// Simple project import test.
-// Verifies the one-path import flow initializes Git, KB files, Hook automation,
-// and a project-init automation run.
-
+const assert = require('assert');
 const fs = require('fs');
-const path = require('path');
 const os = require('os');
+const path = require('path');
+const { spawnSync } = require('child_process');
 const { spawnServer } = require('./helpers/spawn-server');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), `kb-data-simple-import-${process.pid}-`));
-const PORT = process.env.KB_SIMPLE_IMPORT_PORT || '7824';
-const BASE_URL = `http://127.0.0.1:${PORT}`;
-const TEMP_REPO = fs.mkdtempSync(path.join(os.tmpdir(), `kb-simple-import-repo-${process.pid}-`));
+const PORT = 7824;
+const BASE = `http://127.0.0.1:${PORT}`;
+const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pkb-import-v2-'));
+const repoPath = fs.mkdtempSync(path.join(os.tmpdir(), 'pkb-import-repo-'));
+const knowledgeRoot = path.join(dataDir, 'knowledge');
 
-process.env.KB_DATA_DIR = DATA_DIR;
-require('../lib/data-dir')._resetCache();
-fs.writeFileSync(path.join(DATA_DIR, 'projects.json'), '{}\n', 'utf-8');
-fs.writeFileSync(path.join(DATA_DIR, 'ai-profiles.json'), JSON.stringify({
-  schema: 'ai-profiles/v1',
-  profiles: [{
-    id: 'test-profile',
-    name: 'Test Profile',
-    enabled: true,
-    implementation: 'claude-code-agent',
-    baseUrl: 'https://example.test/anthropic',
-    apiKey: 'test-key',
-    mainModel: 'test-model',
-  }, {
-    id: 'second-profile',
-    name: 'Second Profile',
-    enabled: true,
-    implementation: 'claude-code-agent',
-    baseUrl: 'https://example.test/anthropic',
-    apiKey: 'test-key-2',
-    mainModel: 'test-model-2',
-  }],
-}, null, 2) + '\n', 'utf-8');
+function git(args) {
+  const result = spawnSync('git', args, { cwd: repoPath, encoding: 'utf8' });
+  assert.strictEqual(result.status, 0, result.stderr);
+  return String(result.stdout || '').trim();
+}
 
-function assert(cond, msg) {
-  if (!cond) throw new Error(msg);
+async function request(method, pathname, body) {
+  const response = await fetch(`${BASE}${pathname}`, {
+    method,
+    headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  return { status: response.status, data: await response.json() };
 }
 
 async function waitForServer() {
-  const deadline = Date.now() + 15000;
-  let lastError;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`${BASE_URL}/api/state`);
-      if (res.ok) return;
-      lastError = new Error(`HTTP ${res.status}`);
-    } catch (e) {
-      lastError = e;
-    }
-    await new Promise(resolve => setTimeout(resolve, 250));
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    try { if ((await fetch(`${BASE}/api/health`)).ok) return; } catch {}
+    await new Promise(resolve => setTimeout(resolve, 100));
   }
-  throw lastError || new Error('server did not start');
-}
-
-async function json(method, url, body) {
-  const res = await fetch(`${BASE_URL}${url}`, {
-    method,
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const text = await res.text();
-  let data = {};
-  if (text) {
-    try { data = JSON.parse(text); } catch { data = { raw: text }; }
-  }
-  return { res, data };
+  throw new Error('server did not start');
 }
 
 (async () => {
-  fs.writeFileSync(path.join(TEMP_REPO, 'README.md'), '# simple import\n', 'utf-8');
+  git(['init', '--initial-branch=main']);
+  git(['config', 'user.email', 'import@example.test']);
+  git(['config', 'user.name', 'Import Test']);
+  fs.writeFileSync(path.join(repoPath, 'README.md'), '# source\n', 'utf8');
+  git(['add', 'README.md']);
+  git(['commit', '-m', 'baseline']);
+  const baseline = git(['rev-parse', 'HEAD']);
 
-  const spawned = spawnServer({
-    root: ROOT,
-    port: Number(PORT),
-    dataDir: DATA_DIR,
-    tag: 'simple-import',
-    extraEnv: { KB_AUTOMATION_FAKE_CLAUDE: '1' },
-  });
-  const child = spawned.child;
-  let serverOutput = '';
-  child.stdout.on('data', d => { serverOutput += d.toString(); });
-  child.stderr.on('data', d => { serverOutput += d.toString(); });
-
+  const spawned = spawnServer({ root: ROOT, port: PORT, dataDir, tag: 'simple-import-v2', extraEnv: { KB_SKIP_MIGRATION: '1' } });
+  let output = '';
+  spawned.child.stdout.on('data', chunk => { output += chunk; });
+  spawned.child.stderr.on('data', chunk => { output += chunk; });
   try {
     await waitForServer();
-    const r = await json('POST', '/api/projects/import', { localPath: TEMP_REPO, aiProfileId: 'second-profile' });
-    assert(r.res.ok, `import should succeed: ${JSON.stringify(r.data)}`);
-    assert(r.data.slug, 'import should return slug');
-    assert(r.data.gitInit && r.data.gitInit.initialized === true, 'non-git folder should be initialized');
-    assert(r.data.config.aiProfileId === 'test-profile', 'import should assign default first usable AI profile');
-    assert(r.data.config.automation.enabled === true, 'automation should be enabled');
-    assert(r.data.config.automation.postCommitEnabled === true, 'post-commit automation should be enabled');
-    assert(r.data.config.automation.allowReadOnlyBash === true, 'read-only Bash should be enabled');
-    assert(!Object.prototype.hasOwnProperty.call(r.data.config.automation, 'knowledgeMode'), 'legacy knowledge mode should be absent');
-    assert(r.data.config.automation.hookPromptTemplate.includes('单个 Git 提交'), 'default hook prompt should enforce one commit per task');
-    assert(r.data.config.automation.initPromptTemplate.includes('直接初始化知识库'), 'init prompt should be stored');
-    assert(r.data.config.claudeWorkbench.permissionMode === 'acceptEdits', 'permission mode should default to acceptEdits');
-    assert(fs.existsSync(path.join(r.data.config.kbPath, 'README.md')), 'KB README should be initialized');
-    assert(r.data.hookResult && r.data.hookResult.ok === true, 'managed hook should be installed');
-    assert(r.data.initAutomation && r.data.initAutomation.ok === true, 'project-init automation should dispatch');
+    let result = await request('PATCH', '/api/settings', { knowledge: { rootPath: knowledgeRoot } });
+    assert.strictEqual(result.status, 200, JSON.stringify(result.data));
 
-    const runs = await json('GET', `/api/projects/${r.data.slug}/automation/runs`);
-    assert(runs.res.ok, 'automation runs should be readable');
-    assert((runs.data.runs || []).some(run => run.source === 'project-init'), 'project-init run should be persisted');
+    result = await request('POST', '/api/projects/import', { localPath: repoPath, displayName: 'Imported v2' });
+    assert.strictEqual(result.status, 201, JSON.stringify(result.data));
+    assert.match(result.data.projectId, /^project-/);
+    assert.strictEqual(result.data.project.config.projectId, result.data.projectId);
+    assert.strictEqual(result.data.project.state.trackingStartCommit, baseline);
+    assert.strictEqual(result.data.project.state.lastAnalyzedCommit, null);
+    assert.strictEqual(result.data.project.state.analysis.status, 'idle');
+    assert.strictEqual(result.data.hook.ok, true);
+    assert.strictEqual(result.data.project.state.hook.managedVersion, 2);
+    assert.deepStrictEqual(fs.readdirSync(result.data.project.config.knowledgePath), [], 'import must not create speculative knowledge');
+    assert(!fs.existsSync(path.join(dataDir, 'projects', result.data.projectId, 'requirements.jsonl')));
 
-    console.log('simple import test passed');
-  } catch (e) {
-    console.error('simple import test failed:', e.message);
-    if (serverOutput) console.error(serverOutput);
-    process.exitCode = 1;
+    const projectId = result.data.projectId;
+    result = await request('PATCH', `/api/projects/${projectId}`, { displayName: 'Renamed safely', knowledgeLanguage: 'en-US' });
+    assert.strictEqual(result.status, 200, JSON.stringify(result.data));
+    assert.strictEqual(result.data.config.displayName, 'Renamed safely');
+    result = await request('PATCH', `/api/projects/${projectId}`, { repoPath: path.join(repoPath, 'unverified') });
+    assert.strictEqual(result.status, 400, 'generic PATCH must not bypass Hook-verified repo relocation');
+    assert.strictEqual(result.data.error.code, 'INVALID_ARGUMENT');
+    result = await request('PATCH', `/api/projects/${projectId}`, { teamBinding: { provider: 'github' } });
+    assert.strictEqual(result.status, 400, 'generic PATCH must not change a fixed team binding');
+
+    const hookPath = path.join(repoPath, '.git', 'hooks', 'post-commit');
+    assert(fs.existsSync(hookPath), 'managed Hook was not installed');
+    const hook = fs.readFileSync(hookPath, 'utf8');
+    assert(hook.includes('PROJECT-KNOWLEDGE-HOOK'));
+    assert(hook.includes(projectId));
+
+    result = await request('GET', '/api/projects');
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(result.data.projects.length, 1);
+    assert.strictEqual(result.data.projects[0].projectId, result.data.projects[0].config.projectId);
+    assert(!fs.existsSync(path.join(dataDir, 'runtime', 'staging')), 'import must not dispatch analysis');
+    console.log('simple-import-test PASS');
+  } catch (error) {
+    console.error(output);
+    throw error;
   } finally {
-    try { child.kill(); } catch {}
-    try { fs.rmSync(TEMP_REPO, { recursive: true, force: true }); } catch {}
-    try { fs.rmSync(DATA_DIR, { recursive: true, force: true }); } catch {}
+    spawned.cleanup();
+    fs.rmSync(dataDir, { recursive: true, force: true });
+    fs.rmSync(repoPath, { recursive: true, force: true });
   }
-})();
+})().catch(error => { console.error(error); process.exitCode = 1; });

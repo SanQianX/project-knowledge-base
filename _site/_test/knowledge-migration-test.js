@@ -2,191 +2,74 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { StorageLayout } = require('../lib/storage-layout');
+const { SettingsStore } = require('../lib/settings-store');
+const { ProjectStore } = require('../lib/project-store');
+const { MigrationService } = require('../lib/migration-service');
 const { KnowledgeDatabase } = require('../lib/knowledge-db');
-const { KnowledgeMigrationManager } = require('../lib/knowledge-migration');
 const { EMBEDDING_DIMENSIONS } = require('../lib/knowledge-schema');
-const { spawnServer } = require('./helpers/spawn-server');
-
-const ROOT = path.resolve(__dirname, '..', '..');
-const PORT = 7927;
-
-async function request(method, route, body) {
-  const response = await fetch(`http://127.0.0.1:${PORT}${route}`, {
-    method,
-    headers: body ? { 'content-type': 'application/json' } : {},
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(`${response.status}: ${JSON.stringify(data)}`);
-  return data;
-}
-
-async function waitForServer() {
-  for (let i = 0; i < 60; i++) {
-    try { await request('GET', '/api/projects'); return; } catch {}
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
-  throw new Error('server did not start');
-}
-
-function fakeVector(text) {
-  const vector = new Array(EMBEDDING_DIMENSIONS).fill(0);
-  for (let i = 0; i < String(text).length; i++) vector[String(text).charCodeAt(i) % EMBEDDING_DIMENSIONS] += 1;
-  const norm = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0)) || 1;
-  return vector.map(value => value / norm);
-}
 
 (async () => {
-  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'knowledge-migration-test-'));
-  const db = new KnowledgeDatabase({ dbPath: path.join(temp, 'knowledge.lancedb') });
-  try {
-    const personalKb = path.join(temp, 'projects', 'api');
-    const teamKb = path.join(temp, 'team-store', 'knowledge', 'shared');
-    fs.mkdirSync(path.join(personalKb, 'modules'), { recursive: true });
-    fs.mkdirSync(path.join(teamKb, 'changes'), { recursive: true });
-    fs.writeFileSync(path.join(personalKb, 'GOAL.md'), '# API 目标\n\n提供稳定认证接口。\n', 'utf8');
-    fs.writeFileSync(path.join(personalKb, 'modules', 'auth.md'), '# 认证\n\n刷新令牌可轮换。\n', 'utf8');
-    fs.writeFileSync(path.join(personalKb, 'modules', '00-index.md'), '# Modules Index\n\nTags: derived\n', 'utf8');
-    fs.writeFileSync(path.join(teamKb, 'README.md'), '# 团队知识\n\n多项目共享约定。\n', 'utf8');
-    fs.writeFileSync(path.join(teamKb, 'changes', 'abc.md'), '# 变更\n\n统一请求标识。\n', 'utf8');
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'knowledge-migration-v2-'));
+  const oldKnowledgeRoot = path.join(dataDir, 'old-knowledge');
+  const fixedKnowledgePath = path.join(oldKnowledgeRoot, 'api-fixed');
+  const legacyIndex = path.join(dataDir, 'knowledge.lancedb');
+  fs.mkdirSync(fixedKnowledgePath, { recursive: true });
+  fs.writeFileSync(path.join(fixedKnowledgePath, 'GOAL.md'), '# API goal\n\nAuthoritative Markdown remains external.\n', 'utf8');
+  fs.writeFileSync(path.join(dataDir, 'projects.json'), JSON.stringify({
+    api: {
+      displayName: 'API', localPath: dataDir, gitPath: dataDir, kbPath: fixedKnowledgePath,
+      trackingStartCommit: 'track-before', lastAnalyzedCommit: 'commit-before', enabled: true,
+    },
+  }, null, 2));
+  fs.writeFileSync(path.join(dataDir, 'knowledge-store.json'), JSON.stringify({ rootPath: oldKnowledgeRoot, configured: true }));
+  fs.writeFileSync(path.join(dataDir, 'ai-profiles.json'), JSON.stringify({ schema: 'ai-profiles/v1', profiles: [{ id: 'primary', apiKey: 'migration-secret-value' }] }));
+  fs.writeFileSync(path.join(dataDir, 'logging.json'), JSON.stringify({ levels: ['debug', 'info', 'error'], retentionDays: 0, maxTotalSizeMB: 128 }));
+  fs.writeFileSync(path.join(dataDir, '.hook-trigger-errors.log'), '2026-01-01 legacy hook error\n', 'utf8');
 
-    const projects = {
-      api: { displayName: 'API', kbPath: personalKb, primarySpaceId: 'project:api', knowledgeBackend: 'markdown', headCommit: 'abc' },
-      web: { displayName: 'Web', kbPath: teamKb, primarySpaceId: 'team:store:shared', knowledgeBackend: 'markdown', knowledgeMode: 'team', kbId: 'shared' },
-    };
-    const patches = {};
-    const manager = new KnowledgeMigrationManager({
-      dataDir: temp,
-      database: db,
-      embedder: { embedPassage: async text => fakeVector(text) },
-      onProjectMigrated: async (slug, patch) => {
-        patches[slug] = patch;
-        Object.assign(projects[slug], patch);
-      },
-    });
-    assert.equal(manager.inspect(projects).eligible, 2);
-    const result = await manager.migrateAll(projects);
-    assert.equal(result.status, 'completed');
-    assert.equal(result.completed, 2);
-    assert.equal(result.failed, 0);
-    assert.equal(patches.api.knowledgeBackend, 'lancedb');
-    assert.equal(patches.web.teamSyncTransport, 'markdown-v1');
-    assert.equal(await db.count(['project:api']), 2);
-    assert.equal(await db.count(['team:store:shared']), 2);
-    assert.ok(fs.existsSync(path.join(result.projects.api.backupPath, 'migration-manifest.json')));
-    assert.ok(fs.existsSync(path.join(result.projects.api.backupPath, 'modules', '00-index.md')), 'compatibility index must remain in the migration backup');
-    assert(!((await db.entryIds('project:api')).includes('modules/00-index.md')), 'compatibility index must not enter LanceDB');
-    assert.ok(fs.existsSync(path.join(personalKb, 'GOAL.md')), 'legacy Markdown must remain untouched');
-    const second = await manager.migrateAll(projects);
-    assert.equal(second.message, 'no legacy projects need migration');
+  const vector = new Array(EMBEDDING_DIMENSIONS).fill(0);
+  vector[9] = 1;
+  const oldDatabase = new KnowledgeDatabase({ dbPath: legacyIndex });
+  await oldDatabase.replaceEntry('project:api', 'GOAL.md', [{ chunkOrder: 0, title: 'Legacy index', chunkText: 'A migrated derived row.', vector }]);
+  await oldDatabase.close();
+  const oldIndexRows = await (async () => {
+    const db = new KnowledgeDatabase({ dbPath: legacyIndex });
+    try { return await db.count(); } finally { await db.close(); }
+  })();
 
-    let indexCalled = false;
-    const blockedManager = new KnowledgeMigrationManager({
-      dataDir: temp,
-      statePath: path.join(temp, 'blocked-migration.json'),
-      database: db,
-      embedder: {
-        load: async () => { throw new Error('model download unavailable'); },
-        status: () => ({ modelId: 'Xenova/bge-small-zh-v1.5', remoteHost: 'https://models.invalid/' }),
-      },
-      indexer: { indexDirectory: async () => { indexCalled = true; throw new Error('must not index without a model'); } },
-    });
-    const blocked = await blockedManager.migrateAll({ api: { ...projects.api, knowledgeBackend: 'markdown' } });
-    assert.equal(blocked.status, 'model-required');
-    assert.equal(blocked.failed, 0, 'a shared model failure must not be counted once per project');
-    assert.match(blocked.error, /model download unavailable/);
-    assert.equal(indexCalled, false);
+  const layout = new StorageLayout({ dataDir });
+  const migration = new MigrationService({
+    layout,
+    legacyDataDir: dataDir,
+    indexValidator: async candidate => {
+      const db = new KnowledgeDatabase({ dbPath: candidate });
+      try { await db.open(); return { ok: (await db.count()) === oldIndexRows }; }
+      finally { await db.close(); }
+    },
+  });
+  const result = await migration.migrateIfNeeded({ migrationRunId: 'knowledge-index-v2' });
+  assert(result.ok && result.completed && result.migrated, JSON.stringify(result));
+  const projectId = result.projectMap.api;
+  const projectStore = new ProjectStore({ layout });
+  const config = projectStore.readConfig(projectId);
+  const state = projectStore.readState(projectId);
+  assert.strictEqual(config.knowledgePath, fixedKnowledgePath, 'legacy kbPath must be preserved exactly');
+  assert.strictEqual(state.trackingStartCommit, 'track-before');
+  assert.strictEqual(state.lastAnalyzedCommit, 'commit-before');
+  assert.strictEqual(new SettingsStore({ layout }).read().ai.profiles[0].apiKey, 'migration-secret-value');
+  const migratedDatabase = new KnowledgeDatabase({ dbPath: layout.getIndexPath() });
+  assert.strictEqual(await migratedDatabase.count(), 1, 'the validated legacy index should be copied to the one internal index path');
+  await migratedDatabase.close();
+  assert(fs.existsSync(legacyIndex), 'legacy index source must remain for rollback');
+  assert(fs.existsSync(path.join(result.recoveryDir, 'backup', 'knowledge.lancedb')), 'recovery must retain an index backup');
+  assert(fs.existsSync(path.join(dataDir, '.hook-trigger-errors.log')), 'legacy hook logs must remain at the source');
+  assert(fs.existsSync(path.join(result.recoveryDir, 'backup', '.hook-trigger-errors.log')));
 
-    const runtime = spawnServer({ root: ROOT, port: PORT, tag: 'knowledge-migration-api', extraEnv: { KB_EMBEDDING_FAKE: '1' } });
-    try {
-      const apiKb = path.join(runtime.dataDir, 'projects', 'api');
-      fs.mkdirSync(apiKb, { recursive: true });
-      fs.writeFileSync(path.join(apiKb, 'GOAL.md'), '# API\n\n迁移接口测试。\n', 'utf8');
-      fs.writeFileSync(path.join(runtime.dataDir, 'projects.json'), JSON.stringify({
-        api: { displayName: 'API', kbPath: apiKb, localPath: temp, gitPath: temp, enabled: true },
-      }, null, 2));
-      await waitForServer();
-      const modelBefore = await request('GET', '/api/knowledge/model/status');
-      assert.equal(modelBefore.installed, true);
-      const modelConfig = await request('PUT', '/api/knowledge/model/config', {
-        remoteHost: 'https://model-mirror.example/', localModelPath: '', localFilesOnly: false,
-      });
-      assert.equal(modelConfig.config.remoteHost, 'https://model-mirror.example/');
-      const modelDownload = await request('POST', '/api/knowledge/model/download', {});
-      assert.equal(modelDownload.started, true);
-      let modelAfter;
-      for (let i = 0; i < 50; i++) {
-        modelAfter = await request('GET', '/api/knowledge/model/status');
-        if (!modelAfter.downloading) break;
-        await new Promise(resolve => setTimeout(resolve, 50));
-      }
-      assert.equal(modelAfter.state.status, 'ready');
-      assert.match(modelAfter.environmentExamples.remoteHost, /KB_EMBEDDING_REMOTE_HOST/);
-      const before = await request('GET', '/api/knowledge/migration');
-      assert.equal(before.eligible, 1);
-      const started = await request('POST', '/api/knowledge/migration/start', {});
-      assert.equal(started.started, true);
-      let status;
-      for (let i = 0; i < 100; i++) {
-        status = await request('GET', '/api/knowledge/migration');
-        if (!status.running && status.projects.api?.status === 'completed') break;
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-      assert.equal(status.projects.api.status, 'completed');
-      const savedProjects = await request('GET', '/api/projects');
-      assert.equal(savedProjects.api.knowledgeBackend, 'lancedb');
-      assert.equal(savedProjects.api.legacyKbPath, apiKb);
-      const searched = await request('POST', '/api/knowledge/search', { projectSlug: 'api', query: '迁移接口', limit: 5 });
-      assert.equal(searched.results[0].space_id, savedProjects.api.primarySpaceId);
-      assert.match(searched.results[0].chunk_text, /迁移接口测试/);
-      const asked = await request('POST', '/api/knowledge/ask', { projectSlug: 'api', query: '迁移接口', limit: 5 });
-      assert.match(asked.answer, /相关知识记录/);
-      const maintenanceBefore = await request('GET', '/api/knowledge/maintenance');
-      assert.equal(maintenanceBefore.rows, 1);
-      assert.equal(maintenanceBefore.exists, true);
-      assert.equal(maintenanceBefore.dbPath, path.join(runtime.dataDir, 'projects', '.project-knowledge', 'knowledge.lancedb'));
-      const rebuildStarted = await request('POST', '/api/knowledge/maintenance/rebuild', { keepBackup: true });
-      assert.equal(rebuildStarted.started, true);
-      let maintenanceAfter;
-      for (let i = 0; i < 100; i++) {
-        maintenanceAfter = await request('GET', '/api/knowledge/maintenance');
-        if (!maintenanceAfter.running && maintenanceAfter.status === 'completed') break;
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-      assert.equal(maintenanceAfter.status, 'completed');
-      assert.equal(maintenanceAfter.rows, 1);
-      assert.equal(maintenanceAfter.ftsSchemaVersion, 2);
-      assert.equal(maintenanceAfter.backupRetained, true);
-      assert.ok(fs.existsSync(maintenanceAfter.lastBackupPath));
-      const searchedAfterRebuild = await request('POST', '/api/knowledge/search', { projectSlug: 'api', query: 'migration API', limit: 5 });
-      assert.equal(searchedAfterRebuild.results[0].space_id, savedProjects.api.primarySpaceId);
-      const relocatedRoot = path.join(runtime.dataDir, 'external-knowledge-root');
-      const relocated = await request('PUT', '/api/knowledge-store/config', { rootPath: relocatedRoot });
-      const relocatedDb = path.join(relocatedRoot, '.project-knowledge', 'knowledge.lancedb');
-      assert.equal(relocated.storage.databasePath, relocatedDb);
-      assert.equal(relocated.storage.followsConfiguredRoot, true);
-      assert.equal(relocated.relocation.moved, true);
-      assert.ok(fs.existsSync(relocatedDb));
-      assert.ok(!fs.existsSync(maintenanceBefore.dbPath));
-      const maintenanceRelocated = await request('GET', '/api/knowledge/maintenance');
-      assert.equal(maintenanceRelocated.dbPath, relocatedDb);
-      assert.equal(maintenanceRelocated.rows, 1);
-      assert.equal(maintenanceRelocated.lastBackupPath, path.join(relocatedRoot, '.project-knowledge', '_backup', 'knowledge-db', path.basename(maintenanceAfter.lastBackupPath)));
-      assert.ok(fs.existsSync(maintenanceRelocated.lastBackupPath));
-      const searchedAfterRelocation = await request('POST', '/api/knowledge/search', { projectSlug: 'api', query: 'migration API', limit: 5 });
-      assert.equal(searchedAfterRelocation.results[0].space_id, savedProjects.api.primarySpaceId);
-      const rolledBack = await request('POST', '/api/projects/api/knowledge-migration/rollback', {});
-      assert.equal(rolledBack.knowledgeBackend, 'markdown');
-      assert.equal(rolledBack.retainedDatabase, true);
-    } finally {
-      runtime.cleanup();
-    }
-    console.log('knowledge-migration-test: PASS');
-  } finally {
-    await db.close();
-    fs.rmSync(temp, { recursive: true, force: true });
-  }
-})().catch(error => {
-  console.error(error);
-  process.exit(1);
-});
+  const settings = new SettingsStore({ layout });
+  await settings.updatePatch({ knowledge: { rootPath: path.join(dataDir, 'new-knowledge-root') } });
+  assert.strictEqual(projectStore.readConfig(projectId).knowledgePath, fixedKnowledgePath, 'changing the global root must not move an imported project');
+  assert.strictEqual(layout.getIndexPath(), path.join(dataDir, 'index', 'knowledge.lancedb'), 'global root changes must not move the derived index');
+  const second = await migration.migrateIfNeeded();
+  assert.strictEqual(second.migrated, false);
+  console.log('knowledge-migration-test: PASS');
+})().catch(error => { console.error(error); process.exitCode = 1; });

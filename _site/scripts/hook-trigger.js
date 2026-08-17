@@ -1,110 +1,97 @@
-// _site/scripts/hook-trigger.js
-//
-// Lightweight, fire-and-forget trigger invoked by `<repo>/.git/hooks/post-commit`.
-// It reports the commit event to the KB server. The server resolves the
-// project and starts the configured background automation. This script always
-// exits 0 so a KB outage can never block a user's commit.
-//
-// Usage from a git hook:
-//   node "<site-root>/scripts/hook-trigger.js" \
-//        --kb-root <path-to-log-root> \
-//        --repo  <absolute-repo-path>
-
-const fs = require('fs');
-const path = require('path');
 const http = require('http');
 const { execFileSync } = require('child_process');
 const { getDataDir } = require('../lib/data-dir');
 const { readLiveEndpoint } = require('../lib/runtime-endpoint');
+const { StorageLayout } = require('../lib/storage-layout');
+const { Logger } = require('../lib/structured-logger');
 
 const args = process.argv.slice(2);
-function arg(name, fallback) {
-  const i = args.indexOf(name);
-  if (i < 0) return fallback;
-  return args[i + 1] || fallback;
+function arg(name, fallback = '') {
+  const index = args.indexOf(name);
+  return index >= 0 ? (args[index + 1] || fallback) : fallback;
 }
 
-const KB_ROOT = arg('--kb-root', '');
-const REPO = arg('--repo', '');
-const FALLBACK_HOST = arg('--host', '127.0.0.1');
-const FALLBACK_PORT = parseInt(arg('--port', process.env.KB_SITE_PORT || '5757'), 10);
+const projectId = arg('--project-id', '');
+const repoRoot = arg('--repo-root', arg('--repo', ''));
+const fallbackHost = arg('--host', '127.0.0.1');
+const fallbackPort = Number(arg('--port', process.env.KB_SITE_PORT || '5757'));
+const dataDir = getDataDir();
+const layout = new StorageLayout({ dataDir });
+const logger = new Logger({
+  layout,
+  scope: 'hooks',
+  settingsProvider: () => ({ levels: ['trace', 'debug', 'info', 'warn', 'error', 'fatal'], retentionDays: 365, maxTotalSizeMB: 2048 }),
+  context: { component: 'git-hook', projectId },
+});
+const timeoutMs = 2000;
 
-const HOOK_TIMEOUT_MS = 2000;
-const LOG_FILENAME = '.hook-trigger-errors.log';
-const DATA_DIR = getDataDir();
-
-function resolveTarget() {
-  const endpoint = readLiveEndpoint(DATA_DIR);
-  return endpoint
-    ? { host: endpoint.host, port: endpoint.port, source: 'runtime-endpoint' }
-    : { host: FALLBACK_HOST, port: FALLBACK_PORT, source: 'hook-fallback' };
-}
-
-function logError(msg) {
+function git(gitArgs, fallback = '') {
+  if (!repoRoot) return fallback;
   try {
-    const logPath = path.join(DATA_DIR, LOG_FILENAME);
-    const stamp = new Date().toISOString();
-    fs.appendFileSync(logPath, `[${stamp}] ${msg}\n`, 'utf-8');
-  } catch {}
-}
-
-function git(args, fallback = '') {
-  if (!REPO) return fallback;
-  try {
-    return execFileSync('git', ['-C', REPO, ...args], {
-      encoding: 'utf-8',
-      windowsHide: true,
-      timeout: HOOK_TIMEOUT_MS,
-      stdio: ['ignore', 'pipe', 'ignore'],
+    return execFileSync('git', ['-C', repoRoot, ...gitArgs], {
+      encoding: 'utf8', windowsHide: true, timeout: timeoutMs,
+      stdio: ['ignore', 'pipe', 'ignore'], env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
     }).trim();
-  } catch {
-    return fallback;
-  }
+  } catch { return fallback; }
 }
 
-function postJson(p, body) {
+function target() {
+  const endpoint = readLiveEndpoint(dataDir);
+  return endpoint ? { host: endpoint.host, port: endpoint.port } : { host: fallbackHost, port: fallbackPort };
+}
+
+function post(body) {
   return new Promise((resolve, reject) => {
-    const data = JSON.stringify(body);
-    const target = resolveTarget();
-    const req = http.request({
-      host: target.host,
-      port: target.port,
+    const payload = JSON.stringify(body);
+    const endpoint = target();
+    const request = http.request({
+      host: endpoint.host,
+      port: endpoint.port,
       method: 'POST',
-      path: p,
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(data),
-      },
-      timeout: HOOK_TIMEOUT_MS,
-    }, (res) => {
-      res.on('data', () => {});
-      res.on('end', () => resolve({ status: res.statusCode }));
+      path: '/api/hooks/post-commit',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+      timeout: timeoutMs,
+    }, response => {
+      response.resume();
+      response.on('end', () => resolve(response.statusCode || 0));
     });
-    req.on('error', reject);
-    req.on('timeout', () => req.destroy(new Error('timeout')));
-    req.write(data);
-    req.end();
+    request.on('error', reject);
+    request.on('timeout', () => request.destroy(new Error('hook notification timeout')));
+    request.end(payload);
   });
 }
 
 (async () => {
-  if (!KB_ROOT || !REPO) process.exit(0);
-
-  const commitHash = git(['rev-parse', 'HEAD'], '');
-  const branch = git(['branch', '--show-current'], '');
-
   try {
-    const r = await postJson('/api/hooks/post-commit', {
-      repoPath: REPO,
-      commitHash,
-      branch,
-    });
-    if (r.status < 200 || r.status >= 300) {
-      logError(`post-commit dispatch non-2xx for repo=${REPO}: HTTP ${r.status}`);
+    if (!projectId || !repoRoot) {
+      await logger.warn('hook.notification.skipped', 'Hook payload is missing project identity or repository root.', { phase: 'validate' });
+      return;
     }
-  } catch (e) {
-    logError(`post-commit dispatch failed for repo=${REPO}: ${e.message}`);
+    const payload = {
+      schema: 'hook-event/v2',
+      projectId,
+      repoRoot,
+      head: git(['rev-parse', 'HEAD']),
+      branch: git(['branch', '--show-current']),
+    };
+    try {
+      const status = await post(payload);
+      if (status < 200 || status >= 300) {
+        await logger.warn('hook.notification.failed', 'Knowledge service rejected the Hook notification.', { phase: 'notify', context: { status } });
+      } else {
+        await logger.debug('hook.notification.completed', 'Hook notification delivered.', { phase: 'notify' });
+      }
+    } catch (error) {
+      await logger.warn('hook.notification.degraded', 'Knowledge service is unavailable; startup reconciliation will catch up.', { phase: 'notify', error });
+    }
+  } catch (error) {
+    await logger.error('hook.script.failed', 'Hook trigger failed.', { phase: 'runtime', error });
+  } finally {
+    await logger.close();
   }
-
+})().then(() => process.exit(0), async error => {
+  try { await logger.error('hook.script.failed', 'Hook trigger failed unexpectedly.', { error }); await logger.close(); } catch {
+    // Hook execution must always exit zero even when logging is unavailable.
+  }
   process.exit(0);
-})();
+});

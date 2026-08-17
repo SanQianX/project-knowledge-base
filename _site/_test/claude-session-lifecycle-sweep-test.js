@@ -25,23 +25,26 @@ process.env.KB_DATA_DIR = TMP_DATA;
 process.env.KB_STALE_ACTIVE_MS = '60000';
 require(path.resolve(__dirname, '..', '..', '_site', 'lib', 'data-dir'))._resetCache();
 
-// scanPersistedRecords discovers projects by reading projects.json first,
-// falling back to listing KB_ROOT/projects/. Without either, the sweeper
-// will see no candidates at all. Seed a minimal registry so every test
-// "project" below is visible.
-const TEST_PROJECTS = {
-  'demo-zombie-persisted': { kbPath: path.join(TMP_DATA, 'projects', 'demo-zombie-persisted'), enabled: true },
-  'demo-zombie-memory': { kbPath: path.join(TMP_DATA, 'projects', 'demo-zombie-memory'), enabled: true },
-  'demo-fresh': { kbPath: path.join(TMP_DATA, 'projects', 'demo-fresh'), enabled: true },
-  'demo-broadcast': { kbPath: path.join(TMP_DATA, 'projects', 'demo-broadcast'), enabled: true },
-  'demo-callback': { kbPath: path.join(TMP_DATA, 'projects', 'demo-callback'), enabled: true },
-};
+// Seed the v2 registry and per-project config/state before loading the runner.
+const PROJECT_IDS = ['demo-zombie-persisted', 'demo-zombie-memory', 'demo-fresh', 'demo-broadcast', 'demo-callback'];
+const { defaultProjectConfig, defaultProjectState } = require('../lib/project-store');
+const now = new Date().toISOString();
 fs.mkdirSync(path.join(TMP_DATA, 'projects'), { recursive: true });
-for (const slug of Object.keys(TEST_PROJECTS)) {
-  fs.mkdirSync(path.join(TMP_DATA, 'projects', slug), { recursive: true });
-  fs.mkdirSync(path.join(TMP_DATA, '_ai', slug, 'claude-workbench'), { recursive: true });
+for (const projectId of PROJECT_IDS) {
+  const knowledgePath = path.join(TMP_DATA, 'knowledge', projectId);
+  const metadataPath = path.join(TMP_DATA, 'projects', projectId);
+  fs.mkdirSync(knowledgePath, { recursive: true });
+  fs.mkdirSync(metadataPath, { recursive: true });
+  fs.writeFileSync(path.join(metadataPath, 'config.json'), JSON.stringify(defaultProjectConfig(projectId, {
+    displayName: projectId, storageName: projectId, repoPath: TMP_DATA, knowledgePath,
+  }), null, 2) + '\n', 'utf8');
+  fs.writeFileSync(path.join(metadataPath, 'state.json'), JSON.stringify(defaultProjectState(), null, 2) + '\n', 'utf8');
 }
-fs.writeFileSync(path.join(TMP_DATA, 'projects.json'), JSON.stringify(TEST_PROJECTS, null, 2) + '\n', 'utf-8');
+fs.writeFileSync(path.join(TMP_DATA, 'projects.json'), JSON.stringify({
+  schema: 'project-registry/v2', schemaVersion: 2, projectOrder: PROJECT_IDS,
+  projects: Object.fromEntries(PROJECT_IDS.map(projectId => [projectId, { createdAt: now, displayNameSnapshot: projectId }])),
+  revision: 1, updatedAt: now,
+}, null, 2) + '\n', 'utf8');
 fs.writeFileSync(path.join(TMP_DATA, 'claude-prompts.json'), '{"schema":"prompts/v1","prompts":{}}', 'utf-8');
 
 const runner = require('../lib/claude-cli-runner');
@@ -57,7 +60,7 @@ const {
 function assert(cond, msg) { if (!cond) throw new Error('ASSERT: ' + msg); }
 
 function writePersistedRecord(projectSlug, record) {
-  const aiDir = path.join(TMP_DATA, '_ai', projectSlug, 'claude-workbench');
+  const aiDir = path.join(TMP_DATA, 'runtime', 'claude-sessions', projectSlug);
   fs.mkdirSync(aiDir, { recursive: true });
   const target = path.join(aiDir, `${record.sessionId}.json`);
   // Default updatedAt to the same stale time used for startedAt so the
@@ -77,7 +80,7 @@ function makeStalePersistedRecord(projectSlug, sessionId, state) {
     sessionId,
     projectSlug,
     projectPath: 'D:/proj/' + projectSlug,
-    kbPath: path.join(TMP_DATA, 'projects', projectSlug),
+    kbPath: path.join(TMP_DATA, 'knowledge', projectSlug),
     promptKey: 'post-commit-automation',
     runner: 'sdk',
     state,
@@ -144,7 +147,7 @@ function makeStalePersistedRecord(projectSlug, sessionId, state) {
     const session = createSession({
       projectSlug,
       projectPath: 'D:/proj/' + projectSlug,
-      kbPath: path.join(TMP_DATA, 'projects', projectSlug),
+      kbPath: path.join(TMP_DATA, 'knowledge', projectSlug),
       promptKey: 'post-commit-automation',
       source: 'git-hook',
       metadata: { source: 'git-hook', automation: true, automationRunId: 'auto-mem' },
@@ -176,7 +179,7 @@ function makeStalePersistedRecord(projectSlug, sessionId, state) {
     const session = createSession({
       projectSlug,
       projectPath: 'D:/proj/' + projectSlug,
-      kbPath: path.join(TMP_DATA, 'projects', projectSlug),
+      kbPath: path.join(TMP_DATA, 'knowledge', projectSlug),
       promptKey: 'post-commit-automation',
       source: 'git-hook',
       metadata: { source: 'git-hook', automation: true, automationRunId: 'auto-fresh' },

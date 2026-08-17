@@ -956,7 +956,9 @@ async function readManifestFromRepo({ repo, token, apiBaseUrl, provider = 'githu
     try {
       const manifest = normalizeManifest(parseJsonText(raw), repo);
       if (manifest.knowledgeBases.length) return { ok: true, manifest, manifestPath };
-    } catch {}
+    } catch {
+      // Probe the next supported manifest name when a candidate is absent or malformed.
+    }
   }
   return { ok: false, error: 'manifest not found' };
 }

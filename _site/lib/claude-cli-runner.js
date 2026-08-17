@@ -31,7 +31,13 @@ const { resolveContextWindow } = require('./model-context-windows');
 // Map<sessionId, Session>
 const sessions = new Map();
 const { getDataDir } = require('./data-dir');
+const { StorageLayout } = require('./storage-layout');
+const { ProjectRegistryStore } = require('./project-registry-store');
+const { ProjectStore } = require('./project-store');
 const KB_ROOT = getDataDir();
+const storageLayout = new StorageLayout({ dataDir: KB_ROOT });
+const projectRegistryStore = new ProjectRegistryStore({ layout: storageLayout });
+const projectStore = new ProjectStore({ layout: storageLayout });
 const WORKBENCH_DIR = 'claude-workbench';
 
 // End-of-session subscribers. Used by the automation queue to learn when an
@@ -144,7 +150,7 @@ function createSession({ projectSlug, projectPath, kbPath, promptKey, source = '
 
 function sessionRecordPath(session) {
   if (!session || !session.projectSlug) return null;
-  return path.join(aiWorkspace.ensureProjectAIPath(session.projectSlug), WORKBENCH_DIR, `${session.sessionId}.json`);
+  return storageLayout.getRuntimePath('claude-sessions', session.projectSlug, `${session.sessionId}.json`);
 }
 
 function toPersistedSession(session) {
@@ -191,32 +197,29 @@ function readPersistedRecord(file) {
   try {
     const parsed = JSON.parse(fs.readFileSync(file, 'utf-8'));
     if (parsed && parsed.schema === 'claude-workbench-session/v1' && parsed.sessionId) return parsed;
-  } catch {}
+  } catch {
+    // Corrupt or partially written historical session records are not resumable.
+  }
   return null;
 }
 
 function scanPersistedRecords(projectSlug = null) {
   let projectDirs = [];
   try {
-    const projects = JSON.parse(fs.readFileSync(path.join(KB_ROOT, 'projects.json'), 'utf-8'));
-    projectDirs = Object.entries(projects || {})
-      .filter(([slug]) => !projectSlug || slug === projectSlug)
-      .map(([slug, cfg]) => ({ name: slug, kbPath: cfg.kbPath || path.join(KB_ROOT, 'projects', slug) }));
-  } catch {
-    const projectsRoot = path.join(KB_ROOT, 'projects');
-    try {
-      projectDirs = fs.readdirSync(projectsRoot, { withFileTypes: true })
-        .filter(entry => entry.isDirectory())
-        .filter(entry => !projectSlug || entry.name === projectSlug)
-        .map(entry => ({ name: entry.name, kbPath: path.join(projectsRoot, entry.name) }));
-    } catch { return []; }
-  }
+    const registry = projectRegistryStore.read({ allowMissing: true });
+    projectDirs = registry.projectOrder
+      .filter(projectId => !projectSlug || projectId === projectSlug)
+      .map(projectId => ({ name: projectId, kbPath: projectStore.readConfig(projectId).knowledgePath }));
+  } catch { return []; }
   const records = [];
   for (const entry of projectDirs) {
     const dirs = [
-      path.join(aiWorkspace.projectAIPath(entry.name), WORKBENCH_DIR),
+      storageLayout.getRuntimePath('claude-sessions', entry.name),
       path.join(entry.kbPath, '_ai', WORKBENCH_DIR),
     ];
+    try { dirs.push(path.join(aiWorkspace.projectAIPath(entry.name), WORKBENCH_DIR)); } catch {
+      // The legacy workspace location is optional during v2 session discovery.
+    }
     for (const dir of dirs) {
       let files = [];
       try { files = fs.readdirSync(dir); } catch { continue; }
@@ -236,10 +239,10 @@ function findPersistedRecord(sessionId) {
 
 function currentProjectKbPath(projectSlug) {
   try {
-    const projects = JSON.parse(fs.readFileSync(path.join(KB_ROOT, 'projects.json'), 'utf-8'));
-    const cfg = projects && projects[projectSlug];
-    if (cfg && cfg.kbPath) return cfg.kbPath;
-  } catch {}
+    if (projectRegistryStore.readDisplaySnapshot(projectSlug)) return projectStore.readConfig(projectSlug).knowledgePath;
+  } catch {
+    // Missing project metadata means there is no knowledge path for this legacy caller.
+  }
   return null;
 }
 
@@ -248,12 +251,9 @@ function restoreSessionFromDisk(sessionId) {
   const record = findPersistedRecord(sessionId);
   if (!record) return null;
   const liveState = ['running', 'spawning', 'pending-permission'].includes(record.state) ? 'idle' : (record.state || 'idle');
-  // Always prefer the project's CURRENT kbPath from projects.json over the
-  // value persisted when the session was first created. The KB root is
-  // user-configurable (see knowledge-store.json) and projects can move between
-  // roots; following the live config means restoring a session after a path
-  // change still lands in the right working directory. Falls back to the
-  // persisted value only when the project is no longer registered.
+  // Always prefer the project's current v2 config knowledgePath over the
+  // value persisted when the session was created. A controlled project move
+  // therefore restores the session in the new working directory.
   const liveKbPath = currentProjectKbPath(record.projectSlug);
   const kbPath = liveKbPath || record.kbPath || path.join(KB_ROOT, 'projects', record.projectSlug);
   const kbPathChanged = !!liveKbPath && record.kbPath && liveKbPath !== record.kbPath;
@@ -984,7 +984,9 @@ async function findClaudeExecutableForSdk(options = {}) {
     try {
       const result = runCommand('where.exe', ['claude']);
       if (result && result.status === 0) discovered = String(result.stdout || '').split(/\r?\n/).filter(Boolean);
-    } catch {}
+    } catch {
+      // PATH discovery falls through to the remaining supported executable locations.
+    }
     for (const found of discovered) {
       const candidate = resolveCandidate(found);
       if (candidate) return launchInfo(candidate, 'PATH');
@@ -1196,7 +1198,9 @@ function abort(sessionId) {
   if (session.subprocess) {
     try {
       session.subprocess.kill();
-    } catch {}
+    } catch {
+      // The subprocess may already have exited; state is still transitioned to aborted below.
+    }
     setState(session, 'aborted', { reason: 'user-abort' });
     emit(session, { type: 'claude/aborted', reason: 'user-abort' });
   } else {
@@ -1213,7 +1217,9 @@ function subscribe(sessionId, onEvent) {
   if (!session) throw new Error(`session not found: ${sessionId}`);
   // replay buffer first
   for (const ev of session.outputBuffer) {
-    try { onEvent(ev); } catch {}
+    try { onEvent(ev); } catch {
+      // A disconnected subscriber must not corrupt the persisted session.
+    }
   }
   session.listeners.add(onEvent);
   return () => {
@@ -1253,13 +1259,17 @@ function deleteSession(sessionId) {
   const s = sessions.get(sessionId);
   if (!s) return false;
   if (s.subprocess) {
-    try { s.subprocess.kill(); } catch {}
+    try { s.subprocess.kill(); } catch {
+      // Session deletion proceeds when the child has already exited.
+    }
   }
   sessions.delete(sessionId);
   try {
     const file = sessionRecordPath(s);
     if (file) fs.rmSync(file, { force: true });
-  } catch {}
+  } catch {
+    // Metadata cleanup is best-effort after the in-memory session is removed.
+  }
   return true;
 }
 
@@ -1338,7 +1348,9 @@ function demoteSessionToFailed(session, reason, source) {
     const snapshot = session;
     setImmediate(() => {
       for (const cb of sessionEndedCallbacks) {
-        try { cb(snapshot); } catch {}
+        try { cb(snapshot); } catch {
+          // Subscriber failures must not alter the terminal session snapshot.
+        }
       }
     });
   }
@@ -1460,7 +1472,11 @@ try {
 // reasonable tradeoff between responsiveness and noise.
 setInterval(() => {
   try { demoteStaleActiveSessions(); }
-  catch {}
+  catch (error) {
+    try { process.stderr.write(`[claude-cli-runner] periodic sweep failed: ${normalizeErrorMessage(error)}\n`); } catch {
+      // stderr is the final fallback for this legacy workbench maintenance path.
+    }
+  }
 }, 30 * 1000).unref();
 
 module.exports = {

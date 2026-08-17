@@ -1,32 +1,32 @@
-# project-knowledge Index
+# project-knowledge index
 
-`project-knowledge` is a local-first knowledge-base manager for Git projects.
-It provides a browser dashboard, CLI, project scanner, AI-assisted analysis,
-reviewable drafts, and local automation helpers.
+`project-knowledge` is a local Git-triggered knowledge service. Authoritative
+knowledge is Markdown; LanceDB is one internal, rebuildable derived index.
 
-## Public Modules
+## Public entry points
 
 | Area | Files |
 | --- | --- |
-| CLI | `bin/project-knowledge.js` |
-| Server and dashboard | `_site/server.js`, `_site/index.html` |
-| Core libraries | `_site/lib/` |
-| Dashboard launch scripts | `_site/start.bat`, `_site/stop.bat` |
-| Public templates | `templates/` |
-| Public documentation | `README.md`, `docs/`, `CHANGELOG.md` |
-| Regression tests | `_site/_test/` |
+| Local server | `_site/server.js`, `_site/lib/server-app.js` |
+| Browser UI | `ui/index.html` |
+| CLI | `bin/project-knowledge.js`, `bin/project-knowledge-kb.js` |
+| MCP | `bin/project-knowledge-mcp.js` |
+| Git Hook notifier | `_site/scripts/hook-trigger.js` |
+| Core services | `_site/lib/` |
+| Windows desktop | `desktop/` |
+| Tests | `_site/_test/`, `desktop/test/` |
 
-## Local Runtime Data
+## Runtime data
 
-The following paths are generated locally and are intentionally excluded from
-source control:
+Runtime data is outside the package under `~/.project-knowledge/` or
+`KB_DATA_DIR`:
 
-- `projects/`
+- `settings.json`
 - `projects.json`
-- `knowledge-store.json`
-- `logging.json`
-- `logs/`
-- `.jobs-log.json`
-- `.jobs-archive/`
-- `ai-profiles.json`
-- `_backup/`
+- `projects/<projectId>/{config.json,state.json,requirements.jsonl}`
+- `index/knowledge.lancedb`
+- `cache/`, `runtime/`, `logs/`, and `recovery/`
+
+The separately configured user knowledge root contains project Markdown only.
+See [README.md](README.md) for lifecycle, migration, security, and storage
+contracts.

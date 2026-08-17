@@ -76,7 +76,9 @@ function getNeighborPaths(projectRoot, changedFiles) {
         if (changedFiles.includes(rel)) continue;
         neighbors.add(rel);
       }
-    } catch {}
+    } catch {
+      // Neighbor discovery is optional evidence; unreadable directories are omitted from the manifest.
+    }
   }
   return [...neighbors];
 }
@@ -97,7 +99,9 @@ function getTestPaths(projectRoot, changedFiles) {
           tests.add(path.posix.join(dir, e.name).replace(/\\/g, '/'));
         }
       }
-    } catch {}
+    } catch {
+      // Test discovery is best-effort and records only readable sibling files.
+    }
     // Direct test/ folder sibling
     for (const candidate of ['tests', 'test', '__tests__']) {
       const testDir = path.join(projectRoot, dir, candidate);
@@ -110,7 +114,9 @@ function getTestPaths(projectRoot, changedFiles) {
             tests.add(path.posix.join(dir, candidate, e.name).replace(/\\/g, '/'));
           }
         }
-      } catch {}
+      } catch {
+        // An unreadable optional test directory contributes no context-pack entry.
+      }
     }
   }
   return [...tests];
@@ -142,6 +148,8 @@ function findRelatedDocs(projectRoot, changedFiles) {
 async function buildContextPack({ project, runId, trigger, commits = [], options = {} }) {
   if (!project || !project.slug) throw new Error('project required');
   const slug = project.slug;
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(slug)) throw new Error('invalid project id');
+  if (runId && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(runId)) throw new Error('invalid context pack run id');
   if (!project.kbPath) throw new Error('project.kbPath is required');
   const projectRoot = path.resolve(project.kbPath);
   if (!isSafePath(projectRoot, '')) throw new Error('unsafe project root');
@@ -150,7 +158,7 @@ async function buildContextPack({ project, runId, trigger, commits = [], options
   if (!gitPath) throw new Error('project has no git/local path');
   const sourceRoot = path.resolve(gitPath); // source files live in the git repo, not the KB
 
-  const maxFiles = options.maxFiles || 80;
+  const maxFiles = Number.isInteger(options.maxFiles) && options.maxFiles > 0 ? Math.min(options.maxFiles, 500) : 80;
   const entries = [];
   const seenAbs = new Set();
   const safeSeen = (rel) => entries.find(e => e.path === rel);
@@ -273,7 +281,9 @@ async function buildContextPack({ project, runId, trigger, commits = [], options
   };
 
   // 8. Write to disk
-  const outDir = aiWorkspace.contextPackDir(slug, pack.runId);
+  const outDir = options.outputDir
+    ? path.resolve(options.outputDir, pack.runId)
+    : aiWorkspace.contextPackDir(slug, pack.runId);
   fs.mkdirSync(outDir, { recursive: true });
   fs.writeFileSync(path.join(outDir, 'context-pack.json'), JSON.stringify(pack, null, 2), 'utf-8');
 

@@ -1,6 +1,6 @@
 {
   "name": "project-knowledge",
-  "version": "4.1.22",
+  "version": "4.1.23",
   "description": "Knowledge base manager with Git integration, AI-driven analysis, and bilingual (zh-CN/en-US) knowledge output",
   "main": "_site/server.js",
   "scripts": {
@@ -22,7 +22,6 @@
     "ui/favicon.svg",
     "_site/lib/",
     "_site/scripts/",
-    "ui/vendor/",
     "_site/_test/*.js",
     "_site/_test/fixtures/",
     "_site/start.bat",
@@ -33,7 +32,11 @@
     ".claude-plugin/",
     ".agents/plugins/",
     "templates/",
-    "docs/",
+    "docs/assets/",
+    "docs/README.zh-CN.md",
+    "docs/project-registry-schema.md",
+    "docs/team-knowledge-mode-a-plan.md",
+    "docs/testing-strategy.md",
     "README.md",
     "NOTICE",
     "CHANGELOG.md"

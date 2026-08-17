@@ -15,7 +15,6 @@ const SERVER = path.join(ROOT, '_site', 'server.js');
 const DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), `kb-data-context-pack-${process.pid}-`));
 process.env.KB_DATA_DIR = DATA_DIR;
 require('../lib/data-dir')._resetCache();
-fs.writeFileSync(path.join(DATA_DIR, 'projects.json'), '{}\n', 'utf-8');
 try { fs.copyFileSync(path.join(ROOT, 'claude-prompts.json'), path.join(DATA_DIR, 'claude-prompts.json')); } catch {}
 
 const { buildContextPack, isSafePath, PACKAGE_CONFIG_FILES } = require('../lib/context-pack-builder');
@@ -53,13 +52,7 @@ async function json(method, url, body) {
 }
 
 async function cleanup() {
-  const base = path.join(DATA_DIR, 'projects', TEMP_SLUG);
-  fs.rmSync(base, { recursive: true, force: true });
-  const cur = JSON.parse(fs.readFileSync(PROJECTS_JSON, 'utf-8'));
-  if (cur[TEMP_SLUG]) {
-    delete cur[TEMP_SLUG];
-    fs.writeFileSync(PROJECTS_JSON, JSON.stringify(cur, null, 2) + '\n', 'utf-8');
-  }
+  // The whole test data directory is isolated and removed after the server exits.
 }
 
 (async () => {
@@ -164,19 +157,20 @@ async function cleanup() {
   try {
     await cleanup();
     await waitForServer();
+    let r = await json('PATCH', '/api/settings', { knowledge: { rootPath: path.join(DATA_DIR, 'knowledge') } });
+    assert(r.res.ok, `knowledge root setup should succeed: ${JSON.stringify(r.data)}`);
 
     // 6. POST /api/projects/:slug/context-pack for an initial pack
     const initRepo = makeRepo({ kind: 'one-commit' });
     const slug = TEMP_SLUG;
-    const kbPath = path.join(DATA_DIR, 'projects', slug);
-    fs.mkdirSync(kbPath, { recursive: true });
-    fs.writeFileSync(path.join(kbPath, 'GOAL.md'), '# Goal — server test\n');
-
-    r = await json('PUT', '/api/projects', {
-      slug,
-      config: { displayName: 'TASK-006', localPath: initRepo.path, gitPath: initRepo.path, kbPath },
+    r = await json('POST', '/api/projects/import', {
+      projectId: slug,
+      displayName: 'TASK-006',
+      localPath: initRepo.path,
     });
-    assert(r.res.ok, 'upsert should succeed');
+    assert(r.res.ok, `v2 import should succeed: ${JSON.stringify(r.data)}`);
+    const kbPath = r.data.config.knowledgePath;
+    fs.writeFileSync(path.join(kbPath, 'GOAL.md'), '# Goal — server test\n');
 
     r = await json('POST', `/api/projects/${slug}/context-pack`, { trigger: 'initial' });
     assert(r.res.ok, 'context-pack initial should succeed');
@@ -188,8 +182,8 @@ async function cleanup() {
     assert(r.data.contextPack.commitCount === 0, 'commits trigger should not treat pre-import history as pending');
 
     // 7. Bad slug
-    r = await json('POST', '/api/projects/INVALID../context-pack', {});
-    assert(!r.res.ok && r.res.status === 400, 'bad slug should 400');
+    r = await json('POST', '/api/projects/%5Ebad/context-pack', {});
+    assert(!r.res.ok && r.res.status === 400, 'bad project id should 400');
 
     initRepo.cleanup();
     console.log('TASK-006 context pack test passed');

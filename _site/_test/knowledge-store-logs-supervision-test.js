@@ -1,145 +1,86 @@
-// Run: node _site/_test/knowledge-store-logs-supervision-test.js
+const assert = require('assert');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
-const { spawn } = require('child_process');
 const { spawnServer } = require('./helpers/spawn-server');
 const { makeRepo } = require('./fixtures/make-git-repos');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const SERVER = path.join(ROOT, '_site', 'server.js');
-let PROJECTS_JSON; // assigned inside the IIFE after spawnServer
-let DATA_DIR; // assigned inside the IIFE after spawnServer
-const KNOWLEDGE_STORE_JSON = path.join(ROOT, 'knowledge-store.json');
-const LOGGING_JSON = path.join(ROOT, 'logging.json');
-const PORT = process.env.KB_TASK_012_013_TEST_PORT || '7814';
+const PORT = Number(process.env.KB_TASK_012_013_TEST_PORT || 7814);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
-const TEMP_SLUG = 'task-012-013-temp';
-const TEMP_ROOT = path.join(ROOT, '.tmp-task-012-013');
-
-function assert(cond, msg) { if (!cond) throw new Error(msg); }
-
-function backup(file) {
-  return fs.existsSync(file) ? fs.readFileSync(file, 'utf-8') : null;
-}
-
-function restore(file, content) {
-  if (content == null) fs.rmSync(file, { force: true });
-  else fs.writeFileSync(file, content, 'utf-8');
-}
+const DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), `kb-store-logs-v2-${process.pid}-`));
 
 async function waitForServer() {
-  const deadline = Date.now() + 15000;
-  let lastError;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(`${BASE_URL}/api/state`);
-      if (res.ok) return;
-      lastError = new Error(`HTTP ${res.status}`);
-    } catch (e) { lastError = e; }
-    await new Promise(resolve => setTimeout(resolve, 250));
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    try { if ((await fetch(`${BASE_URL}/api/health`)).ok) return; } catch {}
+    await new Promise(resolve => setTimeout(resolve, 100));
   }
-  throw lastError || new Error('server did not start');
+  throw new Error('server did not start');
 }
 
-async function json(method, url, body) {
-  const res = await fetch(`${BASE_URL}${url}`, {
+async function json(method, route, body) {
+  const response = await fetch(`${BASE_URL}${route}`, {
     method,
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
-  const text = await res.text();
-  let data = {};
-  if (text) { try { data = JSON.parse(text); } catch { data = { raw: text }; } }
-  return { res, data };
+  const text = await response.text();
+  return { response, body: text ? JSON.parse(text) : {} };
 }
 
 (async () => {
-  const projectsBackup = backup(PROJECTS_JSON);
-  const storeBackup = backup(KNOWLEDGE_STORE_JSON);
-  const loggingBackup = backup(LOGGING_JSON);
-  fs.rmSync(TEMP_ROOT, { recursive: true, force: true });
-  fs.mkdirSync(TEMP_ROOT, { recursive: true });
-
-  const _spawned = spawnServer({ root: ROOT, port: Number(PORT), tag: 'knowledge-store-logs-supervision',  });
-  DATA_DIR = _spawned.dataDir;
-  PROJECTS_JSON = path.join(DATA_DIR, 'projects.json');
-  const child = _spawned.child;
-
-  let serverOutput = '';
-  let repo = null;
-  child.stdout.on('data', d => { serverOutput += d.toString(); });
-  child.stderr.on('data', d => { serverOutput += d.toString(); });
-
+  const repoOne = makeRepo({ kind: 'multi-commit' });
+  const repoTwo = makeRepo({ kind: 'one-commit' });
+  const spawned = spawnServer({ root: ROOT, port: PORT, dataDir: DATA_DIR, tag: 'knowledge-store-logs-v2', extraEnv: { KB_EMBEDDING_FAKE: '1' } });
+  let output = '';
+  spawned.child.stdout.on('data', chunk => { output += chunk; });
+  spawned.child.stderr.on('data', chunk => { output += chunk; });
   try {
     await waitForServer();
+    const rootOne = path.join(DATA_DIR, 'knowledge-one');
+    let result = await json('PATCH', '/api/settings', { knowledge: { rootPath: rootOne } });
+    assert(result.response.ok, JSON.stringify(result.body));
+    result = await json('POST', '/api/projects/import', { projectId: 'store-project-one', localPath: repoOne.path, displayName: 'Store one' });
+    assert.strictEqual(result.response.status, 201, JSON.stringify(result.body));
+    const fixedPath = result.body.config.knowledgePath;
+    assert(path.resolve(fixedPath).startsWith(`${path.resolve(rootOne)}${path.sep}`));
+    assert.deepStrictEqual(fs.readdirSync(fixedPath), [], 'import must not generate TODO or initialization knowledge');
 
-    const storeRoot = path.join(TEMP_ROOT, 'kb-store');
-    let r = await json('PUT', '/api/knowledge-store/config', {
-      rootPath: storeRoot,
-      git: { enabled: true, remoteUrl: 'https://example.invalid/kb.git', branch: 'main' },
-    });
-    assert(r.res.ok, 'knowledge store config save should succeed');
-    assert(r.data.config.rootPath === path.resolve(storeRoot), 'knowledge store root should persist');
-    assert(r.data.storage.databasePath === path.join(storeRoot, '.project-knowledge', 'knowledge.lancedb'), 'vector database path should follow configured knowledge root');
-    assert(r.data.storage.followsConfiguredRoot === true, 'database location should report configured-root ownership');
+    const rootTwo = path.join(DATA_DIR, 'knowledge-two');
+    result = await json('PATCH', '/api/settings', { knowledge: { rootPath: rootTwo } });
+    assert(result.response.ok);
+    result = await json('POST', '/api/projects/import', { projectId: 'store-project-two', localPath: repoTwo.path, displayName: 'Store two' });
+    assert.strictEqual(result.response.status, 201, JSON.stringify(result.body));
+    assert(path.resolve(result.body.config.knowledgePath).startsWith(`${path.resolve(rootTwo)}${path.sep}`));
+    result = await json('GET', '/api/projects/store-project-one');
+    assert.strictEqual(result.body.project.config.knowledgePath, fixedPath, 'global root changes affect only future imports');
 
-    repo = makeRepo({ kind: 'multi-commit' });
-    r = await json('PUT', '/api/projects', {
-      slug: TEMP_SLUG,
-      config: {
-        displayName: 'TASK 012 013 Temp',
-        localPath: repo.path,
-        gitPath: repo.path,
-        enabled: true,
-      },
-    });
-    assert(r.res.ok, 'project import should succeed');
+    result = await json('PATCH', '/api/settings', { logging: { levels: ['trace', 'debug', 'info', 'warn', 'error', 'fatal'], retentionDays: 0, maxTotalSizeMB: 32 } });
+    assert(result.response.ok, JSON.stringify(result.body));
+    assert.strictEqual(result.body.settings.logging.retentionDays, 0);
+    result = await json('PATCH', '/api/settings', { logging: { rootPath: path.join(DATA_DIR, 'external-logs') } });
+    assert.strictEqual(result.response.status, 400, 'logging root must not be configurable');
+    assert(!fs.existsSync(path.join(DATA_DIR, 'external-logs')));
 
-    r = await json('GET', '/api/projects');
-    assert(r.data[TEMP_SLUG].kbPath === path.join(storeRoot, TEMP_SLUG), 'new project should use configured knowledge store root');
+    result = await json('GET', '/api/logs?levels=info,error&pageSize=100');
+    assert(result.response.ok, JSON.stringify(result.body));
+    assert(result.body.entries.some(log => log.event === 'project.import.completed' && log.projectId === 'store-project-one'));
+    assert(result.body.health && ['ok', 'degraded'].includes(result.body.health.status));
+    const state = await json('GET', '/api/state');
+    const one = state.body.projects.find(project => project.projectId === 'store-project-one');
+    assert(one && one.state.trackingStartCommit, 'v2 state should expose the import tracking baseline');
+    assert.strictEqual(one.state.analysis.status, 'idle');
+    assert.strictEqual(one.state.hook.managedVersion, 2);
 
-    r = await json('POST', `/api/projects/${TEMP_SLUG}/init`);
-    assert(r.res.ok, 'project init should succeed');
-    assert(fs.existsSync(path.join(storeRoot, TEMP_SLUG, 'README.md')), 'KB README should be created in external store');
-
-    const logRoot = path.join(TEMP_ROOT, 'logs');
-    r = await json('PUT', '/api/logging/config', {
-      rootPath: logRoot,
-      retentionDays: 7,
-      levels: ['info', 'warn', 'error'],
-    });
-    assert(r.res.ok, 'logging config save should succeed');
-    assert(fs.readdirSync(logRoot).some(file => file.endsWith('.log')), 'logging config update should write a daily .log file');
-
-    r = await json('GET', '/api/logs?level=info&q=logging_config_updated');
-    assert(r.res.ok, 'log query should succeed');
-    assert((r.data.logs || []).some(log => log.event === 'logging_config_updated'), 'log query should find logging_config_updated');
-
-    r = await json('GET', '/api/supervision/pending-commits');
-    assert(r.res.ok, 'pending commits endpoint should succeed');
-    const pendingItem = (r.data.items || []).find(item => item.slug === TEMP_SLUG);
-    assert(pendingItem, 'pending commits should include temp project');
-    assert(pendingItem.pendingCount === 0, 'pre-import history should not be pending after tracking start');
-
-    r = await json('GET', '/api/supervision/issues');
-    assert(r.res.ok, 'issues endpoint should succeed');
-    assert(Array.isArray(r.data.issues), 'issues should be an array');
-
-    r = await json('POST', '/api/knowledge-store/migrate', { execute: false });
-    assert(r.res.ok, 'migration preview should succeed');
-    assert(Array.isArray(r.data.plan), 'migration preview should return plan');
-
+    result = await json('POST', '/api/knowledge-store/migrate', { execute: false });
+    assert.strictEqual(result.response.status, 404, 'the old storage relocation API must remain removed');
     console.log('TASK-012/TASK-013 knowledge store, logs, supervision test passed');
-  } catch (e) {
-    console.error('TASK-012/TASK-013 test failed:', e.message);
-    if (serverOutput) console.error(serverOutput);
-    process.exitCode = 1;
+  } catch (error) {
+    if (output) process.stderr.write(output);
+    throw error;
   } finally {
-    child.kill();
-    try { if (typeof repo !== 'undefined' && repo.cleanup) repo.cleanup(); } catch {}
-    restore(PROJECTS_JSON, projectsBackup);
-    restore(KNOWLEDGE_STORE_JSON, storeBackup);
-    restore(LOGGING_JSON, loggingBackup);
-    fs.rmSync(TEMP_ROOT, { recursive: true, force: true });
+    spawned.child.kill();
+    repoOne.cleanup();
+    repoTwo.cleanup();
   }
-})();
+})().catch(error => { console.error(error); process.exitCode = 1; });

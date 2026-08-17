@@ -46,6 +46,11 @@ const forbidden = [
   'node_modules/onnxruntime-node/bin/napi-v3/darwin/',
   'node_modules/onnxruntime-node/bin/napi-v3/linux/',
   'node_modules/onnxruntime-node/bin/napi-v3/win32/arm64/',
+  'node_modules/project-knowledge/docs/project-knowledge-base-review-deliverables',
+  'node_modules/project-knowledge/docs/project-knowledge-base-pro-review-prompt.md',
+  'node_modules/project-knowledge/docs/knowledge-base-trigger-refactor-plan.md',
+  'node_modules/project-knowledge/docs/log-ui-comparison.html',
+  'node_modules/project-knowledge/ui/claude-workspace-preview.html',
 ];
 for (const fragment of forbidden) assert(!contains(fragment), `forbidden packaged runtime found: ${fragment}`);
 

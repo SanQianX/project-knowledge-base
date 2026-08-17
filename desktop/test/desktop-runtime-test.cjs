@@ -11,6 +11,13 @@ function assert(condition, message) {
 }
 
 (async () => {
+  const corePackage = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8'));
+  const desktopPackage = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+  for (const [name, version] of Object.entries(corePackage.dependencies || {})) {
+    assert(desktopPackage.dependencies[name] === version,
+      `desktop must declare core runtime dependency ${name}@${version} for Electron packaging`);
+  }
+
   const server = http.createServer((req, res) => {
     if (req.url === '/api/state') {
       res.writeHead(200, { 'Content-Type': 'application/json' });

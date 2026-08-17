@@ -9,33 +9,31 @@ This knowledge base stores only useful, reviewed project memory. It is not a dum
 
 | Path | Purpose | Policy |
 |---|---|---|
-| `README.md` | Framework design, reading rules, and examples | Auto-maintained |
+| `README.md` | Knowledge-base purpose and reading guidance | Updated only through verified promotion |
 | `GOAL.md` | Stable project goal, boundaries, and non-goals | Updated conservatively from committed evidence |
 | `ARCHITECTURE.md` | Current architecture and key decisions | Updated conservatively from committed evidence |
-| `modules/00-index.md` | Module lookup index for relevant memory search | Auto-maintained |
-| `modules/<module>.md` | Useful module knowledge tied to source paths, routes, symbols, and tests | Auto-apply allowed |
-| `changes/00-index.md` | Change lookup index for related development history | Auto-maintained |
-| `changes/<change>.md` | Accepted change memory with intent, result, and evidence | Auto-apply allowed |
+| `modules/<module>.md` | Durable module facts tied to source paths, routes, symbols, and tests | Verified promotion only |
+| `changes/<change>.md` | Accepted change memory with intent, result, and evidence | Verified promotion only |
 
 AI run records, per-commit automation state, backups, and context packs live outside the knowledge base.
 
 ## Design Principles
 
 1. Keep the official KB small: store stable intent, architecture, module facts, and accepted change summaries.
-2. Use indexes first: Claude Code should read `GOAL.md`, `modules/00-index.md`, and `changes/00-index.md` before opening detail files.
-3. Read only relevant memory: choose module and change files by tags, source paths, routes, symbols, and affected modules.
+2. Search first: use the read-only knowledge tools before opening detail files.
+3. Read only relevant memory: choose module and change files by source paths, routes, symbols, and affected modules.
 4. Store development intent, not raw prompts: summarize the user's request in `changes/<change>.md` under `## Development Intent`.
 5. Update `GOAL.md` and `ARCHITECTURE.md` only when committed evidence clearly changes their current facts.
 
-## Claude Code Reading Rule
+## Reading Rule
 
 When starting work on a feature or fix:
 
-1. Read `GOAL.md`.
-2. Read `modules/00-index.md` and `changes/00-index.md`.
-3. Match the current task against index tags, source paths, routes, symbols, and affected modules.
-4. Open only the relevant `modules/<module>.md` and `changes/<change>.md` files.
-5. Update the KB only when the final code change creates durable knowledge.
+1. Resolve the current project and search its scoped knowledge.
+2. Read `GOAL.md` when the task depends on product boundaries.
+3. Open only relevant `modules/<module>.md` and `changes/<change>.md` files.
+4. Verify retrieved facts against current source code.
+5. Let post-commit reconciliation update knowledge from committed evidence; do not write the final KB directly.
 
 ## Change File Example
 
@@ -44,10 +42,11 @@ When starting work on a feature or fix:
 Add a branch-aware knowledge update flow so AI records the user's feature intent without storing raw prompts.
 
 ## Implementation Result
-- Added durable per-commit state and exact commit metadata.
-- Kept completed commits from being dispatched again.
+- Added a frozen per-commit claim and exact Commit evidence.
+- Promoted validated Markdown before advancing state.
 
 ## Evidence
-- `_site/lib/post-commit-automation.js`
-- `_site/lib/commit-automation-store.js`
+- `_site/lib/commit-reconciler.js`
+- `_site/lib/knowledge-promotion.js`
+- `_site/lib/index-service.js`
 ```

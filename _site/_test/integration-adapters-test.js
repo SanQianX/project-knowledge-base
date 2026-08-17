@@ -40,6 +40,7 @@ async function main() {
   assert(mcpManifest.mcpServers['project-knowledge'].args.includes(`project-knowledge@${packageInfo.version}`), 'plugin MCP should pin the matching package version');
   assert(!skill.includes('[TODO:'), 'bundled Skill should not contain scaffold placeholders');
   assert(skill.includes('project_knowledge_resolve'), 'bundled Skill should teach the resolve-first workflow');
+  assert(skill.includes('project_knowledge_record_requirement'), 'bundled Skill should record the user request before implementation');
 
   const calls = [];
   const homeDir = path.join(TEMP, 'home');

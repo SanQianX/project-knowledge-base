@@ -14,7 +14,9 @@ function selectedDirectoryFromOutput(output, options = {}) {
     if (!absolute || !exists(candidate)) continue;
     try {
       if (stat(candidate).isDirectory()) return candidate;
-    } catch {}
+    } catch {
+      // A disappearing or inaccessible candidate is not a valid picker result.
+    }
   }
   return '';
 }

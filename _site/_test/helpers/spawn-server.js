@@ -27,17 +27,6 @@ function defaultDataDir(tag) {
 
 function spawnServer({ root, port, host = '127.0.0.1', dataDir, extraEnv = {}, tag, stdio = ['ignore', 'pipe', 'pipe'], cwd }) {
   const dir = dataDir || defaultDataDir(tag);
-  // Pre-create projects.json so hasMigrated() returns true on server startup.
-  // Without this, server.js would migrate the user's REAL projects.json from
-  // <pkg>/projects.json into the temp data dir, polluting the test with
-  // fixtures from the host environment. Tests that need an empty registry
-  // get one; tests that need a populated one can overwrite the file. Only
-  // create it if the caller hasn't already populated the file.
-  try {
-    if (!fs.existsSync(path.join(dir, 'projects.json'))) {
-      fs.writeFileSync(path.join(dir, 'projects.json'), '{}\n', 'utf-8');
-    }
-  } catch {}
   const child = spawn(process.execPath, [path.join(root, '_site', 'server.js')], {
     cwd: cwd || root,
     env: {
@@ -46,6 +35,7 @@ function spawnServer({ root, port, host = '127.0.0.1', dataDir, extraEnv = {}, t
       KB_SITE_HOST: host,
       KB_DATA_DIR: dir,
       KB_CLAUDE_RULES_DIR: dir,
+      KB_SKIP_MIGRATION: '1',
       ...extraEnv,
     },
     stdio,

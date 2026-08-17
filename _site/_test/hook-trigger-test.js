@@ -1,414 +1,77 @@
-// _site/_test/hook-trigger-test.js
-//
-// Post-commit hook regression test.
-//
-// Verifies:
-// 1. hook-manager.installHook writes a KB-managed post-commit script.
-// 2. installHook refuses to overwrite a non-KB-managed hook without overwrite.
-// 3. uninstallHook refuses to delete a non-KB-managed hook.
-// 4. uninstallHook removes a KB-managed hook.
-// 5. hook-trigger.js exits 0 when the server is unreachable.
-// 6. A real git commit fires the hook, calls /api/hooks/post-commit, and
-//    records a project automation run.
-
+const assert = require('assert');
 const fs = require('fs');
-const path = require('path');
 const os = require('os');
-const { spawn, spawnSync } = require('child_process');
-const { installHook, uninstallHook, readHookStatus, HOOK_MARKER } = require('../lib/hook-manager');
+const path = require('path');
+const { spawnSync } = require('child_process');
 const {
-  CLAUDE_MD_FILENAME,
-  SECTION_MARKER_START,
-  SECTION_MARKER_END,
-  CENTRAL_RULE_REFERENCE,
-  PROJECT_GUIDANCE,
-  readClaudeMdStatus,
-} = require('../lib/claude-md-manager');
-const { spawnServer } = require('./helpers/spawn-server');
+  HOOK_MARKER,
+  installHook,
+  uninstallHook,
+  readHookStatus,
+  parseManagedMarker,
+} = require('../lib/hook-manager');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const SERVER = path.join(ROOT, '_site', 'server.js');
-const HOOK_TRIGGER = path.join(ROOT, '_site', 'scripts', 'hook-trigger.js');
-const SITE_ROOT = path.join(ROOT, '_site');
-const KB_ROOT = ROOT;
-let DATA_DIR; // assigned when spawnServer returns
-let PROJECTS_JSON; // assigned after DATA_DIR
-const PORT = process.env.KB_HOOK_TEST_PORT || '7802';
-const BASE_URL = `http://127.0.0.1:${PORT}`;
+const TRIGGER = path.join(ROOT, '_site', 'scripts', 'hook-trigger.js');
 
-const SLUG = 'hook-test-proj';
-const FIXTURE_REPO = path.join(os.tmpdir(), `kb-hook-test-${process.pid}`);
-const FIXTURE_KB_PATH = path.join(os.tmpdir(), `kb-hook-test-kb-${process.pid}`);
-const FIXTURE_PROJECTS_PATH = path.join(os.tmpdir(), `kb-hook-projects-${process.pid}.json`);
-const BASELINE_AI_PROFILES = {
-  schema: 'ai-profiles/v1',
-  profiles: [{
-    id: 'minimax-m3',
-    name: 'MiniMax M3',
-    enabled: true,
-    implementation: 'claude-code-agent',
-    baseUrl: 'https://example.test/anthropic',
-    apiKey: 'test-key',
-    mainModel: 'MiniMax-M3',
-  }],
-};
-
-function assert(cond, msg) {
-  if (!cond) throw new Error('ASSERT: ' + msg);
+function git(repo, args) {
+  const result = spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8', windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });
+  if (result.status !== 0) throw new Error(result.stderr || `git ${args.join(' ')} failed`);
+  return String(result.stdout || '').trim();
 }
 
-function rmrf(p) {
-  try { fs.rmSync(p, { recursive: true, force: true }); } catch {}
+function makeRepo() {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-hook-v2-repo-'));
+  git(repo, ['init', '--initial-branch=main']);
+  git(repo, ['config', 'user.email', 'hook@example.invalid']);
+  git(repo, ['config', 'user.name', 'Hook Test']);
+  fs.writeFileSync(path.join(repo, 'README.md'), '# hook\n');
+  git(repo, ['add', 'README.md']);
+  git(repo, ['commit', '-m', 'initial']);
+  return repo;
 }
 
-function execGit(cwd, args) {
-  return spawnSync('git', args, { cwd, encoding: 'utf-8', env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });
-}
+const repo = makeRepo();
+const claudePath = path.join(repo, 'CLAUDE.md');
+fs.writeFileSync(claudePath, '# user-owned\n');
+const projectId = 'project-hook-test';
 
-function initRepo(p) {
-  rmrf(p);
-  fs.mkdirSync(p, { recursive: true });
-  let r = execGit(p, ['init', '--initial-branch=main']);
-  assert(r.status === 0, 'git init failed: ' + r.stderr);
-  execGit(p, ['config', 'user.email', 'kb-test@example.com']);
-  execGit(p, ['config', 'user.name', 'KB Test']);
-  execGit(p, ['config', 'commit.gpgsign', 'false']);
-  fs.writeFileSync(path.join(p, 'README.md'), '# hook test\n', 'utf-8');
-  execGit(p, ['add', 'README.md']);
-  r = execGit(p, ['commit', '-m', 'init']);
-  assert(r.status === 0, 'initial commit failed: ' + r.stderr);
-}
+const installed = installHook({ repoPath: repo, projectId, triggerScriptPath: TRIGGER });
+assert.strictEqual(installed.ok, true);
+assert(fs.existsSync(installed.hookPath));
+const body = fs.readFileSync(installed.hookPath, 'utf8');
+assert(body.includes(HOOK_MARKER));
+assert(body.includes('--project-id'));
+assert(body.includes('--repo-root "$REPO_ROOT"'));
+assert(body.includes('git rev-parse --show-toplevel'));
+assert(!body.includes(repo.replace(/\\/g, '/')), 'managed hook must not embed the imported repo path');
+assert.strictEqual(parseManagedMarker(body).projectId, projectId);
+assert.strictEqual(fs.readFileSync(claudePath, 'utf8'), '# user-owned\n', 'Hook install must not modify CLAUDE.md');
 
-function makeCommit(p, msg) {
-  fs.writeFileSync(path.join(p, 'changelog.md'), `+ ${msg}\n`, { flag: 'a' });
-  execGit(p, ['add', 'changelog.md']);
-  const r = execGit(p, ['commit', '-m', msg]);
-  assert(r.status === 0, 'commit failed: ' + r.stderr + ' :: ' + r.stdout);
-}
+const repeated = installHook({ repoPath: repo, projectId, triggerScriptPath: TRIGGER });
+assert.strictEqual(repeated.updated, false);
+assert.strictEqual(fs.readFileSync(installed.hookPath, 'utf8'), body);
+assert.strictEqual(readHookStatus({ repoPath: repo, projectId }).installed, true);
 
-function enabledProfileId() {
-  const p = (BASELINE_AI_PROFILES.profiles || []).find(item => item.enabled !== false);
-  return p && p.id || 'minimax';
-}
+const removed = uninstallHook({ repoPath: repo, projectId });
+assert.strictEqual(removed.removed, true);
+assert.strictEqual(fs.readFileSync(claudePath, 'utf8'), '# user-owned\n', 'Hook uninstall must not modify CLAUDE.md');
 
-async function waitForServer() {
-  const deadline = Date.now() + 15000;
-  let last;
-  while (Date.now() < deadline) {
-    try {
-      const r = await fetch(`${BASE_URL}/api/state`);
-      if (r.status < 500) return;
-      last = new Error('HTTP ' + r.status);
-    } catch (e) {
-      last = e;
-    }
-    await new Promise(r => setTimeout(r, 250));
-  }
-  throw last || new Error('server did not start');
-}
+fs.writeFileSync(installed.hookPath, '#!/bin/sh\necho user-hook\n');
+assert.throws(() => installHook({ repoPath: repo, projectId, triggerScriptPath: TRIGGER }), error => error.code === 'HOOK_CONFLICT');
+assert.throws(() => uninstallHook({ repoPath: repo, projectId }), error => error.code === 'HOOK_CONFLICT');
+assert(fs.readFileSync(installed.hookPath, 'utf8').includes('user-hook'));
 
-async function json(method, url, body) {
-  const r = await fetch(`${BASE_URL}${url}`, {
-    method,
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const text = await r.text();
-  let data = {};
-  if (text) {
-    try { data = JSON.parse(text); } catch { data = { raw: text }; }
-  }
-  return { res: r, status: r.status, data };
-}
+const offlineData = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-hook-offline-'));
+const offline = spawnSync(process.execPath, [TRIGGER, '--project-id', projectId, '--repo-root', repo, '--port', '65530'], {
+  encoding: 'utf8',
+  timeout: 10_000,
+  env: { ...process.env, KB_DATA_DIR: offlineData, KB_SKIP_MIGRATION: '1' },
+});
+assert.strictEqual(offline.status, 0, offline.stderr);
+const hooksLogDir = path.join(offlineData, 'logs', 'hooks');
+assert(fs.existsSync(hooksLogDir));
+const lines = fs.readdirSync(hooksLogDir).flatMap(file => fs.readFileSync(path.join(hooksLogDir, file), 'utf8').trim().split(/\r?\n/).filter(Boolean).map(JSON.parse));
+assert(lines.some(line => line.schema === 'log/v2' && line.event === 'hook.notification.degraded'));
 
-async function waitForAutomationRun(slug, timeoutMs = 30000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const r = await json('GET', `/api/projects/${slug}/automation/runs`);
-    if (r.data && Array.isArray(r.data.runs)) {
-      const hit = r.data.runs.find(j => j.projectSlug === slug && j.source === 'git-hook');
-      if (hit) return hit;
-    }
-    await new Promise(r => setTimeout(r, 500));
-  }
-  return null;
-}
-
-(async () => {
-  initRepo(FIXTURE_REPO);
-
-  execGit(FIXTURE_REPO, ['config', 'core.hooksPath', '.githooks']);
-  let r = installHook({ repoPath: FIXTURE_REPO, siteRoot: SITE_ROOT, host: '127.0.0.1', port: Number(PORT), kbPath: FIXTURE_KB_PATH });
-  assert(r.ok, 'installHook with core.hooksPath failed: ' + r.error);
-  let legacyClaudeText = fs.readFileSync(path.join(FIXTURE_REPO, CLAUDE_MD_FILENAME), 'utf-8');
-  assert(!legacyClaudeText.includes(FIXTURE_KB_PATH.replace(/\\/g, '/')),
-    'installHook must not embed kbPath in CLAUDE.md even when legacy callers pass kbPath');
-  assert(!legacyClaudeText.includes('lives at:'),
-    'installHook must not write legacy direct-mode CLAUDE.md blocks');
-  const customHookPath = path.join(FIXTURE_REPO, '.githooks', 'post-commit');
-  assert(fs.existsSync(customHookPath), 'hook file not created under core.hooksPath');
-  let customStatus = readHookStatus({ repoPath: FIXTURE_REPO });
-  assert(customStatus.installed === true, 'readHookStatus should follow core.hooksPath');
-  assert(path.resolve(customStatus.hookPath) === path.resolve(customHookPath), 'readHookStatus returned wrong hookPath for core.hooksPath');
-  r = uninstallHook({ repoPath: FIXTURE_REPO });
-  assert(r.ok && r.removed === true, 'uninstallHook should remove hook under core.hooksPath');
-  assert(!fs.existsSync(customHookPath), 'hook under core.hooksPath still exists after uninstall');
-  execGit(FIXTURE_REPO, ['config', '--unset', 'core.hooksPath']);
-  rmrf(path.join(FIXTURE_REPO, '.githooks'));
-
-  r = installHook({
-    repoPath: FIXTURE_REPO,
-    siteRoot: SITE_ROOT,
-    host: '127.0.0.1',
-    port: Number(PORT),
-    projectSlug: SLUG,
-  });
-  assert(r.ok, 'installHook failed: ' + r.error);
-  const hookPath = path.join(FIXTURE_REPO, '.git', 'hooks', 'post-commit');
-  assert(fs.existsSync(hookPath), 'hook file not created at ' + hookPath);
-  const hookText = fs.readFileSync(hookPath, 'utf-8');
-  assert(hookText.includes(HOOK_MARKER), 'hook missing KB marker');
-  assert(hookText.includes('hook-trigger.js'), 'hook does not call hook-trigger.js');
-  assert(hookText.includes('--kb-root'), 'hook missing --kb-root flag');
-  assert(hookText.includes(FIXTURE_REPO.replace(/\\/g, '/')), 'hook missing repo path');
-
-  // installHook should also drop a one-line central rule import into CLAUDE.md.
-  assert(r.claudeMd && r.claudeMd.ok, 'installHook should report claudeMd.ok=true: ' + JSON.stringify(r.claudeMd));
-  const claudeMdPath = path.join(FIXTURE_REPO, CLAUDE_MD_FILENAME);
-  assert(fs.existsSync(claudeMdPath), 'installHook should create CLAUDE.md in repo');
-  const claudeMdText0 = fs.readFileSync(claudeMdPath, 'utf-8');
-  assert(claudeMdText0.includes(SECTION_MARKER_START), 'CLAUDE.md missing start marker after install');
-  assert(claudeMdText0.includes(SECTION_MARKER_END), 'CLAUDE.md missing end marker after install');
-  assert(claudeMdText0.includes(PROJECT_GUIDANCE), 'CLAUDE.md missing central rule guidance after install');
-  assert(claudeMdText0.includes(`@${CENTRAL_RULE_REFERENCE}`), 'CLAUDE.md should use a home-relative import');
-  assert(!claudeMdText0.includes('Read-only boundary') && !claudeMdText0.includes('GOAL.md'),
-    'CLAUDE.md should not duplicate detailed central instructions');
-  const expectedKbPath = FIXTURE_KB_PATH.replace(/\\/g, '/');
-  const expectedProjectsPath = FIXTURE_PROJECTS_PATH.replace(/\\/g, '/');
-  // Hard guarantee: no absolute path embedded, no fixture paths leaking.
-  assert(!claudeMdText0.includes(`projects.json: ${expectedProjectsPath}`),
-    `CLAUDE.md must NOT embed projects.json path ${expectedProjectsPath}`);
-  assert(!claudeMdText0.includes(expectedKbPath),
-    `CLAUDE.md must NOT embed absolute kbPath ${expectedKbPath}`);
-  assert(!claudeMdText0.includes(FIXTURE_PROJECTS_PATH),
-    'CLAUDE.md must not embed the fixture projects.json path');
-  let s0 = readClaudeMdStatus(FIXTURE_REPO);
-  assert(s0.ok && s0.present && s0.managed, 'readClaudeMdStatus should report managed after install: ' + JSON.stringify(s0));
-  assert(s0.kbPath === null, `readClaudeMdStatus should not report direct kbPath, got ${s0.kbPath}`);
-  assert(s0.projectsPath === null,
-    `readClaudeMdStatus should not report projectsPath in default form, got ${s0.projectsPath}`);
-  assert(s0.projectSlug === null, `readClaudeMdStatus should not need a project slug, got ${s0.projectSlug}`);
-  assert(s0.state === 'current' && s0.current === true, 'readClaudeMdStatus should report central pointer as current');
-
-  if (process.platform !== 'win32') {
-    const st = fs.statSync(hookPath);
-    assert((st.mode & 0o111) !== 0, 'hook is not executable on POSIX');
-  }
-
-  rmrf(hookPath);
-  fs.writeFileSync(hookPath, '#!/bin/sh\necho "user hook, do not touch"\n', 'utf-8');
-  r = installHook({ repoPath: FIXTURE_REPO, siteRoot: SITE_ROOT, host: '127.0.0.1', port: Number(PORT), kbPath: FIXTURE_KB_PATH });
-  assert(!r.ok && r.status === 409, 'installHook should refuse non-KB hook without overwrite');
-  assert(fs.readFileSync(hookPath, 'utf-8').includes('do not touch'), 'user hook was overwritten');
-
-  r = installHook({ repoPath: FIXTURE_REPO, siteRoot: SITE_ROOT, host: '127.0.0.1', port: Number(PORT), overwrite: true, kbPath: FIXTURE_KB_PATH });
-  assert(r.ok, 'overwrite installHook failed: ' + r.error);
-  assert(fs.readFileSync(hookPath, 'utf-8').includes(HOOK_MARKER), 'overwrite did not write KB hook');
-
-  rmrf(hookPath);
-  fs.writeFileSync(hookPath, '#!/bin/sh\necho "user hook"\n', 'utf-8');
-  r = uninstallHook({ repoPath: FIXTURE_REPO });
-  assert(!r.ok && r.status === 409, 'uninstallHook should refuse non-KB hook');
-  assert(fs.existsSync(hookPath), 'non-KB hook was deleted');
-
-  installHook({ repoPath: FIXTURE_REPO, siteRoot: SITE_ROOT, host: '127.0.0.1', port: Number(PORT), overwrite: true, kbPath: FIXTURE_KB_PATH });
-  assert(fs.existsSync(hookPath), 'KB hook not present before uninstall');
-  assert(fs.readFileSync(hookPath, 'utf-8').includes(HOOK_MARKER), 'KB hook did not replace the non-KB hook');
-  r = uninstallHook({ repoPath: FIXTURE_REPO });
-  assert(r.ok && r.removed === true, 'uninstallHook failed: ' + r.error);
-  assert(!fs.existsSync(hookPath), 'hook still exists after uninstall');
-
-  // uninstallHook should also remove the KB-managed rule block from CLAUDE.md.
-  // In this fixture CLAUDE.md was created by install and contains nothing else,
-  // so the file itself should be deleted.
-  assert(r.claudeMd && r.claudeMd.ok, 'uninstallHook should report claudeMd.ok=true: ' + JSON.stringify(r.claudeMd));
-  assert(r.claudeMd.removed === true, 'uninstallHook should report claudeMd.removed=true: ' + JSON.stringify(r.claudeMd));
-  assert(r.claudeMd.fileDeleted === true, 'uninstallHook should report claudeMd.fileDeleted=true when file becomes empty: ' + JSON.stringify(r.claudeMd));
-  assert(!fs.existsSync(claudeMdPath), 'CLAUDE.md should be deleted when KB rule was the only content');
-  let s0b = readClaudeMdStatus(FIXTURE_REPO);
-  assert(s0b.ok && s0b.present === false, 'CLAUDE.md should be absent after uninstall: ' + JSON.stringify(s0b));
-
-  let s = readHookStatus({ repoPath: FIXTURE_REPO });
-  assert(s.installed === false, 'readHookStatus should report not installed');
-  assert(s.claudeMd && s.claudeMd.present === false, 'readHookStatus should report claudeMd absent when no CLAUDE.md');
-  installHook({ repoPath: FIXTURE_REPO, siteRoot: SITE_ROOT, host: '127.0.0.1', port: Number(PORT), kbPath: FIXTURE_KB_PATH });
-  s = readHookStatus({ repoPath: FIXTURE_REPO });
-  assert(s.installed === true && s.kbManaged === true, 'readHookStatus should report KB-managed hook');
-  assert(s.claudeMd && s.claudeMd.managed === true, 'readHookStatus should report claudeMd.managed=true when rule is installed');
-
-  // opt-out: updateClaudeMd:false should leave CLAUDE.md alone.
-  uninstallHook({ repoPath: FIXTURE_REPO });
-  rmrf(claudeMdPath);
-  fs.writeFileSync(claudeMdPath, '# user-written only, do not touch\n', 'utf-8');
-  r = installHook({ repoPath: FIXTURE_REPO, siteRoot: SITE_ROOT, host: '127.0.0.1', port: Number(PORT), updateClaudeMd: false, kbPath: FIXTURE_KB_PATH });
-  assert(r.ok, 'installHook with updateClaudeMd:false failed: ' + r.error);
-  assert(r.claudeMd && r.claudeMd.action === 'skipped', 'installHook with updateClaudeMd:false should skip CLAUDE.md: ' + JSON.stringify(r.claudeMd));
-  const userOnly = fs.readFileSync(claudeMdPath, 'utf-8');
-  assert(userOnly === '# user-written only, do not touch\n', 'updateClaudeMd:false must not modify user CLAUDE.md');
-  assert(!userOnly.includes(SECTION_MARKER_START), 'updateClaudeMd:false must not insert rule markers');
-  uninstallHook({ repoPath: FIXTURE_REPO, updateClaudeMd: false });
-  assert(fs.readFileSync(claudeMdPath, 'utf-8') === '# user-written only, do not touch\n', 'uninstallHook with updateClaudeMd:false must not touch user CLAUDE.md');
-  rmrf(claudeMdPath);
-
-  // Reinstall with default behavior so the rest of the test (server + real
-  // git commit) runs against a repo whose CLAUDE.md has the KB rule.
-  installHook({ repoPath: FIXTURE_REPO, siteRoot: SITE_ROOT, host: '127.0.0.1', port: Number(PORT), kbPath: FIXTURE_KB_PATH });
-  assert(fs.existsSync(claudeMdPath), 'CLAUDE.md should exist after default installHook');
-
-  const childDown = spawn(process.execPath, [HOOK_TRIGGER, '--kb-root', KB_ROOT, '--repo', FIXTURE_REPO, '--host', '127.0.0.1', '--port', '1'], {
-    cwd: ROOT,
-    stdio: 'pipe',
-    windowsHide: true,
-    env: { ...process.env, KB_SITE_PORT: '1' },
-  });
-  const downExit = await new Promise(res => { childDown.on('exit', res); });
-  assert(downExit === 0, `hook-trigger should exit 0 even when server is down, got ${downExit}`);
-
-  const serverHandle = spawnServer({
-    root: ROOT,
-    port: Number(PORT),
-    tag: 'hook-trigger',
-    extraEnv: { KB_AUTOMATION_FAKE_CLAUDE: '1' },
-  });
-  const server = serverHandle.child;
-  const serverDataDir = serverHandle.dataDir;
-  DATA_DIR = serverDataDir;
-  // The real Git hook is spawned by this test process, so point its
-  // hook-trigger child at the isolated server data directory.
-  process.env.KB_DATA_DIR = serverDataDir;
-  // Override the test's PROJECTS_JSON so it writes into the same data dir
-  // the spawned server reads from.
-  PROJECTS_JSON = path.join(serverDataDir, 'projects.json');
-  fs.writeFileSync(
-    path.join(serverDataDir, 'ai-profiles.json'),
-    JSON.stringify(BASELINE_AI_PROFILES, null, 2) + '\n',
-    'utf-8'
-  );
-  let serverOutput = '';
-  server.stdout.on('data', d => { serverOutput += d.toString(); });
-  server.stderr.on('data', d => { serverOutput += d.toString(); });
-
-  const projKb = path.join(serverDataDir, 'projects', SLUG);
-  try {
-    await waitForServer();
-
-    rmrf(projKb);
-    rmrf(path.join(serverDataDir, '_ai', SLUG));
-    fs.mkdirSync(projKb, { recursive: true });
-    fs.mkdirSync(path.join(projKb, 'modules'), { recursive: true });
-    fs.mkdirSync(path.join(projKb, 'changes'), { recursive: true });
-    fs.writeFileSync(path.join(projKb, 'README.md'), '# hook test kb\n', 'utf-8');
-    fs.writeFileSync(path.join(projKb, 'GOAL.md'), '# goal\n\ntest goal\n', 'utf-8');
-    fs.writeFileSync(path.join(projKb, 'ARCHITECTURE.md'), '# architecture\n', 'utf-8');
-    fs.writeFileSync(path.join(projKb, 'modules', '00-index.md'), '# Modules Index\n', 'utf-8');
-    fs.writeFileSync(path.join(projKb, 'changes', '00-index.md'), '# Changes Index\n', 'utf-8');
-
-    const projects = JSON.parse(fs.readFileSync(PROJECTS_JSON, 'utf-8'));
-    const trackingBaseline = execGit(FIXTURE_REPO, ['rev-parse', 'HEAD']).stdout.trim();
-    projects[SLUG] = {
-      displayName: 'Hook Test',
-      localPath: FIXTURE_REPO,
-      gitPath: FIXTURE_REPO,
-      isReference: false,
-      primaryLanguage: 'JavaScript',
-      tags: [],
-      docConvention: 'frontmatter-relations',
-      kbPath: projKb,
-      enabled: true,
-      repoStatus: 'unknown',
-      headCommit: null,
-      lastSeenCommit: null,
-      lastAnalyzedCommit: trackingBaseline,
-      trackingStartCommit: trackingBaseline,
-      aiProfileId: enabledProfileId(),
-      kbSchemaVersion: 'minimal',
-      goalStatus: 'accepted',
-      kbInitialized: true,
-      automation: {
-        enabled: true,
-        postCommitEnabled: true,
-        allowReadOnlyBash: true,
-        hookPromptTemplate: 'Hook test {{projectSlug}} {{shortHash}} {{changedFiles}} {{permissionMode}}',
-      },
-      claudeWorkbench: { permissionMode: 'bypassPermissions' },
-    };
-    fs.writeFileSync(PROJECTS_JSON, JSON.stringify(projects, null, 2) + '\n', 'utf-8');
-
-    uninstallHook({ repoPath: FIXTURE_REPO });
-    r = installHook({ repoPath: FIXTURE_REPO, siteRoot: SITE_ROOT, host: '127.0.0.1', port: Number(PORT), kbPath: FIXTURE_KB_PATH });
-    assert(r.ok, 'reinstall failed: ' + r.error);
-
-    const kbReadmeBeforeCommit = fs.readFileSync(path.join(projKb, 'README.md'), 'utf-8');
-    fs.writeFileSync(path.join(FIXTURE_REPO, 'staged-only.md'), 'not committed yet\n', 'utf-8');
-    execGit(FIXTURE_REPO, ['add', 'staged-only.md']);
-    await new Promise(resolve => setTimeout(resolve, 750));
-    const beforeCommitRuns = await json('GET', `/api/projects/${SLUG}/automation/runs`);
-    assert((beforeCommitRuns.data.runs || []).filter(item => item.source === 'git-hook').length === 0,
-      'editing or staging files must not dispatch post-commit automation');
-    assert(fs.readFileSync(path.join(projKb, 'README.md'), 'utf-8') === kbReadmeBeforeCommit,
-      'editing or staging files must not change the KB');
-
-    // The spawned server intentionally uses an isolated data directory. Give
-    // the hook process the same location so it reads this test server's live
-    // runtime endpoint instead of a real desktop instance owned by the user.
-    const previousDataDir = process.env.KB_DATA_DIR;
-    process.env.KB_DATA_DIR = serverDataDir;
-    try {
-      makeCommit(FIXTURE_REPO, 'feat: add changelog entry to trigger hook');
-    } finally {
-      if (previousDataDir === undefined) delete process.env.KB_DATA_DIR;
-      else process.env.KB_DATA_DIR = previousDataDir;
-    }
-
-    const run = await waitForAutomationRun(SLUG, 30000);
-    assert(run, `no automation run for ${SLUG} appeared within 30s; server output: ${serverOutput.slice(-1000)}`);
-    assert(!Object.prototype.hasOwnProperty.call(run, 'knowledgeMode'), 'legacy knowledge mode should not be persisted');
-    assert(run.permissionMode === 'bypassPermissions', 'wrong permission mode: ' + run.permissionMode);
-    assert(run.allowedTools.includes('Write'), 'automatic KB policy should allow Write');
-    await new Promise(resolve => setTimeout(resolve, 500));
-    const afterCommitRuns = await json('GET', `/api/projects/${SLUG}/automation/runs`);
-    assert((afterCommitRuns.data.runs || []).filter(item => item.source === 'git-hook').length === 1,
-      'one git commit should dispatch exactly one git-hook automation run');
-    console.log('hook automation observed:', run.runId, run.projectSlug, run.status);
-
-    const logPath = path.join(serverDataDir, '.hook-trigger-errors.log');
-    if (fs.existsSync(logPath)) {
-      const lines = fs.readFileSync(logPath, 'utf-8').split('\n').filter(Boolean);
-      console.log('hook error log lines:', lines.length);
-    }
-
-    console.log('hook trigger test passed');
-  } catch (e) {
-    console.error('hook trigger test failed:', e.message);
-    if (serverOutput) console.error('--- server output ---');
-    if (serverOutput) console.error(serverOutput.slice(-2000));
-    process.exitCode = 1;
-  } finally {
-    try { uninstallHook({ repoPath: FIXTURE_REPO }); } catch {}
-    rmrf(FIXTURE_REPO);
-    rmrf(FIXTURE_KB_PATH);
-    rmrf(FIXTURE_PROJECTS_PATH);
-    rmrf(projKb);
-    rmrf(path.join(serverDataDir, '_ai', SLUG));
-    try { fs.rmSync(serverDataDir, { recursive: true, force: true }); } catch {}
-    delete process.env.KB_DATA_DIR;
-    try {
-      const projects = JSON.parse(fs.readFileSync(PROJECTS_JSON, 'utf-8'));
-      if (projects[SLUG]) {
-        delete projects[SLUG];
-        fs.writeFileSync(PROJECTS_JSON, JSON.stringify(projects, null, 2) + '\n', 'utf-8');
-      }
-    } catch {}
-    server.kill();
-  }
-})();
+console.log('hook-trigger-test PASS');

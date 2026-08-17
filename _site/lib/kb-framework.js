@@ -44,36 +44,17 @@ function ensureFile(file, content, created, base) {
 
 function initProjectDirs(slug, kbPath) {
   const base = path.resolve(kbPath);
-  const created = [];
-  const vars = { PROJECT: slug, SLUG: slug, DATE: todayIso(), AUTHOR: process.env.USERNAME || process.env.USER || 'unknown' };
-  fs.mkdirSync(path.join(base, 'modules'), { recursive: true });
-  fs.mkdirSync(path.join(base, 'changes'), { recursive: true });
-  ensureFile(
-    path.join(base, 'README.md'),
-    renderTemplate('project-readme.md', vars, `# ${slug}\n\nThis knowledge base contains only trusted, useful project memory.\n`),
-    created,
-    base,
-  );
-  ensureFile(
-    path.join(base, 'GOAL.md'),
-    renderTemplate('goal.md', vars, `${frontmatter({ schema: KB_FRAMEWORK_SCHEMA, title: `${slug} Goal`, status: 'draft', updatedAt: todayIso() })}# ${slug} Goal\n\nTODO: confirm the project goal, users, success criteria, non-goals, and review principles.\n`),
-    created,
-    base,
-  );
-  ensureFile(
-    path.join(base, 'ARCHITECTURE.md'),
-    renderTemplate('architecture.md', vars, `${frontmatter({ schema: KB_FRAMEWORK_SCHEMA, title: `${slug} Architecture`, updatedAt: todayIso() })}# ${slug} Architecture\n\nTODO: summarize the current architecture, module relationships, data flow, constraints, and source entry points.\n`),
-    created,
-    base,
-  );
-  regenerateIndexes(base);
-  ensureProjectAIPath(slug);
+  // Import only declares the external project directory. Real Markdown and
+  // collection directories are created lazily by validated promotion; an
+  // empty/TODO skeleton would turn guesses into durable project knowledge.
+  fs.mkdirSync(base, { recursive: true });
   return {
-    created,
+    created: [],
     basePath: base,
     kbSchemaVersion: PROJECT_SCHEMA_VERSION,
     frameworkSchema: KB_FRAMEWORK_SCHEMA,
     topLevel: TOP_LEVEL.slice(),
+    lazy: true,
   };
 }
 

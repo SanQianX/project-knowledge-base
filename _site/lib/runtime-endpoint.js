@@ -87,7 +87,9 @@ function writeEndpoint(dataDir, value) {
     fs.renameSync(temp, target);
   } catch (error) {
     // Windows cannot always replace an existing file with renameSync.
-    try { fs.rmSync(target, { force: true }); } catch {}
+    try { fs.rmSync(target, { force: true }); } catch {
+      // The following rename is authoritative and reports endpoint replacement failure.
+    }
     fs.renameSync(temp, target);
   }
   return endpoint;
@@ -120,7 +122,9 @@ function claimEndpoint(dataDir, value) {
       try {
         const ageMs = Date.now() - fs.statSync(target).mtimeMs;
         if (!existing && ageMs < 2000) return { claimed: false, endpoint: null };
-      } catch {}
+      } catch {
+        // clearEndpoint performs the ownership-safe final check when stat is unavailable.
+      }
       clearEndpoint(dataDir, existing ? { pid: existing.pid } : {});
     }
   }

@@ -8,7 +8,7 @@ const AI_ROOT = path.join(APP_ROOT, '_ai');
 const STANDARD_SUBDIRS = ['runs', 'context-packs', 'backups', 'claude-workbench'];
 
 function safeSlug(slug) {
-  return typeof slug === 'string' && /^[a-z0-9][a-z0-9-]{0,40}$/.test(slug);
+  return typeof slug === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(slug);
 }
 
 function projectAIPath(slug) {

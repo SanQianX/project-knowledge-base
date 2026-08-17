@@ -48,8 +48,8 @@ function git(args) {
 
   const child = spawn(process.execPath, [
     TRIGGER,
-    '--kb-root', ROOT,
-    '--repo', repo,
+    '--project-id', 'project-runtime',
+    '--repo-root', repo,
     '--host', '127.0.0.1',
     '--port', '1',
   ], {
@@ -62,7 +62,11 @@ function git(args) {
   assert(exitCode === 0, `hook trigger should exit 0, got ${exitCode}`);
   assert(received, 'hook trigger should use the live runtime endpoint instead of fallback port 1');
   assert(received.method === 'POST' && received.url === '/api/hooks/post-commit', 'unexpected hook request');
-  assert(path.resolve(received.body.repoPath) === path.resolve(repo), 'hook request should contain repo path');
+  assert(received.body.schema === 'hook-event/v2', 'hook request should use the v2 event schema');
+  assert(received.body.projectId === 'project-runtime', 'hook request should contain the stable project id');
+  assert(path.resolve(received.body.repoRoot) === path.resolve(repo), 'hook request should contain the runtime repo root');
+  assert(received.body.head, 'hook request should contain the current head');
+  assert(received.body.branch, 'hook request should contain the current branch');
 
   await new Promise(resolve => server.close(resolve));
   fs.rmSync(dataDir, { recursive: true, force: true });

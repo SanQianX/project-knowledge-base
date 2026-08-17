@@ -1,5 +1,42 @@
 # Changelog
 
+## [4.1.23] - 2026-08-17
+
+- Replaced legacy whole-registry project state with schema-v2 settings, a
+  minimal project registry, stable per-project config/state, and locked
+  requirement JSONL records under one canonical `StorageLayout`.
+- Reduced knowledge analysis to the managed post-commit Hook and startup
+  recovery, both routed through one per-project reconciler and one Commit
+  prompt. Import now establishes a baseline without AI or placeholder files.
+- Added manifest-validated AI staging, journaled Markdown promotion, crash
+  recovery, dirty-index semantics, and a single serialized `IndexService` for
+  incremental writes and atomic full rebuilds.
+- Rebuilt logging around six-level `log/v2` JSONL records, recursive secret
+  redaction, daily/size rotation, retention/capacity cleanup, cursor queries,
+  exports, health state, and orphaned-operation detection.
+- Replaced the duplicate dashboard implementations with one responsive
+  light/dark logging console, including operation flows, structured error
+  details, pause/refresh, filtering, cursor pagination, and export.
+- Unified server, CLI, MCP, Hook, index, and project path resolution. Read-only
+  knowledge search falls back to scoped Markdown when the derived index is
+  dirty or unavailable.
+- Added staged `layout-v2` migration with centralized recovery backups,
+  source/hash validation, last-step completion, fault recovery, and preservation
+  of legacy paths, secrets, Commit pointers, indexes, and logs.
+- Hardened the API by removing wildcard CORS, raw-file access, generic project
+  replacement, manual Hook/analysis routes, and stack responses; non-loopback
+  binding now requires authentication and Origin validation.
+- Removed CLAUDE.md management, the second automation queue, configurable log
+  and index locations, legacy direct database writers, and unused Vue/Tailwind
+  browser runtimes.
+- Added Windows end-to-end coverage for online Hook processing, offline Commit
+  catch-up, requirement binding, promotion/index completion, structured log
+  chains, paths with spaces/non-ASCII text, and immediate recovery of locks
+  owned by a crashed process.
+- Hardened release packaging by explicitly mirroring core runtime dependencies
+  into the Electron app and allowlisting shipped documentation, preventing
+  local review artifacts from leaking into npm or desktop packages.
+
 ## [4.1.22] - 2026-07-27
 
 - Added a read-only `project-knowledge-mcp` server for OpenCode, Codex, and

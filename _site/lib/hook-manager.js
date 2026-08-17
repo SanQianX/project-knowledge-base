@@ -1,214 +1,190 @@
-// _site/lib/hook-manager.js
-//
-// Install/uninstall a post-commit hook in a project's git repo so that
-// commits automatically report a post-commit event to the KB server. The hook
-// is a tiny shim that calls `node <siteRoot>/scripts/hook-trigger.js` with the
-// project repo path.
-//
-// Safety contract:
-//   * The hook is installed as `<repo>/.git/hooks/post-commit`.
-//   * It is a real, standalone script — it does NOT depend on the KB
-//     server being up to commit; it always exits 0.
-//   * The script points at the absolute path of the KB site scripts dir,
-//     so moving either the repo or the KB root is safe only when both
-//     are reinstalled.
-//   * If `<repo>/.git/hooks/post-commit` already exists, we refuse
-//     unless the caller passes `overwrite: true`. This protects any
-//     pre-existing hook the user might rely on.
-
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const { spawnSync } = require('child_process');
-const {
-  ensureClaudeMdRule,
-  removeClaudeMdRule,
-  readClaudeMdStatus,
-} = require('./claude-md-manager');
+const AtomicFile = require('./atomic-file');
+const { DomainError, validateProjectId } = require('./contracts');
 
 const HOOK_NAME = 'post-commit';
-const HOOK_MARKER = '# KB-HOOK-MANAGED';
+const HOOK_MARKER = '# PROJECT-KNOWLEDGE-HOOK ';
+const LEGACY_HOOK_MARKER = '# KB-HOOK-MANAGED v1';
+const MANAGED_VERSION = 2;
+const HOOK_SCHEMA = 'project-knowledge/hook/v2';
 
-function isWindows() { return process.platform === 'win32'; }
-
-function repoGitDir(repoPath) {
-  // We expect repoPath to be the work-tree root, but accept either.
-  const direct = path.join(repoPath, '.git');
-  if (fs.existsSync(direct)) {
-    const stat = fs.statSync(direct);
-    if (stat.isDirectory()) {
-      // Normal repo: hooks live in <repo>/.git/hooks
-      return direct;
-    }
-    // Submodule / linked work-tree: .git is a file containing "gitdir: ..."
-    if (stat.isFile()) {
-      const text = fs.readFileSync(direct, 'utf-8').trim();
-      const m = /^gitdir:\s*(.+)$/m.exec(text);
-      if (m) return path.resolve(repoPath, m[1].trim());
-    }
-  }
-  return null;
-}
-
-function gitHooksDir(gitDir) {
-  // Git's hooks directory is `<gitDir>/hooks`, unless core.hooksPath is set.
-  // We respect the env var `GIT_HOOKS_PATH` and `core.hooksPath` by reading
-  // the repo's config; otherwise default to the conventional location.
-  if (!gitDir) return null;
-  const env = process.env.GIT_HOOKS_PATH;
-  if (env) return env;
-  // Try to read the worktree's config: search upward for the git toplevel.
-  // We don't need to do a full `git rev-parse` — we trust that the standard
-  // hooks dir exists.
-  return path.join(gitDir, 'hooks');
-}
-
-function normalizeHooksPath(value, repoPath) {
-  if (!value || typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  return path.isAbsolute(trimmed) ? trimmed : path.resolve(repoPath, trimmed);
-}
-
-function readCoreHooksPath(repoPath) {
-  const result = spawnSync('git', ['-C', repoPath, 'config', '--path', '--get', 'core.hooksPath'], {
-    encoding: 'utf-8',
+function runGit(repoPath, args) {
+  const result = spawnSync('git', ['-C', repoPath, ...args], {
+    encoding: 'utf8',
     windowsHide: true,
     env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
   });
-  if (result.status !== 0) return null;
-  return (result.stdout || '').trim() || null;
+  if (result.status !== 0) {
+    throw new DomainError('HOOK_INVALID', 'Git could not resolve the repository hook path.', {
+      status: 400,
+      details: { gitExitCode: result.status, gitError: String(result.stderr || '').trim().slice(0, 1000) },
+    });
+  }
+  return String(result.stdout || '').trim();
 }
 
-function resolveGitHooksDir(gitDir, repoPath) {
-  if (!gitDir) return null;
-  const fromEnv = normalizeHooksPath(process.env.GIT_HOOKS_PATH, repoPath);
-  if (fromEnv) return fromEnv;
-  const fromConfig = normalizeHooksPath(readCoreHooksPath(repoPath), repoPath);
-  if (fromConfig) return fromConfig;
-  return path.join(gitDir, 'hooks');
+function resolveGitHooksDir(_gitDir, repoPath) {
+  if (!repoPath) throw new DomainError('INVALID_ARGUMENT', 'repoPath is required.');
+  const absolute = path.resolve(repoPath);
+  const hooksPath = runGit(absolute, ['rev-parse', '--path-format=absolute', '--git-path', 'hooks']);
+  if (!hooksPath) throw new DomainError('HOOK_INVALID', 'Git returned an empty hooks path.', { status: 400 });
+  return path.resolve(absolute, hooksPath);
 }
 
-function buildHookBody({ siteRoot, host, port }) {
-  // The script is a plain POSIX shell that defers to Node. This works in
-  // Git for Windows (git-bash) and on macOS / Linux.
-  const trigger = path.join(siteRoot, 'scripts', 'hook-trigger.js');
-  // Use forward slashes inside the shim for portability; Windows git-bash
-  // accepts them. Quote with single-quotes for paths that contain spaces.
-  const triggerPosix = trigger.replace(/\\/g, '/');
-  const repoPath = '$REPO_PATH_PLACEHOLDER';
-  // host/port remain only as a compatibility fallback. hook-trigger reads the
-  // live endpoint from ~/.project-knowledge first, so installed hooks survive
-  // port fallback, CLI upgrades, and switching to the desktop application.
-  const hostLine = host ? `--host ${host}` : '';
-  const portLine = Number.isFinite(port) ? `--port ${port}` : '';
+function repoGitDir(repoPath) {
+  try { return runGit(path.resolve(repoPath), ['rev-parse', '--path-format=absolute', '--git-dir']); }
+  catch { return null; }
+}
+
+function shellQuote(value) { return `'${String(value).replace(/'/g, `'"'"'`)}'`; }
+function toGitBashPath(value) { return path.resolve(value).replace(/\\/g, '/'); }
+
+function markerFor(projectId) {
+  return `${HOOK_MARKER}${JSON.stringify({ schema: HOOK_SCHEMA, managedVersion: MANAGED_VERSION, projectId })}`;
+}
+
+function parseManagedMarker(text) {
+  const line = String(text || '').split(/\r?\n/).find(item => item.startsWith(HOOK_MARKER));
+  if (!line) return null;
+  try {
+    const marker = JSON.parse(line.slice(HOOK_MARKER.length));
+    if (marker.schema !== HOOK_SCHEMA || marker.managedVersion !== MANAGED_VERSION) return null;
+    validateProjectId(marker.projectId);
+    return marker;
+  } catch { return null; }
+}
+
+function isLegacyManagedHook(text) {
+  return String(text || '').split(/\r?\n/).some(line => line.startsWith(LEGACY_HOOK_MARKER));
+}
+
+function buildHookBody({ projectId, triggerScriptPath, nodeExecutable = process.execPath }) {
+  validateProjectId(projectId);
+  if (!triggerScriptPath) throw new DomainError('HOOK_INVALID', 'triggerScriptPath is required.', { status: 400 });
+  const trigger = path.resolve(triggerScriptPath);
+  if (!fs.existsSync(trigger) || !fs.statSync(trigger).isFile()) {
+    throw new DomainError('HOOK_INVALID', 'Hook trigger script does not exist.', { status: 400 });
+  }
   return `#!/bin/sh
-${HOOK_MARKER} v1 — auto-installed by KB manager
-# This hook is generated. Editing the marker line will break updates.
-# To remove: 'git hooks uninstall' from the KB manager, or delete this file.
-set -e
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-node '${triggerPosix}' \\
-  --kb-root '${siteRoot.replace(/\\/g, '/')}' \\
-  --repo "${repoPath}" \\
-  ${hostLine} ${portLine} &
-HOOK_PID=$!
-# Wait up to 4 seconds for the trigger to dispatch; otherwise let it run free.
-( sleep 4 && kill -0 "$HOOK_PID" 2>/dev/null && kill "$HOOK_PID" 2>/dev/null ) &
-WATCHER=$!
-wait "$HOOK_PID" 2>/dev/null || true
-kill "$WATCHER" 2>/dev/null || true
+${markerFor(projectId)}
+# Generated by project-knowledge. The hook only sends a non-blocking notification.
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+${shellQuote(toGitBashPath(nodeExecutable))} ${shellQuote(toGitBashPath(trigger))} \\
+  --project-id ${shellQuote(projectId)} \\
+  --repo-root "$REPO_ROOT" >/dev/null 2>&1 || true
 exit 0
 `;
 }
 
-function installHook({
-  repoPath,
-  siteRoot,
-  host,
-  port,
-  overwrite = false,
-  updateClaudeMd = true,
-  kbPath = null,
-  projectsPath = null,
-  projectSlug = null,
-}) {
-  if (!repoPath) return { ok: false, status: 400, error: 'repoPath required' };
-  if (!siteRoot) return { ok: false, status: 400, error: 'siteRoot required' };
-  const abs = path.resolve(repoPath);
-  const gitDir = repoGitDir(abs);
-  if (!gitDir) return { ok: false, status: 400, error: `no .git directory under ${abs}` };
-  const hooksDir = resolveGitHooksDir(gitDir, abs);
-  if (!fs.existsSync(hooksDir)) fs.mkdirSync(hooksDir, { recursive: true });
-  const hookPath = path.join(hooksDir, HOOK_NAME);
-  if (fs.existsSync(hookPath) && !overwrite) {
-    const existing = fs.readFileSync(hookPath, 'utf-8');
-    if (!existing.includes(HOOK_MARKER)) {
-      return { ok: false, status: 409, error: `${HOOK_NAME} already exists and is not KB-managed. Pass overwrite:true to replace.` };
+function hookPathForRepo(repoPath) {
+  const absolute = path.resolve(repoPath);
+  const gitDir = repoGitDir(absolute);
+  if (!gitDir) throw new DomainError('HOOK_INVALID', 'The project is not a Git repository.', { status: 400 });
+  return path.join(resolveGitHooksDir(gitDir, absolute), HOOK_NAME);
+}
+
+function installHook(options = {}) {
+  const repoPath = path.resolve(String(options.repoPath || ''));
+  const projectId = validateProjectId(options.projectId || options.projectSlug || '');
+  const triggerScriptPath = options.triggerScriptPath || (options.siteRoot ? path.join(options.siteRoot, 'scripts', 'hook-trigger.js') : '');
+  const body = buildHookBody({ projectId, triggerScriptPath, nodeExecutable: options.nodeExecutable });
+  const hookPath = hookPathForRepo(repoPath);
+  fs.mkdirSync(path.dirname(hookPath), { recursive: true });
+  if (fs.existsSync(hookPath)) {
+    const existing = fs.readFileSync(hookPath, 'utf8');
+    const marker = parseManagedMarker(existing);
+    if (!marker) {
+      throw new DomainError('HOOK_CONFLICT', 'A non-managed post-commit hook already exists.', { status: 409 });
     }
+    if (marker.projectId !== projectId) {
+      throw new DomainError('HOOK_CONFLICT', 'The managed hook belongs to another project.', { status: 409 });
+    }
+    if (existing === body) return { ok: true, installed: true, updated: false, hookPath, projectId, managedVersion: MANAGED_VERSION };
   }
-  let body = buildHookBody({ siteRoot, host, port });
-  body = body.replace('$REPO_PATH_PLACEHOLDER', abs.replace(/\\/g, '/'));
-  fs.writeFileSync(hookPath, body, { mode: 0o755 });
-
-  let claudeMd;
-  if (updateClaudeMd) {
-    // Project-specific paths and slugs live in the central registry. Every
-    // repo receives the same one-line, home-relative shared-rule import.
-    claudeMd = ensureClaudeMdRule(abs);
-  } else {
-    claudeMd = { ok: true, action: 'skipped', path: path.join(abs, 'CLAUDE.md') };
+  AtomicFile.writeFileAtomic(hookPath, body, { mode: 0o755 });
+  try { fs.chmodSync(hookPath, 0o755); } catch {
+    // Windows does not expose POSIX executable bits; the atomic write used mode 0755 where supported.
   }
-  return { ok: true, hookPath, repoPath: abs, claudeMd };
+  const readback = fs.readFileSync(hookPath, 'utf8');
+  const marker = parseManagedMarker(readback);
+  if (!marker || marker.projectId !== projectId || !readback.includes(toGitBashPath(triggerScriptPath))) {
+    try { fs.unlinkSync(hookPath); } catch {
+      // Verification failure remains authoritative; the lifecycle journal records rollback residue.
+    }
+    throw new DomainError('HOOK_INVALID', 'Managed hook verification failed.', { status: 500 });
+  }
+  return { ok: true, installed: true, updated: true, hookPath, projectId, managedVersion: MANAGED_VERSION };
 }
 
-function uninstallHook({ repoPath, updateClaudeMd = true }) {
-  if (!repoPath) return { ok: false, status: 400, error: 'repoPath required' };
-  const abs = path.resolve(repoPath);
-  const gitDir = repoGitDir(abs);
-  if (!gitDir) return { ok: false, status: 400, error: `no .git directory under ${abs}` };
-  const hooksDir = resolveGitHooksDir(gitDir, abs);
-  const hookPath = path.join(hooksDir, HOOK_NAME);
+function uninstallHook({ repoPath, projectId = '' } = {}) {
+  const absolute = path.resolve(String(repoPath || ''));
+  const hookPath = hookPathForRepo(absolute);
   if (!fs.existsSync(hookPath)) return { ok: true, removed: false, hookPath };
-  const text = fs.readFileSync(hookPath, 'utf-8');
-  if (!text.includes(HOOK_MARKER)) {
-    return { ok: false, status: 409, error: `${HOOK_NAME} is not KB-managed; refusing to delete. Remove it manually.` };
-  }
+  const text = fs.readFileSync(hookPath, 'utf8');
+  const marker = parseManagedMarker(text);
+  if (!marker) throw new DomainError('HOOK_CONFLICT', 'The post-commit hook is not managed by project-knowledge.', { status: 409 });
+  if (projectId && marker.projectId !== validateProjectId(projectId)) throw new DomainError('HOOK_CONFLICT', 'The managed hook belongs to another project.', { status: 409 });
   fs.unlinkSync(hookPath);
-
-  let claudeMd;
-  if (updateClaudeMd) {
-    claudeMd = removeClaudeMdRule(abs);
-  } else {
-    claudeMd = { ok: true, action: 'skipped', path: path.join(abs, 'CLAUDE.md') };
-  }
-  return { ok: true, removed: true, hookPath, claudeMd };
+  return { ok: true, removed: true, hookPath, projectId: marker.projectId };
 }
 
-function readHookStatus({ repoPath }) {
-  if (!repoPath) return { ok: false, status: 400, error: 'repoPath required' };
-  const abs = path.resolve(repoPath);
-  const gitDir = repoGitDir(abs);
-  const claudeMd = readClaudeMdStatus(abs);
-  if (!gitDir) {
-    return { ok: true, installed: false, repoPath: abs, reason: 'no .git directory', claudeMd };
+function readHookStatus({ repoPath, projectId = '' } = {}) {
+  const absolute = path.resolve(String(repoPath || ''));
+  let hookPath;
+  try { hookPath = hookPathForRepo(absolute); }
+  catch (error) { return { ok: true, installed: false, repoPath: absolute, reason: error.message }; }
+  if (!fs.existsSync(hookPath)) return { ok: true, installed: false, hookPath, repoPath: absolute };
+  const text = fs.readFileSync(hookPath, 'utf8');
+  const marker = parseManagedMarker(text);
+  if (!marker) return { ok: true, installed: false, kbManaged: false, hookPath, repoPath: absolute, reason: isLegacyManagedHook(text) ? 'legacy managed hook requires migration' : 'third-party hook' };
+  return {
+    ok: true,
+    installed: !projectId || marker.projectId === projectId,
+    kbManaged: true,
+    hookPath,
+    repoPath: absolute,
+    projectId: marker.projectId,
+    managedVersion: marker.managedVersion,
+    bytes: text.length,
+  };
+}
+
+function migrateManagedHook(options = {}) {
+  const hookPath = hookPathForRepo(options.repoPath);
+  if (!fs.existsSync(hookPath)) return { ok: true, migrated: false, reason: 'missing' };
+  const existing = fs.readFileSync(hookPath, 'utf8');
+  const current = parseManagedMarker(existing);
+  if (current) return { ok: true, migrated: false, reason: 'current', hookPath, managedVersion: current.managedVersion };
+  if (!isLegacyManagedHook(existing)) throw new DomainError('HOOK_CONFLICT', 'A third-party post-commit hook cannot be migrated.', { status: 409 });
+  const result = installLegacyReplacement(options, hookPath);
+  return { ...result, migrated: true };
+}
+
+function installLegacyReplacement(options, hookPath) {
+  const body = buildHookBody(options);
+  AtomicFile.writeFileAtomic(hookPath, body, { mode: 0o755 });
+  try { fs.chmodSync(hookPath, 0o755); } catch {
+    // Windows does not expose POSIX executable bits; the atomic write used mode 0755 where supported.
   }
-  const hooksDir = resolveGitHooksDir(gitDir, abs);
-  const hookPath = path.join(hooksDir, HOOK_NAME);
-  if (!fs.existsSync(hookPath)) {
-    return { ok: true, installed: false, hookPath, repoPath: abs, claudeMd };
-  }
-  const text = fs.readFileSync(hookPath, 'utf-8');
-  if (!text.includes(HOOK_MARKER)) {
-    return { ok: true, installed: false, kbManaged: false, hookPath, repoPath: abs, reason: 'pre-existing hook (not KB-managed)', claudeMd };
-  }
-  return { ok: true, installed: true, kbManaged: true, hookPath, repoPath: abs, bytes: text.length, claudeMd };
+  const marker = parseManagedMarker(fs.readFileSync(hookPath, 'utf8'));
+  if (!marker) throw new DomainError('HOOK_INVALID', 'Migrated hook verification failed.', { status: 500 });
+  return { ok: true, installed: true, updated: true, hookPath, projectId: marker.projectId, managedVersion: marker.managedVersion };
 }
 
 module.exports = {
   HOOK_NAME,
   HOOK_MARKER,
+  LEGACY_HOOK_MARKER,
+  MANAGED_VERSION,
+  HOOK_SCHEMA,
+  resolveGitHooksDir,
+  repoGitDir,
+  parseManagedMarker,
+  buildHookBody,
   installHook,
   uninstallHook,
   readHookStatus,
+  migrateManagedHook,
 };

@@ -4,49 +4,47 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const html = fs.readFileSync(path.join(ROOT, 'ui', 'index.html'), 'utf8');
-const server = fs.readFileSync(path.join(ROOT, '_site', 'server.js'), 'utf8');
-const template = html.split('<script>')[0];
 
-assert(template.includes('data-workspace-shell'), 'workspace shell contract is missing');
-assert(template.includes('data-project-list'), 'project list contract is missing');
-assert(
-  template.includes('@contextmenu.prevent="openProjectContextMenu($event, p.slug)"'),
-  'project removal must start from a project-list context menu',
-);
-assert(template.includes('data-project-context-menu'), 'project context menu is missing');
-assert(template.includes('@click="openRemoveProject(projectContextMenu.slug)"'), 'context-menu removal action is not wired');
-assert.strictEqual((template.match(/data-remove-project-dialog/g) || []).length, 1, 'remove dialog must render exactly once');
-
-for (const section of ['ai', 'automation', 'relations', 'knowledge', 'model', 'logs', 'client']) {
-  assert(template.includes(`data-settings-section="${section}"`), `settings section missing: ${section}`);
+for (const contract of [
+  'data-logging-app',
+  'data-log-table',
+  'data-level-filters',
+  'data-hook-readonly',
+  'id="operation-flow"',
+  'id="structured-error"',
+  'id="structured-error-stack"',
+  'id="raw-log"',
+  'id="health-pill"',
+  'id="pause-button"',
+  'id="export-button"',
+  'id="settings-dialog"',
+]) {
+  assert(html.includes(contract), 'missing logging workspace contract: ' + contract);
 }
-assert(template.includes('data-settings-drawer'), 'settings drawer contract is missing');
-assert(template.includes('data-import-drawer'), 'import drawer contract is missing');
-assert(template.includes('form.useTeamKnowledge'), 'team knowledge binding must remain in the import flow');
 
-assert(template.includes('data-git-account-drawer'), 'Git account drawer contract is missing');
-assert(template.includes("selectGitLoginProvider('github')"), 'GitHub provider selection is missing');
-assert(template.includes("selectGitLoginProvider('gitea')"), 'Gitea provider selection is missing');
-assert(template.includes('startGithubOAuth'), 'GitHub Device Flow action is missing');
-assert(template.includes('startGiteaOAuth'), 'Gitea OAuth action is missing');
+const levels = [...html.matchAll(/class="level-filter"[^>]*data-level="([^"]+)"/g)].map(match => match[1]);
+assert.deepStrictEqual(levels, ['trace', 'debug', 'info', 'warn', 'error', 'fatal'], 'six level controls must be unique and ordered');
+assert.strictEqual((html.match(/class="level-filter"/g) || []).length, 6, 'there must be exactly six level filters');
+assert((html.match(/aria-pressed="true"/g) || []).length >= 6, 'level filters must expose pressed state');
 
-assert(template.includes('@click="onAttachImage"'), 'Claude image attachment is missing');
-assert(template.includes('@click="toggleModeMenu"'), 'Claude permission mode is missing');
-assert(template.includes('tokenUsagePercent'), 'Claude token usage is missing');
-assert(template.includes('@click="toggleSlashMenu"'), 'Claude slash menu is missing');
+for (const name of ['from', 'to', 'projectId', 'component', 'event', 'operationId', 'commitSha', 'q', 'pageSize']) {
+  assert(html.includes('name="' + name + '"'), 'missing filter: ' + name);
+}
+assert(html.includes('localDateOffset(-6)') && html.includes('localDateOffset(0)'), 'default range must be local today minus six days through today');
+assert(html.includes('cursorHistory') && html.includes('nextCursor') && html.includes('params.set("cursor"'), 'opaque cursor next/previous strategy is missing');
+assert(html.includes('resetCursor();') && html.includes('scheduleFilterRefresh'), 'filter changes must reset cursor state');
 
-assert(!template.includes('@click="validateGit('), 'manual Git validation must not render');
-assert(!template.includes('@click.prevent="installHook('), 'manual Hook installation must not render');
-assert(!template.includes('@click.prevent="uninstallHook('), 'manual Hook removal must not render');
+assert(html.includes('fetchOperationFlow') && html.includes('operationId', html.indexOf('fetchOperationFlow')), 'operation flow must query by operationId');
+assert(html.includes('structured.stack') && html.includes('JSON.stringify(entry, null, 2)'), 'structured error stack and raw JSON views are required');
+assert(html.includes('copyText(state.selectedLog.operationId') && html.includes('copyText(JSON.stringify(state.selectedLog'), 'copy actions are required');
 
-assert(server.includes('function projectHasRunningJobs('), 'backend project running-job guard is missing');
-assert(
-  server.includes('claudeCliRunner.ACTIVE_STATES.has(session.state)'),
-  'project removal guard must derive activity from the persisted session state',
-);
-assert(
-  /projectHasRunningJobs\(slug\)[\s\S]{0,500}status:\s*409/.test(server),
-  'project removal must reject active projects with HTTP 409',
-);
+assert(!/id="setting-[^"]*root/i.test(html), 'logging root must not be configurable');
+assert(!html.includes('name="rootPath"'), 'logging root field must not exist');
+assert(html.includes('retentionDays') && html.includes('maxTotalSizeMB'), 'retention and capacity settings are required');
 
-console.log('workspace UI contract test passed');
+assert(!html.includes('.innerHTML') && !html.includes('insertAdjacentHTML'), 'log data must never render through an HTML sink');
+assert(html.includes('.textContent = text(entry.message') || html.includes('create("span", "message", entry.message'), 'log messages must render as text');
+assert(html.includes('html[data-theme="dark"]'), 'dark theme tokens are required');
+assert(html.includes('@media (max-width: 620px)'), 'sub-620 responsive layout is required');
+
+console.log('workspace UI contract test PASS');
