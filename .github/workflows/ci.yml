@@ -69,8 +69,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm test --prefix desktop
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Package and test Windows runtime
-        run: npm run package --prefix desktop
+      - name: Build Windows x64 runtime and installer
+        run: npm run make --prefix desktop
       - name: Test packaged application and LanceDB
         run: npm run test:packaged --prefix desktop
       - name: Audit packaged runtime
