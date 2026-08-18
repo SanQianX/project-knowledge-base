@@ -1,6 +1,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 const crossSpawn = require('cross-spawn');
 const { applyEdits, modify, parse } = require('jsonc-parser');
@@ -169,7 +170,17 @@ class IntegrationManager {
     this.runner = options.runner || defaultRunner;
     this.commandResolver = options.commandResolver || defaultCommandResolver;
     this.dryRun = Boolean(options.dryRun);
+    this.logger = options.logger || null;
     this.planned = [];
+  }
+
+  log(level, event, message, input = {}) {
+    if (!this.logger || typeof this.logger[level] !== 'function') return;
+    Promise.resolve(this.logger[level](event, message, { component: 'integration-manager', ...input })).catch(() => {
+      try { process.stderr.write(`[integration-manager logger fallback] ${event}\n`); } catch {
+        // stderr is the final non-recursive observer fallback.
+      }
+    });
   }
 
   executable(client) {
@@ -183,20 +194,34 @@ class IntegrationManager {
   }
 
   execute(client, args, options = {}) {
+    const startedAt = Date.now();
     const command = this.executable(client);
     this.planned.push({ command: command || client, args: [...args] });
-    if (this.dryRun) return { status: 0, stdout: '', stderr: '' };
-    if (!command) throw new Error(`${CLIENT_LABELS[client]} CLI is not installed or not on PATH`);
+    const argsHash = `sha256:${crypto.createHash('sha256').update(JSON.stringify(args), 'utf8').digest('hex')}`;
+    this.log('info', 'integration.command_started', 'Integration CLI command started.', { context: { client, argumentCount: args.length, argsHash, dryRun: this.dryRun } });
+    if (this.dryRun) {
+      this.log('info', 'integration.command_completed', 'Integration CLI command completed.', { durationMs: Date.now() - startedAt, context: { client, status: 0, argsHash, dryRun: true } });
+      return { status: 0, stdout: '', stderr: '' };
+    }
+    if (!command) {
+      this.log('error', 'integration.command_failed', 'Integration CLI command failed.', { durationMs: Date.now() - startedAt, error: Object.assign(new Error('Integration CLI is unavailable.'), { code: 'INTEGRATION_CLI_UNAVAILABLE' }), context: { client, argsHash } });
+      throw new Error(`${CLIENT_LABELS[client]} CLI is not installed or not on PATH`);
+    }
     const result = this.runner(command, args, {
       env: this.env,
       cwd: this.rootDir,
       timeout: options.timeout,
     });
-    if (result.error) throw result.error;
+    if (result.error) {
+      this.log('error', 'integration.command_failed', 'Integration CLI command failed.', { durationMs: Date.now() - startedAt, error: Object.assign(new Error('Integration CLI command failed.'), { code: result.error.code || 'INTEGRATION_COMMAND_FAILED' }), context: { client, argsHash } });
+      throw result.error;
+    }
     if (result.status !== 0 && !options.allowFailure) {
       const detail = String(result.stderr || result.stdout || '').trim();
+      this.log('error', 'integration.command_failed', 'Integration CLI command failed.', { durationMs: Date.now() - startedAt, error: Object.assign(new Error('Integration CLI command failed.'), { code: 'INTEGRATION_COMMAND_FAILED' }), context: { client, status: result.status, argsHash, outputHash: `sha256:${crypto.createHash('sha256').update(detail, 'utf8').digest('hex')}` } });
       throw new Error(detail || `${CLIENT_LABELS[client]} command failed with exit code ${result.status}`);
     }
+    this.log('info', 'integration.command_completed', 'Integration CLI command completed.', { durationMs: Date.now() - startedAt, context: { client, status: result.status, argsHash } });
     return result;
   }
 

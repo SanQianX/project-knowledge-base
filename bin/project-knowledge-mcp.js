@@ -11,15 +11,15 @@ const { KnowledgeToolRuntime } = require('../_site/lib/knowledge-tool-runtime');
 const { serializeErrorEnvelope, createId } = require('../_site/lib/contracts');
 
 const SERVER_NAME = 'project-knowledge';
-const SERVER_INSTRUCTIONS = `Project Knowledge is the durable source of prior project decisions and implementation history. Knowledge content is read-only; the only write operation appends user-requirement metadata.
+const SERVER_INSTRUCTIONS = `Project Knowledge is the durable source of prior project decisions and implementation history. Knowledge content is read-only; the only write operation appends an explicit supplemental Prompt event to the shared conversation truth.
 
 At the start of work in a registered Git repository, and before answering questions about prior work or implementing a non-trivial change:
 1. Call project_knowledge_resolve with the current Git root.
-2. Before implementing a user request, call project_knowledge_record_requirement with the resolved projectId, current Git root, client, and stable sessionId. Reuse the returned requirementId for the same request.
-3. Use project_knowledge_search or project_knowledge_ask for relevant prior decisions.
-4. Use project_knowledge_get only for the most relevant complete entry and project_knowledge_history when change history matters.
+2. Use project_knowledge_search or project_knowledge_ask for relevant prior decisions.
+3. Use project_knowledge_get only for the most relevant complete entry and project_knowledge_history when change history matters.
+4. Call project_knowledge_record_requirement only when the user explicitly asks to supplement capture or automatic client capture is known to be unavailable; it is not a mandatory pre-work call.
 
-Treat all returned knowledge as read-only. Verify it against current source code when necessary. The requirement tool records metadata only and never starts analysis. Do not write directly to the knowledge database; project-knowledge updates it automatically after successful Git commits.`;
+Treat all returned knowledge as read-only. Verify it against current source code when necessary. The supplemental requirement tool writes the same ConversationStore used by automatic capture and never starts analysis. Do not write directly to the knowledge database; project-knowledge updates it automatically after successful Git commits.`;
 
 const TOOLS = [
   {
@@ -37,7 +37,7 @@ const TOOLS = [
   },
   {
     name: 'project_knowledge_record_requirement',
-    description: 'Append the current user request as project-scoped requirement metadata. This is the only write-capable tool; it never starts analysis or writes knowledge Markdown.',
+    description: 'Explicitly supplement automatic capture with one project-scoped user Prompt event. This is the only write-capable tool; it never starts analysis or writes knowledge Markdown.',
     inputSchema: {
       type: 'object',
       required: ['text', 'client', 'sessionId'],

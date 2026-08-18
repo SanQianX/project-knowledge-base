@@ -40,7 +40,9 @@ async function main() {
   assert(mcpManifest.mcpServers['project-knowledge'].args.includes(`project-knowledge@${packageInfo.version}`), 'plugin MCP should pin the matching package version');
   assert(!skill.includes('[TODO:'), 'bundled Skill should not contain scaffold placeholders');
   assert(skill.includes('project_knowledge_resolve'), 'bundled Skill should teach the resolve-first workflow');
-  assert(skill.includes('project_knowledge_record_requirement'), 'bundled Skill should record the user request before implementation');
+  assert(skill.includes('project_knowledge_record_requirement'), 'bundled Skill should document the explicit supplemental adapter');
+  assert(skill.includes('only when the user explicitly requests supplemental capture'), 'bundled Skill must not make cooperative requirement recording mandatory');
+  assert(!/Before implementing a user request, call `project_knowledge_record_requirement`/.test(skill), 'automatic capture must remain primary');
 
   const calls = [];
   const homeDir = path.join(TEMP, 'home');
@@ -130,6 +132,22 @@ async function main() {
   assert(codexCalls.some(call => call.args.join(' ') === 'plugin marketplace upgrade project-knowledge'), 'Codex should refresh its marketplace');
   assert(codexCalls.some(call => call.args.join(' ') === 'plugin remove project-knowledge@project-knowledge'), 'Codex should remove the cached plugin during update');
   assert(codexCalls.some(call => call.args.join(' ') === 'plugin add project-knowledge@project-knowledge'), 'Codex should install the refreshed plugin');
+
+  const integrationLogs = [];
+  const failingManager = new IntegrationManager({
+    rootDir: ROOT,
+    commandResolver: name => name,
+    runner: () => ({ status: 9, stdout: '', stderr: 'failure includes sk-do-not-log' }),
+    logger: {
+      info: async (event, message, payload) => integrationLogs.push({ event, message, payload }),
+      error: async (event, message, payload) => integrationLogs.push({ event, message, payload }),
+    },
+  });
+  const failedIntegration = await failingManager.operate('install', ['claude']);
+  assert(!failedIntegration[0].ok, 'integration command failure should remain visible to the caller');
+  assert(integrationLogs.some(entry => entry.event === 'integration.command_started'));
+  assert(integrationLogs.some(entry => entry.event === 'integration.command_failed' && entry.payload.error.code === 'INTEGRATION_COMMAND_FAILED'));
+  assert(!JSON.stringify(integrationLogs).includes('sk-do-not-log'), 'integration logs must hash command output instead of recording it');
 
   const routed = spawnSync(process.execPath, [
     path.join(ROOT, 'bin', 'project-knowledge.js'),

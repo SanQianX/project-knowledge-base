@@ -73,6 +73,10 @@ async function markDirty(projectId, commitSha) {
   assert.strictEqual(calls.filter(call => call.projectId === 'project-a').length, 2, 'new generation during an old write must be indexed again');
   assert.strictEqual(projects.readState('project-a').index.dirty, false);
   assert.strictEqual(projects.readState('project-b').index.dirty, false);
+  const sourceManifest = JSON.parse(fs.readFileSync(layout.getRuntimePath('index-sources', 'project-a.json'), 'utf8'));
+  assert.strictEqual(sourceManifest.schema, 'knowledge-index-source-manifest/v1');
+  assert(sourceManifest.entries['README.md'].documentHash, 'successful indexing must persist the authoritative source document hash');
+  assert.strictEqual(sourceManifest.generation, projects.readState('project-a').index.generation);
 
   await markDirty('project-b', 'commit-index-failure');
   let fail = true;

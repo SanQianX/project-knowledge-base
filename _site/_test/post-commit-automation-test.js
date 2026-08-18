@@ -26,12 +26,16 @@ const { REQUIREMENT_UNAVAILABLE, renderCommitPrompt } = require('../lib/commit-p
   assert(!Object.hasOwn(automation, 'dispatchAutomation'), 'generic automation dispatch must not be public');
 
   const staging = path.resolve('runtime', 'staging', 'run-test');
-  const policy = automationConfig.buildAutomationToolPolicy({ stagingPath: staging });
+  const evidenceRoot = path.resolve('runtime', 'runs', 'run-test', 'input', 'evidence');
+  const policy = automationConfig.buildAutomationToolPolicy({ stagingPath: staging, evidenceRoot });
   assert.strictEqual(policy.canWriteKb, false, 'AI must never write final knowledge directly');
   assert.strictEqual(policy.canWriteStaging, true);
   assert(!policy.allowedTools.includes('Bash'), 'generic Bash must not be available to analysis');
   assert.strictEqual(automationConfig.evaluateAutomationToolUse(policy, 'Write', { file_path: path.join(staging, 'manifest.json') }).behavior, 'allow');
   assert.strictEqual(automationConfig.evaluateAutomationToolUse(policy, 'Write', { file_path: path.resolve('source.js') }).behavior, 'deny');
+  assert.strictEqual(automationConfig.evaluateAutomationToolUse(policy, 'Read', { file_path: path.join(evidenceRoot, 'patch-manifest.json') }).behavior, 'allow');
+  assert.strictEqual(automationConfig.evaluateAutomationToolUse(policy, 'Write', { file_path: path.join(evidenceRoot, 'patches', '000001.patch') }).behavior, 'deny');
+  assert.strictEqual(automationConfig.evaluateAutomationToolUse(policy, 'Read', { file_path: path.resolve('repo', 'source.js') }).behavior, 'deny');
   assert.strictEqual(automationConfig.evaluateAutomationToolUse(policy, 'Bash', { command: 'git show' }).behavior, 'deny');
 
   const evidence = {
