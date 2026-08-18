@@ -73,5 +73,10 @@ const hooksLogDir = path.join(offlineData, 'logs', 'projects', projectId);
 assert(fs.existsSync(hooksLogDir));
 const lines = fs.readdirSync(hooksLogDir).flatMap(file => fs.readFileSync(path.join(hooksLogDir, file), 'utf8').trim().split(/\r?\n/).filter(Boolean).map(JSON.parse));
 assert(lines.some(line => line.schema === 'log/v2' && line.event === 'hook.notification.degraded'));
+assert(lines.some(line => line.schema === 'log/v2' && line.event === 'hook.boundary.unavailable'));
+const gapsPath = path.join(offlineData, 'runtime', 'conversation-capture-gaps.jsonl');
+assert(fs.existsSync(gapsPath), 'Bridge unavailability must persist an explicit capture gap');
+const gaps = fs.readFileSync(gapsPath, 'utf8').trim().split(/\r?\n/).map(JSON.parse);
+assert(gaps.some(gap => gap.projectId === projectId && gap.reason === 'bridge-unavailable'));
 
 console.log('hook-trigger-test PASS');

@@ -1,9 +1,11 @@
 const http = require('http');
+const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 const { getDataDir } = require('../lib/data-dir');
 const { readLiveEndpoint } = require('../lib/runtime-endpoint');
 const { StorageLayout } = require('../lib/storage-layout');
 const { Logger } = require('../lib/structured-logger');
+const { BridgeAdapter } = require('../lib/bridge-adapter');
 
 const args = process.argv.slice(2);
 function arg(name, fallback = '') {
@@ -19,10 +21,10 @@ const dataDir = getDataDir();
 const layout = new StorageLayout({ dataDir });
 const logger = new Logger({
   layout,
-  scope: 'hooks',
-  settingsProvider: () => ({ levels: ['trace', 'debug', 'info', 'warn', 'error', 'fatal'], retentionDays: 365, maxTotalSizeMB: 2048 }),
+  settingsProvider: () => ({ levels: ['trace', 'debug', 'info', 'warn', 'error', 'fatal'] }),
   context: { component: 'git-hook', projectId },
 });
+const bridge = new BridgeAdapter({ dataDir, modulePath: arg('--bridge-module', '') });
 const timeoutMs = 2000;
 
 function git(gitArgs, fallback = '') {
@@ -74,6 +76,37 @@ function post(body) {
       head: git(['rev-parse', 'HEAD']),
       branch: git(['branch', '--show-current']),
     };
+    const operationId = arg('--operation-id', `op-${crypto.randomUUID()}`);
+    const commonDir = git(['rev-parse', '--path-format=absolute', '--git-common-dir']);
+    const boundaryResult = await bridge.appendCommitBoundary({
+      projectId,
+      repoIdentity: commonDir ? { commonDir } : null,
+      commitSha: payload.head,
+      parentShas: git(['show', '-s', '--format=%P', 'HEAD']).split(/\s+/).filter(Boolean),
+      branch: payload.branch || null,
+      committedAt: git(['show', '-s', '--format=%cI', 'HEAD']) || new Date().toISOString(),
+      operationId,
+    });
+    payload.operationId = operationId;
+    payload.boundary = boundaryResult;
+    if (boundaryResult.status === 'captured') {
+      await logger.debug('hook.boundary.captured', 'Commit conversation boundary was durably captured.', {
+        operationId,
+        phase: 'boundary',
+        commitSha: payload.head,
+        context: {
+          bridgeCursorAtCommit: boundaryResult.boundary.bridgeCursorAtCommit,
+          openTurnCount: boundaryResult.boundary.openTurnIdsAtCommit.length,
+        },
+      });
+    } else {
+      await logger.warn('hook.boundary.unavailable', 'Commit conversation boundary could not be captured.', {
+        operationId,
+        phase: 'boundary',
+        commitSha: payload.head,
+        context: { gapId: boundaryResult.gap && boundaryResult.gap.gapId, reason: boundaryResult.gap && boundaryResult.gap.reason },
+      });
+    }
     try {
       const status = await post(payload);
       if (status < 200 || status >= 300) {

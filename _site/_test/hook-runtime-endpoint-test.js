@@ -45,6 +45,9 @@ function git(args) {
   });
   const port = server.address().port;
   writeEndpoint(dataDir, { pid: process.pid, host: '127.0.0.1', port, mode: 'desktop' });
+  const bridgeJournal = path.join(dataDir, 'bridge-journal.jsonl');
+  const bridgeModule = path.join(dataDir, 'bridge-fixture.cjs');
+  fs.writeFileSync(bridgeModule, `const fs = require('fs');\nmodule.exports = {\n  appendCommitBoundary(input) {\n    fs.appendFileSync(process.env.BRIDGE_TEST_JOURNAL, JSON.stringify(input) + '\\n');\n    return { sequence: 17, bridgeCursorAtCommit: 17, openTurnIdsAtCommit: ['turn-runtime'] };\n  }\n};\n`);
 
   const child = spawn(process.execPath, [
     TRIGGER,
@@ -56,7 +59,7 @@ function git(args) {
     cwd: ROOT,
     windowsHide: true,
     stdio: 'pipe',
-    env: { ...process.env, KB_DATA_DIR: dataDir },
+    env: { ...process.env, KB_DATA_DIR: dataDir, AI_CODING_EVENT_BRIDGE_MODULE: bridgeModule, BRIDGE_TEST_JOURNAL: bridgeJournal },
   });
   const exitCode = await new Promise(resolve => child.once('exit', resolve));
   assert(exitCode === 0, `hook trigger should exit 0, got ${exitCode}`);
@@ -67,6 +70,11 @@ function git(args) {
   assert(path.resolve(received.body.repoRoot) === path.resolve(repo), 'hook request should contain the runtime repo root');
   assert(received.body.head, 'hook request should contain the current head');
   assert(received.body.branch, 'hook request should contain the current branch');
+  assert(received.body.operationId && received.body.operationId.startsWith('op-'), 'Hook boundary operation id should propagate to notification');
+  assert(received.body.boundary && received.body.boundary.status === 'captured', 'Hook must append the Bridge boundary before notifying the server');
+  assert(received.body.boundary.boundary.bridgeCursorAtCommit === 17, 'Hook must forward the atomic Bridge cursor receipt');
+  const durableBoundary = JSON.parse(fs.readFileSync(bridgeJournal, 'utf8').trim());
+  assert(durableBoundary.commitSha === received.body.head, 'durable Bridge boundary and Hook payload must reference the same commit');
 
   await new Promise(resolve => server.close(resolve));
   fs.rmSync(dataDir, { recursive: true, force: true });
