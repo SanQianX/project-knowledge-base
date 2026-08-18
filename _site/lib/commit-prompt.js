@@ -11,6 +11,7 @@ const {
 const REQUIREMENT_UNAVAILABLE = '需求上下文未记录。只能记录代码可以证明的变化，不得猜测业务目的。';
 const REQUIRED_SECTIONS = Object.freeze([
   ['userRequirement', '用户需求'],
+  ['aiConversationEvidence', 'AI 对话证据'],
   ['commitMetadata', 'Commit 信息'],
   ['actualChanges', 'Commit 实际变更文件'],
   ['actualPatch', 'Commit 实际 Patch'],
@@ -30,6 +31,31 @@ function formatRequirements(records) {
     '  requirement: |',
     ...String(record.requirement || '').split(/\r?\n/).map(line => `    ${line}`),
   ].join('\n')).join('\n');
+}
+
+function formatConversationUserTruth(snapshot) {
+  if (!snapshot || !Array.isArray(snapshot.turns) || snapshot.turns.length === 0) return REQUIREMENT_UNAVAILABLE;
+  return snapshot.turns.flatMap(turn => turn.userEvents.map(event => [
+    `- turnId: ${turn.turnId}`,
+    `  eventId: ${event.eventId}`,
+    `  source/session: ${turn.source}/${turn.sessionId || '(unavailable)'}`,
+    `  binding: ${turn.bindingKind}`,
+    `  capturedAt: ${event.capturedAt}`,
+    '  userPrompt: |',
+    ...String(event.content || '').split(/\r?\n/).map(line => `    ${line}`),
+  ].join('\n'))).join('\n');
+}
+
+function formatAssistantEvidence(snapshot) {
+  if (!snapshot || !Array.isArray(snapshot.turns)) return '(no assistant conversation evidence was frozen)';
+  const entries = snapshot.turns.flatMap(turn => turn.assistantEvents.map(event => [
+    `- turnId: ${turn.turnId}`,
+    `  eventId: ${event.eventId}`,
+    `  capturedAt: ${event.capturedAt}`,
+    '  assistantResponse: |',
+    ...String(event.content || '').split(/\r?\n/).map(line => `    ${line}`),
+  ].join('\n')));
+  return entries.length ? entries.join('\n') : '(no assistant conversation evidence was frozen)';
 }
 
 function formatCommitMetadata(evidence) {
@@ -56,13 +82,17 @@ function formatChanges(evidence) {
 }
 
 function formatPatch(evidence) {
-  if (!evidence.patchOmitted) return evidence.patch || '(empty patch)';
+  if (!evidence.patchChunked) return evidence.patch || '(empty patch)';
+  const bundle = evidence.evidenceBundle || {};
   return [
-    '[PATCH OMITTED BY EXPLICIT EVIDENCE SIZE POLICY]',
-    `reason: ${evidence.omittedReason}`,
+    '[EXACT PATCH AVAILABLE AS READ-ONLY CHUNKS]',
     `fullPatchHash: ${evidence.patchHash}`,
     `fullPatchBytes: ${evidence.patchBytes}`,
-    'Only the file manifest and commit metadata above remain available. Do not infer omitted code.',
+    `patchManifestHash: ${bundle.manifestHash || '(unavailable)'}`,
+    `patchManifestPath: ${bundle.manifestPath || '(unavailable)'}`,
+    `chunkCount: ${bundle.chunkCount == null ? '(unavailable)' : bundle.chunkCount}`,
+    'Read patch-manifest.json, then Read exact patch chunks in manifest sequence. The chunks cover the full Git diff.',
+    'Do not read the source worktree and do not infer unread evidence.',
   ].join('\n');
 }
 
@@ -90,7 +120,10 @@ function renderCommitPrompt(input = {}) {
   const automation = normalizeAutomationConfig(config.automation);
   const template = automation.commitPromptTemplate || DEFAULT_COMMIT_PROMPT_TEMPLATE;
   const vars = {
-    userRequirement: formatRequirements(input.requirements),
+    userRequirement: input.conversationSnapshot
+      ? formatConversationUserTruth(input.conversationSnapshot)
+      : formatRequirements(input.requirements),
+    aiConversationEvidence: formatAssistantEvidence(input.conversationSnapshot),
     commitMetadata: formatCommitMetadata(evidence),
     actualChanges: formatChanges(evidence),
     actualPatch: formatPatch(evidence),
@@ -162,6 +195,8 @@ module.exports = {
   REQUIREMENT_UNAVAILABLE,
   KnowledgeEvidenceReader,
   formatRequirements,
+  formatConversationUserTruth,
+  formatAssistantEvidence,
   renderCommitPrompt,
   sha256,
 };

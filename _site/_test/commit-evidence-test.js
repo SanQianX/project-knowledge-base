@@ -5,15 +5,21 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { CommitScanner, TrustedGitReader, EMPTY_TREE_SHA } = require('../lib/scanner');
+const { CommitScanner, TrustedGitReader, EMPTY_TREE_SHA, sha256 } = require('../lib/scanner');
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), `kb-commit-evidence-${process.pid}-`));
 const repo = path.join(temp, 'repo');
 
 function git(args) {
-  const result = spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8', windowsHide: true });
+  const result = spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8', windowsHide: true, maxBuffer: 16 * 1024 * 1024 });
   if (result.status !== 0) throw new Error(result.stderr || `git ${args.join(' ')} failed`);
   return String(result.stdout || '').trim();
+}
+
+function gitRaw(args) {
+  const result = spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8', windowsHide: true, maxBuffer: 16 * 1024 * 1024 });
+  if (result.status !== 0) throw new Error(result.stderr || `git ${args.join(' ')} failed`);
+  return String(result.stdout || '');
 }
 
 function commitFile(name, content, message) {
@@ -64,12 +70,36 @@ function commitFile(name, content, message) {
   assert.strictEqual(mergeEvidence.patchBase, mainCommit, 'merge patch must compare against the first parent');
   assert(mergeEvidence.patch.includes('src/feature.txt'), 'first-parent merge patch should show the introduced feature side');
 
-  const limitedReader = new TrustedGitReader({ maxPatchBytes: 8 });
-  const limited = await limitedReader.collectEvidence(repo, mergeCommit, { branch: 'main' });
-  assert.strictEqual(limited.patch, null, 'oversized patch must be explicitly omitted rather than silently truncated');
-  assert.strictEqual(limited.patchOmitted, true);
-  assert(limited.omittedReason.includes('8-byte'));
-  assert(limited.patchHash.startsWith('sha256:') && limited.evidenceHash.startsWith('sha256:'), 'full omitted evidence must retain hashes');
+  git(['mv', 'src/root.txt', 'src/renamed.txt']);
+  git(['commit', '-m', 'rename root evidence']);
+  const renameCommit = git(['rev-parse', 'HEAD']);
+  const renameEvidence = await scanner.collectEvidence({ repoPath: repo }, renameCommit, { branch: 'main' });
+  assert(renameEvidence.files.some(file => file.oldPath === 'src/root.txt' && file.path === 'src/renamed.txt'), 'rename evidence must retain old and new paths');
+
+  const largeContent = Array.from({ length: 42000 }, (_, index) => `${String(index).padStart(6, '0')} ${'exact-evidence-'.repeat(5)}\n`).join('');
+  const largeCommit = commitFile('src/large.txt', largeContent, 'large exact evidence');
+  const evidenceRoot = path.join(temp, 'run', 'input', 'evidence');
+  const largeReader = new TrustedGitReader({ maxPatchBytes: 2 * 1024 * 1024, maxChunkBytes: 128 * 1024 });
+  const large = await largeReader.collectEvidence(repo, largeCommit, { branch: 'main', evidenceRoot });
+  assert(large.patchBytes > 2 * 1024 * 1024, 'fixture must cross the production inline threshold');
+  assert.strictEqual(large.patch, null, 'large patch should be referenced by exact chunks instead of prompt inline text');
+  assert.strictEqual(large.patchChunked, true);
+  assert.strictEqual(large.patchOmitted, false, 'exact chunk evidence must not be represented as omitted');
+  assert(large.evidenceBundle.chunkCount > 1, 'large patch should be split into ordered chunks');
+  const manifest = largeReader.verifyEvidence(large);
+  assert.deepStrictEqual(manifest.chunks.map(chunk => chunk.sequence), manifest.chunks.map((_, index) => index + 1));
+  assert(manifest.chunks.every(chunk => chunk.sha256.startsWith('sha256:') && chunk.bytes > 0 && chunk.sourcePaths.includes('src/large.txt')));
+  const reconstructed = manifest.chunks.map(chunk => fs.readFileSync(path.join(evidenceRoot, ...chunk.path.split('/')))).join('');
+  const exactGitPatch = gitRaw(['diff', '--no-ext-diff', '--binary', '--find-renames', '--unified=3', renameCommit, largeCommit]);
+  assert.strictEqual(Buffer.byteLength(reconstructed), Buffer.byteLength(exactGitPatch));
+  assert.strictEqual(sha256(reconstructed), large.patchHash, 'ordered chunks must exactly reconstruct the full Git diff hash');
+
+  const corruptPath = path.join(evidenceRoot, ...manifest.chunks[0].path.split('/'));
+  fs.appendFileSync(corruptPath, 'corrupt');
+  assert.throws(() => largeReader.verifyEvidence(large), error => error.code === 'EVIDENCE_INTEGRITY_FAILED', 'corrupt chunks must fail with a typed evidence error');
+
+  const missingRootReader = new TrustedGitReader({ maxPatchBytes: 8 });
+  await assert.rejects(missingRootReader.collectEvidence(repo, mergeCommit, { branch: 'main' }), error => error.code === 'EVIDENCE_INTEGRITY_FAILED');
 
   console.log('commit-evidence-test PASS');
 })().catch(error => {

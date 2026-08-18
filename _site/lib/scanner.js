@@ -1,8 +1,10 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { TextDecoder } = require('util');
 const { execGit } = require('./git-runner');
 const { DomainError } = require('./contracts');
+const { ExactPatchEvidenceBundle } = require('./evidence-bundle');
 
 const EMPTY_TREE_SHA = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 const DEFAULT_MAX_PATCH_BYTES = 2 * 1024 * 1024;
@@ -49,6 +51,7 @@ class TrustedGitReader {
   constructor(options = {}) {
     this.execGit = options.execGit || execGit;
     this.maxPatchBytes = Number(options.maxPatchBytes || DEFAULT_MAX_PATCH_BYTES);
+    this.evidenceBundle = options.evidenceBundle || new ExactPatchEvidenceBundle(options);
   }
 
   async run(repoPath, args, timeoutMs = 30_000) {
@@ -60,6 +63,17 @@ class TrustedGitReader {
       });
     }
     return String(result.stdout || '');
+  }
+
+  async runBuffer(repoPath, args, timeoutMs = 30_000) {
+    const result = await this.execGit(repoPath, args, timeoutMs);
+    if (!result || !result.ok) {
+      throw new DomainError('INVALID_ARGUMENT', 'Trusted Git read failed.', {
+        status: 409,
+        details: { args: args.slice(0, 4), code: result && result.code, error: String(result && (result.stderr || result.error) || '').slice(0, 1000) },
+      });
+    }
+    return Buffer.isBuffer(result.stdoutBuffer) ? result.stdoutBuffer : Buffer.from(String(result.stdout || ''), 'utf8');
   }
 
   async isRepository(repoPath) {
@@ -103,10 +117,12 @@ class TrustedGitReader {
     const numstat = await this.run(repoPath, ['diff-tree', '--root', '--find-renames', '--numstat', '-r', '--no-commit-id', commit]);
     const files = applyNumstat(parseNameStatus(nameStatus), numstat);
     const base = parents.length ? parents[0] : EMPTY_TREE_SHA;
-    const patch = await this.run(repoPath, ['diff', '--no-ext-diff', '--binary', '--find-renames', '--unified=3', base, commit], options.patchTimeoutMs || 60_000);
-    const patchBytes = Buffer.byteLength(patch, 'utf8');
+    const patchBuffer = await this.runBuffer(repoPath, ['diff', '--no-ext-diff', '--binary', '--find-renames', '--unified=3', base, commit], options.patchTimeoutMs || 60_000);
+    const patchBytes = patchBuffer.length;
     const maxPatchBytes = Number(options.maxPatchBytes || this.maxPatchBytes);
-    const patchOmitted = patchBytes > maxPatchBytes;
+    let patch = null;
+    try { patch = new TextDecoder('utf-8', { fatal: true }).decode(patchBuffer); } catch { patch = null; }
+    const patchChunked = patchBytes > maxPatchBytes || patch == null;
     const branch = options.branch != null ? String(options.branch) : await this.branch(repoPath);
     const metadata = {
       commitSha: resolved || commit,
@@ -118,20 +134,58 @@ class TrustedGitReader {
       patchBase: base,
       patchMode: parents.length > 1 ? 'merge-first-parent' : parents.length === 0 ? 'root-empty-tree' : 'parent',
     };
-    const patchHash = sha256(patch);
-    const evidenceHash = sha256(JSON.stringify({ metadata, files, patchHash, patchBytes }));
+    const patchHash = sha256(patchBuffer);
+    if (patchChunked && !options.evidenceRoot) {
+      throw new DomainError('EVIDENCE_INTEGRITY_FAILED', 'Large patch requires an exact evidence bundle root.', { status: 500 });
+    }
+    const evidenceBundle = options.evidenceRoot ? this.evidenceBundle.build({
+      evidenceRoot: options.evidenceRoot,
+      patch: patchBuffer,
+      patchHash,
+      commit: metadata,
+      files,
+    }) : null;
+    const evidenceHash = sha256(JSON.stringify({
+      metadata,
+      files,
+      patchHash,
+      patchBytes,
+      evidenceManifestHash: evidenceBundle && evidenceBundle.manifestHash || null,
+    }));
     return {
       schema: 'commit-evidence/v1',
       ...metadata,
       files,
-      patch: patchOmitted ? null : patch,
+      patch: patchChunked ? null : patch,
       patchHash,
       patchBytes,
-      patchOmitted,
+      patchInline: !patchChunked,
+      patchChunked,
+      patchOmitted: false,
       patchLimitBytes: maxPatchBytes,
-      omittedReason: patchOmitted ? `patch exceeds explicit ${maxPatchBytes}-byte evidence limit` : null,
+      omittedReason: null,
+      evidenceBundle,
       evidenceHash,
     };
+  }
+
+  verifyEvidence(evidence) {
+    if (!evidence || !evidence.patchHash || !Number.isInteger(evidence.patchBytes)) {
+      throw new DomainError('EVIDENCE_INTEGRITY_FAILED', 'Commit evidence is incomplete.', { status: 500 });
+    }
+    if (evidence.evidenceBundle) {
+      return this.evidenceBundle.verify(evidence.evidenceBundle.root, {
+        expectedPatchHash: evidence.patchHash,
+        expectedBytes: evidence.patchBytes,
+      });
+    }
+    if (evidence.patchChunked) {
+      throw new DomainError('EVIDENCE_INTEGRITY_FAILED', 'Chunked patch has no frozen evidence bundle.', { status: 500 });
+    }
+    if (sha256(evidence.patch || '') !== evidence.patchHash) {
+      throw new DomainError('EVIDENCE_INTEGRITY_FAILED', 'Inline patch hash does not match.', { status: 500 });
+    }
+    return null;
   }
 }
 
@@ -176,6 +230,10 @@ class CommitScanner {
 
   collectEvidence(config, commitSha, options = {}) {
     return this.git.collectEvidence(config.repoPath, commitSha, options);
+  }
+
+  verifyEvidence(evidence) {
+    return this.git.verifyEvidence(evidence);
   }
 }
 
