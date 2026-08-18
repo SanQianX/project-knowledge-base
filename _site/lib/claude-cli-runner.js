@@ -26,6 +26,26 @@ const {
   evaluateAutomationToolUse,
 } = require('./automation-config');
 const { resolveContextWindow } = require('./model-context-windows');
+const AtomicFile = require('./atomic-file');
+
+let structuredLogger = null;
+function setLogger(logger) { structuredLogger = logger || null; }
+function logSession(level, event, message, session, context = {}, error = null) {
+  if (!structuredLogger || typeof structuredLogger[level] !== 'function') return;
+  const payload = {
+    component: 'claude-cli-runner',
+    projectId: session && session.projectSlug || '',
+    runId: session && session.automationRunId || '',
+    phase: session && session.state || '',
+    context: { sessionId: session && session.sessionId || '', ...context },
+  };
+  if (error) payload.error = error;
+  Promise.resolve(structuredLogger[level](event, message, payload)).catch(() => {
+    try { process.stderr.write(`[claude-cli-runner logger fallback] ${event}\n`); } catch {
+      // stderr is the final non-recursive observer fallback.
+    }
+  });
+}
 
 // ---- session store ----
 // Map<sessionId, Session>
@@ -145,6 +165,7 @@ function createSession({ projectSlug, projectPath, kbPath, promptKey, source = '
   };
   sessions.set(sessionId, session);
   persistSession(session);
+  logSession('info', 'claude.session_created', 'Claude Workbench session created.', session, { promptKey, source });
   return session;
 }
 
@@ -184,12 +205,14 @@ function toPersistedSession(session) {
 
 function persistSession(session) {
   const file = sessionRecordPath(session);
-  if (!file) return;
+  if (!file) return false;
   try {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(toPersistedSession(session), null, 2) + '\n', 'utf-8');
-  } catch (e) {
+    AtomicFile.writeJsonAtomic(file, toPersistedSession(session));
+    return true;
+  } catch (error) {
     // Persistence should never interrupt the live Claude process.
+    logSession('error', 'claude.session_persist_failed', 'Claude Workbench session metadata could not be persisted.', session, { recordId: path.basename(file) }, error);
+    return false;
   }
 }
 
@@ -197,8 +220,9 @@ function readPersistedRecord(file) {
   try {
     const parsed = JSON.parse(fs.readFileSync(file, 'utf-8'));
     if (parsed && parsed.schema === 'claude-workbench-session/v1' && parsed.sessionId) return parsed;
-  } catch {
+  } catch (error) {
     // Corrupt or partially written historical session records are not resumable.
+    logSession('warn', 'claude.session_restore_skipped', 'A Claude Workbench session record was not resumable.', null, { recordId: path.basename(file), errorCode: error && error.code || 'DATA_CORRUPT' });
   }
   return null;
 }
@@ -475,6 +499,7 @@ function setState(session, state, extra = {}) {
     session.endedAt = new Date().toISOString();
   }
   emit(session, { type: 'claude/state', state, ...extra });
+  logSession(state === 'failed' ? 'error' : 'info', 'claude.session_state_changed', 'Claude Workbench session state changed.', session, { state, turn: session.turns, runner: session.runner || 'sdk' });
   _broadcastSessionChange(session, 'state');
   if (TERMINAL_STATES.has(state) && sessionEndedCallbacks.size > 0) {
     const snapshot = session;
@@ -848,6 +873,11 @@ async function sendInput(sessionId, text, aiProfile = null, opts = {}) {
     applyAiProfileToSession(session, aiProfile);
   }
   const isFresh = !session.claudeSessionId;
+  logSession('info', 'claude.input_accepted', 'Claude Workbench input accepted.', session, {
+    inputHash: `sha256:${crypto.createHash('sha256').update(String(text), 'utf8').digest('hex')}`,
+    inputLength: String(text).length,
+    isFollowUp: !isFresh,
+  });
   emit(session, { type: 'claude/user-prompt', text, isFollowUp: !isFresh, isFresh });
   const sdkOverrides = buildSdkOverridesFromProfile(aiProfile);
   session.permissionMode = normalizePermissionMode(opts.permissionMode || session.permissionMode || 'default');
@@ -1119,9 +1149,11 @@ async function runSdkTurn(session, opts, isResume) {
   try {
     const retries = maxSdkRetries();
     for (let attempt = 0; attempt <= retries; attempt += 1) {
+      const attemptStartedAt = Date.now();
       let queryInstance;
       const attemptToolInputBuffers = attempt === 0 ? toolInputBuffers : new Map();
       try {
+        logSession('info', 'claude.sdk_attempt_started', 'Claude SDK attempt started.', session, { attempt: attempt + 1, maxAttempts: retries + 1, isResume });
         queryInstance = query({ prompt: opts.userPrompt, options: sdkOptions });
         session.subprocess = { kill: () => queryInstance.close && queryInstance.close() };
         let errorResult = null;
@@ -1140,6 +1172,7 @@ async function runSdkTurn(session, opts, isResume) {
           setState(session, 'idle', { exitCode: 0, message: isResume ? 'follow-up complete' : 'turn complete, awaiting input or new analysis' });
           emit(session, { type: 'claude/turn-end', exitCode: 0 });
         }
+        logSession('info', 'claude.sdk_attempt_completed', 'Claude SDK attempt completed.', session, { attempt: attempt + 1, maxAttempts: retries + 1, durationMs: Date.now() - attemptStartedAt });
         return;
       } catch (e) {
         session.subprocess = null;
@@ -1153,6 +1186,13 @@ async function runSdkTurn(session, opts, isResume) {
             maxRetries: retries,
             delayMs,
             message,
+          });
+          logSession('warn', 'claude.sdk_attempt_retrying', 'Claude SDK attempt will retry after a transient failure.', session, {
+            attempt: attempt + 1,
+            maxAttempts: retries + 1,
+            delayMs,
+            durationMs: Date.now() - attemptStartedAt,
+            failureHash: `sha256:${crypto.createHash('sha256').update(message, 'utf8').digest('hex')}`,
           });
           setState(session, 'running', {
             turn: session.turns,
@@ -1171,6 +1211,9 @@ async function runSdkTurn(session, opts, isResume) {
     session.error = e.message;
     emit(session, { type: 'claude/error', message: e.message });
     setState(session, 'failed', { error: e.message });
+    logSession('error', 'claude.sdk_turn_failed', 'Claude SDK turn failed.', session, {
+      failureHash: `sha256:${crypto.createHash('sha256').update(normalizeErrorMessage(e), 'utf8').digest('hex')}`,
+    }, Object.assign(new Error('Claude SDK turn failed.'), { code: 'CLAUDE_SDK_FAILED' }));
   } finally {
     session.subprocess = null;
     session.pendingToolApproval = null;
@@ -1195,6 +1238,7 @@ function startSdkTurn(session, opts, isResume) {
 function abort(sessionId) {
   const session = getSession(sessionId);
   if (!session) throw new Error(`session not found: ${sessionId}`);
+  logSession('warn', 'claude.session_abort_requested', 'Claude Workbench session abort requested.', session, { state: session.state });
   if (session.subprocess) {
     try {
       session.subprocess.kill();
@@ -1480,6 +1524,8 @@ setInterval(() => {
 }, 30 * 1000).unref();
 
 module.exports = {
+  setLogger,
+  persistSession,
   createSession,
   startSession,
   startChatSession,

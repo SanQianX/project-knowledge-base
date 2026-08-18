@@ -490,6 +490,7 @@ function createRuntime(options = {}) {
     },
     secretsProvider,
   });
+  claudeCliRunner.setLogger(logger);
   const logRepository = options.logRepository || new LogRepository({
     layout,
     settingsProvider: () => settingsStore.read({ allowMissing: true }).logging,

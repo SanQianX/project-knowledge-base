@@ -100,6 +100,26 @@ function assert(cond, msg) {
   assert(switchedState.model === 'glm-5.2', `profile switch should update model, got ${switchedState.model}`);
   runner.deleteSession(chat.sessionId);
 
+  // Session metadata uses durable atomic replacement, but a disk fault must
+  // remain fail-open for the live Workbench session and become observable.
+  const AtomicFile = require('../lib/atomic-file');
+  const originalAtomicWrite = AtomicFile.writeJsonAtomic;
+  const persistenceLogs = [];
+  runner.setLogger({ error: async (event, message, payload) => { persistenceLogs.push({ event, message, payload }); } });
+  AtomicFile.writeJsonAtomic = () => { throw Object.assign(new Error('simulated disk full'), { code: 'ENOSPC' }); };
+  let persistenceFaultSession;
+  try {
+    persistenceFaultSession = runner.createSession({
+      projectSlug: 'claude-workbench-test-temp', projectPath: ROOT, kbPath: TEMP_KB, promptKey: 'terminal-chat',
+    });
+    assert(persistenceFaultSession.sessionId, 'persistence failure must not interrupt the live session');
+    assert(persistenceLogs.some(entry => entry.event === 'claude.session_persist_failed' && entry.payload.error.code === 'ENOSPC'), 'persistence failure must be structured and correlated');
+  } finally {
+    AtomicFile.writeJsonAtomic = originalAtomicWrite;
+    runner.setLogger(null);
+    if (persistenceFaultSession) runner.deleteSession(persistenceFaultSession.sessionId);
+  }
+
   const executable = await runner.findClaudeExecutableForSdk();
   if (process.platform === 'win32' && executable.cmd) {
     assert(!/\.(cmd|bat|ps1)$/i.test(executable.cmd),
