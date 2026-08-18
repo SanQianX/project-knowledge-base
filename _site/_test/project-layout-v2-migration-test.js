@@ -63,7 +63,8 @@ function fixture() {
     assert.strictEqual(stateA.lastAnalyzedCommit, 'last-a');
     const settings = JSON.parse(fs.readFileSync(layout.getSettingsPath(), 'utf8'));
     assert.strictEqual(settings.ai.profiles[0].apiKey, 'exact-secret-value');
-    assert.strictEqual(settings.logging.retentionDays, 0);
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(settings.logging, 'retentionDays'), false);
+    assert.strictEqual(settings.legacyExtensions.logging.retentionDays, 0, 'legacy logging settings remain preserved as read-only migration evidence');
     assert(fs.existsSync(path.join(result.recoveryDir, 'backup', 'projects.json')));
     assert(fs.existsSync(path.join(dataDir, '.hook-trigger-errors.log')), 'legacy hook log must remain');
     const second = await migration.migrateIfNeeded();

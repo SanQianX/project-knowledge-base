@@ -130,9 +130,7 @@ class MigrationService {
     if (embedding && typeof embedding === 'object') settings.embedding = embedding;
     if (logging && typeof logging === 'object') {
       if (Array.isArray(logging.levels)) settings.logging.levels = logging.levels;
-      if (Number.isInteger(logging.retentionDays) && logging.retentionDays >= 0) settings.logging.retentionDays = logging.retentionDays;
-      if (Number.isFinite(logging.maxTotalSizeMB) && logging.maxTotalSizeMB > 0) settings.logging.maxTotalSizeMB = logging.maxTotalSizeMB;
-      settings.legacyExtensions.logging = Object.fromEntries(Object.entries(logging).filter(([key]) => !['levels', 'retentionDays', 'maxTotalSizeMB', 'rootPath', 'schema'].includes(key)));
+      settings.legacyExtensions.logging = { ...logging };
     }
     if (prompts && typeof prompts === 'object') settings.promptOverrides = prompts;
     if (github || providers) settings.integrations = { ...(settings.integrations || {}), ...(github ? { githubTeam: github } : {}), ...(providers ? { teamGitProviders: providers } : {}) };

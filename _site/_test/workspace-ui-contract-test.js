@@ -40,7 +40,7 @@ assert(html.includes('copyText(state.selectedLog.operationId') && html.includes(
 
 assert(!/id="setting-[^"]*root/i.test(html), 'logging root must not be configurable');
 assert(!html.includes('name="rootPath"'), 'logging root field must not exist');
-assert(html.includes('retentionDays') && html.includes('maxTotalSizeMB'), 'retention and capacity settings are required');
+assert(!html.includes('retentionDays') && !html.includes('maxTotalSizeMB'), 'permanent logs expose no retention or capacity settings');
 
 assert(!html.includes('.innerHTML') && !html.includes('insertAdjacentHTML'), 'log data must never render through an HTML sink');
 assert(html.includes('.textContent = text(entry.message') || html.includes('create("span", "message", entry.message'), 'log messages must render as text');

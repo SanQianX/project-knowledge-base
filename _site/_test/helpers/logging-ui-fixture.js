@@ -77,6 +77,44 @@ async function createLoggingUiFixture(options = {}) {
   }
   await logger.close();
 
+  if (Number(options.conversationTurns || 0) > 0) {
+    const { ConversationStore } = require('../../lib/conversation-store');
+    const conversationStore = new ConversationStore({ layout, projectStore });
+    const turnCount = Number(options.conversationTurns);
+    const repoIdentity = { repoId: 'visual-project-repo' };
+    const baseTime = new Date();
+    baseTime.setHours(9, 0, 0, 0);
+    const captured = [];
+    for (let index = 0; index < turnCount; index += 1) {
+      const turnId = `visual-turn-${index + 1}`;
+      const promptAt = new Date(baseTime.getTime() + index * 120000).toISOString();
+      const replyAt = new Date(baseTime.getTime() + index * 120000 + 30000).toISOString();
+      const longToken = index === 1 ? ` ${'D:\\deep-project\\'.repeat(40)}README.md` : '';
+      const prompt = `请检查第 ${index + 1} 个视觉工作流。${longToken}`;
+      const reply = `已完成第 ${index + 1} 个工作流的检查。${longToken}`;
+      const user = (await conversationStore.appendEvent(projectId, {
+        eventId: `visual-user-${index + 1}`, sequence: index * 2 + 1, source: 'codex', eventType: 'user_prompt', role: 'user', content: prompt,
+        sessionId: 'visual-session', turnId, repoIdentity, projectPath: repo.path, branch: 'main', headAtCapture: repo.headCommit,
+        capturedAt: promptAt, identityConfidence: 'high', captureStatus: 'captured',
+      })).event;
+      const assistant = (await conversationStore.appendEvent(projectId, {
+        eventId: `visual-assistant-${index + 1}`, sequence: index * 2 + 2, source: 'codex', eventType: 'assistant_response', role: 'assistant', content: reply,
+        sessionId: 'visual-session', turnId, repoIdentity, projectPath: repo.path, branch: 'main', headAtCapture: repo.headCommit,
+        capturedAt: replyAt, identityConfidence: 'high', captureStatus: 'captured',
+      })).event;
+      captured.push({ turnId, user, assistant });
+    }
+    const projectEvent = event => ({ eventId: event.eventId, sequence: event.sequence, content: event.content, contentHash: event.contentHash, capturedAt: event.capturedAt });
+    if (captured[0]) conversationStore.writeSnapshot(projectId, {
+      commitSha: '1'.repeat(40), repoIdentity, parentSha: null, boundaryStartCursor: 0, boundaryEndCursor: 2, status: 'available',
+      turns: [{ turnId: captured[0].turnId, source: 'codex', sessionId: 'visual-session', bindingKind: 'direct', userEvents: [projectEvent(captured[0].user)], assistantEvents: [projectEvent(captured[0].assistant)] }],
+    });
+    if (captured[1]) conversationStore.writeSnapshot(projectId, {
+      commitSha: '2'.repeat(40), repoIdentity, parentSha: '1'.repeat(40), boundaryStartCursor: 2, boundaryEndCursor: 4, status: 'available',
+      turns: [{ turnId: captured[1].turnId, source: 'codex', sessionId: 'visual-session', bindingKind: 'shared-spanning', userEvents: [projectEvent(captured[1].user)], assistantEvents: [projectEvent(captured[1].assistant)] }],
+    });
+  }
+
   return {
     dataDir,
     layout,

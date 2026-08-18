@@ -10,9 +10,7 @@ function defaultSettings() {
     ai: { schema: 'ai-profiles/v1', profiles: [] },
     embedding: {},
     logging: {
-      levels: ['info', 'warn', 'error', 'fatal'],
-      retentionDays: 365,
-      maxTotalSizeMB: 2048,
+      levels: ['trace', 'debug', 'info', 'warn', 'error', 'fatal'],
     },
     promptOverrides: {},
     integrations: {},
@@ -43,11 +41,8 @@ function validateSettings(settings) {
     throw new DomainError('DATA_CORRUPT', 'Settings knowledge.rootPath is invalid.', { status: 500 });
   }
   const logging = settings.logging || {};
-  if (!Array.isArray(logging.levels) || !Number.isInteger(logging.retentionDays) || logging.retentionDays < 0) {
+  if (!Array.isArray(logging.levels) || !logging.levels.length || logging.levels.some(level => !['trace', 'debug', 'info', 'warn', 'error', 'fatal'].includes(level))) {
     throw new DomainError('DATA_CORRUPT', 'Settings logging configuration is invalid.', { status: 500 });
-  }
-  if (!Number.isFinite(logging.maxTotalSizeMB) || logging.maxTotalSizeMB <= 0) {
-    throw new DomainError('DATA_CORRUPT', 'Settings logging maxTotalSizeMB is invalid.', { status: 500 });
   }
   return settings;
 }
@@ -89,6 +84,10 @@ class SettingsStore {
 
   async updatePatch(patch) {
     return this.atomic.withFileLock(this.lockPath, async () => {
+      if (patch && patch.logging && typeof patch.logging === 'object') {
+        const unknown = Object.keys(patch.logging).find(key => key !== 'levels');
+        if (unknown) throw new DomainError('INVALID_ARGUMENT', `Logging setting is read-only or unsupported: ${unknown}.`, { details: { field: unknown } });
+      }
       const current = this.read({ allowMissing: true });
       const next = mergeObjects(current, patch || {});
       next.schema = SCHEMAS.settings;
@@ -106,6 +105,7 @@ class SettingsStore {
     return {
       ...settings,
       ai: publicAiProfilesConfig(settings.ai),
+      logging: { levels: [...settings.logging.levels] },
     };
   }
 }

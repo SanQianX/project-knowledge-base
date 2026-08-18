@@ -3,20 +3,22 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { StorageLayout } = require('../lib/storage-layout');
-const { Logger, LogRepository } = require('../lib/structured-logger');
+const { Logger, LogRepository, localDay } = require('../lib/structured-logger');
 
 (async () => {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-logger-v2-'));
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-logger-v3-'));
   const layout = new StorageLayout({ dataDir });
-  const config = { levels: ['trace', 'debug', 'info', 'warn', 'error', 'fatal'], retentionDays: 365, maxTotalSizeMB: 10 };
+  const config = { levels: ['trace', 'debug', 'info', 'warn', 'error', 'fatal'] };
   let stderr = '';
   const logger = new Logger({
     layout,
     settingsProvider: () => config,
-    segmentMaxBytes: 600,
     secrets: ['known-secret-value'],
     stderr: { write(value) { stderr += String(value); } },
   });
+  const published = [];
+  logger.subscribe(record => published.push(record));
+  logger.subscribe(() => { throw new Error('subscriber failure must be isolated'); });
   const child = logger.child({ component: 'commit-reconciler', projectId: 'project-a', operationId: 'op-1', runId: 'run-1', commitSha: 'abc' });
   const cause = new Error('cause known-secret-value');
   cause.code = 'ECAUSE';
@@ -32,13 +34,17 @@ const { Logger, LogRepository } = require('../lib/structured-logger');
   }
   await logger.close();
 
-  const files = fs.readdirSync(layout.getLogPath('project', 'project-a')).filter(file => file.endsWith('.jsonl'));
-  assert(files.length >= 2, 'small threshold should rotate segments');
-  const allText = files.map(file => fs.readFileSync(path.join(layout.getLogPath('project', 'project-a'), file), 'utf8')).join('');
+  const projectDirectory = layout.getLogPath('project', 'project-a');
+  const files = fs.readdirSync(projectDirectory).filter(file => file.endsWith('.jsonl'));
+  assert.deepStrictEqual(files, [`${localDay()}.jsonl`], 'one project/day must use exactly one file');
+  assert(!files.some(file => /\.\d{3}\.jsonl$/.test(file)), 'v13 writer must never create size segments');
+  const allText = fs.readFileSync(path.join(projectDirectory, files[0]), 'utf8');
   assert(!allText.includes('known-secret-value'));
   assert(!allText.includes('top-secret-token'));
   assert(!allText.includes('nested-token'));
   assert(allText.includes('[REDACTED]'));
+  assert.strictEqual(published.length, 6, 'each durable append must publish exactly once');
+  assert.deepStrictEqual(published.map(record => record.level), ['trace', 'debug', 'info', 'warn', 'error', 'fatal']);
   for (const line of allText.trim().split(/\r?\n/)) {
     const record = JSON.parse(line);
     assert.strictEqual(record.schema, 'log/v2');
@@ -47,28 +53,28 @@ const { Logger, LogRepository } = require('../lib/structured-logger');
     assert(record.id && record.ts && record.event);
   }
 
-  const repository = new LogRepository({ layout, settingsProvider: () => config, secrets: ['known-secret-value'] });
-  const first = repository.query({ from: '2000-01-01', to: '2999-12-31', pageSize: 2, projectId: 'project-a' });
+  await logger.info('system.completed', 'System record', { component: 'server', operationId: 'op-system' });
+  await logger.close();
+  assert(fs.existsSync(path.join(layout.getLogPath('system'), `${localDay()}.jsonl`)), 'unscoped logs belong to system/day');
+
+  const repository = new LogRepository({ layout, secrets: ['known-secret-value'] });
+  const first = repository.query({ pageSize: 2, projectId: 'project-a' });
   assert.strictEqual(first.entries.length, 2);
   assert(first.nextCursor);
-  const second = repository.query({ from: '2000-01-01', to: '2999-12-31', pageSize: 2, projectId: 'project-a', cursor: first.nextCursor });
+  const second = repository.query({ pageSize: 2, projectId: 'project-a', cursor: first.nextCursor });
   assert.strictEqual(second.entries.length, 2);
   assert.notStrictEqual(first.entries[0].id, second.entries[0].id);
-  assert.throws(() => repository.query({ from: '2000-01-01', to: '2999-12-31', pageSize: 3, projectId: 'project-a', cursor: first.nextCursor }), error => error.code === 'INVALID_ARGUMENT');
+  assert.throws(
+    () => repository.query({ pageSize: 3, projectId: 'project-a', cursor: first.nextCursor }),
+    error => error.code === 'LOG_CURSOR_EXPIRED',
+  );
 
   const exportPath = path.join(dataDir, 'exports', 'diagnostics.jsonl');
-  const exported = repository.exportToFile(exportPath, { from: '2000-01-01', to: '2999-12-31', projectId: 'project-a' });
+  const exported = repository.exportToFile(exportPath, { projectId: 'project-a' });
   assert.strictEqual(exported.count, 6);
   assert(!fs.readFileSync(exportPath, 'utf8').includes('known-secret-value'));
   assert.strictEqual(stderr, '');
-
-  const oldLog = path.join(layout.getLogPath('app'), '2020-01-01.jsonl');
-  fs.mkdirSync(path.dirname(oldLog), { recursive: true });
-  fs.writeFileSync(oldLog, `${JSON.stringify({ schema: 'log/v2', id: 'old', ts: '2020-01-01T00:00:00.000Z', level: 'debug', component: 'test', event: 'old.debug', message: 'old', projectId: '', projectSlug: '', projectDisplayName: '', projectDeleted: false, operationId: '', jobId: '', runId: '', commitSha: '', phase: '', attempt: 0, durationMs: 0, error: null, context: {} })}\n`);
-  const keptForever = repository.cleanup({ retentionDays: 0, maxTotalSizeMB: 10 });
-  assert.strictEqual(keptForever.deleted.includes('app/2020-01-01.jsonl'), false);
-  const removedExpired = repository.cleanup({ retentionDays: 1, maxTotalSizeMB: 10 });
-  assert(removedExpired.deleted.includes('app/2020-01-01.jsonl'));
+  assert.strictEqual(typeof repository.cleanup, 'undefined', 'production log cleanup API must not exist');
 
   const blocker = path.join(dataDir, 'not-a-directory');
   fs.writeFileSync(blocker, 'blocker');
@@ -82,8 +88,10 @@ const { Logger, LogRepository } = require('../lib/structured-logger');
     secrets: ['known-secret-value'],
     stderr: { write(value) { stderr += String(value); } },
   });
-  await failing.error('logger.failure.test', 'known-secret-value', { error: new Error('known-secret-value') });
-  assert.strictEqual(failing.getHealth().status, 'degraded');
+  const failingChild = failing.child({ component: 'failure-test' });
+  await failingChild.error('logger.failure.test', 'known-secret-value', { error: new Error('known-secret-value') });
+  assert.strictEqual(failing.getHealth().status, 'degraded', 'parent and child must share logger health');
+  assert.strictEqual(failingChild.getHealth().status, 'degraded');
   assert(stderr.includes('logger fallback'));
   assert(!stderr.includes('known-secret-value'));
   console.log('structured-logger-test PASS');

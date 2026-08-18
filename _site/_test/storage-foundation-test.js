@@ -61,10 +61,13 @@ const { SettingsStore } = require('../lib/settings-store');
   assert.strictEqual(publicSettings.ai.profiles[0].apiKeyMasked, '****7890');
   assert.strictEqual(Object.prototype.hasOwnProperty.call(publicSettings.ai.profiles[0], 'apiKey'), false);
 
-  await store.updatePatch({ logging: { retentionDays: 0, maxTotalSizeMB: 512 } });
-  const updated = store.read();
-  assert.strictEqual(updated.logging.retentionDays, 0);
-  assert.strictEqual(updated.logging.maxTotalSizeMB, 512);
+  await assert.rejects(
+    () => store.updatePatch({ logging: { retentionDays: 0, maxTotalSizeMB: 512 } }),
+    error => error.code === 'INVALID_ARGUMENT',
+    'runtime retention/capacity settings must not be writable',
+  );
+  const updated = store.readPublicView();
+  assert.deepStrictEqual(updated.logging.levels, ['trace', 'debug', 'info', 'warn', 'error', 'fatal']);
   assert.strictEqual(fs.existsSync(layout.getRecoveryPath()), false, 'optional recovery directory must stay lazy');
   assert.strictEqual(fs.existsSync(layout.getCachePath()), false, 'optional cache directory must stay lazy');
 

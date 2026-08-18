@@ -50,7 +50,7 @@ async function jsonResponse(url) {
     invalidParams.set('q', 'changed-fingerprint');
     const invalid = await jsonResponse(baseUrl + '/api/logs?' + invalidParams.toString());
     assert.strictEqual(invalid.response.status, 409);
-    assert.strictEqual(invalid.body.error.code, 'INVALID_ARGUMENT');
+    assert.strictEqual(invalid.body.error.code, 'LOG_CURSOR_EXPIRED');
     assert.strictEqual(invalid.body.error.retryable, true);
     assert(!('stack' in invalid.body.error), 'public cursor error must not leak a stack');
 
@@ -89,7 +89,7 @@ async function jsonResponse(url) {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ logging: { rootPath: path.join(fixture.dataDir, 'elsewhere') } }),
     });
-    assert.strictEqual(rootMutation.status, 400, 'logging root must not be mutable through the API');
+    assert.strictEqual(rootMutation.status, 409, 'logging root must not be mutable through the API');
     const persistedSettings = JSON.parse(require('fs').readFileSync(fixture.layout.getSettingsPath(), 'utf8'));
     assert(!Object.prototype.hasOwnProperty.call(persistedSettings.logging, 'rootPath'));
 

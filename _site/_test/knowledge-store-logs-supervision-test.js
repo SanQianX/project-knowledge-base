@@ -55,11 +55,14 @@ async function json(method, route, body) {
     result = await json('GET', '/api/projects/store-project-one');
     assert.strictEqual(result.body.project.config.knowledgePath, fixedPath, 'global root changes affect only future imports');
 
-    result = await json('PATCH', '/api/settings', { logging: { levels: ['trace', 'debug', 'info', 'warn', 'error', 'fatal'], retentionDays: 0, maxTotalSizeMB: 32 } });
-    assert(result.response.ok, JSON.stringify(result.body));
-    assert.strictEqual(result.body.settings.logging.retentionDays, 0);
+    result = await json('PATCH', '/api/settings', { logging: { levels: ['trace', 'debug', 'info', 'warn', 'error', 'fatal'] } });
+    assert.strictEqual(result.response.status, 409, 'logging capture policy must not be a mutable product setting');
+    const publicSettings = await json('GET', '/api/settings');
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(publicSettings.body.settings.logging, 'retentionDays'), false);
+    result = await json('PATCH', '/api/settings', { logging: { retentionDays: 0 } });
+    assert.strictEqual(result.response.status, 409, 'automatic retention settings must be removed');
     result = await json('PATCH', '/api/settings', { logging: { rootPath: path.join(DATA_DIR, 'external-logs') } });
-    assert.strictEqual(result.response.status, 400, 'logging root must not be configurable');
+    assert.strictEqual(result.response.status, 409, 'logging root must not be configurable');
     assert(!fs.existsSync(path.join(DATA_DIR, 'external-logs')));
 
     result = await json('GET', '/api/logs?levels=info,error&pageSize=100');

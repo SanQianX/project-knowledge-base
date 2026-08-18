@@ -69,7 +69,7 @@ const offline = spawnSync(process.execPath, [TRIGGER, '--project-id', projectId,
   env: { ...process.env, KB_DATA_DIR: offlineData, KB_SKIP_MIGRATION: '1' },
 });
 assert.strictEqual(offline.status, 0, offline.stderr);
-const hooksLogDir = path.join(offlineData, 'logs', 'hooks');
+const hooksLogDir = path.join(offlineData, 'logs', 'projects', projectId);
 assert(fs.existsSync(hooksLogDir));
 const lines = fs.readdirSync(hooksLogDir).flatMap(file => fs.readFileSync(path.join(hooksLogDir, file), 'utf8').trim().split(/\r?\n/).filter(Boolean).map(JSON.parse));
 assert(lines.some(line => line.schema === 'log/v2' && line.event === 'hook.notification.degraded'));

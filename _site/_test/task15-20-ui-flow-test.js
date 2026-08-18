@@ -60,11 +60,12 @@ const profileDir = path.join(os.tmpdir(), 'pk-ui-flow-profile-' + process.pid);
 
     await browser.evaluate('document.getElementById("settings-button").click()');
     await waitFor(() => browser.evaluate('document.getElementById("settings-dialog").open'), 'settings dialog');
-    await browser.evaluate('(() => { document.getElementById("setting-retention").value = "30"; document.getElementById("setting-capacity").value = "1024"; document.getElementById("save-settings").click(); })()');
+    await browser.evaluate('(() => { document.getElementById("save-settings").click(); })()');
     await waitFor(() => browser.evaluate('!document.getElementById("settings-dialog").open'), 'settings save');
     const settings = await requestJson('http://127.0.0.1:' + sitePort + '/api/settings');
-    assert.strictEqual(settings.settings.logging.retentionDays, 30);
-    assert.strictEqual(settings.settings.logging.maxTotalSizeMB, 1024);
+    assert(Array.isArray(settings.settings.logging.levels) && settings.settings.logging.levels.length > 0, 'levels remain the only mutable logging setting');
+    assert(!('retentionDays' in settings.settings.logging), 'retention is no longer a stored logging setting');
+    assert(!('maxTotalSizeMB' in settings.settings.logging), 'capacity is no longer a stored logging setting');
 
     assert.strictEqual(browser.exceptions.length, 0, 'browser runtime exceptions: ' + JSON.stringify(browser.exceptions));
     console.log('task15-20 UI flow test PASS');

@@ -612,8 +612,8 @@ function createRequestHandler(runtime, options = {}) {
         const body = await readJsonBody(req);
         const patch = {};
         if (body.knowledge) patch.knowledge = { rootPath: String(body.knowledge.rootPath || '') };
-        if (body.logging) patch.logging = normalizeLoggingPatch(body.logging);
-        if (!Object.keys(patch).length) throw new DomainError('INVALID_ARGUMENT', 'Only knowledge and logging settings are mutable on this route.');
+        if (body.logging) throw new DomainError('IMMUTABLE_FIELD', 'Logging storage and capture policy are not user settings.', { status: 409 });
+        if (!Object.keys(patch).length) throw new DomainError('INVALID_ARGUMENT', 'Only the knowledge root is mutable on this route.');
         const settings = await runtime.settingsStore.updatePatch(patch);
         return send(res, 200, { ok: true, settings: { ...settings, ai: publicAiProfilesConfig(settings.ai) } });
       }

@@ -40,6 +40,8 @@ class StorageLayout {
   getRecoveryPath(...segments) { return path.join(this.dataDir, 'recovery', ...segments); }
 
   getLogPath(scope = 'app', projectId = '') {
+    if (scope === 'system') return path.join(this.dataDir, 'logs', 'system');
+    // app/hooks are read-only compatibility locations for pre-v13 logs.
     if (scope === 'app') return path.join(this.dataDir, 'logs', 'app');
     if (scope === 'hooks') return path.join(this.dataDir, 'logs', 'hooks');
     if (scope === 'project' || scope === 'projects') {

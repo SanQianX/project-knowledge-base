@@ -925,17 +925,7 @@
             <label class="check"><input type="checkbox" value="fatal"> FATAL</label>
           </div>
         </div>
-        <div class="settings-fields">
-          <div class="field">
-            <label for="setting-retention">保留天数（0 表示仅按容量）</label>
-            <input class="input" id="setting-retention" type="number" min="0" max="3650" step="1" required>
-          </div>
-          <div class="field">
-            <label for="setting-capacity">容量上限（MiB）</label>
-            <input class="input" id="setting-capacity" type="number" min="1" max="1048576" step="1" required>
-          </div>
-        </div>
-        <p class="settings-note">日志目录由应用内部存储布局固定管理，不能在此更改。导出内容会沿用服务端脱敏规则。</p>
+        <p class="settings-note">日志按天永久保存，由应用内部存储布局固定管理，不能在此更改。导出内容会沿用服务端脱敏规则。</p>
         <div class="notice error" id="settings-error" role="alert" hidden><span></span></div>
       </div>
       <div class="dialog-foot">
@@ -1039,8 +1029,6 @@
         copyLog: document.getElementById("copy-log"),
         settingsDialog: document.getElementById("settings-dialog"),
         settingsLevels: document.getElementById("settings-levels"),
-        retention: document.getElementById("setting-retention"),
-        capacity: document.getElementById("setting-capacity"),
         settingsError: document.getElementById("settings-error"),
         saveSettings: document.getElementById("save-settings"),
         toast: document.getElementById("toast")
@@ -1244,7 +1232,7 @@
         if (status === "degraded") {
           elements.healthLabel.textContent = "日志服务降级";
         } else if (status === "ok") {
-          elements.healthLabel.textContent = "日志服务正常 · 保留 " + Number(logging.retentionDays || 0) + " 天 · 上限 " + Number(logging.maxTotalSizeMB || 0) + " MiB";
+          elements.healthLabel.textContent = "日志服务正常 · 按天永久保存";
         } else {
           elements.healthLabel.textContent = "正在检查日志服务";
         }
@@ -1587,12 +1575,10 @@
       }
 
       function populateSettingsDialog() {
-        var logging = state.settings && state.settings.logging || { levels: ["info", "warn", "error", "fatal"], retentionDays: 365, maxTotalSizeMB: 2048 };
+        var logging = state.settings && state.settings.logging || { levels: ["info", "warn", "error", "fatal"] };
         elements.settingsLevels.querySelectorAll("input[type=checkbox]").forEach(function (input) {
           input.checked = Array.isArray(logging.levels) && logging.levels.includes(input.value);
         });
-        elements.retention.value = String(Number(logging.retentionDays || 0));
-        elements.capacity.value = String(Number(logging.maxTotalSizeMB || 2048));
         elements.settingsError.hidden = true;
       }
 
@@ -1603,38 +1589,9 @@
       }
 
       async function saveSettings() {
-        var levels = Array.from(elements.settingsLevels.querySelectorAll("input:checked")).map(function (input) { return input.value; });
-        var retentionDays = Number(elements.retention.value);
-        var maxTotalSizeMB = Number(elements.capacity.value);
-        var message = "";
-        if (!levels.length) message = "至少启用一个日志等级。";
-        else if (!Number.isInteger(retentionDays) || retentionDays < 0 || retentionDays > 3650) message = "保留天数必须是 0 到 3650 的整数。";
-        else if (!Number.isFinite(maxTotalSizeMB) || maxTotalSizeMB <= 0 || maxTotalSizeMB > 1048576) message = "容量上限必须是 1 到 1048576 MiB。";
-        if (message) {
-          elements.settingsError.querySelector("span").textContent = message;
-          elements.settingsError.hidden = false;
-          return;
-        }
-
-        elements.saveSettings.disabled = true;
-        elements.settingsError.hidden = true;
-        try {
-          var payload = await api("/api/settings", {
-            method: "PATCH",
-            headers: { Accept: "application/json", "Content-Type": "application/json" },
-            body: JSON.stringify({ logging: { levels: levels, retentionDays: retentionDays, maxTotalSizeMB: maxTotalSizeMB } })
-          });
-          state.settings = payload.settings || state.settings;
-          if (typeof elements.settingsDialog.close === "function") elements.settingsDialog.close();
-          else elements.settingsDialog.removeAttribute("open");
-          renderHealth();
-          showToast("日志设置已保存。");
-        } catch (error) {
-          elements.settingsError.querySelector("span").textContent = error.message;
-          elements.settingsError.hidden = false;
-        } finally {
-          elements.saveSettings.disabled = false;
-        }
+        if (typeof elements.settingsDialog.close === "function") elements.settingsDialog.close();
+        else elements.settingsDialog.removeAttribute("open");
+        showToast("日志按天永久保存，等级由系统统一记录。");
       }
 
       async function copyText(value, successMessage) {

@@ -62,6 +62,7 @@ const ERROR_CODES = Object.freeze([
   'AUTH_REQUIRED',
   'ORIGIN_FORBIDDEN',
   'LOGGER_UNAVAILABLE',
+  'LOG_CURSOR_EXPIRED',
 ]);
 
 const IMMUTABLE_PROJECT_FIELDS = Object.freeze([
