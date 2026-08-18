@@ -36,6 +36,11 @@ jobs:
     name: Core + Desktop package smoke / Windows
     runs-on: windows-latest
     timeout-minutes: 75
+    env:
+      # Runner TEMP uses 8.3 short paths (RUNNER~1); realpathSync.native expands
+      # them, breaking path-equality assertions. Use a workspace-local temp dir.
+      TEMP: ${{ github.workspace }}\.tmp
+      TMP: ${{ github.workspace }}\.tmp
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -45,6 +50,9 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             desktop/package-lock.json
+      - name: Prepare temp directory
+        shell: pwsh
+        run: New-Item -ItemType Directory -Force -Path .tmp | Out-Null
       - name: Install and test core
         shell: pwsh
         run: |
