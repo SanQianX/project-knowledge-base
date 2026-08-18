@@ -33,13 +33,9 @@ jobs:
       - run: npm pack --dry-run --json
 
   core-windows:
-    name: Core (web runtime) / Node ${{ matrix.node }} / Windows
+    name: Core (web runtime) / Windows
     runs-on: windows-latest
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        node: ['18.x', '24.x']
     env:
       # Runner TEMP uses 8.3 short paths (RUNNER~1); realpathSync.native expands
       # them, breaking path-equality assertions. Use a workspace-local temp dir.
@@ -49,7 +45,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: ${{ matrix.node }}
+          node-version: '24.x'
           cache: npm
       - name: Prepare temp directory
         shell: pwsh
