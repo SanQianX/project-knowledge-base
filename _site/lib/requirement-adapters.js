@@ -18,8 +18,9 @@ async function recordEmbeddedClaudeInput(options = {}) {
     explicitCommit: options.explicitCommit || null,
     operationId: options.operationId,
   });
+  if (typeof options.onRecorded === 'function') await options.onRecorded(requirement);
   const result = await options.sendInput(options.text, { requirementId: requirement.id });
-  return { requirementId: requirement.id, requirementHash: requirement.requirementHash, result };
+  return { requirementId: requirement.id, requirementHash: requirement.requirementHash, turnId: requirement.turnId || null, result };
 }
 
 function createRequirementMetadataAdapter(recorder, client) {
