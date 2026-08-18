@@ -1,5 +1,4 @@
 const assert = require('assert');
-const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnServer } = require('./helpers/spawn-server');
@@ -8,41 +7,46 @@ const { launchCdpBrowser, requestJson, waitFor } = require('./helpers/cdp-browse
 const { createLoggingUiFixture } = require('./helpers/logging-ui-fixture');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const html = fs.readFileSync(path.join(ROOT, 'ui', 'index.html'), 'utf8');
 const sitePort = 8500 + (process.pid % 200);
 const debugPort = 10100 + (process.pid % 200);
 const profileDir = path.join(os.tmpdir(), 'pk-project-status-profile-' + process.pid);
 
-assert(html.includes('data-hook-readonly'), 'read-only managed Hook project status is required');
-assert(!html.includes('data-install-hook') && !html.includes('data-uninstall-hook'), 'Hook mutation controls must be absent');
-assert(!html.includes('remove-project') && !html.includes('DELETE", "/api/projects/'), 'focused logging UI must not mutate projects');
-
 (async () => {
   const fixture = await createLoggingUiFixture({ totalLogs: 8 });
-  const server = spawnServer({ root: ROOT, port: sitePort, dataDir: fixture.dataDir, tag: 'project-status-v2', stdio: 'ignore' });
+  const server = spawnServer({ root: ROOT, port: sitePort, dataDir: fixture.dataDir, tag: 'project-status-v13', stdio: 'ignore' });
   let browser;
   try {
-    await waitFor(() => requestJson('http://127.0.0.1:' + sitePort + '/api/projects').then(body => body.projects.length === 1), 'project API', 20000);
-    browser = await launchCdpBrowser({
-      chrome: findChrome(),
-      debugPort,
-      profileDir,
-      url: 'http://127.0.0.1:' + sitePort + '/',
-      width: 1200,
-      height: 860,
-    });
-    await waitFor(() => browser.evaluate('document.querySelectorAll("#filter-project option").length === 2'), 'project filter options');
-    await browser.evaluate('(() => { const select = document.getElementById("filter-project"); select.value = "visual-project"; select.dispatchEvent(new Event("change", { bubbles: true })); })()');
-    await waitFor(() => browser.evaluate('window.__PK_LOG_UI__.getState().filters.projectId === "visual-project" && document.getElementById("project-status-name").textContent.includes("视觉检测知识库")'), 'read-only project status');
+    await waitFor(() => requestJson(`http://127.0.0.1:${sitePort}/api/projects`).then(body => body.projects.length === 1), 'project API', 20000);
+    browser = await launchCdpBrowser({ chrome: findChrome(), debugPort, profileDir, url: `http://127.0.0.1:${sitePort}/`, width: 1200, height: 860 });
+    await waitFor(() => browser.evaluate('window.__PK_APP__ && window.__PK_APP__.getState().projects === 1'), 'project shell');
 
-    const status = await browser.evaluate('({ name: document.getElementById("project-status-name").textContent, hook: document.getElementById("project-hook-status").textContent, analysis: document.getElementById("project-analysis-status").textContent, index: document.getElementById("project-index-status").textContent, controls: document.querySelectorAll("[data-hook-readonly] button").length, filtered: window.__PK_LOG_UI__.getState().filters.projectId })');
-    assert(status.name.includes('视觉检测知识库'));
-    assert(status.name.includes(fixture.repo.path));
-    assert(/^managed\/v2$/.test(status.hook), 'managed Hook version must be read-only');
-    assert(status.analysis.length > 0);
-    assert(status.index.includes('ready'));
-    assert.strictEqual(status.controls, 0);
-    assert.strictEqual(status.filtered, fixture.projectId);
+    const shell = await browser.evaluate(`(() => ({
+      projectButtons: document.querySelectorAll('#project-list .project-button').length,
+      selected: document.querySelector('#project-list .project-button.active')?.dataset.projectId,
+      name: document.querySelector('#project-list .project-name')?.textContent,
+      title: document.getElementById('top-title').textContent,
+      subtitle: document.getElementById('top-subtitle').textContent,
+      workbench: !document.getElementById('view-workbench').hidden && document.getElementById('view-workbench').classList.contains('active'),
+      manualControls: document.querySelectorAll('[data-install-hook], [data-uninstall-hook], [data-analyze], [data-simulate]').length,
+      mainConversationLinks: [...document.querySelectorAll('.sidebar-actions button')].filter(node => /开发对话|运行记录|系统日志/.test(node.textContent)).length
+    }))()`);
+    assert.strictEqual(shell.projectButtons, 1);
+    assert.strictEqual(shell.selected, fixture.projectId);
+    assert.strictEqual(shell.name, '视觉检测知识库');
+    assert.strictEqual(shell.title, '视觉检测知识库');
+    assert(shell.subtitle.includes(fixture.repo.path));
+    assert.strictEqual(shell.workbench, true);
+    assert.strictEqual(shell.manualControls, 0);
+    assert.strictEqual(shell.mainConversationLinks, 0);
+
+    await browser.evaluate("window.__PK_APP__.openSettings('knowledge')");
+    await waitFor(() => browser.evaluate("document.getElementById('settings-knowledge').classList.contains('active')"), 'knowledge settings');
+    await browser.evaluate("document.getElementById('open-delete').click()");
+    await waitFor(() => browser.evaluate("document.getElementById('delete-dialog').open"), 'delete modal');
+    assert((await browser.evaluate("document.getElementById('delete-copy').textContent")).includes('视觉检测知识库'));
+    await browser.evaluate("document.getElementById('delete-knowledge').click()");
+    assert.strictEqual(await browser.evaluate("document.getElementById('delete-confirm-field').hidden"), false, 'knowledge deletion needs explicit project-id confirmation');
+    assert.strictEqual(browser.exceptions.length, 0, 'browser runtime exceptions: ' + JSON.stringify(browser.exceptions));
     console.log('project control panel task14 test PASS');
   } finally {
     if (browser) await browser.close();

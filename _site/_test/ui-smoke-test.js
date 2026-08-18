@@ -15,54 +15,48 @@ const screenshotPath = path.join(os.tmpdir(), 'pk-ui-smoke-' + process.pid + '.p
 
 (async () => {
   const fixture = await createLoggingUiFixture({ totalLogs: 18 });
-  const server = spawnServer({
-    root: ROOT,
-    port: sitePort,
-    dataDir: fixture.dataDir,
-    tag: 'ui-smoke-v2',
-    stdio: 'ignore',
-  });
+  const server = spawnServer({ root: ROOT, port: sitePort, dataDir: fixture.dataDir, tag: 'ui-smoke-v13', stdio: 'ignore' });
   let browser;
   try {
-    await waitFor(
-      () => requestJson('http://127.0.0.1:' + sitePort + '/api/health').then(payload => payload.ok),
-      'isolated logging server',
-      20000,
-    );
-    browser = await launchCdpBrowser({
-      chrome: findChrome(),
-      debugPort,
-      profileDir,
-      url: 'http://127.0.0.1:' + sitePort + '/',
-      width: 1440,
-      height: 960,
-    });
-    await waitFor(
-      () => browser.evaluate('Boolean(window.__PK_LOG_UI__) && document.getElementById("loading-state").hidden && window.__PK_LOG_UI__.getState().entryCount > 0'),
-      'logging rows',
-      20000,
-    );
+    await waitFor(() => requestJson(`http://127.0.0.1:${sitePort}/api/health`).then(payload => payload.ok), 'isolated server', 20000);
+    browser = await launchCdpBrowser({ chrome: findChrome(), debugPort, profileDir, url: `http://127.0.0.1:${sitePort}/`, width: 1440, height: 900 });
+    await waitFor(() => browser.evaluate('window.__PK_APP__ && window.__PK_APP__.getState().projects === 1'), 'v13 shell', 20000);
 
-    const snapshot = await browser.evaluate('(() => { const from = document.getElementById("filter-from").value; const to = document.getElementById("filter-to").value; return { title: document.title, appRoots: document.querySelectorAll("[data-logging-app]").length, tableRoots: document.querySelectorAll("[data-log-table]").length, rows: document.querySelectorAll("#log-rows tr").length, levels: document.querySelectorAll(".level-filter").length, rangeDays: Math.round((new Date(to + "T12:00:00") - new Date(from + "T12:00:00")) / 86400000), health: document.getElementById("health-pill").dataset.status, unsafeImages: document.querySelectorAll("#log-rows img").length, xss: window.__xss, manualControls: document.querySelectorAll("[data-install-hook], [data-analyze], [data-simulate]").length }; })()');
+    const snapshot = await browser.evaluate(`(() => ({
+      title: document.title,
+      shell: document.querySelectorAll('.shell').length,
+      sidebar: getComputedStyle(document.querySelector('.sidebar')).display,
+      workbench: document.getElementById('view-workbench').classList.contains('active'),
+      projects: document.querySelectorAll('#project-list .project-button').length,
+      unsafeImages: document.querySelectorAll('img').length,
+      xss: window.__xss,
+      bodyWidth: document.body.scrollWidth,
+      viewportWidth: document.documentElement.clientWidth
+    }))()`);
+    assert.strictEqual(snapshot.title, 'Project Knowledge');
+    assert.strictEqual(snapshot.shell, 1);
+    assert.notStrictEqual(snapshot.sidebar, 'none');
+    assert.strictEqual(snapshot.workbench, true);
+    assert.strictEqual(snapshot.projects, 1);
+    assert.strictEqual(snapshot.unsafeImages, 0);
+    assert.strictEqual(snapshot.xss, undefined);
+    assert(snapshot.bodyWidth <= snapshot.viewportWidth + 1, 'desktop shell must not overflow horizontally');
 
-    assert(snapshot.title.includes('系统日志'));
-    assert.strictEqual(snapshot.appRoots, 1);
-    assert.strictEqual(snapshot.tableRoots, 1);
-    assert(snapshot.rows >= 18, 'seeded logs must render');
-    assert.strictEqual(snapshot.levels, 6);
-    assert.strictEqual(snapshot.rangeDays, 6, 'local today-6 through today is seven inclusive days');
-    assert.strictEqual(snapshot.health, 'ok');
-    assert.strictEqual(snapshot.unsafeImages, 0, 'XSS fixture must remain text');
-    assert.strictEqual(snapshot.xss, undefined, 'XSS fixture must not execute');
-    assert.strictEqual(snapshot.manualControls, 0);
-
-    await browser.evaluate('document.getElementById("theme-toggle").click()');
+    await browser.evaluate("document.getElementById('theme-button').click()");
     assert.strictEqual(await browser.evaluate('document.documentElement.dataset.theme'), 'dark');
 
-    await browser.setViewport(580, 820);
-    const mobile = await browser.evaluate('({ rowDisplay: getComputedStyle(document.querySelector("#log-rows tr")).display, filters: getComputedStyle(document.getElementById("filter-form")).gridTemplateColumns, bodyWidth: document.body.scrollWidth, viewportWidth: document.documentElement.clientWidth })');
-    assert.strictEqual(mobile.rowDisplay, 'grid');
-    assert(mobile.bodyWidth <= mobile.viewportWidth + 1, 'mobile page must not overflow horizontally');
+    await browser.setViewport(390, 844);
+    const mobile = await browser.evaluate(`(() => ({
+      sidebar: getComputedStyle(document.querySelector('.sidebar')).display,
+      mobileBar: getComputedStyle(document.querySelector('.mobile-bar')).display,
+      bodyWidth: document.body.scrollWidth,
+      viewportWidth: document.documentElement.clientWidth,
+      projectUsable: document.getElementById('mobile-project').getBoundingClientRect().width > 100
+    }))()`);
+    assert.strictEqual(mobile.sidebar, 'none');
+    assert.notStrictEqual(mobile.mobileBar, 'none');
+    assert.strictEqual(mobile.projectUsable, true);
+    assert(mobile.bodyWidth <= mobile.viewportWidth + 1, 'mobile shell must not overflow horizontally');
 
     await browser.screenshot(screenshotPath);
     assert(fs.statSync(screenshotPath).size > 10000, 'real browser screenshot should contain rendered UI');

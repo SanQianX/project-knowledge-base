@@ -71,7 +71,8 @@ async function waitForServer() {
     const htmlResponse = await fetch(BASE + '/');
     const html = await htmlResponse.text();
     assert.strictEqual(htmlResponse.status, 200);
-    assert.strictEqual((html.match(/data-logging-app/g) || []).length, 1);
+    assert.strictEqual((html.match(/class="shell"/g) || []).length, 1);
+    assert.strictEqual((html.match(/id="settings-logs"/g) || []).length, 1);
     assert(!html.includes('vue.global.prod.js'));
 
     result = await json('DELETE', '/api/projects/' + encodeURIComponent(projectId), { deleteKnowledge: false });

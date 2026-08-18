@@ -26,6 +26,7 @@ assert(logger.includes('LOG_LEVELS,') && logger.includes('new Set(LOG_LEVELS)'),
 assert(logger.includes('class LogRepository'));
 assert(!ui.includes('tailwindcss.com'));
 assert(!ui.includes('vue.global'));
-assert.strictEqual((ui.match(/data-logging-app/g) || []).length, 1, 'production must contain one logging UI root (full shell restoration lands with the UI commit)');
+assert.strictEqual((ui.match(/class="shell"/g) || []).length, 1, 'production must contain one full product shell');
+assert.strictEqual((ui.match(/id="settings-logs"/g) || []).length, 1, 'production must contain one Settings logs view');
 
 console.log('refactor-characterization-test PASS');

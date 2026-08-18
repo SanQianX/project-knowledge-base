@@ -4,47 +4,45 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const html = fs.readFileSync(path.join(ROOT, 'ui', 'index.html'), 'utf8');
+const css = fs.readFileSync(path.join(ROOT, 'ui', 'app.css'), 'utf8');
+const script = fs.readFileSync(path.join(ROOT, 'ui', 'app.js'), 'utf8');
 
 for (const contract of [
-  'data-logging-app',
-  'data-log-table',
-  'data-level-filters',
-  'data-hook-readonly',
-  'id="operation-flow"',
-  'id="structured-error"',
-  'id="structured-error-stack"',
-  'id="raw-log"',
-  'id="health-pill"',
-  'id="pause-button"',
-  'id="export-button"',
-  'id="settings-dialog"',
-]) {
-  assert(html.includes(contract), 'missing logging workspace contract: ' + contract);
-}
+  'id="project-list"',
+  'id="view-workbench"',
+  'id="view-import"',
+  'id="settings-drawer"',
+  'data-settings="ai"',
+  'data-settings="knowledge"',
+  'data-settings="conversation"',
+  'data-settings="logs"',
+  'data-settings="client"',
+  'id="delete-dialog"',
+]) assert(html.includes(contract), 'missing v13 shell contract: ' + contract);
 
-const levels = [...html.matchAll(/class="level-filter"[^>]*data-level="([^"]+)"/g)].map(match => match[1]);
-assert.deepStrictEqual(levels, ['trace', 'debug', 'info', 'warn', 'error', 'fatal'], 'six level controls must be unique and ordered');
-assert.strictEqual((html.match(/class="level-filter"/g) || []).length, 6, 'there must be exactly six level filters');
-assert((html.match(/aria-pressed="true"/g) || []).length >= 6, 'level filters must expose pressed state');
+const desktopNav = html.slice(html.indexOf('<div class="sidebar-actions">'), html.indexOf('</aside>'));
+assert(desktopNav.includes('data-view="workbench"') && desktopNav.includes('data-view="import"'));
+assert(!/开发对话|运行记录|系统日志/.test(desktopNav), 'conversation and logs must not be duplicated in main navigation');
+assert(!html.includes('data-install-hook') && !html.includes('data-analyze') && !html.includes('data-simulate'), 'manual Hook/analysis controls are forbidden');
 
-for (const name of ['from', 'to', 'projectId', 'component', 'event', 'operationId', 'commitSha', 'q', 'pageSize']) {
-  assert(html.includes('name="' + name + '"'), 'missing filter: ' + name);
-}
-assert(html.includes('localDateOffset(-6)') && html.includes('localDateOffset(0)'), 'default range must be local today minus six days through today');
-assert(html.includes('cursorHistory') && html.includes('nextCursor') && html.includes('params.set("cursor"'), 'opaque cursor next/previous strategy is missing');
-assert(html.includes('resetCursor();') && html.includes('scheduleFilterRefresh'), 'filter changes must reset cursor state');
+const conversation = html.slice(html.indexOf('id="settings-conversation"'), html.indexOf('id="settings-logs"'));
+assert.strictEqual((conversation.match(/class="field"/g) || []).length, 2, 'conversation toolbar must have exactly project and date controls');
+for (const required of ['id="conversation-project"', 'id="conversation-date"']) assert(conversation.includes(required), 'missing conversation control: ' + required);
+for (const forbidden of ['来源', 'Session', '搜索', '时间线', 'Commit 视角', 'Bridge', 'provider', 'schema']) assert(!conversation.includes(forbidden), 'forbidden visible conversation control/copy: ' + forbidden);
 
-assert(html.includes('fetchOperationFlow') && html.includes('operationId', html.indexOf('fetchOperationFlow')), 'operation flow must query by operationId');
-assert(html.includes('structured.stack') && html.includes('JSON.stringify(entry, null, 2)'), 'structured error stack and raw JSON views are required');
-assert(html.includes('copyText(state.selectedLog.operationId') && html.includes('copyText(JSON.stringify(state.selectedLog'), 'copy actions are required');
+for (const required of ['logs-date', 'logs-project', 'logs-scope', 'logs-limit', 'logs-search', 'logs-export']) assert(html.includes(`id="${required}"`), 'missing logs toolbar control: ' + required);
+for (const forbidden of ['pause-button', 'level-filter', 'setting-retention', 'setting-capacity', 'health-pill', 'data-log-table']) assert(!html.includes(forbidden), 'legacy logs-only control must be absent: ' + forbidden);
+assert(!/>Level</i.test(html) && !/>级别</i.test(html.slice(html.indexOf('class="logs-toolbar"'), html.indexOf('class="record-shell"'))), 'logs toolbar must not expose a level filter/column');
 
-assert(!/id="setting-[^"]*root/i.test(html), 'logging root must not be configurable');
-assert(!html.includes('name="rootPath"'), 'logging root field must not exist');
-assert(!html.includes('retentionDays') && !html.includes('maxTotalSizeMB'), 'permanent logs expose no retention or capacity settings');
+assert(css.includes('grid-template-columns:minmax(0,1fr) 88px') && css.includes('grid-template-columns:minmax(0,1fr) 76px'), 'desktop/mobile log row geometry is required');
+assert(css.includes('.record-list{min-height:0;flex:1;overflow-y:auto;overflow-x:hidden}'), 'record list must own logs scrolling');
+assert(!css.includes('max-height:520px'), 'fixed legacy record height is forbidden');
+for (const level of ['warn', 'error', 'fatal']) assert(css.includes(`[data-level=${level}]`), 'whole-row severity color missing: ' + level);
+assert(css.includes('html[data-theme=dark]') && css.includes('@media(max-width:820px)') && css.includes('@media(max-width:520px)'), 'dark and responsive layouts are required');
 
-assert(!html.includes('.innerHTML') && !html.includes('insertAdjacentHTML'), 'log data must never render through an HTML sink');
-assert(html.includes('.textContent = text(entry.message') || html.includes('create("span", "message", entry.message'), 'log messages must render as text');
-assert(html.includes('html[data-theme="dark"]'), 'dark theme tokens are required');
-assert(html.includes('@media (max-width: 620px)'), 'sub-620 responsive layout is required');
+assert(!script.includes('.innerHTML') && !script.includes('insertAdjacentHTML'), 'business data must never render through an HTML sink');
+assert(script.includes('.textContent = record.message') && script.includes('.textContent = value'), 'logs and conversations must render as plain text');
+assert(script.includes("stream.addEventListener('logs/appended'") && script.includes('state.newLogs += 1'), 'SSE append/new-record behavior is required');
+assert(script.includes('window.__PK_APP__'), 'browser test surface is required');
 
 console.log('workspace UI contract test PASS');

@@ -72,8 +72,10 @@ const runner = require('../lib/claude-cli-runner');
     assert(server.includes('body.permissionMode'));
 
     const html = fs.readFileSync(path.join(ROOT, 'ui', 'index.html'), 'utf8');
-    assert(!html.includes('slashMenuOpen'), 'production UI is intentionally the single logging surface');
-    assert.strictEqual((html.match(/data-logging-app/g) || []).length, 1);
+    const app = fs.readFileSync(path.join(ROOT, 'ui', 'app.js'), 'utf8');
+    assert(html.includes('id="view-workbench"') && html.includes('id="chat-input"'));
+    assert(app.includes('/api/claude/sessions') && app.includes('/events'));
+    assert(app.includes("'claude/text-delta'") && app.includes("'claude/tool-use'"));
 
     runner.deleteSession(started.sessionId);
     console.log('chat runner contract test PASS');

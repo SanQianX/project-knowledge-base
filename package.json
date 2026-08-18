@@ -19,6 +19,8 @@
   "files": [
     "_site/server.js",
     "ui/index.html",
+    "ui/app.css",
+    "ui/app.js",
     "ui/favicon.svg",
     "_site/lib/",
     "_site/scripts/",

@@ -8,8 +8,6 @@
 // Usage:
 //   node _site/_test/run-all-tests.js                  # run all *-test.js
 //   node _site/_test/run-all-tests.js --no-report      # do not write report
-//   node _site/_test/run-all-tests.js --include-ui     # also run ui-test.js
-//                                                      # (requires Playwright)
 //
 // Exit code is 0 only if every test passes.
 
@@ -23,14 +21,10 @@ const REPORT_PATH = path.join(TEST_DIR, 'TEST-REPORT.md');
 
 const args = process.argv.slice(2);
 const WRITE_REPORT = !args.includes('--no-report');
-const INCLUDE_UI = args.includes('--include-ui');
 
 function listTestFiles() {
   return fs.readdirSync(TEST_DIR)
     .filter(file => file.endsWith('-test.js'))
-    // Skip legacy ui-test.js by default. ui-smoke-test.js uses local Chrome via
-    // CDP and is safe to run as part of the regression suite.
-    .filter(file => INCLUDE_UI || file !== 'ui-test.js')
     .filter(file => file !== 'run-all-tests.js')
     .sort();
 }

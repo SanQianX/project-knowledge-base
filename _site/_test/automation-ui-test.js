@@ -4,12 +4,12 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const html = fs.readFileSync(path.join(ROOT, 'ui', 'index.html'), 'utf8');
+const app = fs.readFileSync(path.join(ROOT, 'ui', 'app.js'), 'utf8');
 const server = fs.readFileSync(path.join(ROOT, '_site', 'lib', 'server-app.js'), 'utf8');
 
-assert.strictEqual((html.match(/data-logging-app/g) || []).length, 1, 'production UI must have one logging application root');
-assert.strictEqual((html.match(/data-log-table/g) || []).length, 1, 'production UI must have one log render table');
-assert.strictEqual((html.match(/var state\s*=/g) || []).length, 1, 'logging UI must have one root state');
-assert(html.includes('data-hook-readonly'), 'managed Hook state must remain visible as read-only status');
+assert.strictEqual((html.match(/class="shell"/g) || []).length, 1, 'production UI must have one full product shell');
+assert.strictEqual((html.match(/id="settings-logs"/g) || []).length, 1, 'production UI must have one Settings logs section');
+assert(html.includes('id="view-workbench"') && html.includes('id="view-import"'), 'Workbench and Import must remain reachable');
 
 const forbiddenUi = [
   /\/api\/projects\/[^"' ]+\/hook/,
@@ -22,7 +22,7 @@ const forbiddenUi = [
   /reinstallHook\s*\(/,
   /manual analysis/i,
 ];
-for (const pattern of forbiddenUi) assert(!pattern.test(html), 'removed manual automation control/call remains: ' + pattern);
+for (const pattern of forbiddenUi) assert(!pattern.test(html + app), 'removed manual automation control/call remains: ' + pattern);
 
 for (const route of [
   '/api/projects/:projectId/hook/install',
@@ -34,7 +34,7 @@ for (const route of [
   assert(!server.includes(route), 'removed backend route remains: ' + route);
 }
 
-assert(!html.includes('vue.global.prod.js'), 'focused logging page must not retain the old Vue dashboard');
-assert(!html.includes('tailwind-browser.js'), 'focused logging page must not require the old browser Tailwind runtime');
+assert(!html.includes('vue.global.prod.js'), 'product shell must not require the old Vue runtime');
+assert(!html.includes('tailwind-browser.js'), 'product shell must not require the old browser Tailwind runtime');
 
 console.log('automation UI test PASS');
