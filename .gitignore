@@ -12,6 +12,7 @@ dist/
 desktop/out/
 desktop/.core-package/
 .venv/
+.agent-state/
 
 # Test artifacts and dev logs (regenerated on demand; do not push)
 _site/_test/ui-screenshots/
