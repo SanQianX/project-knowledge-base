@@ -126,18 +126,24 @@ class CommitReconciler {
     }
   }
 
-  async reconcile(projectId, trigger) {
+  async reconcile(projectId, trigger, context = {}) {
     validateProjectId(projectId);
     validateTrigger(trigger);
+    const operationId = context.operationId || createId('op');
     const existing = inFlightProjects.get(projectId);
     if (existing) {
       await this.requestRescan(projectId);
+      await this.log('debug', 'reconcile.owner_joined', 'Reconciliation joined the active project owner.', {
+        projectId,
+        operationId,
+        context: { ownerOperationId: existing.operationId, trigger },
+      });
       return existing.promise;
     }
-    const entry = { rescanRequested: false, promise: null };
+    const entry = { operationId, rescanRequested: false, promise: null };
     const promise = AtomicFile.withFileLock(
       `${this.layout.getProjectLockPath(projectId)}.reconcile`,
-      () => this.runOwner(projectId, trigger, entry),
+      () => this.runOwner(projectId, trigger, operationId, entry),
       { timeoutMs: 10_000, staleMs: 120_000 },
     );
     entry.promise = promise;
@@ -149,8 +155,7 @@ class CommitReconciler {
     }
   }
 
-  async runOwner(projectId, trigger, entry) {
-    const operationId = createId('op');
+  async runOwner(projectId, trigger, operationId, entry) {
     const aggregate = { ok: true, projectId, trigger, operationId, processed: [], rescans: 0 };
     do {
       entry.rescanRequested = false;
@@ -398,7 +403,7 @@ class CommitReconciler {
 
 async function reconcileProjectCommits(projectId, trigger, deps = {}) {
   const reconciler = deps.reconciler instanceof CommitReconciler ? deps.reconciler : new CommitReconciler(deps);
-  return reconciler.reconcile(projectId, trigger);
+  return reconciler.reconcile(projectId, trigger, { operationId: deps.operationId });
 }
 
 module.exports = {

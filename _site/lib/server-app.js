@@ -263,7 +263,7 @@ function listClaudeSessions(runtime, projectId = '') {
 }
 
 function isProjectBusy(projectId, projectStore, activeTasks) {
-  if (activeTasks.has(projectId)) return true;
+  if ((activeTasks.get(projectId)?.size || 0) > 0) return true;
   const state = projectStore.readState(projectId);
   if (state.analysis.activeClaim) return true;
   return claudeCliRunner.listSessions({ projectSlug: projectId }).some(session => ['spawning', 'running', 'pending-permission'].includes(session.state));
@@ -563,14 +563,58 @@ function streamSse(res, subscribe) {
   res.on('close', () => { clearInterval(heartbeat); unsubscribe?.(); });
 }
 
-function taskForProject(runtime, projectId, operationId, task) {
-  const promise = Promise.resolve().then(task);
-  runtime.activeTasks.set(projectId, { operationId, promise });
-  promise.catch(error => runtime.logger.error('background.operation_failed', 'A background operation failed.', { projectId, operationId, error }))
-    .finally(() => {
-      if (runtime.activeTasks.get(projectId)?.operationId === operationId) runtime.activeTasks.delete(projectId);
+function taskForProject(runtime, projectId, operationId, task, kind = 'background') {
+  let projectTasks = runtime.activeTasks.get(projectId);
+  if (!projectTasks) {
+    projectTasks = new Map();
+    runtime.activeTasks.set(projectId, projectTasks);
+  }
+  if (projectTasks.has(operationId)) throw new DomainError('INVALID_ARGUMENT', 'Background operationId is already registered.');
+  const startedAt = new Date().toISOString();
+  const work = Promise.resolve().then(task);
+  const promise = (async () => {
+    await runtime.logger.debug('background.operation_registered', 'Background operation registered.', {
+      projectId,
+      operationId,
+      phase: 'registered',
+      context: { kind, startedAt },
     });
+    try {
+      const result = await work;
+      await runtime.logger.debug('background.operation_completed', 'Background operation completed.', {
+        projectId,
+        operationId,
+        phase: 'completed',
+        durationMs: Date.now() - Date.parse(startedAt),
+        context: { kind },
+      });
+      return result;
+    } catch (error) {
+      await runtime.logger.error('background.operation_failed', 'A background operation failed.', {
+        projectId,
+        operationId,
+        phase: 'failed',
+        durationMs: Date.now() - Date.parse(startedAt),
+        error,
+        context: { kind },
+      });
+      throw error;
+    } finally {
+      const current = runtime.activeTasks.get(projectId);
+      current?.delete(operationId);
+      if (current && current.size === 0) runtime.activeTasks.delete(projectId);
+    }
+  })();
+  projectTasks.set(operationId, { operationId, kind, startedAt, promise });
   return promise;
+}
+
+function activeTaskPromises(activeTasks) {
+  const promises = [];
+  for (const projectTasks of activeTasks.values()) {
+    for (const entry of projectTasks.values()) promises.push(entry.promise);
+  }
+  return promises;
 }
 
 function createRequestHandler(runtime, options = {}) {
@@ -588,8 +632,26 @@ function createRequestHandler(runtime, options = {}) {
 
   return async function handle(req, res) {
     const requestOperationId = createId('op');
+    const requestStartedAt = Date.now();
+    const requestPathname = String(req.url || '').split('?')[0];
+    let requestFailed = false;
+    res.setHeader('X-Operation-Id', requestOperationId);
+    res.once('finish', () => {
+      if (requestFailed || res.statusCode >= 400) return;
+      Promise.resolve(runtime.logger.info('http.request_completed', 'HTTP request completed.', {
+        operationId: requestOperationId,
+        phase: 'completed',
+        durationMs: Date.now() - requestStartedAt,
+        context: { method: req.method, pathname: requestPathname, status: res.statusCode },
+      })).catch(() => {});
+    });
     applyCors(req, res, security);
     try {
+      await runtime.logger.debug('http.request_started', 'HTTP request started.', {
+        operationId: requestOperationId,
+        phase: 'started',
+        context: { method: req.method, pathname: requestPathname },
+      });
       enforceSecurity(req, security);
       if (req.method === 'OPTIONS') {
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
@@ -755,7 +817,9 @@ function createRequestHandler(runtime, options = {}) {
         const projectId = validateProjectId(event.projectId);
         if (!runtime.registryStore.readDisplaySnapshot(projectId)) throw new DomainError('PROJECT_NOT_FOUND', 'Hook project was not found.', { status: 404 });
         if (typeof event.repoRoot !== 'string' || !event.repoRoot.trim()) throw new DomainError('INVALID_ARGUMENT', 'Hook event repoRoot is required.');
-        const operationId = createId('op');
+        const operationId = /^op-[A-Za-z0-9-]{8,120}$/.test(String(event.operationId || ''))
+          ? event.operationId
+          : requestOperationId;
         taskForProject(runtime, projectId, operationId, () => handlePostCommitEvent(event, {
           layout: runtime.layout,
           registryStore: runtime.registryStore,
@@ -763,7 +827,7 @@ function createRequestHandler(runtime, options = {}) {
           reconciler: runtime.reconciler,
           claimProcessor: runtime.promotionService,
           logger: runtime.logger,
-        }));
+        }), 'git-hook');
         await runtime.logger.info('hook.event_accepted', 'Hook event accepted for background reconciliation.', { projectId, operationId, phase: 'accepted' });
         return send(res, 202, { ok: true, accepted: true, projectId, operationId });
       }
@@ -879,6 +943,7 @@ function createRequestHandler(runtime, options = {}) {
       }
       return send(res, 404, { ok: false, error: { code: 'PROJECT_NOT_FOUND', message: 'Route not found.', operationId: requestOperationId, retryable: false, details: {} } });
     } catch (error) {
+      requestFailed = true;
       const status = error instanceof DomainError ? error.status : 500;
       if (!error.operationId) error.operationId = requestOperationId;
       await runtime.logger.error('http.request_failed', 'HTTP request failed.', {
@@ -928,22 +993,20 @@ async function startServer(options = {}) {
     runtime.indexService.retryDirtyProjects(),
     ...runtime.registryStore.listIds().map(projectId => {
     const operationId = createId('op');
-    return taskForProject(runtime, projectId, operationId, () => reconcileProjectCommits(projectId, 'startup', { reconciler: runtime.reconciler }));
+    return taskForProject(runtime, projectId, operationId, () => reconcileProjectCommits(projectId, 'startup', { reconciler: runtime.reconciler, operationId }), 'startup');
     }),
   ]).catch(error => runtime.logger.error('reconcile.startup_failed', 'Startup recovery failed.', { error }));
 
-  const cleanupTimer = setInterval(() => {
-    try { runtime.logRepository.cleanup(); }
-    catch (error) { runtime.logger.error('logger.cleanup_failed', 'Logger cleanup failed.', { error }); }
+  const maintenanceTimer = setInterval(() => {
     runtime.indexService.retryDirtyProjects().catch(error => runtime.logger.error('index.retry_failed', 'Index retry failed.', { error }));
   }, Number(process.env.KB_MAINTENANCE_INTERVAL_MS || 60 * 60 * 1000));
-  cleanupTimer.unref?.();
+  maintenanceTimer.unref?.();
 
   let stopping = null;
   const stop = async reason => {
     if (stopping) return stopping;
     stopping = (async () => {
-      clearInterval(cleanupTimer);
+      clearInterval(maintenanceTimer);
       await runtime.logger.info('server.shutdown_started', 'Server shutdown started.', { phase: 'shutdown', context: { reason } });
       const forceConnections = setTimeout(() => server.closeAllConnections?.(), Number(process.env.KB_SERVER_CLOSE_GRACE_MS || 2000));
       await new Promise(resolve => server.close(resolve));
@@ -951,7 +1014,7 @@ async function startServer(options = {}) {
       const drainTimeoutMs = Number(process.env.KB_SHUTDOWN_DRAIN_TIMEOUT_MS || 30000);
       let drainTimer;
       const drained = await Promise.race([
-        Promise.allSettled([...runtime.activeTasks.values()].map(entry => entry.promise).concat(IndexService.flush())).then(() => true),
+        Promise.allSettled(activeTaskPromises(runtime.activeTasks).concat(IndexService.flush())).then(() => true),
         new Promise(resolve => { drainTimer = setTimeout(() => resolve(false), drainTimeoutMs); }),
       ]);
       clearTimeout(drainTimer);
@@ -999,4 +1062,7 @@ module.exports = {
   mergeAiProfiles,
   requestOriginAllowed,
   isLoopback,
+  isProjectBusy,
+  taskForProject,
+  activeTaskPromises,
 };
