@@ -14,6 +14,9 @@ const { ProjectStore } = require('./project-store');
 const { MigrationService } = require('./migration-service');
 const { ProjectLifecycleService } = require('./project-lifecycle-service');
 const { RequirementRecorder } = require('./requirement-recorder');
+const { ConversationStore } = require('./conversation-store');
+const { ConversationQueryService } = require('./conversation-query-service');
+const { BridgeAdapter } = require('./bridge-adapter');
 const { recordEmbeddedClaudeInput } = require('./requirement-adapters');
 const { Logger, LogRepository } = require('./structured-logger');
 const { CommitReconciler, reconcileProjectCommits } = require('./commit-reconciler');
@@ -115,6 +118,23 @@ function subscribeEmbeddedConversation(runtime, sessionId, projectId) {
   runtime.embeddedConversationSubscriptions.set(sessionId, unsubscribe);
 }
 
+function normalizeLoggingPatch(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new DomainError('INVALID_ARGUMENT', 'Logging settings must be an object.');
+  }
+  const allowed = new Set(['levels']);
+  const unknown = Object.keys(input).find(key => !allowed.has(key));
+  if (unknown) throw new DomainError('INVALID_ARGUMENT', `Unknown logging setting: ${unknown}.`, { details: { field: unknown } });
+  const patch = {};
+  if (Object.prototype.hasOwnProperty.call(input, 'levels')) {
+    if (!Array.isArray(input.levels) || !input.levels.length || input.levels.some(level => !LOG_LEVELS.includes(level))) {
+      throw new DomainError('INVALID_ARGUMENT', 'Logging levels must contain one or more supported levels.');
+    }
+    patch.levels = [...new Set(input.levels)];
+  }
+  if (!Object.keys(patch).length) throw new DomainError('INVALID_ARGUMENT', 'No mutable logging settings were provided.');
+  return patch;
+}
 
 function requestOriginAllowed(req, origin, options) {
   if (!origin) return true;
@@ -411,7 +431,7 @@ class RuntimeKnowledgeAnalyzer {
     const settings = this.settingsStore.read();
     const profile = profileById(settings, input.config.aiProfileId);
     if (!profile || profile.enabled === false) throw new DomainError('INVALID_ARGUMENT', 'The configured AI profile is unavailable.', { status: 409 });
-    const contract = `\n\nOUTPUT CONTRACT\nWrite only beneath ${input.stagingPath}. Put Markdown under files/<allowed-path> and write ${input.manifestPath} with schema knowledge-staging-manifest/v1, projectId ${input.projectId}, runId ${input.claim.runId}, commitSha ${input.claim.commitSha}, and non-empty operations. Each operation needs path, operation, sha256, reason, and evidenceReferences containing commit:${input.claim.commitSha}, patch:${input.claim.patchHash}, conversation:${input.claim.conversationSnapshotHash}, and retrieval:${input.claim.retrievalManifestHash}. Do not read or modify source files, final knowledge, other runs, or indexes.`;
+    const contract = `\n\nOUTPUT CONTRACT\nRead exact Git evidence only beneath ${input.evidenceRoot}. Write only beneath ${input.stagingPath}. Put Markdown under files/<allowed-path> and write ${input.manifestPath} with schema knowledge-staging-manifest/v1, projectId ${input.projectId}, runId ${input.claim.runId}, commitSha ${input.claim.commitSha}, and non-empty operations. Each operation needs path, operation, sha256, reason, and evidenceReferences containing commit:${input.claim.commitSha}, patch:${input.claim.patchHash}, conversation:${input.claim.conversationSnapshotHash}, and retrieval:${input.claim.retrievalManifestHash}. Do not read or modify source files, final knowledge, other runs, or indexes.`;
     const started = claudeCliRunner.startAutomationSession({
       slug: input.projectId,
       projectPath: input.config.repoPath,
@@ -476,11 +496,26 @@ function createRuntime(options = {}) {
     secretsProvider,
   });
   const activeTasks = new Map();
+  const bridgeAdapter = options.bridgeAdapter || new BridgeAdapter({ dataDir: dataPath });
+  const conversationStore = options.conversationStore || new ConversationStore({ layout, projectStore, logger });
+  const conversationQuery = options.conversationQuery || new ConversationQueryService({
+    layout, registryStore, projectStore, conversationStore, logger,
+  });
   const indexAdapter = options.indexAdapter || new RuntimeIndexAdapter({ layout, settingsStore });
   const indexService = options.indexService || new IndexService({ layout, registryStore, projectStore, adapter: indexAdapter, logger });
   const analyzer = options.analyzer || new RuntimeKnowledgeAnalyzer({ settingsStore, logger });
   const promotionService = options.promotionService || new KnowledgePromotionService({ layout, projectStore, analyzer, indexService, logger });
-  const reconciler = options.reconciler || new CommitReconciler({ layout, registryStore, projectStore, claimProcessor: promotionService, logger });
+  const requirementRecorder = options.requirementRecorder || new RequirementRecorder({ layout, registryStore, projectStore, conversationStore, logger });
+  const knowledgeRuntime = options.knowledgeRuntime || new KnowledgeToolRuntime({ layout, settingsStore, registryStore, projectStore, requirementRecorder, logger });
+  const reconciler = options.reconciler || new CommitReconciler({
+    layout,
+    registryStore,
+    projectStore,
+    conversationStore,
+    retrievalService: knowledgeRuntime.retrievalService,
+    claimProcessor: promotionService,
+    logger,
+  });
   const lifecycleService = options.lifecycleService || new ProjectLifecycleService({
     layout,
     settingsStore,
@@ -490,13 +525,15 @@ function createRuntime(options = {}) {
     triggerScriptPath: TRIGGER_SCRIPT_PATH,
     logger,
     isProjectBusy: projectId => isProjectBusy(projectId, projectStore, activeTasks),
+    bridgeAdapter,
   });
-  const requirementRecorder = options.requirementRecorder || new RequirementRecorder({ layout, registryStore, projectStore, logger });
-  const knowledgeRuntime = options.knowledgeRuntime || new KnowledgeToolRuntime({ layout, settingsStore, registryStore, projectStore, requirementRecorder, logger });
   const migrationService = options.migrationService || new MigrationService({ layout, legacyDataDir: dataPath, logger });
+  const embeddedConversationCaptures = new Map();
+  const embeddedConversationSubscriptions = new Map();
   return {
     rootDir, dataPath, layout, settingsStore, registryStore, projectStore, logger, logRepository,
-    activeTasks, indexAdapter, indexService, promotionService, reconciler, lifecycleService, requirementRecorder, knowledgeRuntime, migrationService,
+    activeTasks, bridgeAdapter, conversationStore, conversationQuery, indexAdapter, indexService, promotionService, reconciler, lifecycleService, requirementRecorder, knowledgeRuntime, migrationService,
+    embeddedConversationCaptures, embeddedConversationSubscriptions,
   };
 }
 
@@ -928,6 +965,8 @@ function createRequestHandler(runtime, options = {}) {
           reconciler: runtime.reconciler,
           claimProcessor: runtime.promotionService,
           logger: runtime.logger,
+          operationId,
+          conversationStore: runtime.conversationStore,
         }), 'git-hook');
         await runtime.logger.info('hook.event_accepted', 'Hook event accepted for background reconciliation.', { projectId, operationId, phase: 'accepted' });
         return send(res, 202, { ok: true, accepted: true, projectId, operationId });
@@ -943,6 +982,19 @@ function createRequestHandler(runtime, options = {}) {
         const ai = mergeAiProfiles(current.ai, body);
         await runtime.settingsStore.updatePatch({ ai });
         return send(res, 200, { ok: true, config: publicAiProfilesConfig(ai) });
+      }
+
+      if (method === 'GET' && pathname === '/api/conversations/projects') {
+        return send(res, 200, { ok: true, projects: runtime.conversationQuery.listProjects() });
+      }
+      if (method === 'GET' && pathname === '/api/conversations/turns') {
+        const result = await runtime.conversationQuery.turns({
+          projectId: url.searchParams.get('projectId') || '',
+          date: url.searchParams.get('date') || '',
+          cursor: url.searchParams.get('cursor') || '',
+          limit: url.searchParams.get('limit') || undefined,
+        });
+        return send(res, 200, result);
       }
 
       if (method === 'GET' && pathname === '/api/logs') {
@@ -965,9 +1017,6 @@ function createRequestHandler(runtime, options = {}) {
         return send(res, 200, payload, 'application/x-ndjson; charset=utf-8');
       }
 
-
-
-
       if (method === 'POST' && pathname === '/api/claude/sessions') {
         const body = await readJsonBody(req);
         const projectId = validateProjectId(body.projectId);
@@ -978,6 +1027,7 @@ function createRequestHandler(runtime, options = {}) {
         const profile = profileById(settings, profileId);
         if (!profile || profile.enabled === false) throw new DomainError('INVALID_ARGUMENT', 'A usable AI profile is required.', { status: 409 });
         const result = claudeCliRunner.startChatSession({ slug: projectId, projectPath: config.repoPath, kbPath: config.knowledgePath, aiProfile: profile, permissionMode: body.permissionMode });
+        subscribeEmbeddedConversation(runtime, result.sessionId, projectId);
         return send(res, 201, { ok: true, projectId, ...result });
       }
       if (method === 'GET' && pathname === '/api/claude/sessions') {
@@ -1013,6 +1063,17 @@ function createRequestHandler(runtime, options = {}) {
             text: body.text,
             explicitCommit: body.explicitCommit || null,
             operationId: requestOperationId,
+            onRecorded: requirement => {
+              const userEvent = runtime.conversationStore.readEvents(session.projectSlug)
+                .find(event => event.legacyRequirementId === requirement.id);
+              if (!userEvent) throw new DomainError('DATA_CORRUPT', 'The embedded Prompt event was not persisted.', { status: 500, retryable: true });
+              runtime.embeddedConversationCaptures.set(sessionId, {
+                projectId: session.projectSlug,
+                requirementId: requirement.id,
+                turnId: requirement.turnId,
+                userEvent,
+              });
+            },
             sendInput: text => claudeCliRunner.sendInput(sessionId, text, profile, { permissionMode: body.permissionMode }),
           });
           return send(res, 200, { ok: true, sessionId, requirementId: recorded.requirementId, requirementHash: recorded.requirementHash, ...recorded.result });
@@ -1100,6 +1161,8 @@ async function startServer(options = {}) {
     if (stopping) return stopping;
     stopping = (async () => {
       clearInterval(maintenanceTimer);
+      for (const unsubscribe of runtime.embeddedConversationSubscriptions.values()) unsubscribe();
+      runtime.embeddedConversationSubscriptions.clear();
       await runtime.logger.info('server.shutdown_started', 'Server shutdown started.', { phase: 'shutdown', context: { reason } });
       const forceConnections = setTimeout(() => server.closeAllConnections?.(), Number(process.env.KB_SERVER_CLOSE_GRACE_MS || 2000));
       await new Promise(resolve => server.close(resolve));
@@ -1153,10 +1216,10 @@ module.exports = {
   startServer,
   installProcessHandlers,
   mergeAiProfiles,
+  subscribeEmbeddedConversation,
   requestOriginAllowed,
   isLoopback,
   isProjectBusy,
   taskForProject,
   activeTaskPromises,
-  subscribeEmbeddedConversation,
 };
