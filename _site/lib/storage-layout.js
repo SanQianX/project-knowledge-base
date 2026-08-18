@@ -31,6 +31,20 @@ class StorageLayout {
   getProjectConfigPath(projectId) { return path.join(this.getProjectMetadataDir(projectId), 'config.json'); }
   getProjectStatePath(projectId) { return path.join(this.getProjectMetadataDir(projectId), 'state.json'); }
   getProjectRequirementsPath(projectId) { return path.join(this.getProjectMetadataDir(projectId), 'requirements.jsonl'); }
+  getProjectConversationEventsPath(projectId) { return path.join(this.getProjectMetadataDir(projectId), 'conversation-events.jsonl'); }
+  getProjectCommitBoundariesDir(projectId) { return path.join(this.getProjectMetadataDir(projectId), 'commit-boundaries'); }
+  getProjectCommitConversationsDir(projectId) { return path.join(this.getProjectMetadataDir(projectId), 'commit-conversations'); }
+  validateCommitSha(commitSha) {
+    const value = String(commitSha || '').trim().toLowerCase();
+    if (!/^[a-f0-9]{7,64}$/.test(value)) throw new DomainError('INVALID_ARGUMENT', 'Invalid commit SHA.');
+    return value;
+  }
+  getProjectCommitBoundaryPath(projectId, commitSha) {
+    return path.join(this.getProjectCommitBoundariesDir(projectId), `${this.validateCommitSha(commitSha)}.json`);
+  }
+  getProjectCommitConversationPath(projectId, commitSha) {
+    return path.join(this.getProjectCommitConversationsDir(projectId), `${this.validateCommitSha(commitSha)}.json`);
+  }
   getProjectLockPath(projectId) { return path.join(this.getProjectMetadataDir(projectId), '.project.lock'); }
   getRegistryLockPath() { return path.join(this.dataDir, 'runtime', 'locks', 'projects.lock'); }
 

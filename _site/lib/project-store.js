@@ -41,6 +41,16 @@ function defaultProjectState(input = {}) {
     revision: Number.isInteger(input.revision) ? input.revision : 0,
     trackingStartCommit: input.trackingStartCommit || null,
     lastAnalyzedCommit: input.lastAnalyzedCommit || null,
+    conversationBaselineCursor: Number.isInteger(input.conversationBaselineCursor) && input.conversationBaselineCursor >= 0
+      ? input.conversationBaselineCursor
+      : null,
+    conversation: {
+      lastConsumedCursor: Number.isInteger(input.conversation && input.conversation.lastConsumedCursor)
+        ? input.conversation.lastConsumedCursor
+        : null,
+      captureStatus: input.conversation && input.conversation.captureStatus || 'unavailable',
+      lastError: input.conversation && input.conversation.lastError || null,
+    },
     trackingMode: input.trackingMode === 'empty-repo' ? 'empty-repo' : 'normal',
     analysis: {
       status: input.analysis && input.analysis.status || 'idle',
@@ -77,6 +87,10 @@ function validateProjectState(state) {
   if (state.schema !== SCHEMAS.projectState || state.schemaVersion !== 2) throw new DomainError('SCHEMA_UNSUPPORTED', 'Unsupported project state schema.', { status: 409 });
   if (!Number.isInteger(state.revision) || !state.analysis || !state.index || !state.hook) throw new DomainError('DATA_CORRUPT', 'Project state is incomplete.', { status: 500 });
   if (!['normal', 'empty-repo'].includes(state.trackingMode)) throw new DomainError('DATA_CORRUPT', 'Project tracking mode is invalid.', { status: 500 });
+  if (!Object.prototype.hasOwnProperty.call(state, 'conversationBaselineCursor')) state.conversationBaselineCursor = null;
+  if (!state.conversation || typeof state.conversation !== 'object') {
+    state.conversation = { lastConsumedCursor: null, captureStatus: 'unavailable', lastError: null };
+  }
   return state;
 }
 
