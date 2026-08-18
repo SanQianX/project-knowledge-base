@@ -107,7 +107,8 @@ async function waitForServer() {
     const entry = await runtime.get({ projectId: 'project-stable', entry: 'modules/identity.md' });
     assert.match(entry.chunks[0].chunk_text, /Old project knowledge/);
     const search = await runtime.search({ projectId: 'project-stable', query: 'Old project knowledge' });
-    assert.strictEqual(search.source, 'markdown-fallback');
+    assert.strictEqual(search.source, 'knowledge-retrieval-service');
+    assert.strictEqual(search.backend, 'markdown-hybrid-fallback');
     const cli = spawnSync(process.execPath, [path.join(ROOT, 'bin', 'project-knowledge-kb.js'), 'get', '--project', 'project-stable', '--entry', 'modules/identity.md', '--json'], {
       cwd: movedRepo, encoding: 'utf8', env: { ...process.env, KB_DATA_DIR: dataDir, KB_SKIP_MIGRATION: '1' },
     });

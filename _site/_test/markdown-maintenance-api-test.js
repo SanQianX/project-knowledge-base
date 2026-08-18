@@ -57,7 +57,8 @@ async function json(method, route, body) {
     assert(fs.existsSync(before.indexPath));
     assert.strictEqual(fs.readFileSync(path.join(kbPath, 'modules', 'core.md'), 'utf8'), markdownBefore, 'index maintenance must not rewrite authoritative Markdown');
     let search = await json('POST', '/api/knowledge/search', { projectId: 'maintenance-demo', query: 'atomic rebuild', limit: 5 });
-    assert.strictEqual(search.source, 'derived-index');
+    assert.strictEqual(search.source, 'knowledge-retrieval-service');
+    assert.strictEqual(search.backend, 'hybrid+markdown-truth');
     assert(search.results.some(item => item.entry_id === 'modules/core.md'));
 
     fs.writeFileSync(path.join(kbPath, 'modules', 'core.md'), `${markdownBefore}\nSecond rebuild evidence.\n`, 'utf8');
