@@ -10,15 +10,23 @@ function execGit(cwd, args, timeoutMs = 8000) {
       return resolve({ ok: false, code: -1, stdout: '', stderr: 'missing path', error: 'missing path' });
     }
     const child = spawn('git', args, { cwd, windowsHide: true, timeout: timeoutMs });
-    let out = '', err = '';
-    child.stdout.on('data', d => out += d.toString('utf-8'));
-    child.stderr.on('data', d => err += d.toString('utf-8'));
+    const outChunks = [];
+    const errChunks = [];
+    child.stdout.on('data', d => outChunks.push(Buffer.from(d)));
+    child.stderr.on('data', d => errChunks.push(Buffer.from(d)));
     let timedOut = false;
     const killer = setTimeout(() => { timedOut = true; child.kill(); }, timeoutMs);
-    child.on('error', e => { clearTimeout(killer); resolve({ ok: false, code: -1, stdout: out, stderr: err, error: e.message }); });
+    child.on('error', e => {
+      clearTimeout(killer);
+      const stdoutBuffer = Buffer.concat(outChunks);
+      const stderrBuffer = Buffer.concat(errChunks);
+      resolve({ ok: false, code: -1, stdout: stdoutBuffer.toString('utf8'), stdoutBuffer, stderr: stderrBuffer.toString('utf8'), stderrBuffer, error: e.message });
+    });
     child.on('close', code => {
       clearTimeout(killer);
-      resolve({ ok: code === 0 && !timedOut, code, stdout: out, stderr: err, error: timedOut ? 'timeout' : null });
+      const stdoutBuffer = Buffer.concat(outChunks);
+      const stderrBuffer = Buffer.concat(errChunks);
+      resolve({ ok: code === 0 && !timedOut, code, stdout: stdoutBuffer.toString('utf8'), stdoutBuffer, stderr: stderrBuffer.toString('utf8'), stderrBuffer, error: timedOut ? 'timeout' : null });
     });
   });
 }
@@ -52,4 +60,3 @@ function _setGitVersionForTests(value) {
 }
 
 module.exports = { execGit, getGitVersion, _resetGitVersionCache, _setGitVersionForTests };
-

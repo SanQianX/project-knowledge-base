@@ -42,6 +42,28 @@ async function handlePostCommitEvent(event = {}, deps = {}) {
     // Only the versioned Hook path reaches this update, after projectId and Git identity checks above.
     await resolved.projectStore.updateConfig(projectId, { repoPath: runtimeRoot }, { allowRepoPath: true });
   }
+  if (event.boundary && event.boundary.status === 'captured' && event.boundary.boundary) {
+    const boundary = event.boundary.boundary;
+    if (boundary.projectId !== projectId || boundary.commitSha !== event.head) {
+      throw new DomainError('INVALID_ARGUMENT', 'Hook boundary identity does not match the Hook event.');
+    }
+    const commitExists = runGit(runtimeRoot, ['cat-file', '-e', `${boundary.commitSha}^{commit}`], { allowFailure: true });
+    if (!commitExists.ok) throw new DomainError('INVALID_ARGUMENT', 'Hook boundary commit does not exist in the repository.');
+    if (deps.conversationStore && typeof deps.conversationStore.writeBoundary === 'function') {
+      deps.conversationStore.writeBoundary(projectId, boundary);
+    }
+  } else if (event.boundary && event.boundary.status === 'unavailable' && deps.logger && typeof deps.logger.warn === 'function') {
+    await deps.logger.warn('conversation.boundary_gap', 'Conversation boundary capture gap was reported by the Git Hook.', {
+      projectId,
+      operationId: deps.operationId || event.operationId || '',
+      commitSha: event.head || '',
+      phase: 'boundary',
+      context: {
+        gapId: event.boundary.gap && event.boundary.gap.gapId || '',
+        reason: event.boundary.gap && event.boundary.gap.reason || 'unavailable',
+      },
+    });
+  }
   return reconcileProjectCommits(projectId, 'git-hook', {
     ...deps,
     ...resolved,

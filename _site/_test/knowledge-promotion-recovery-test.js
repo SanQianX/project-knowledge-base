@@ -82,7 +82,7 @@ function analyzerFor(operations) {
           operation: operation.operation,
           sha256: digest,
           reason: operation.reason || 'Verified by the active commit patch.',
-          evidenceReferences: operation.evidenceReferences || [input.claim.commitSha],
+          evidenceReferences: operation.evidenceReferences || [`commit:${input.claim.commitSha}`, `patch:${input.claim.patchHash}`],
         });
       }
       fs.writeFileSync(input.manifestPath, JSON.stringify({

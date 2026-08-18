@@ -25,7 +25,7 @@ Commit 实际 Patch：
 2. 只记录 Commit、Patch 和现有知识能够证明的事实。
 3. 明确需要新增、更新或删除哪些知识；删除必须有实际变更证据。
 4. 不得修改源码、最终知识目录、其他项目或派生索引。
-5. Patch 有显式 omitted 标记时，只能使用仍在证据 manifest 中的事实，不得补猜省略内容。`;
+5. Patch 使用 chunk evidence 时，必须从只读 manifest 按序读取所需 chunk；不得从源码工作树补读或猜测。`;
 
 const READ_TOOLS = ['Read'];
 const WRITE_TOOLS = ['Edit', 'Write', 'MultiEdit'];
@@ -93,9 +93,13 @@ function extractToolPaths(toolName, input) {
 
 function buildAutomationToolPolicy(options = {}) {
   const stagingPath = options.stagingPath || options.kbPath || '';
+  const evidenceRoot = options.evidenceRoot || '';
   return {
     kind: 'knowledge-staging',
     stagingPath,
+    evidenceRoot,
+    readRoots: [evidenceRoot, stagingPath].filter(Boolean),
+    writeRoot: stagingPath,
     allowedTools: [...READ_TOOLS, ...WRITE_TOOLS],
     canWriteKb: false,
     canWriteStaging: true,
@@ -109,9 +113,15 @@ function evaluateAutomationToolUse(policy, toolName, input) {
   const paths = extractToolPaths(toolName, input);
   if (!paths.length) return { behavior: 'deny', reason: `${toolName} has no explicit file path` };
   for (const filePath of paths) {
-    if (!isInsidePath(policy.stagingPath, filePath)) return { behavior: 'deny', reason: `path outside run staging: ${filePath}` };
+    if (toolName === 'Read') {
+      if (!(policy.readRoots || []).some(root => isInsidePath(root, filePath))) {
+        return { behavior: 'deny', reason: `path outside read-only evidence/output roots: ${filePath}` };
+      }
+    } else if (!isInsidePath(policy.writeRoot || policy.stagingPath, filePath)) {
+      return { behavior: 'deny', reason: `path outside writable run output: ${filePath}` };
+    }
   }
-  return { behavior: 'allow', reason: 'path is inside the isolated run staging directory' };
+  return { behavior: 'allow', reason: toolName === 'Read' ? 'path is inside an isolated read root' : 'path is inside the isolated writable output root' };
 }
 
 module.exports = {

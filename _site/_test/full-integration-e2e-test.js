@@ -109,7 +109,8 @@ async function waitForState(predicate, label) {
       projectId: PROJECT_ID, repoPath: REPO, client: 'codex', sessionId: 'full-e2e-session',
       text: 'Record the actual post-commit behavior and keep Markdown as the source of truth.',
     });
-    assert(requirement.id && fs.existsSync(layout.getProjectRequirementsPath(PROJECT_ID)));
+    assert(requirement.id && fs.existsSync(layout.getProjectConversationEventsPath(PROJECT_ID)));
+    assert.strictEqual(fs.existsSync(layout.getProjectRequirementsPath(PROJECT_ID)), false);
 
     const onlineCommit = commit('online-change', 'online hook evidence');
     let state = await waitForState(current => current.lastAnalyzedCommit === onlineCommit && current.index.dirty === false, 'online Hook reconciliation');

@@ -12,8 +12,12 @@ const { StorageLayout } = require('./storage-layout');
 const { ProjectRegistryStore } = require('./project-registry-store');
 const { ProjectStore } = require('./project-store');
 const { CommitScanner, validateSha } = require('./scanner');
-const { RequirementBinder } = require('./requirement-binder');
-const { KnowledgeEvidenceReader, renderCommitPrompt, sha256 } = require('./commit-prompt');
+const { ConversationStore } = require('./conversation-store');
+const { CommitConversationBinder, snapshotRequirementRecords } = require('./commit-conversation-binder');
+const { renderCommitPrompt, sha256 } = require('./commit-prompt');
+const { KnowledgeRetrievalService } = require('./knowledge-retrieval-service');
+const { manifestHash: calculateRetrievalManifestHash } = require('./knowledge-retrieval-service');
+const { sha256: knowledgeContentHash } = require('./knowledge-schema');
 
 const inFlightProjects = new Map();
 
@@ -34,7 +38,8 @@ function validateClaim(claim, projectId, commitSha) {
   if (claim.projectId !== projectId || claim.commitSha !== commitSha) {
     throw new DomainError('DATA_CORRUPT', 'Active commit claim identity does not match the pending commit.', { status: 500 });
   }
-  if (!Array.isArray(claim.requirementIds) || !claim.patchHash || !claim.promptHash || !claim.evidenceHash || !claim.knowledgePath || !claim.runId) {
+  if (!Array.isArray(claim.requirementIds) || !claim.patchHash || !claim.promptHash || !claim.evidenceHash
+    || !claim.evidenceManifestHash || !claim.retrievalManifestHash || !claim.knowledgePath || !claim.runId) {
     throw new DomainError('DATA_CORRUPT', 'Active commit claim is incomplete.', { status: 500 });
   }
   return claim;
@@ -48,10 +53,13 @@ function claimFingerprint(claim) {
     parents: claim.parents,
     requirementIds: claim.requirementIds,
     requirementBinding: claim.requirementBinding,
+    conversationSnapshotHash: claim.conversationSnapshotHash || '',
     promptTemplateVersion: claim.promptTemplateVersion,
     promptHash: claim.promptHash,
     patchHash: claim.patchHash,
     evidenceHash: claim.evidenceHash,
+    evidenceManifestHash: claim.evidenceManifestHash,
+    retrievalManifestHash: claim.retrievalManifestHash,
     knowledgePath: claim.knowledgePath,
   }));
 }
@@ -96,13 +104,25 @@ class CommitReconciler {
     this.registryStore = options.registryStore || new ProjectRegistryStore({ layout: this.layout });
     this.projectStore = options.projectStore || new ProjectStore({ layout: this.layout });
     this.scanner = options.scanner || new CommitScanner(options);
-    this.binder = options.binder || new RequirementBinder({
+    this.conversationStore = options.conversationStore || new ConversationStore({
+      layout: this.layout,
+      projectStore: this.projectStore,
+      logger: options.logger,
+    });
+    this.binder = options.conversationBinder || new CommitConversationBinder({
+      layout: this.layout,
+      projectStore: this.projectStore,
+      conversationStore: this.conversationStore,
+      logger: options.logger,
+    });
+    this.retrievalService = options.retrievalService || new KnowledgeRetrievalService({
       layout: this.layout,
       registryStore: this.registryStore,
       projectStore: this.projectStore,
-      gitReader: options.bindingGitReader,
+      databaseProvider: options.databaseProvider,
+      embedderProvider: options.embedderProvider,
+      logger: options.logger,
     });
-    this.knowledgeReader = options.knowledgeReader || new KnowledgeEvidenceReader(options);
     this.claimStore = options.claimStore || new CommitClaimStore({ layout: this.layout });
     this.claimProcessor = options.claimProcessor || null;
     this.logger = options.logger || null;
@@ -239,8 +259,31 @@ class CommitReconciler {
       if (snapshot.claimFingerprint !== claimFingerprint(claim)
         || snapshot.evidence.patchHash !== claim.patchHash
         || snapshot.evidence.evidenceHash !== claim.evidenceHash
-        || sha256(snapshot.prompt) !== claim.promptHash) {
+        || !snapshot.evidence.evidenceBundle
+        || snapshot.evidence.evidenceBundle.manifestHash !== claim.evidenceManifestHash
+        || !snapshot.existingKnowledge || snapshot.existingKnowledge.manifestHash !== claim.retrievalManifestHash
+        || sha256(snapshot.prompt) !== claim.promptHash
+        || (claim.conversationSnapshotHash && (!snapshot.conversationSnapshot || snapshot.conversationSnapshot.snapshotHash !== claim.conversationSnapshotHash))) {
         throw new DomainError('DATA_CORRUPT', 'Frozen commit claim snapshot does not match active state.', { status: 500 });
+      }
+      this.scanner.verifyEvidence(snapshot.evidence);
+      const retrievalManifest = this.claimStore.atomic.readJsonStrict(snapshot.existingKnowledge.manifestPath, {
+        category: 'knowledge-retrieval-manifest',
+        validate: value => {
+          if (!value || value.schema !== 'knowledge-retrieval-manifest/v1'
+            || value.manifestHash !== claim.retrievalManifestHash
+            || calculateRetrievalManifestHash(value) !== value.manifestHash) {
+            throw new DomainError('DATA_CORRUPT', 'Frozen knowledge retrieval manifest is corrupt.', { status: 500 });
+          }
+          return value;
+        },
+      });
+      const selectedById = new Map(retrievalManifest.selected.map(item => [`${item.spaceId}:${item.chunkId}`, item]));
+      for (const entry of snapshot.existingKnowledge.entries || []) {
+        const selected = selectedById.get(`${entry.projectId === projectId ? `project:${projectId}` : `project:${entry.projectId}`}:${entry.chunkId}`);
+        if (!selected || knowledgeContentHash(entry.content) !== entry.hash || selected.contentHash !== entry.hash) {
+          throw new DomainError('DATA_CORRUPT', 'Frozen authoritative Markdown context does not match its retrieval manifest.', { status: 500 });
+        }
       }
       claim.attempt = Number(claim.attempt || 1) + 1;
       claim.phase = 'evidence.prepared';
@@ -249,33 +292,50 @@ class CommitReconciler {
         draft.analysis.status = 'evidence.prepared';
         draft.analysis.lastError = null;
       });
-      return { claim, evidence: snapshot.evidence, prompt: snapshot.prompt, requirements: snapshot.requirements || [], retry: true };
+      return {
+        claim,
+        evidence: snapshot.evidence,
+        prompt: snapshot.prompt,
+        requirements: snapshot.requirements || [],
+        conversationSnapshot: snapshot.conversationSnapshot || null,
+        existingKnowledge: snapshot.existingKnowledge,
+        retry: true,
+      };
     }
 
-    const evidence = await this.scanner.collectEvidence(config, commitSha, { branch });
-    const binding = await this.binder.bind({
+    const runId = createId('run');
+    const evidenceRoot = this.layout.getRuntimePath('runs', projectId, runId, 'input', 'evidence');
+    const evidence = await this.scanner.collectEvidence(config, commitSha, { branch, evidenceRoot });
+    this.scanner.verifyEvidence(evidence);
+    const conversationSnapshot = await this.binder.bind({ projectId, commitSha, branch });
+    const requirements = snapshotRequirementRecords(conversationSnapshot);
+    const existingKnowledge = await this.retrievalService.retrieveForCommit({
       projectId,
-      commitSha,
-      branch,
-      claimedRequirementIds: state.analysis.consumedRequirementIds || [],
+      conversationSnapshot,
+      commitEvidence: evidence,
     });
-    const requirements = binding.requirementIds.map(id => this.binder.findRequirement(id));
-    const existingKnowledge = this.knowledgeReader.read(config, evidence);
-    const rendered = renderCommitPrompt({ projectId, config, evidence, requirements, existingKnowledge });
+    existingKnowledge.manifestPath = this.layout.getRuntimePath('runs', projectId, runId, 'input', 'retrieval', 'manifest.json');
+    this.claimStore.atomic.writeJsonAtomic(existingKnowledge.manifestPath, existingKnowledge.manifest);
+    const rendered = renderCommitPrompt({ projectId, config, evidence, requirements, conversationSnapshot, existingKnowledge });
     const claim = {
       schema: SCHEMAS.commitClaim,
       projectId,
       commitSha,
       parents: evidence.parents,
       triggerFirstSeen: trigger,
-      requirementIds: binding.requirementIds,
-      requirementBinding: binding.requirementBinding,
+      requirementIds: requirements.map(requirement => requirement.id),
+      requirementBinding: conversationSnapshot.status,
+      conversationSnapshotHash: conversationSnapshot.snapshotHash,
+      conversationTurnIds: conversationSnapshot.turns.map(turn => turn.turnId),
+      conversationEventIds: conversationSnapshot.turns.flatMap(turn => [...turn.userEvents, ...turn.assistantEvents].map(event => event.eventId)),
       promptTemplateVersion: rendered.promptTemplateVersion,
       promptHash: rendered.promptHash,
       patchHash: evidence.patchHash,
       evidenceHash: evidence.evidenceHash,
+      evidenceManifestHash: evidence.evidenceBundle.manifestHash,
+      retrievalManifestHash: existingKnowledge.manifestHash,
       knowledgePath: config.knowledgePath,
-      runId: createId('run'),
+      runId,
       operationId,
       phase: 'evidence.prepared',
       attempt: 1,
@@ -288,6 +348,8 @@ class CommitReconciler {
       evidence,
       prompt: rendered.prompt,
       requirements,
+      conversationSnapshot,
+      existingKnowledge,
       createdAt: new Date().toISOString(),
     });
     try {
@@ -310,11 +372,17 @@ class CommitReconciler {
       promptHash: claim.promptHash,
       patchHash: claim.patchHash,
       patchBytes: evidence.patchBytes,
+      evidenceManifestHash: claim.evidenceManifestHash,
+      evidenceChunkCount: evidence.evidenceBundle.chunkCount,
+      evidenceChunkBytes: evidence.evidenceBundle.chunkBytes,
+      retrievalManifestHash: claim.retrievalManifestHash,
+      retrievalSelectedCount: existingKnowledge.entries.length,
+      retrievalBytes: existingKnowledge.totalBytes,
       fileCount: evidence.files.length,
       requirementBinding: claim.requirementBinding,
       requirementCount: claim.requirementIds.length,
     });
-    return { claim, evidence, prompt: rendered.prompt, requirements, retry: false };
+    return { claim, evidence, prompt: rendered.prompt, requirements, conversationSnapshot, existingKnowledge, retry: false };
   }
 
   async processCommit(projectId, trigger, operationId, config, branch, commitSha) {
@@ -334,6 +402,8 @@ class CommitReconciler {
         evidence: prepared.evidence,
         prompt: prepared.prompt,
         requirements: prepared.requirements,
+        conversationSnapshot: prepared.conversationSnapshot,
+        existingKnowledge: prepared.existingKnowledge,
         operationId,
       });
       if (!result || result.stateAdvanced !== true) {
@@ -403,7 +473,7 @@ class CommitReconciler {
 
 async function reconcileProjectCommits(projectId, trigger, deps = {}) {
   const reconciler = deps.reconciler instanceof CommitReconciler ? deps.reconciler : new CommitReconciler(deps);
-  return reconciler.reconcile(projectId, trigger, { operationId: deps.operationId });
+  return reconciler.reconcile(projectId, trigger, { operationId: deps.operationId || '' });
 }
 
 module.exports = {

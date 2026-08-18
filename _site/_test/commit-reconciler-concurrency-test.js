@@ -9,6 +9,7 @@ const { SCHEMAS } = require('../lib/contracts');
 const { StorageLayout } = require('../lib/storage-layout');
 const { ProjectRegistryStore } = require('../lib/project-registry-store');
 const { ProjectStore } = require('../lib/project-store');
+const { ConversationStore } = require('../lib/conversation-store');
 const { CommitReconciler } = require('../lib/commit-reconciler');
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), `kb-reconciler-${process.pid}-`));
@@ -41,14 +42,21 @@ function commit(repo, label) {
 }
 
 async function addProject(projectId, repo, state) {
+  const repoIdentity = { commonDir: path.join(repo, '.git') };
   await projects.create(projectId, {
     displayName: projectId,
     storageName: projectId,
     repoPath: repo,
     knowledgePath: path.join(temp, 'knowledge', projectId),
     aiProfileId: 'test-profile',
-  }, state);
+    repoIdentity,
+  }, {
+    conversationBaselineCursor: 0,
+    conversation: { lastConsumedCursor: 0, captureStatus: 'captured' },
+    ...state,
+  });
   await registry.add(projectId, { displayName: projectId });
+  return repoIdentity;
 }
 
 class TestClaimProcessor {
@@ -73,6 +81,7 @@ class TestClaimProcessor {
       commitSha: input.claim.commitSha,
       runId: input.claim.runId,
       promptHash: input.claim.promptHash,
+      retrievalManifestHash: input.claim.retrievalManifestHash,
       requirementIds: [...input.claim.requirementIds],
       attempt: input.claim.attempt,
     });
@@ -113,25 +122,31 @@ class TestClaimProcessor {
   const baselineA = git(repoA, ['rev-parse', 'HEAD']);
   const firstA = commit(repoA, 'first-a');
   const secondA = commit(repoA, 'second-a');
-  await addProject('project-a', repoA, { trackingStartCommit: baselineA, trackingMode: 'normal' });
-  await projects.appendRequirement('project-a', {
-    schema: SCHEMAS.requirement,
-    id: 'req-project-a',
-    ts: '2026-08-17T00:00:00.000Z',
-    projectId: 'project-a',
-    client: 'codex',
+  const repoIdentityA = await addProject('project-a', repoA, { trackingStartCommit: baselineA, trackingMode: 'normal' });
+  const conversations = new ConversationStore({ layout, projectStore: projects });
+  await conversations.appendEvent('project-a', {
+    eventId: 'req-project-a',
+    sequence: 1,
+    source: 'codex',
+    eventType: 'user_prompt',
+    role: 'user',
+    content: 'Implement the next project A change.',
     sessionId: 'session-a',
-    conversationId: null,
+    turnId: 'turn-project-a',
+    projectPath: repoA,
+    repoIdentity: repoIdentityA,
     branch: 'main',
-    headAtRecord: baselineA,
-    requirement: 'Implement the next project A change.',
-    requirementHash: 'sha256:req-project-a',
-    explicitCommit: null,
+    headAtCapture: baselineA,
+    capturedAt: '2026-08-17T00:00:00.000Z',
+    identityConfidence: 'high',
+    captureStatus: 'captured',
   });
+  conversations.writeBoundary('project-a', { commitSha: firstA, repoIdentity: repoIdentityA, parentShas: [baselineA], branch: 'main', committedAt: '2026-08-17T00:01:00.000Z', bridgeCursorAtCommit: 2, journalSequence: 2, openTurnIdsAtCommit: [], operationId: 'op-project-a-1' });
+  conversations.writeBoundary('project-a', { commitSha: secondA, repoIdentity: repoIdentityA, parentShas: [firstA], branch: 'main', committedAt: '2026-08-17T00:02:00.000Z', bridgeCursorAtCommit: 3, journalSequence: 3, openTurnIdsAtCommit: [], operationId: 'op-project-a-2' });
   const processor = new TestClaimProcessor();
   processor.gate(firstA);
   const reconciler = new CommitReconciler({
-    layout, registryStore: registry, projectStore: projects, claimProcessor: processor, logger, batchSize: 1,
+    layout, registryStore: registry, projectStore: projects, conversationStore: conversations, claimProcessor: processor, logger, batchSize: 1,
   });
   const hookRun = reconciler.reconcile('project-a', 'git-hook');
   await processor.gateStarted;
@@ -141,7 +156,7 @@ class TestClaimProcessor {
   assert.strictEqual(hookResult.operationId, startupResult.operationId, 'overlapping triggers should await the same in-flight sweep');
   assert.deepStrictEqual(processor.calls.filter(call => call.projectId === 'project-a').map(call => call.commitSha), [firstA, secondA], 'each commit should be processed once in order across batch continuations');
   assert.strictEqual(projects.readState('project-a').lastAnalyzedCommit, secondA);
-  assert.deepStrictEqual(processor.calls[0].requirementIds, ['req-project-a'], 'unique session ancestry should bind the recorded requirement');
+  assert.deepStrictEqual(processor.calls[0].requirementIds, ['req-project-a'], 'the durable sequence window should bind the recorded user event');
   assert.deepStrictEqual(processor.calls[1].requirementIds, [], 'advanced requirement must not be rebound to a later commit');
 
   const idle = await reconciler.reconcile('project-a', 'startup');
@@ -151,33 +166,53 @@ class TestClaimProcessor {
   const repoB = initRepo('repo-b');
   const baselineB = git(repoB, ['rev-parse', 'HEAD']);
   const commitsB = [commit(repoB, 'first-b'), commit(repoB, 'second-b'), commit(repoB, 'third-b')];
-  await addProject('project-b', repoB, { trackingStartCommit: baselineB, trackingMode: 'normal' });
+  const repoIdentityB = await addProject('project-b', repoB, { trackingStartCommit: baselineB, trackingMode: 'normal' });
+  conversations.writeBoundary('project-b', { commitSha: commitsB[0], repoIdentity: repoIdentityB, parentShas: [baselineB], branch: 'main', committedAt: '2026-08-17T00:10:00.000Z', bridgeCursorAtCommit: 1, journalSequence: 10, openTurnIdsAtCommit: [], operationId: 'op-project-b-1' });
+  conversations.writeBoundary('project-b', { commitSha: commitsB[1], repoIdentity: repoIdentityB, parentShas: [commitsB[0]], branch: 'main', committedAt: '2026-08-17T00:11:00.000Z', bridgeCursorAtCommit: 2, journalSequence: 11, openTurnIdsAtCommit: [], operationId: 'op-project-b-2' });
+  conversations.writeBoundary('project-b', { commitSha: commitsB[2], repoIdentity: repoIdentityB, parentShas: [commitsB[1]], branch: 'main', committedAt: '2026-08-17T00:12:00.000Z', bridgeCursorAtCommit: 4, journalSequence: 12, openTurnIdsAtCommit: [], operationId: 'op-project-b-3' });
   processor.failOnceCommit = commitsB[1];
   const failed = await reconciler.reconcile('project-b', 'git-hook');
   assert.strictEqual(failed.ok, false);
   assert.deepStrictEqual(processor.calls.filter(call => call.projectId === 'project-b').map(call => call.commitSha), commitsB.slice(0, 2), 'failure on second commit must stop the third');
   const failedClaim = projects.readState('project-b').analysis.activeClaim;
   assert.strictEqual(failedClaim.commitSha, commitsB[1]);
-  await projects.appendRequirement('project-b', {
-    schema: SCHEMAS.requirement,
-    id: 'req-future',
-    ts: '2026-08-17T00:00:10.000Z',
-    projectId: 'project-b',
-    client: 'codex',
+  await conversations.appendEvent('project-b', {
+    eventId: 'req-future',
+    sequence: 3,
+    source: 'codex',
+    eventType: 'user_prompt',
+    role: 'user',
+    content: 'Recorded after the failed claim.',
     sessionId: 'future-session',
-    conversationId: null,
+    turnId: 'future-turn',
+    projectPath: repoB,
+    repoIdentity: repoIdentityB,
     branch: 'main',
-    headAtRecord: commitsB[1],
-    requirement: 'Recorded after the failed claim.',
-    requirementHash: 'sha256:req-future',
-    explicitCommit: null,
+    headAtCapture: commitsB[1],
+    capturedAt: '2026-08-17T00:11:30.000Z',
+    identityConfidence: 'high',
+    captureStatus: 'captured',
   });
+  const frozenClaim = reconciler.claimStore.read('project-b', commitsB[1]);
+  const patchManifest = JSON.parse(fs.readFileSync(frozenClaim.evidence.evidenceBundle.manifestPath, 'utf8'));
+  const firstChunkPath = path.join(frozenClaim.evidence.evidenceBundle.root, ...patchManifest.chunks[0].path.split('/'));
+  const originalChunk = fs.readFileSync(firstChunkPath);
+  fs.appendFileSync(firstChunkPath, 'corrupt-after-claim');
+  const corruptRetry = await reconciler.reconcile('project-b', 'startup');
+  assert.strictEqual(corruptRetry.ok, false);
+  assert.strictEqual(corruptRetry.error.code, 'EVIDENCE_INTEGRITY_FAILED', 'corrupt frozen evidence must produce a typed failure');
+  assert.strictEqual(projects.readState('project-b').lastAnalyzedCommit, commitsB[0], 'corrupt evidence must not advance the commit pointer');
+  assert.strictEqual(processor.calls.filter(call => call.projectId === 'project-b' && call.commitSha === commitsB[1]).length, 1, 'corrupt evidence must fail before invoking the analyzer');
+  fs.writeFileSync(firstChunkPath, originalChunk);
   const retried = await reconciler.reconcile('project-b', 'startup');
   assert.strictEqual(retried.ok, true);
   const secondCommitCalls = processor.calls.filter(call => call.projectId === 'project-b' && call.commitSha === commitsB[1]);
   assert.strictEqual(secondCommitCalls.length, 2);
   assert.deepStrictEqual(secondCommitCalls[1].requirementIds, secondCommitCalls[0].requirementIds, 'retry must reuse frozen requirement IDs and ignore future records');
+  assert.strictEqual(secondCommitCalls[1].retrievalManifestHash, secondCommitCalls[0].retrievalManifestHash, 'retry must reuse the frozen authoritative Markdown retrieval manifest');
   assert(secondCommitCalls[1].attempt > secondCommitCalls[0].attempt, 'retry should increment the frozen claim attempt');
+  const thirdCommitCall = processor.calls.find(call => call.projectId === 'project-b' && call.commitSha === commitsB[2]);
+  assert.deepStrictEqual(thirdCommitCall.requirementIds, ['req-future'], 'a post-Claim event should remain eligible for the next durable boundary window');
   assert.strictEqual(projects.readState('project-b').lastAnalyzedCommit, commitsB[2]);
 
   const repoTracking = initRepo('repo-tracking');

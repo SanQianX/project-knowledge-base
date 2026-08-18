@@ -12,6 +12,7 @@ const {
 const { StorageLayout } = require('./storage-layout');
 const { ProjectRegistryStore } = require('./project-registry-store');
 const { ProjectStore } = require('./project-store');
+const { ConversationStore } = require('./conversation-store');
 
 const REQUIREMENT_CLIENTS = Object.freeze(['claude', 'codex', 'opencode']);
 const CLIENT_ALIASES = Object.freeze({
@@ -83,9 +84,13 @@ class GitReader {
       const branch = branchResult.status === 0
         ? optionalMetadata(String(branchResult.stdout || '').trim(), 'branch', 1024)
         : null;
-      return { headAtRecord: head, branch };
+      const commonResult = this.run(repoPath, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
+      const commonDir = commonResult.status === 0 && String(commonResult.stdout || '').trim()
+        ? path.resolve(String(commonResult.stdout).trim())
+        : null;
+      return { headAtRecord: head, branch, repoIdentity: commonDir ? { commonDir } : null };
     } catch {
-      return { headAtRecord: null, branch: null };
+      return { headAtRecord: null, branch: null, repoIdentity: null };
     }
   }
 
@@ -151,6 +156,11 @@ class RequirementRecorder {
       gitReader: this.gitReader,
     });
     this.logger = options.logger || null;
+    this.conversationStore = options.conversationStore || new ConversationStore({
+      layout: this.layout,
+      projectStore: this.projectStore,
+      logger: this.logger,
+    });
     this.now = options.now || (() => new Date().toISOString());
     this.createRequirementId = options.createRequirementId || (() => createId('req'));
   }
@@ -185,7 +195,28 @@ class RequirementRecorder {
         requirementHash: requirementHash(text),
         explicitCommit,
       };
-      await this.projectStore.appendRequirement(resolved.projectId, record);
+      const source = client === 'claude' ? 'claude-code' : client;
+      const turnId = optionalMetadata(input.turnId, 'turnId') || `explicit-${record.id}`;
+      await this.conversationStore.appendEvent(resolved.projectId, {
+        eventId: `explicit-${record.id}`,
+        sequence: null,
+        source,
+        eventType: 'user_prompt',
+        role: 'user',
+        content: text,
+        sessionId,
+        turnId,
+        projectPath: resolved.config.repoPath,
+        repoIdentity: gitContext.repoIdentity,
+        branch: record.branch,
+        headAtCapture: record.headAtRecord,
+        capturedAt: record.ts,
+        rawEventType: 'explicit-requirement-adapter',
+        identityConfidence: explicitCommit ? 'explicit' : 'high',
+        captureStatus: 'explicit-supplement',
+        explicitCommitSha: explicitCommit,
+        legacyRequirementId: record.id,
+      });
       if (this.logger && typeof this.logger.info === 'function') {
         await this.logger.info('requirement.recorded', 'User requirement recorded.', {
           operationId,
@@ -196,7 +227,7 @@ class RequirementRecorder {
           requirementHash: record.requirementHash,
         });
       }
-      return record;
+      return { ...record, turnId };
     } catch (error) {
       if (error instanceof DomainError) {
         if (!error.operationId) error.operationId = operationId;

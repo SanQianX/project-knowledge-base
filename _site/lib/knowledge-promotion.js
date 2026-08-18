@@ -79,9 +79,9 @@ class KnowledgePromotionService {
     this.fault = options.fault || (() => {});
   }
 
-  stagingPath(projectId, runId) {
-    return this.layout.getRuntimePath('staging', validateProjectId(projectId), String(runId));
-  }
+  runRoot(projectId, runId) { return this.layout.getRuntimePath('runs', validateProjectId(projectId), String(runId)); }
+  stagingPath(projectId, runId) { return path.join(this.runRoot(projectId, runId), 'output'); }
+  evidenceRoot(projectId, runId) { return path.join(this.runRoot(projectId, runId), 'input', 'evidence'); }
 
   manifestPath(projectId, runId) { return path.join(this.stagingPath(projectId, runId), 'manifest.json'); }
   journalPath(projectId, runId) { return this.layout.getRuntimePath('promotions', validateProjectId(projectId), `${runId}.json`); }
@@ -139,6 +139,19 @@ class KnowledgePromotionService {
       if (!String(raw.reason || '').trim() || !Array.isArray(raw.evidenceReferences) || raw.evidenceReferences.length === 0) {
         throw new DomainError('INVALID_ARGUMENT', `Manifest operation lacks reason/evidence: ${relativePath}.`);
       }
+      const evidenceReferences = raw.evidenceReferences.map(String);
+      const requiredEvidence = [
+        `commit:${claim.commitSha}`,
+        claim.patchHash && `patch:${claim.patchHash}`,
+        claim.conversationSnapshotHash && `conversation:${claim.conversationSnapshotHash}`,
+        claim.retrievalManifestHash && `retrieval:${claim.retrievalManifestHash}`,
+      ].filter(Boolean);
+      const missingEvidence = requiredEvidence.filter(reference => !evidenceReferences.includes(reference));
+      if (missingEvidence.length) {
+        throw new DomainError('INVALID_ARGUMENT', `Manifest operation lacks frozen claim evidence: ${relativePath}.`, {
+          details: { missingEvidence },
+        });
+      }
       const target = path.resolve(config.knowledgePath, ...relativePath.split('/'));
       if (!this.layout.isPathInside(config.knowledgePath, target, { realpath: true })) throw new DomainError('PATH_OUTSIDE_ROOT', `Final knowledge path escapes its project: ${relativePath}.`);
       const targetExists = fs.existsSync(target);
@@ -172,7 +185,7 @@ class KnowledgePromotionService {
         path: relativePath,
         operation,
         reason: String(raw.reason),
-        evidenceReferences: raw.evidenceReferences.map(String),
+        evidenceReferences,
         target,
         stagedPath,
         originalExists: targetExists,
@@ -196,6 +209,13 @@ class KnowledgePromotionService {
       runId: claim.runId,
       commitSha: claim.commitSha,
       claimFingerprint: claim.fingerprint,
+      evidence: {
+        promptHash: claim.promptHash || null,
+        patchHash: claim.patchHash || null,
+        evidenceManifestHash: claim.evidenceManifestHash || null,
+        conversationSnapshotHash: claim.conversationSnapshotHash || null,
+        retrievalManifestHash: claim.retrievalManifestHash || null,
+      },
       knowledgePath: config.knowledgePath,
       phase: 'preparing',
       createdAt: new Date().toISOString(),
@@ -293,7 +313,11 @@ class KnowledgePromotionService {
         claim,
         stagingPath,
         manifestPath: this.manifestPath(projectId, claim.runId),
-        safetyPolicy: buildAutomationToolPolicy({ stagingPath }),
+        evidenceRoot: this.evidenceRoot(projectId, claim.runId),
+        safetyPolicy: buildAutomationToolPolicy({
+          stagingPath,
+          evidenceRoot: this.evidenceRoot(projectId, claim.runId),
+        }),
       });
       if (analyzerResult && analyzerResult.ok === false) throw new DomainError('INVALID_ARGUMENT', analyzerResult.error || 'Knowledge analyzer failed.', { status: 500, retryable: true });
       const afterSource = await gitStatus(config.repoPath);

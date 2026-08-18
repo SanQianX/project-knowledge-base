@@ -10,8 +10,11 @@ const { StorageLayout } = require('../lib/storage-layout');
 const { ProjectRegistryStore } = require('../lib/project-registry-store');
 const { ProjectStore } = require('../lib/project-store');
 const { RequirementRecorder } = require('../lib/requirement-recorder');
+const { ConversationStore } = require('../lib/conversation-store');
 const { recordEmbeddedClaudeInput, createRequirementMetadataAdapter } = require('../lib/requirement-adapters');
 const { KnowledgeToolRuntime } = require('../lib/knowledge-tool-runtime');
+const { subscribeEmbeddedConversation } = require('../lib/server-app');
+const claudeRunner = require('../lib/claude-cli-runner');
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), `kb-requirement-recorder-${process.pid}-`));
 const dataDir = path.join(temp, 'data');
@@ -55,6 +58,7 @@ async function addProject(registry, projects, projectId, repoPath) {
   await addProject(registry, projects, 'project-b', repoB);
 
   const recorder = new RequirementRecorder({ layout, registryStore: registry, projectStore: projects });
+  const conversations = new ConversationStore({ layout, projectStore: projects });
   assert.strictEqual(fs.existsSync(layout.getProjectRequirementsPath('project-a')), false, 'requirements should be lazy-created');
   assert.strictEqual(fs.existsSync(layout.getProjectRequirementsPath('project-b')), false, 'unused project should not have an empty requirements file');
 
@@ -79,8 +83,9 @@ async function addProject(registry, projects, projectId, repoPath) {
     assert(record.requirementHash.startsWith('sha256:'), 'record should include a body hash');
     assert(record.headAtRecord && record.branch, 'trusted Git metadata should be captured when available');
   }
-  const serialized = fs.readFileSync(layout.getProjectRequirementsPath('project-a'), 'utf8');
+  const serialized = fs.readFileSync(layout.getProjectConversationEventsPath('project-a'), 'utf8');
   assert(!serialized.includes('must-not-be-copied-from-metadata'), 'credential-like adapter metadata must not be persisted');
+  assert.strictEqual(fs.existsSync(layout.getProjectRequirementsPath('project-a')), false, 'new explicit adapters must not create a second requirement store');
   assert.strictEqual(fs.existsSync(layout.getProjectRequirementsPath('project-b')), false, 'recording project A must not touch project B');
   assert.strictEqual(projects.readState('project-a').lastAnalyzedCommit, null, 'recording must not dispatch or advance analysis');
   assert.strictEqual(fs.existsSync(path.join(temp, 'knowledge', 'project-a')), false, 'recording must not create knowledge content');
@@ -104,7 +109,7 @@ async function addProject(registry, projects, projectId, repoPath) {
     text: `Concurrent requirement ${index}`,
   })));
   assert.strictEqual(new Set(concurrent.map(item => item.id)).size, 32, 'concurrent records should have unique ids');
-  assert.strictEqual(projects.readRequirements('project-a').length, 36, 'every concurrent append should remain parseable');
+  assert.strictEqual(conversations.readEvents('project-a').length, 36, 'every concurrent append should remain parseable in ConversationStore');
 
   await assert.rejects(
     recorder.recordRequirement({ projectId: 'project-a', client: 'codex', sessionId: 'oversized', text: 'x'.repeat(FIELD_LIMITS.requirement + 1) }),
@@ -134,9 +139,32 @@ async function addProject(registry, projects, projectId, repoPath) {
   }), error => error.code === 'PROJECT_BUSY');
   assert.strictEqual(sentAfterFailure, false, 'embedded input must not be sent after requirement persistence fails');
 
+  const chat = claudeRunner.startChatSession({
+    slug: 'project-a', projectPath: repoA, kbPath: path.join(temp, 'knowledge', 'project-a'),
+    aiProfile: { id: 'test-profile', implementation: 'claude-code-agent', mainModel: 'test-model' },
+  });
+  const embeddedRecord = await recorder.recordRequirement({
+    projectId: 'project-a', repoPath: repoA, client: 'claude', sessionId: chat.sessionId, text: 'Persist this Workbench turn.',
+  });
+  const embeddedUser = conversations.readEvents('project-a').find(event => event.legacyRequirementId === embeddedRecord.id);
+  const captureRuntime = {
+    conversationStore: conversations,
+    embeddedConversationCaptures: new Map([[chat.sessionId, { projectId: 'project-a', requirementId: embeddedRecord.id, turnId: embeddedRecord.turnId, userEvent: embeddedUser }]]),
+    embeddedConversationSubscriptions: new Map(),
+    logger: { error: async () => {} },
+  };
+  subscribeEmbeddedConversation(captureRuntime, chat.sessionId, 'project-a');
+  for (const listener of claudeRunner.getSession(chat.sessionId).listeners) listener({ type: 'claude/result', result: 'Workbench reply persisted.', isError: false });
+  for (let attempt = 0; attempt < 50 && conversations.readEvents('project-a').length < 38; attempt += 1) await new Promise(resolve => setTimeout(resolve, 10));
+  const embeddedAssistant = conversations.readEvents('project-a').find(event => event.eventId === `embedded-assistant-${embeddedRecord.id}`);
+  assert(embeddedAssistant && embeddedAssistant.turnId === embeddedRecord.turnId && embeddedAssistant.content === 'Workbench reply persisted.');
+  captureRuntime.embeddedConversationSubscriptions.get(chat.sessionId)();
+  claudeRunner.deleteSession(chat.sessionId);
+
   const failingRecorder = new RequirementRecorder({
     layout,
-    projectStore: { appendRequirement: async () => { throw new Error('disk full'); } },
+    projectStore: projects,
+    conversationStore: { appendEvent: async () => { throw new Error('disk full'); } },
     resolver: { resolve: () => ({ projectId: 'project-a', config: { repoPath: repoA } }) },
     gitReader: { currentContext: () => ({ branch: null, headAtRecord: null }) },
   });
@@ -154,7 +182,8 @@ async function addProject(registry, projects, projectId, repoPath) {
     text: 'MCP metadata write only.',
   });
   assert(toolResult.requirementId && !Object.hasOwn(toolResult, 'requirement'), 'MCP result should return an id without echoing private text');
-  assert.strictEqual(projects.readRequirements('project-b').length, 1, 'MCP runtime should append to the v2 project store');
+  assert.strictEqual(conversations.readEvents('project-b').length, 1, 'MCP runtime should append to the shared ConversationStore');
+  assert.strictEqual(fs.existsSync(layout.getProjectRequirementsPath('project-b')), false, 'MCP must not create legacy requirements.jsonl');
   await runtime.close();
 
   console.log('requirement-recorder-test PASS');

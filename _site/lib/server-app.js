@@ -80,6 +80,41 @@ function configuredSecrets(settingsStore, extras = []) {
   return [...new Set(secrets.filter(secret => typeof secret === 'string' && secret.length >= 4))];
 }
 
+function subscribeEmbeddedConversation(runtime, sessionId, projectId) {
+  const previous = runtime.embeddedConversationSubscriptions.get(sessionId);
+  if (previous) previous();
+  const unsubscribe = claudeCliRunner.subscribe(sessionId, event => {
+    if (!event || event.type !== 'claude/result' || event.isError || !event.result) return;
+    const capture = runtime.embeddedConversationCaptures.get(sessionId);
+    if (!capture || capture.projectId !== projectId) return;
+    runtime.embeddedConversationCaptures.delete(sessionId);
+    Promise.resolve(runtime.conversationStore.appendEvent(projectId, {
+      eventId: `embedded-assistant-${capture.requirementId}`,
+      sequence: null,
+      source: 'claude-code',
+      eventType: 'assistant_response',
+      role: 'assistant',
+      content: String(event.result),
+      sessionId,
+      turnId: capture.turnId,
+      projectPath: capture.userEvent.projectPath,
+      repoIdentity: capture.userEvent.repoIdentity,
+      branch: capture.userEvent.branch,
+      headAtCapture: capture.userEvent.headAtCapture,
+      capturedAt: new Date().toISOString(),
+      rawEventType: 'embedded-claude-result',
+      identityConfidence: 'high',
+      captureStatus: 'captured',
+    })).catch(error => runtime.logger.error('conversation.assistant_capture_failed', 'Embedded Claude assistant response could not be persisted.', {
+      projectId,
+      component: 'claude-workbench',
+      error,
+      context: { sessionId, turnId: capture.turnId, requirementId: capture.requirementId },
+    }));
+  });
+  runtime.embeddedConversationSubscriptions.set(sessionId, unsubscribe);
+}
+
 function normalizeLoggingPatch(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw new DomainError('INVALID_ARGUMENT', 'Logging settings must be an object.');
@@ -389,7 +424,12 @@ class RuntimeKnowledgeAnalyzer {
         operation: 'create',
         sha256: hashBuffer(Buffer.from(content)),
         reason: 'Commit evidence was accepted by the isolated test analyzer.',
-        evidenceReferences: [`commit:${input.claim.commitSha}`, `patch:${input.claim.patchHash}`],
+        evidenceReferences: [
+          `commit:${input.claim.commitSha}`,
+          `patch:${input.claim.patchHash}`,
+          input.claim.conversationSnapshotHash && `conversation:${input.claim.conversationSnapshotHash}`,
+          input.claim.retrievalManifestHash && `retrieval:${input.claim.retrievalManifestHash}`,
+        ].filter(Boolean),
       }],
     }, null, 2)}\n`, 'utf8');
     return { ok: true, fake: true };
@@ -400,7 +440,7 @@ class RuntimeKnowledgeAnalyzer {
     const settings = this.settingsStore.read();
     const profile = profileById(settings, input.config.aiProfileId);
     if (!profile || profile.enabled === false) throw new DomainError('INVALID_ARGUMENT', 'The configured AI profile is unavailable.', { status: 409 });
-    const contract = `\n\nOUTPUT CONTRACT\nWrite only beneath ${input.stagingPath}. Put Markdown under files/<allowed-path> and write ${input.manifestPath} with schema knowledge-staging-manifest/v1, projectId ${input.projectId}, runId ${input.claim.runId}, commitSha ${input.claim.commitSha}, and non-empty operations. Each operation needs path, operation, sha256, reason, and evidenceReferences. Do not modify source files, final knowledge, or indexes.`;
+    const contract = `\n\nOUTPUT CONTRACT\nWrite only beneath ${input.stagingPath}. Put Markdown under files/<allowed-path> and write ${input.manifestPath} with schema knowledge-staging-manifest/v1, projectId ${input.projectId}, runId ${input.claim.runId}, commitSha ${input.claim.commitSha}, and non-empty operations. Each operation needs path, operation, sha256, reason, and evidenceReferences containing commit:${input.claim.commitSha}, patch:${input.claim.patchHash}, conversation:${input.claim.conversationSnapshotHash}, and retrieval:${input.claim.retrievalManifestHash}. Do not read or modify source files, final knowledge, other runs, or indexes.`;
     const started = claudeCliRunner.startAutomationSession({
       slug: input.projectId,
       projectPath: input.config.repoPath,
@@ -1065,4 +1105,5 @@ module.exports = {
   isProjectBusy,
   taskForProject,
   activeTaskPromises,
+  subscribeEmbeddedConversation,
 };

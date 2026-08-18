@@ -7,6 +7,7 @@ const { StorageLayout } = require('../lib/storage-layout');
 const { SettingsStore } = require('../lib/settings-store');
 const { ProjectRegistryStore } = require('../lib/project-registry-store');
 const { ProjectStore } = require('../lib/project-store');
+const { ConversationStore } = require('../lib/conversation-store');
 const { KnowledgeDatabase } = require('../lib/knowledge-db');
 const { EMBEDDING_DIMENSIONS } = require('../lib/knowledge-schema');
 
@@ -86,7 +87,6 @@ async function createMcpClient() {
   write(path.join(markdownKb, 'modules', 'auth.md'), '# Authentication\n\nRefresh tokens rotate after every successful renewal.\n');
   write(path.join(markdownKb, 'changes', 'auth.md'), '# Authentication update\n\nIntroduced rotating refresh tokens.\n');
   write(path.join(vectorKb, 'modules', 'payments.md'), '# Payment tokens\n\nPayment tokens expire after fifteen minutes.\n');
-  fs.mkdirSync(vectorKb, { recursive: true });
 
   const layout = new StorageLayout({ dataDir });
   const settingsStore = new SettingsStore({ layout });
@@ -118,6 +118,7 @@ async function createMcpClient() {
     response = await client.request('tools/call', { name: 'project_knowledge_search', arguments: { projectId: 'project-demo', query: 'refresh tokens' } });
     assert.strictEqual(response.result.structuredContent.source, 'knowledge-retrieval-service');
     assert.strictEqual(response.result.structuredContent.backend, 'hybrid+markdown-truth');
+    assert.strictEqual(response.result.structuredContent.health.scopes[0].dirty, true);
     assert(response.result.structuredContent.results.some(result => result.entry_id === 'modules/auth.md'));
 
     response = await client.request('tools/call', { name: 'project_knowledge_search', arguments: { project: 'vector', query: 'payment tokens' } });
@@ -133,7 +134,8 @@ async function createMcpClient() {
     const stateBefore = fs.readFileSync(layout.getProjectStatePath('project-demo'), 'utf8');
     response = await client.request('tools/call', { name: 'project_knowledge_record_requirement', arguments: { projectId: 'project-demo', repoPath: repo, client: 'codex', sessionId: 'session-mcp', text: 'Keep refresh token rotation documented.' } });
     assert.strictEqual(response.result.structuredContent.projectId, 'project-demo');
-    assert.strictEqual(projectStore.readRequirements('project-demo').length, 1);
+    assert.strictEqual(new ConversationStore({ layout, projectStore }).readEvents('project-demo').length, 1);
+    assert.strictEqual(fs.existsSync(layout.getProjectRequirementsPath('project-demo')), false, 'explicit MCP adapter must not create legacy requirements.jsonl');
     assert.strictEqual(fs.readFileSync(layout.getProjectStatePath('project-demo'), 'utf8'), stateBefore, 'requirement tool must not trigger analysis or mutate state');
     assert(!fs.existsSync(layout.getRuntimePath('staging')));
 
