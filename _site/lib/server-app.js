@@ -115,35 +115,6 @@ function subscribeEmbeddedConversation(runtime, sessionId, projectId) {
   runtime.embeddedConversationSubscriptions.set(sessionId, unsubscribe);
 }
 
-function normalizeLoggingPatch(input) {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) {
-    throw new DomainError('INVALID_ARGUMENT', 'Logging settings must be an object.');
-  }
-  const allowed = new Set(['levels', 'retentionDays', 'maxTotalSizeMB']);
-  const unknown = Object.keys(input).find(key => !allowed.has(key));
-  if (unknown) throw new DomainError('INVALID_ARGUMENT', `Unknown logging setting: ${unknown}.`, { details: { field: unknown } });
-  const patch = {};
-  if (Object.prototype.hasOwnProperty.call(input, 'levels')) {
-    if (!Array.isArray(input.levels) || !input.levels.length || input.levels.some(level => !LOG_LEVELS.includes(level))) {
-      throw new DomainError('INVALID_ARGUMENT', 'Logging levels must contain one or more supported levels.');
-    }
-    patch.levels = [...new Set(input.levels)];
-  }
-  if (Object.prototype.hasOwnProperty.call(input, 'retentionDays')) {
-    if (!Number.isInteger(input.retentionDays) || input.retentionDays < 0 || input.retentionDays > 3650) {
-      throw new DomainError('INVALID_ARGUMENT', 'Logging retentionDays must be an integer from 0 to 3650.');
-    }
-    patch.retentionDays = input.retentionDays;
-  }
-  if (Object.prototype.hasOwnProperty.call(input, 'maxTotalSizeMB')) {
-    if (!Number.isFinite(input.maxTotalSizeMB) || input.maxTotalSizeMB <= 0 || input.maxTotalSizeMB > 1048576) {
-      throw new DomainError('INVALID_ARGUMENT', 'Logging maxTotalSizeMB must be between 1 and 1048576.');
-    }
-    patch.maxTotalSizeMB = Number(input.maxTotalSizeMB);
-  }
-  if (!Object.keys(patch).length) throw new DomainError('INVALID_ARGUMENT', 'No mutable logging settings were provided.');
-  return patch;
-}
 
 function requestOriginAllowed(req, origin, options) {
   if (!origin) return true;
@@ -603,6 +574,94 @@ function streamSse(res, subscribe) {
   res.on('close', () => { clearInterval(heartbeat); unsubscribe?.(); });
 }
 
+function logFiltersFromUrl(url) {
+  return {
+    from: url.searchParams.get('from') || '',
+    to: url.searchParams.get('to') || '',
+    levels: url.searchParams.get('levels') || '',
+    scope: url.searchParams.get('scope') || '',
+    projectId: url.searchParams.get('projectId') || '',
+    component: url.searchParams.get('component') || '',
+    event: url.searchParams.get('event') || '',
+    commitSha: url.searchParams.get('commitSha') || '',
+    operationId: url.searchParams.get('operationId') || '',
+    q: url.searchParams.get('q') || '',
+  };
+}
+
+function encodeLogStreamCursor(entry, snapshotAt = new Date().toISOString()) {
+  return Buffer.from(JSON.stringify({ v: 1, afterId: entry && entry.id || '', afterTs: entry && entry.ts || snapshotAt }), 'utf8').toString('base64url');
+}
+
+function decodeLogStreamCursor(value) {
+  if (!value) return { v: 1, afterId: '', afterTs: new Date().toISOString() };
+  try {
+    const decoded = JSON.parse(Buffer.from(String(value), 'base64url').toString('utf8'));
+    if (!decoded || decoded.v !== 1 || typeof decoded.afterId !== 'string' || Number.isNaN(Date.parse(decoded.afterTs))) throw new Error('invalid');
+    return decoded;
+  } catch (error) {
+    throw new DomainError('LOG_CURSOR_EXPIRED', 'Log stream cursor is invalid; reload the snapshot.', { status: 409, retryable: true, cause: error });
+  }
+}
+
+function writeSseEvent(res, event) {
+  if (res.writableEnded) return;
+  const eventName = String(event && event.type || 'message').replace(/[^A-Za-z0-9._/-]/g, '') || 'message';
+  res.write(`event: ${eventName}\ndata: ${JSON.stringify(event)}\n\n`);
+}
+
+function streamLogsWithoutGap(res, runtime, filters, streamCursor) {
+  const watermark = decodeLogStreamCursor(streamCursor);
+  const buffered = [];
+  let replaying = true;
+  const unsubscribe = runtime.logger.subscribe(record => {
+    if (!runtime.logRepository.matches(record, filters)) return;
+    if (replaying) buffered.push(record);
+    else writeSseEvent(res, { type: 'logs/appended', record });
+  });
+  const catchup = [];
+  let cursor = '';
+  let found = !watermark.afterId;
+  try {
+    outer: do {
+      const page = runtime.logRepository.query({ ...filters, cursor, pageSize: 5000 });
+      for (const entry of page.entries) {
+        if (watermark.afterId && entry.id === watermark.afterId) { found = true; break outer; }
+        if (!watermark.afterId && String(entry.ts) <= watermark.afterTs) { found = true; break outer; }
+        catchup.push(entry);
+      }
+      cursor = page.nextCursor || '';
+    } while (cursor);
+    if (!found) throw new DomainError('LOG_CURSOR_EXPIRED', 'Log stream cursor source is no longer available; reload the snapshot.', { status: 409, retryable: true });
+  } catch (error) {
+    unsubscribe();
+    throw error;
+  }
+
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+  res.write(': connected\n\n');
+  const seen = new Set();
+  const latestCatchup = catchup[0] || null;
+  for (const record of catchup.reverse()) {
+    seen.add(record.id);
+    writeSseEvent(res, { type: 'logs/appended', record, replay: true });
+  }
+  replaying = false;
+  for (const record of buffered) {
+    if (seen.has(record.id)) continue;
+    seen.add(record.id);
+    writeSseEvent(res, { type: 'logs/appended', record });
+  }
+  writeSseEvent(res, { type: 'logs/ready', streamCursor: encodeLogStreamCursor(buffered.at(-1) || latestCatchup, watermark.afterTs) });
+  const heartbeat = setInterval(() => { if (!res.writableEnded) res.write(': heartbeat\n\n'); }, 20_000);
+  heartbeat.unref?.();
+  res.on('close', () => { clearInterval(heartbeat); unsubscribe(); });
+}
+
 function taskForProject(runtime, projectId, operationId, task, kind = 'background') {
   let projectTasks = runtime.activeTasks.get(projectId);
   if (!projectTasks) {
@@ -767,7 +826,9 @@ function createRequestHandler(runtime, options = {}) {
       }
       if (projectMatch && method === 'DELETE') {
         const projectId = validateProjectId(decodeURIComponent(projectMatch[1]));
-        if (!runtime.registryStore.readDisplaySnapshot(projectId)) throw new DomainError('PROJECT_NOT_FOUND', 'Project was not found.', { status: 404 });
+        if (!runtime.registryStore.readDisplaySnapshot(projectId) && !runtime.lifecycleService.hasPendingDeletion(projectId)) {
+          throw new DomainError('PROJECT_NOT_FOUND', 'Project was not found.', { status: 404 });
+        }
         const body = await readJsonBody(req);
         const result = await runtime.lifecycleService.deleteProject(projectId, {
           deleteKnowledge: body.deleteKnowledge === true,
@@ -886,34 +947,26 @@ function createRequestHandler(runtime, options = {}) {
 
       if (method === 'GET' && pathname === '/api/logs') {
         const result = runtime.logRepository.query({
-          from: url.searchParams.get('from') || '',
-          to: url.searchParams.get('to') || '',
-          levels: url.searchParams.get('levels') || '',
-          projectId: url.searchParams.get('projectId') || '',
-          component: url.searchParams.get('component') || '',
-          event: url.searchParams.get('event') || '',
-          commitSha: url.searchParams.get('commitSha') || '',
-          operationId: url.searchParams.get('operationId') || '',
-          q: url.searchParams.get('q') || '',
+          ...logFiltersFromUrl(url),
           cursor: url.searchParams.get('cursor') || '',
-          pageSize: Number(url.searchParams.get('pageSize') || 100),
+          pageSize: Number(url.searchParams.get('pageSize') || 500),
         });
-        return send(res, 200, { ok: true, ...result, health: runtime.logger.getHealth() });
+        return send(res, 200, { ok: true, ...result, streamCursor: encodeLogStreamCursor(result.entries[0]), health: runtime.logger.getHealth() });
+      }
+      if (method === 'GET' && pathname === '/api/logs/stream') {
+        return streamLogsWithoutGap(res, runtime, logFiltersFromUrl(url), url.searchParams.get('streamCursor') || '');
       }
       if (method === 'GET' && pathname === '/api/logs/export') {
         const output = runtime.layout.getCachePath('exports', `${requestOperationId}.jsonl`);
-        const result = runtime.logRepository.exportToFile(output, {
-          from: url.searchParams.get('from') || '', to: url.searchParams.get('to') || '',
-          levels: url.searchParams.get('levels') || '', projectId: url.searchParams.get('projectId') || '',
-          component: url.searchParams.get('component') || '', event: url.searchParams.get('event') || '',
-          commitSha: url.searchParams.get('commitSha') || '', operationId: url.searchParams.get('operationId') || '',
-          q: url.searchParams.get('q') || '',
-        });
+        const result = runtime.logRepository.exportToFile(output, logFiltersFromUrl(url));
         const payload = fs.readFileSync(result.filePath);
         fs.rmSync(result.filePath, { force: true });
         res.setHeader('Content-Disposition', `attachment; filename="project-knowledge-logs-${new Date().toISOString().slice(0, 10)}.jsonl"`);
         return send(res, 200, payload, 'application/x-ndjson; charset=utf-8');
       }
+
+
+
 
       if (method === 'POST' && pathname === '/api/claude/sessions') {
         const body = await readJsonBody(req);
