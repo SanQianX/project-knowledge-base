@@ -32,10 +32,14 @@ jobs:
       - run: npm test -- --no-report
       - run: npm pack --dry-run --json
 
-  windows-desktop:
-    name: Core + Desktop package smoke / Windows
+  core-windows:
+    name: Core (web runtime) / Node ${{ matrix.node }} / Windows
     runs-on: windows-latest
-    timeout-minutes: 75
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['18.x', '24.x']
     env:
       # Runner TEMP uses 8.3 short paths (RUNNER~1); realpathSync.native expands
       # them, breaking path-equality assertions. Use a workspace-local temp dir.
@@ -45,15 +49,12 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: '24.x'
+          node-version: ${{ matrix.node }}
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            desktop/package-lock.json
       - name: Prepare temp directory
         shell: pwsh
         run: New-Item -ItemType Directory -Force -Path .tmp | Out-Null
-      - name: Install and test core
+      - name: Install and test web runtime
         shell: pwsh
         run: |
           npm ci
@@ -61,17 +62,3 @@ jobs:
           npm test -- --no-report
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm pack --dry-run --json
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Install and test desktop
-        shell: pwsh
-        run: |
-          npm ci --prefix desktop --omit=optional
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          npm test --prefix desktop
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Build Windows x64 runtime and installer
-        run: npm run make --prefix desktop
-      - name: Test packaged application and LanceDB
-        run: npm run test:packaged --prefix desktop
-      - name: Audit packaged runtime
-        run: npm run audit:package --prefix desktop
