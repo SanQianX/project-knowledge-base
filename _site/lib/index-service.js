@@ -5,8 +5,33 @@ const { DomainError, createId, validateProjectId } = require('./contracts');
 const { StorageLayout } = require('./storage-layout');
 const { ProjectRegistryStore } = require('./project-registry-store');
 const { ProjectStore } = require('./project-store');
+const { CHUNKER_VERSION, listMarkdownFiles } = require('./markdown-knowledge-indexer');
+const { sha256 } = require('./knowledge-schema');
 
 let globalWriterTail = Promise.resolve();
+
+function buildSourceManifest(projectId, knowledgePath, generation, sourceCommit = '') {
+  const root = path.resolve(knowledgePath);
+  const entries = {};
+  for (const filePath of listMarkdownFiles(root)) {
+    const entryId = path.relative(root, filePath).replace(/\\/g, '/');
+    const markdown = fs.readFileSync(filePath, 'utf8');
+    entries[entryId] = {
+      entryId,
+      documentHash: sha256(`chunker:${CHUNKER_VERSION}\n${markdown}`),
+      sourceCommit: sourceCommit || '',
+    };
+  }
+  return {
+    schema: 'knowledge-index-source-manifest/v1',
+    projectId,
+    generation: Number(generation || 0),
+    sourceCommit: sourceCommit || null,
+    entries,
+    entryCount: Object.keys(entries).length,
+    updatedAt: new Date().toISOString(),
+  };
+}
 
 function enqueueGlobal(task) {
   const run = globalWriterTail.catch(() => {}).then(task);
@@ -20,6 +45,7 @@ class IndexService {
     this.registryStore = options.registryStore || new ProjectRegistryStore({ layout: this.layout });
     this.projectStore = options.projectStore || new ProjectStore({ layout: this.layout });
     this.adapter = options.adapter || null;
+    this.atomic = options.atomic || AtomicFile;
     this.logger = options.logger || null;
     this.pending = new Map();
   }
@@ -72,6 +98,8 @@ class IndexService {
         generation,
         sinceCommit: before.index.sinceCommit,
       });
+      const sourceManifest = buildSourceManifest(projectId, config.knowledgePath, generation, before.index.sinceCommit);
+      this.atomic.writeJsonAtomic(this.layout.getRuntimePath('index-sources', `${projectId}.json`), sourceManifest);
       await this.projectStore.updateState(projectId, state => {
         if (state.index.generation === generation) {
           state.index.dirty = false;
@@ -126,6 +154,11 @@ class IndexService {
           if (fs.existsSync(backup) && !fs.existsSync(target)) fs.renameSync(backup, target);
           throw error;
         }
+        for (const { projectId, config } of projects) {
+          const state = this.projectStore.readState(projectId);
+          const sourceManifest = buildSourceManifest(projectId, config.knowledgePath, state.index.generation, state.index.sinceCommit);
+          this.atomic.writeJsonAtomic(this.layout.getRuntimePath('index-sources', `${projectId}.json`), sourceManifest);
+        }
         return { ok: true, operationId, target, backup: fs.existsSync(backup) ? backup : null, validation };
       } catch (error) {
         if (fs.existsSync(temp)) fs.rmSync(temp, { recursive: true, force: true });
@@ -137,4 +170,4 @@ class IndexService {
   static async flush() { await globalWriterTail.catch(() => {}); }
 }
 
-module.exports = { IndexService, enqueueGlobal };
+module.exports = { IndexService, enqueueGlobal, buildSourceManifest };
