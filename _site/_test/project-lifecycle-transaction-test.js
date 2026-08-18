@@ -43,7 +43,14 @@ function createRepo(root, name, withCommit = true) {
   const projects = new ProjectStore({ layout });
   await settings.initialize({ knowledge: { rootPath: knowledgeRoot } });
   await registry.initialize();
-  const lifecycle = new ProjectLifecycleService({ layout, settingsStore: settings, registryStore: registry, projectStore: projects, triggerScriptPath: TRIGGER });
+  const lifecycle = new ProjectLifecycleService({
+    layout,
+    settingsStore: settings,
+    registryStore: registry,
+    projectStore: projects,
+    triggerScriptPath: TRIGGER,
+    bridgeAdapter: { async getHighWatermark() { return { status: 'captured', cursor: 73 }; } },
+  });
 
   const repo = createRepo(root, 'repo-a');
   const claude = path.join(repo, 'CLAUDE.md');
@@ -52,6 +59,7 @@ function createRepo(root, name, withCommit = true) {
   assert.strictEqual(imported.ok, true);
   assert.strictEqual(imported.config.aiProfileId, null, 'import must not require an AI profile');
   assert.strictEqual(imported.state.trackingStartCommit, git(repo, ['rev-parse', 'HEAD']));
+  assert.strictEqual(imported.state.conversationBaselineCursor, 73, 'import must freeze the current Bridge cursor as its conversation baseline');
   assert.deepStrictEqual(fs.readdirSync(imported.config.knowledgePath), [], 'import must not create TODO knowledge files');
   assert.strictEqual(fs.readFileSync(claude, 'utf8'), '# user only\n');
   assert.strictEqual(realHookManager.readHookStatus({ repoPath: repo, projectId: imported.projectId }).installed, true);

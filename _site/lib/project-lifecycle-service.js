@@ -32,9 +32,36 @@ class ProjectLifecycleService {
     this.triggerScriptPath = options.triggerScriptPath;
     this.logger = options.logger || { child() { return this; }, info() {}, warn() {}, error() {} };
     this.isProjectBusy = options.isProjectBusy || (() => false);
+    this.bridgeAdapter = options.bridgeAdapter || null;
+    this.fault = options.fault || (() => {});
   }
 
   transactionPath(operationId) { return this.layout.getRuntimePath('transactions', `${operationId}.json`); }
+  deleteTransactionPath(projectId) { return this.layout.getRuntimePath('deletions', `${projectId}.json`); }
+
+  readDeleteJournal(projectId) {
+    return AtomicFile.readJsonStrict(this.deleteTransactionPath(projectId), {
+      allowMissing: true,
+      defaultValue: null,
+      category: 'project-delete-transaction',
+      validate: journal => {
+        if (!journal || journal.schema !== 'project-delete-transaction/v1' || journal.projectId !== projectId || !journal.config || !journal.steps) {
+          throw new DomainError('DATA_CORRUPT', 'Project delete transaction is corrupt.', { status: 500 });
+        }
+        return journal;
+      },
+    });
+  }
+
+  hasPendingDeletion(projectId) {
+    const journal = this.readDeleteJournal(projectId);
+    return Boolean(journal && journal.phase !== 'completed');
+  }
+
+  writeDeleteJournal(journal) {
+    journal.updatedAt = new Date().toISOString();
+    AtomicFile.writeJsonAtomic(this.deleteTransactionPath(journal.projectId), journal);
+  }
 
   writeJournal(journal) {
     journal.updatedAt = new Date().toISOString();
@@ -98,13 +125,25 @@ class ProjectLifecycleService {
       journal.repoPath = git.repoPath;
       journal.knowledgePath = knowledgePath;
       this.writeJournal(journal);
+      const conversationBaseline = this.bridgeAdapter && typeof this.bridgeAdapter.getHighWatermark === 'function'
+        ? await this.bridgeAdapter.getHighWatermark({ projectId, repoIdentity: { commonDir: git.commonDir }, repoPath: git.repoPath })
+        : { status: 'unavailable', cursor: null, reason: 'bridge-adapter-unavailable' };
+      const stateInput = git.head
+        ? { trackingStartCommit: git.head, trackingMode: 'normal' }
+        : { trackingStartCommit: null, trackingMode: 'empty-repo' };
+      stateInput.conversationBaselineCursor = conversationBaseline.cursor;
+      stateInput.conversation = {
+        lastConsumedCursor: conversationBaseline.cursor,
+        captureStatus: conversationBaseline.status,
+        lastError: conversationBaseline.status === 'captured' ? null : { reason: conversationBaseline.reason || 'unavailable' },
+      };
       const created = await this.projectStore.create(projectId, {
         displayName, storageName, repoPath: git.repoPath, knowledgePath,
         enabled: true, aiProfileId: input.aiProfileId || null,
         knowledgeLanguage: input.knowledgeLanguage || 'zh-CN',
         teamBinding: team ? team.binding : null,
         repoIdentity: { commonDir: git.commonDir },
-      }, git.head ? { trackingStartCommit: git.head, trackingMode: 'normal' } : { trackingStartCommit: null, trackingMode: 'empty-repo' });
+      }, stateInput);
       journal.created.metadata = this.layout.getProjectMetadataDir(projectId);
       journal.phase = 'metadata-created';
       this.writeJournal(journal);
@@ -189,31 +228,98 @@ class ProjectLifecycleService {
   }
 
   async deleteProject(projectId, options = {}) {
-    const operationId = options.operationId || createId('op');
+    let journal = this.readDeleteJournal(projectId);
+    const operationId = journal && journal.operationId || options.operationId || createId('op');
     const log = this.logger.child ? this.logger.child({ component: 'project-lifecycle', operationId, projectId }) : this.logger;
-    if (await this.isProjectBusy(projectId)) throw new DomainError('PROJECT_BUSY', 'Project has an active reconciliation or AI run.', { status: 409, retryable: true, operationId });
-    const config = this.projectStore.readConfig(projectId);
-    if (options.deleteKnowledge === true && options.confirmationToken !== projectId) {
-      throw new DomainError('INVALID_ARGUMENT', 'Explicit projectId confirmation is required to delete knowledge.', { status: 409, operationId });
-    }
-    let hook;
-    if (fs.existsSync(config.repoPath)) {
-      hook = this.hookManager.uninstallHook({ repoPath: config.repoPath, projectId });
+    if (!journal) {
+      if (await this.isProjectBusy(projectId)) throw new DomainError('PROJECT_BUSY', 'Project has an active reconciliation or AI run.', { status: 409, retryable: true, operationId });
+      const config = this.projectStore.readConfig(projectId);
+      if (options.deleteKnowledge === true && options.confirmationToken !== projectId) {
+        throw new DomainError('INVALID_ARGUMENT', 'Explicit projectId confirmation is required to delete knowledge.', { status: 409, operationId });
+      }
+      journal = {
+        schema: 'project-delete-transaction/v1',
+        operationId,
+        projectId,
+        phase: 'tombstoned',
+        requested: { deleteKnowledge: options.deleteKnowledge === true },
+        config,
+        steps: {
+          hook: { completed: false },
+          registry: { completed: false },
+          metadata: { completed: false },
+          knowledge: { completed: false },
+        },
+        startedAt: new Date().toISOString(),
+      };
+      this.writeDeleteJournal(journal);
+      this.fault('delete-tombstoned', journal);
+      await log.info?.('project.delete.started', 'Project delete transaction started.', { phase: 'tombstoned', context: { deleteKnowledge: journal.requested.deleteKnowledge } });
     } else {
-      hook = { ok: true, removed: false, reason: 'repository-missing' };
-    }
-    await this.registryStore.remove(projectId);
-    const metadataDir = this.layout.getProjectMetadataDir(projectId);
-    if (fs.existsSync(metadataDir)) fs.rmSync(metadataDir, { recursive: true, force: true });
-    let removedKnowledge = false;
-    if (options.deleteKnowledge === true && !config.teamBinding) {
-      if (fs.existsSync(config.knowledgePath)) {
-        fs.rmSync(config.knowledgePath, { recursive: true, force: true });
-        removedKnowledge = true;
+      if (journal.phase === 'completed') {
+        return { ok: true, operationId, projectId, ...journal.result, recovered: true };
+      }
+      if (Boolean(options.deleteKnowledge) !== Boolean(journal.requested.deleteKnowledge)) {
+        throw new DomainError('IMMUTABLE_FIELD', 'A pending delete transaction cannot change deleteKnowledge.', { status: 409, operationId });
+      }
+      if (journal.requested.deleteKnowledge && options.confirmationToken !== projectId) {
+        throw new DomainError('INVALID_ARGUMENT', 'Explicit projectId confirmation is required to resume knowledge deletion.', { status: 409, operationId });
       }
     }
-    await log.info?.('project.delete.completed', 'Project deleted.', { phase: 'completed', context: { hook, externalKnowledgePreserved: !removedKnowledge } });
-    return { ok: true, operationId, projectId, hook, removedKnowledge, knowledgePath: config.knowledgePath };
+    const config = journal.config;
+    const perform = async (stepName, action) => {
+      if (journal.steps[stepName].completed) return journal.steps[stepName].result;
+      journal.phase = `${stepName}.running`;
+      journal.failedStep = null;
+      this.writeDeleteJournal(journal);
+      this.fault(`delete-before-${stepName}`, journal);
+      const result = await action();
+      this.fault(`delete-after-${stepName}`, journal);
+      journal.steps[stepName] = { completed: true, completedAt: new Date().toISOString(), result };
+      journal.phase = `${stepName}.completed`;
+      this.writeDeleteJournal(journal);
+      return result;
+    };
+    try {
+      const hook = await perform('hook', async () => {
+        if (!fs.existsSync(config.repoPath)) return { ok: true, removed: false, reason: 'repository-missing' };
+        return this.hookManager.uninstallHook({ repoPath: config.repoPath, projectId });
+      });
+      await perform('registry', async () => ({ removed: await this.registryStore.remove(projectId) }));
+      await perform('metadata', async () => {
+        const metadataDir = this.layout.getProjectMetadataDir(projectId);
+        if (!fs.existsSync(metadataDir)) return { removed: false };
+        fs.rmSync(metadataDir, { recursive: true, force: true });
+        return { removed: true };
+      });
+      const knowledge = await perform('knowledge', async () => {
+        if (!journal.requested.deleteKnowledge || config.teamBinding) return { removed: false, preserved: true };
+        if (!fs.existsSync(config.knowledgePath)) return { removed: false, preserved: false };
+        fs.rmSync(config.knowledgePath, { recursive: true, force: true });
+        return { removed: true, preserved: false };
+      });
+      this.fault('delete-before-completed', journal);
+      journal.phase = 'completed';
+      journal.completedAt = new Date().toISOString();
+      journal.result = {
+        hook,
+        removedKnowledge: knowledge.removed === true,
+        knowledgePath: config.knowledgePath,
+        externalKnowledgePreserved: knowledge.removed !== true,
+      };
+      this.writeDeleteJournal(journal);
+      await log.info?.('project.delete.completed', 'Project delete transaction completed.', { phase: 'completed', context: { hook, externalKnowledgePreserved: journal.result.externalKnowledgePreserved } });
+      return { ok: true, operationId, projectId, ...journal.result };
+    } catch (error) {
+      journal.failedStep = journal.phase;
+      journal.phase = 'failed';
+      journal.failedAt = new Date().toISOString();
+      journal.error = { code: error.code || 'INVALID_ARGUMENT', message: String(error.message || error) };
+      this.writeDeleteJournal(journal);
+      await log.error?.('project.delete.failed', 'Project delete transaction stopped and can be retried.', { phase: journal.failedStep, error });
+      if (error instanceof DomainError) throw error;
+      throw new DomainError('MIGRATION_FAILED', 'Project delete transaction failed and can be retried.', { status: 500, operationId, retryable: true, cause: error });
+    }
   }
 }
 
