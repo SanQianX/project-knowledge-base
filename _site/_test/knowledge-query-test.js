@@ -34,7 +34,8 @@ const { KnowledgeToolRuntime } = require('../lib/knowledge-tool-runtime');
   const runtime = new KnowledgeToolRuntime({ layout, settingsStore: settings, registryStore: registry, projectStore: projects });
   try {
     const search = await runtime.search({ projectId: 'project-api', query: 'login session tokens', limit: 10 });
-    assert.strictEqual(search.source, 'markdown-fallback');
+    assert.strictEqual(search.source, 'knowledge-retrieval-service');
+    assert.strictEqual(search.backend, 'markdown-hybrid-fallback');
     assert(search.results.some(row => row.scope_project_id === 'project-api'));
     assert(search.results.some(row => row.scope_project_id === 'project-web'));
     assert(search.results.every(row => row.scope_project_id !== 'project-secret'));

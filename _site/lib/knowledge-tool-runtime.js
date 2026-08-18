@@ -10,6 +10,8 @@ const { KnowledgeDatabase } = require('./knowledge-db');
 const { LocalEmbeddingService } = require('./embedding-service');
 const { EMBEDDING_DIMENSIONS } = require('./knowledge-schema');
 const { DomainError } = require('./contracts');
+const { KnowledgeRetrievalService } = require('./knowledge-retrieval-service');
+const { ConversationStore } = require('./conversation-store');
 
 function gitRoot(candidate) {
   const resolved = path.resolve(candidate || process.cwd());
@@ -97,10 +99,24 @@ class KnowledgeToolRuntime {
     this.projectStore = options.projectStore || new ProjectStore({ layout: this.layout });
     this.database = null;
     this.embedder = null;
+    this.conversationStore = options.conversationStore || new ConversationStore({
+      layout: this.layout,
+      projectStore: this.projectStore,
+      logger: options.logger,
+    });
     this.requirementRecorder = options.requirementRecorder || new RequirementRecorder({
       layout: this.layout,
       registryStore: this.registryStore,
       projectStore: this.projectStore,
+      conversationStore: this.conversationStore,
+      logger: options.logger,
+    });
+    this.retrievalService = options.retrievalService || new KnowledgeRetrievalService({
+      layout: this.layout,
+      registryStore: this.registryStore,
+      projectStore: this.projectStore,
+      databaseProvider: () => this.createDatabase(),
+      embedderProvider: () => this.createEmbedder(),
       logger: options.logger,
     });
   }
@@ -263,14 +279,7 @@ class KnowledgeToolRuntime {
 
   async search(input = {}) {
     const project = this.resolveProject(input);
-    const query = String(input.query || '').trim();
-    if (!query) throw new DomainError('INVALID_ARGUMENT', 'query is required.');
-    const availability = this.indexAvailability(project);
-    if (!availability.usable) return this.searchMarkdown(project, input, { index: availability.status, reason: availability.reason });
-    try { return await this.searchIndex(project, input); }
-    catch (error) {
-      return this.searchMarkdown(project, input, { index: 'degraded', reason: 'index-query-failed', error: { code: error.code || 'INDEX_UNAVAILABLE', message: 'Derived index query failed.' } });
-    }
+    return this.retrievalService.search({ ...input, project });
   }
 
   async ask(input = {}) {
@@ -335,6 +344,7 @@ class KnowledgeToolRuntime {
       recordedAt: record.ts,
       branch: record.branch,
       headAtRecord: record.headAtRecord,
+      turnId: record.turnId,
     };
   }
 

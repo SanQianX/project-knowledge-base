@@ -85,6 +85,7 @@ async function createMcpClient() {
   write(path.join(markdownKb, 'README.md'), '# Demo knowledge\n\nThis project uses rotating refresh tokens.\n');
   write(path.join(markdownKb, 'modules', 'auth.md'), '# Authentication\n\nRefresh tokens rotate after every successful renewal.\n');
   write(path.join(markdownKb, 'changes', 'auth.md'), '# Authentication update\n\nIntroduced rotating refresh tokens.\n');
+  write(path.join(vectorKb, 'modules', 'payments.md'), '# Payment tokens\n\nPayment tokens expire after fifteen minutes.\n');
   fs.mkdirSync(vectorKb, { recursive: true });
 
   const layout = new StorageLayout({ dataDir });
@@ -115,12 +116,13 @@ async function createMcpClient() {
     assert.strictEqual(response.result.structuredContent.indexPath, layout.getIndexPath());
 
     response = await client.request('tools/call', { name: 'project_knowledge_search', arguments: { projectId: 'project-demo', query: 'refresh tokens' } });
-    assert.strictEqual(response.result.structuredContent.source, 'markdown-fallback');
-    assert.strictEqual(response.result.structuredContent.health.reason, 'index-dirty');
+    assert.strictEqual(response.result.structuredContent.source, 'knowledge-retrieval-service');
+    assert.strictEqual(response.result.structuredContent.backend, 'hybrid+markdown-truth');
     assert(response.result.structuredContent.results.some(result => result.entry_id === 'modules/auth.md'));
 
     response = await client.request('tools/call', { name: 'project_knowledge_search', arguments: { project: 'vector', query: 'payment tokens' } });
-    assert.strictEqual(response.result.structuredContent.source, 'derived-index');
+    assert.strictEqual(response.result.structuredContent.source, 'knowledge-retrieval-service');
+    assert.strictEqual(response.result.structuredContent.backend, 'hybrid+markdown-truth');
     assert(response.result.structuredContent.results.some(result => result.entry_id === 'modules/payments.md'));
 
     response = await client.request('tools/call', { name: 'project_knowledge_get', arguments: { projectId: 'project-demo', entry: 'modules/auth.md' } });

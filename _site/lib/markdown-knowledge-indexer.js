@@ -16,6 +16,29 @@ function stripFrontmatter(markdown) {
   return String(markdown || '').replace(/^---\s*\r?\n[\s\S]*?\r?\n---\s*\r?\n?/, '');
 }
 
+function parseListValue(value) {
+  const raw = String(value || '').trim();
+  const body = raw.startsWith('[') && raw.endsWith(']') ? raw.slice(1, -1) : raw;
+  return body.split(',').map(item => item.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean);
+}
+
+function parseKnowledgeMetadata(markdown) {
+  const match = /^---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/.exec(String(markdown || ''));
+  if (!match) return { tags: [], sourcePaths: [], routes: [], symbols: [], affectedModules: [] };
+  const values = {};
+  for (const line of match[1].split(/\r?\n/)) {
+    const field = /^([A-Za-z][A-Za-z0-9_-]*)\s*:\s*(.*)$/.exec(line);
+    if (field) values[field[1].toLowerCase()] = field[2];
+  }
+  return {
+    tags: parseListValue(values.tags),
+    sourcePaths: parseListValue(values.sourcepaths || values.source_paths),
+    routes: parseListValue(values.routes),
+    symbols: parseListValue(values.symbols),
+    affectedModules: parseListValue(values.affectedmodules || values.affected_modules),
+  };
+}
+
 function splitLongText(text, maxChars, overlapChars) {
   const clean = String(text || '').trim();
   if (!clean) return [];
@@ -133,6 +156,7 @@ class MarkdownKnowledgeIndexer {
       return { ok: true, action: 'unchanged', entryId: relativePath, chunks: existing.length, documentHash };
     }
     const title = inferTitle(markdown, relativePath);
+    const metadata = parseKnowledgeMetadata(markdown);
     const rawChunks = chunkMarkdown(markdown, { maxChars: this.maxChars, overlapChars: this.overlapChars });
     const chunks = [];
     for (const chunk of rawChunks) {
@@ -146,7 +170,10 @@ class MarkdownKnowledgeIndexer {
         // do not duplicate the entire document body.
         searchText: [title, chunk.headingPath.join(' > ')].filter(Boolean).join('\n'),
         vector: await this.embedder.embedPassage(embeddingText),
-        sourcePaths: input.sourcePaths || [],
+        tags: [...new Set([...metadata.tags, ...metadata.affectedModules])],
+        sourcePaths: metadata.sourcePaths.length ? metadata.sourcePaths : input.sourcePaths || [],
+        routes: metadata.routes,
+        symbols: metadata.symbols,
         sourceProjectId: input.sourceProjectId || '',
         sourceCommit: input.sourceCommit || '',
         documentHash,
@@ -199,4 +226,5 @@ module.exports = {
   listMarkdownFiles,
   isDerivedIndex,
   inferEntryType,
+  parseKnowledgeMetadata,
 };
