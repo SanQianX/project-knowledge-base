@@ -9,7 +9,6 @@ const { createLoggingUiFixture } = require('./helpers/logging-ui-fixture');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const sitePort = 8200 + (process.pid % 250);
-const debugPort = 9800 + (process.pid % 250);
 const profileDir = path.join(os.tmpdir(), 'pk-ui-flow-profile-' + process.pid);
 const artifactDir = path.join(ROOT, '.agent-state', 'ui-v13');
 
@@ -25,7 +24,7 @@ async function capture(browser, name) {
   let browser;
   try {
     await waitFor(() => requestJson(`http://127.0.0.1:${sitePort}/api/health`).then(body => body.ok), 'flow server', 20000);
-    browser = await launchCdpBrowser({ chrome: findChrome(), debugPort, profileDir, url: `http://127.0.0.1:${sitePort}/`, width: 1366, height: 768 });
+    browser = await launchCdpBrowser({ chrome: findChrome(), profileDir, url: `http://127.0.0.1:${sitePort}/`, width: 1366, height: 768 });
     await waitFor(() => browser.evaluate('window.__PK_APP__ && window.__PK_APP__.getState().projects === 1'), 'full shell', 20000);
 
     await browser.setViewport(1920, 1080);

@@ -11,9 +11,8 @@ const { ProjectRegistryStore } = require('../lib/project-registry-store');
 const { ProjectStore } = require('../lib/project-store');
 const { RequirementRecorder } = require('../lib/requirement-recorder');
 const { ConversationStore } = require('../lib/conversation-store');
-const { recordEmbeddedClaudeInput, createRequirementMetadataAdapter } = require('../lib/requirement-adapters');
+const { createRequirementMetadataAdapter } = require('../lib/requirement-adapters');
 const { KnowledgeToolRuntime } = require('../lib/knowledge-tool-runtime');
-const { subscribeEmbeddedConversation } = require('../lib/server-app');
 const claudeRunner = require('../lib/claude-cli-runner');
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), `kb-requirement-recorder-${process.pid}-`));
@@ -116,49 +115,28 @@ async function addProject(registry, projects, projectId, repoPath) {
     error => error.code === 'INVALID_ARGUMENT' && /exceeds/.test(error.message),
   );
 
-  const ordering = [];
-  const embedded = await recordEmbeddedClaudeInput({
-    recorder: {
-      recordRequirement: async input => {
-        ordering.push(`record:${input.client}`);
-        return { id: 'req-embedded', requirementHash: 'sha256:test' };
-      },
-    },
-    session: { projectId: 'project-a', projectPath: repoA, sessionId: 'embedded-session' },
-    text: 'Embedded Claude request.',
-    sendInput: async (_text, metadata) => { ordering.push(`send:${metadata.requirementId}`); return { ok: true }; },
-  });
-  assert.deepStrictEqual(ordering, ['record:claude', 'send:req-embedded'], 'embedded input must be durable before it is sent');
-  assert.strictEqual(embedded.requirementId, 'req-embedded');
-  let sentAfterFailure = false;
-  await assert.rejects(recordEmbeddedClaudeInput({
-    recorder: { recordRequirement: async () => { throw new DomainError('PROJECT_BUSY', 'append failed'); } },
-    session: { projectId: 'project-a', projectPath: repoA, sessionId: 'embedded-session' },
-    text: 'Must not silently continue.',
-    sendInput: async () => { sentAfterFailure = true; },
-  }), error => error.code === 'PROJECT_BUSY');
-  assert.strictEqual(sentAfterFailure, false, 'embedded input must not be sent after requirement persistence fails');
-
+  // T14 / I-02: the Workbench itself never appends Development Conversation
+  // events; explicit record_requirement keeps working for Workbench sessions.
   const chat = claudeRunner.startChatSession({
     slug: 'project-a', projectPath: repoA, kbPath: path.join(temp, 'knowledge', 'project-a'),
     aiProfile: { id: 'test-profile', implementation: 'claude-code-agent', mainModel: 'test-model' },
   });
-  const embeddedRecord = await recorder.recordRequirement({
-    projectId: 'project-a', repoPath: repoA, client: 'claude', sessionId: chat.sessionId, text: 'Persist this Workbench turn.',
+  // T15: every internal SDK session carries the Bridge capture-disable markers.
+  const chatEnv = claudeRunner.getSession(chat.sessionId).claudeEnv || {};
+  assert.strictEqual(chatEnv.AI_CODING_EVENT_BRIDGE_CAPTURE, '0', 'internal SDK sessions disable Bridge capture');
+  assert.strictEqual(chatEnv.AI_CODING_EVENT_ORIGIN, 'project-knowledge-internal', 'internal SDK sessions are marked as Project-Knowledge internal');
+  const beforeWorkbench = conversations.readEvents('project-a').length;
+  const explicitRecord = await recorder.recordRequirement({
+    projectId: 'project-a', repoPath: repoA, client: 'claude', sessionId: chat.sessionId, text: 'Explicit MCP requirement for a Workbench session.',
   });
-  const embeddedUser = conversations.readEvents('project-a').find(event => event.legacyRequirementId === embeddedRecord.id);
-  const captureRuntime = {
-    conversationStore: conversations,
-    embeddedConversationCaptures: new Map([[chat.sessionId, { projectId: 'project-a', requirementId: embeddedRecord.id, turnId: embeddedRecord.turnId, userEvent: embeddedUser }]]),
-    embeddedConversationSubscriptions: new Map(),
-    logger: { error: async () => {} },
-  };
-  subscribeEmbeddedConversation(captureRuntime, chat.sessionId, 'project-a');
-  for (const listener of claudeRunner.getSession(chat.sessionId).listeners) listener({ type: 'claude/result', result: 'Workbench reply persisted.', isError: false });
-  for (let attempt = 0; attempt < 50 && conversations.readEvents('project-a').length < 38; attempt += 1) await new Promise(resolve => setTimeout(resolve, 10));
-  const embeddedAssistant = conversations.readEvents('project-a').find(event => event.eventId === `embedded-assistant-${embeddedRecord.id}`);
-  assert(embeddedAssistant && embeddedAssistant.turnId === embeddedRecord.turnId && embeddedAssistant.content === 'Workbench reply persisted.');
-  captureRuntime.embeddedConversationSubscriptions.get(chat.sessionId)();
+  const explicitUser = conversations.readEvents('project-a').find(event => event.legacyRequirementId === explicitRecord.id);
+  assert(explicitUser, 'explicit record_requirement still persists for Workbench sessions');
+  for (const listener of claudeRunner.getSession(chat.sessionId).listeners) listener({ type: 'claude/result', result: 'Workbench reply must NOT be captured.', isError: false });
+  await new Promise(resolve => setTimeout(resolve, 100));
+  const afterWorkbench = conversations.readEvents('project-a');
+  assert.strictEqual(afterWorkbench.length, beforeWorkbench + 1, 'only the explicit requirement was appended');
+  assert(!afterWorkbench.some(event => String(event.content || '').includes('Workbench reply must NOT be captured.')), 'no embedded assistant capture exists');
+  assert(!afterWorkbench.some(event => event.rawEventType === 'embedded-claude-result'), 'the embedded capture path is gone');
   claudeRunner.deleteSession(chat.sessionId);
 
   const failingRecorder = new RequirementRecorder({

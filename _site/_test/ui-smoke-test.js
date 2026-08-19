@@ -9,7 +9,6 @@ const { createLoggingUiFixture } = require('./helpers/logging-ui-fixture');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const sitePort = 7900 + (process.pid % 300);
-const debugPort = 9500 + (process.pid % 300);
 const profileDir = path.join(os.tmpdir(), 'pk-ui-smoke-profile-' + process.pid);
 const screenshotPath = path.join(os.tmpdir(), 'pk-ui-smoke-' + process.pid + '.png');
 
@@ -19,7 +18,7 @@ const screenshotPath = path.join(os.tmpdir(), 'pk-ui-smoke-' + process.pid + '.p
   let browser;
   try {
     await waitFor(() => requestJson(`http://127.0.0.1:${sitePort}/api/health`).then(payload => payload.ok), 'isolated server', 20000);
-    browser = await launchCdpBrowser({ chrome: findChrome(), debugPort, profileDir, url: `http://127.0.0.1:${sitePort}/`, width: 1440, height: 900 });
+    browser = await launchCdpBrowser({ chrome: findChrome(), profileDir, url: `http://127.0.0.1:${sitePort}/`, width: 1440, height: 900 });
     await waitFor(() => browser.evaluate('window.__PK_APP__ && window.__PK_APP__.getState().projects === 1'), 'v13 shell', 20000);
 
     const snapshot = await browser.evaluate(`(() => ({

@@ -27,6 +27,10 @@ function defaultDataDir(tag) {
 
 function spawnServer({ root, port, host = '127.0.0.1', dataDir, extraEnv = {}, tag, stdio = ['ignore', 'pipe', 'pipe'], cwd }) {
   const dir = dataDir || defaultDataDir(tag);
+  // Isolate the Bridge journal home too: the runtime registers a
+  // 'project-knowledge' consumer at startup, and without this the test
+  // server would write into the developer's real ~/.ai-coding-event-bridge.
+  const bridgeHome = fs.mkdtempSync(path.join(os.tmpdir(), `kb-bridge-${tag || 'test'}-${process.pid}-`));
   const child = spawn(process.execPath, [path.join(root, '_site', 'server.js')], {
     cwd: cwd || root,
     env: {
@@ -36,6 +40,7 @@ function spawnServer({ root, port, host = '127.0.0.1', dataDir, extraEnv = {}, t
       KB_DATA_DIR: dir,
       KB_CLAUDE_RULES_DIR: dir,
       KB_SKIP_MIGRATION: '1',
+      AI_CODING_EVENT_BRIDGE_HOME: bridgeHome,
       ...extraEnv,
     },
     stdio,
@@ -44,6 +49,7 @@ function spawnServer({ root, port, host = '127.0.0.1', dataDir, extraEnv = {}, t
   return {
     child,
     dataDir: dir,
+    bridgeHome,
     cleanup: async () => {
       try { child.kill(); } catch {}
       // Windows keeps data-dir handles alive until the child fully exits;
@@ -54,6 +60,7 @@ function spawnServer({ root, port, host = '127.0.0.1', dataDir, extraEnv = {}, t
         if (child.exitCode !== null) { clearTimeout(timer); resolve(); }
       });
       try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+      try { fs.rmSync(bridgeHome, { recursive: true, force: true }); } catch {}
     },
   };
 }

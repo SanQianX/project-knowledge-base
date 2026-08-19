@@ -49,17 +49,18 @@ const { CommitConversationBinder } = require('../lib/commit-conversation-binder'
   const frozenC1 = await binder.bind({ projectId, commitSha: c1 });
   assert.strictEqual(frozenC1.status, 'available');
   assert.deepStrictEqual(frozenC1.turns.map(turn => turn.turnId), ['turn-1'], 'future R2 must never bind back to C1');
-  assert.deepStrictEqual(frozenC1.turns[0].assistantEvents.map(event => event.eventId), ['a1'], 'assistant tail present before Claim must be frozen');
+  assert.deepStrictEqual(frozenC1.turns[0].assistantEvents.map(event => event.eventId), [], 'assistant beyond boundaryEndCursor must never enter the frozen snapshot (I-13)');
   assert.strictEqual(frozenC1.excludedFuturePromptCount, 1);
   const frozenHash = frozenC1.snapshotHash;
   await append({ eventId: 'a1-after-claim', sequence: 6, eventType: 'assistant_response', role: 'assistant', content: 'Assistant arrived after Claim.', turnId: 'turn-1' });
   const retriedC1 = await binder.bind({ projectId, commitSha: c1 });
   assert.strictEqual(retriedC1.snapshotHash, frozenHash, 'retry must reuse the exact Claim-time conversation freeze');
-  assert.deepStrictEqual(retriedC1.turns[0].assistantEvents.map(event => event.eventId), ['a1']);
+  assert.deepStrictEqual(retriedC1.turns[0].assistantEvents.map(event => event.eventId), [], 'delayed binder execution must not pull post-commit replies into the old snapshot');
 
   store.writeBoundary(projectId, { commitSha: c2, repoIdentity, parentShas: [c1], branch: 'main', committedAt: '2026-08-18T02:05:00.000Z', bridgeCursorAtCommit: 5, journalSequence: 5, openTurnIdsAtCommit: ['turn-1'], operationId: 'op-c2' });
   const frozenC2 = await binder.bind({ projectId, commitSha: c2 });
   assert.deepStrictEqual(frozenC2.turns.map(turn => [turn.turnId, turn.bindingKind]), [['turn-1', 'shared-spanning'], ['turn-2', 'direct']]);
+  assert.deepStrictEqual(frozenC2.turns[0].assistantEvents.map(event => event.eventId), ['a1'], 'the assistant reply inside the C2 window belongs to the spanning turn');
   assert.strictEqual(frozenC2.turns[0].turnId, frozenC1.turns[0].turnId, 'spanning turns must retain one stable identity across commits');
 
   store.writeBoundary(projectId, { commitSha: c3, repoIdentity, parentShas: [c2], branch: 'main', committedAt: '2026-08-18T02:07:00.000Z', bridgeCursorAtCommit: 7, journalSequence: 7, openTurnIdsAtCommit: [], operationId: 'op-c3' });

@@ -6,11 +6,13 @@ const { spawnSync } = require('child_process');
 const crossSpawn = require('cross-spawn');
 const { applyEdits, modify, parse } = require('jsonc-parser');
 const packageInfo = require('../../package.json');
+const bridgeModule = require('@sanqianx/ai-coding-event-bridge');
 
 const INTEGRATION_NAME = 'project-knowledge';
 const MARKETPLACE_NAME = 'project-knowledge';
 const DEFAULT_MARKETPLACE_SOURCE = 'SanQianX/project-knowledge-base';
 const SUPPORTED_CLIENTS = ['claude', 'opencode', 'codex'];
+const DEFAULT_BRIDGE_CONSUMER = 'project-knowledge';
 const CLIENT_LABELS = {
   claude: 'Claude Code',
   opencode: 'OpenCode',
@@ -172,6 +174,149 @@ class IntegrationManager {
     this.dryRun = Boolean(options.dryRun);
     this.logger = options.logger || null;
     this.planned = [];
+    this.bridge = options.bridgeModule || bridgeModule;
+    this.bridgeConsumerName = options.bridgeConsumerName || DEFAULT_BRIDGE_CONSUMER;
+    this.bridgeHomeDir = options.bridgeHomeDir
+      || this.env.AI_CODING_EVENT_BRIDGE_HOME
+      || path.join(this.homeDir, '.ai-coding-event-bridge');
+    this.claudeSettingsFile = options.claudeSettingsFile || '';
+    this.codexConfigFile = options.codexConfigFile || '';
+    this.openCodePluginsDir = options.openCodePluginsDir || '';
+  }
+
+  _bridgeFacade() {
+    return this.bridge.createBridge({ homeDir: this.bridgeHomeDir });
+  }
+
+  _captureInstallerOptions() {
+    return {
+      homeDir: this.bridgeHomeDir,
+      settingsFile: this.claudeSettingsFile || undefined,
+      configFile: this.codexConfigFile || undefined,
+      pluginsDir: this.openCodePluginsDir || undefined,
+    };
+  }
+
+  // ---- Bridge host consumer (host-level, never owned by one connector) ----
+
+  async registerBridgeConsumer(meta = {}) {
+    if (this.dryRun) {
+      this.planned.push({ command: 'bridge', args: ['registerConsumer', this.bridgeConsumerName] });
+      return { state: 'planned', consumerName: this.bridgeConsumerName };
+    }
+    const facade = this._bridgeFacade();
+    const consumer = await facade.registerConsumer(this.bridgeConsumerName, meta);
+    return { state: 'registered', consumerName: this.bridgeConsumerName, consumer };
+  }
+
+  async unregisterBridgeConsumer() {
+    if (this.dryRun) {
+      this.planned.push({ command: 'bridge', args: ['unregisterConsumer', this.bridgeConsumerName] });
+      return { state: 'planned', consumerName: this.bridgeConsumerName };
+    }
+    const facade = this._bridgeFacade();
+    await facade.unregisterConsumer(this.bridgeConsumerName);
+    return { state: 'unregistered', consumerName: this.bridgeConsumerName };
+  }
+
+  async bridgeStatus() {
+    const facade = this._bridgeFacade();
+    const [consumer, health] = await Promise.all([facade.getConsumer(this.bridgeConsumerName), facade.getHealth()]);
+    return {
+      consumerRegistered: Boolean(consumer),
+      consumerName: this.bridgeConsumerName,
+      bridgeHealthy: true,
+      health,
+    };
+  }
+
+  // ---- Development Capture connectors (Bridge hooks / notify / plugin) ----
+
+  async installCaptureClaude() {
+    if (this.dryRun) {
+      this.planned.push({ command: 'bridge', args: ['installClaudeCodeHook', this.bridgeHomeDir] });
+      return { state: 'planned', installed: false, conflict: false, detail: 'managed Bridge hooks (dry-run)' };
+    }
+    const result = await this.bridge.installers.claudeCode.installClaudeCodeHook(this._captureInstallerOptions());
+    return { state: 'installed', installed: true, conflict: false, detail: `managed hooks: ${result.added.join(', ') || 'already present'}` };
+  }
+
+  async statusCaptureClaude() {
+    const status = await this.bridge.installers.claudeCode.statusClaudeCodeHook(this._captureInstallerOptions());
+    return {
+      state: status.installed ? 'installed' : 'not-installed',
+      installed: status.installed,
+      conflict: false,
+      detail: status.installed ? `managed events: ${status.managedEvents.join(', ')}` : 'managed hooks not installed',
+    };
+  }
+
+  async uninstallCaptureClaude(options = {}) {
+    await this.bridge.installers.claudeCode.uninstallClaudeCodeHook({
+      ...this._captureInstallerOptions(),
+      unregisterConsumer: options.unregisterConsumer === true,
+      consumerName: this.bridgeConsumerName,
+    });
+    return { state: 'removed', detail: options.unregisterConsumer === true ? 'managed hooks removed; host consumer unregistered' : 'managed hooks removed; host consumer kept' };
+  }
+
+  async installCaptureCodex() {
+    if (this.dryRun) {
+      this.planned.push({ command: 'bridge', args: ['installCodexNotify', this.bridgeHomeDir] });
+      return { state: 'planned', installed: false, conflict: false, detail: 'managed Codex notify (dry-run)' };
+    }
+    const result = await this.bridge.installers.codex.installCodexNotify(this._captureInstallerOptions());
+    if (result.conflict) {
+      return { state: 'conflict', installed: false, conflict: true, detail: 'third-party notify present; not overwritten' };
+    }
+    return { state: 'installed', installed: true, conflict: false, detail: 'managed notify installed' };
+  }
+
+  async statusCaptureCodex() {
+    const status = await this.bridge.installers.codex.statusCodexNotify(this._captureInstallerOptions());
+    return {
+      state: status.installed ? 'installed' : status.thirdParty ? 'conflict' : 'not-installed',
+      installed: Boolean(status.installed),
+      conflict: Boolean(status.thirdParty),
+      detail: status.installed ? 'managed notify installed' : status.thirdParty ? 'third-party notify present' : 'notify not installed',
+    };
+  }
+
+  async uninstallCaptureCodex(options = {}) {
+    await this.bridge.installers.codex.uninstallCodexNotify({
+      ...this._captureInstallerOptions(),
+      unregisterConsumer: options.unregisterConsumer === true,
+      consumerName: this.bridgeConsumerName,
+    });
+    return { state: 'removed', detail: 'managed notify removed' };
+  }
+
+  async installCaptureOpenCode() {
+    if (this.dryRun) {
+      this.planned.push({ command: 'bridge', args: ['installOpenCodePlugin', this.bridgeHomeDir] });
+      return { state: 'planned', installed: false, conflict: false, detail: 'managed OpenCode plugin (dry-run)' };
+    }
+    await this.bridge.installers.openCode.installOpenCodePlugin(this._captureInstallerOptions());
+    return { state: 'installed', installed: true, conflict: false, detail: 'managed plugin installed' };
+  }
+
+  async statusCaptureOpenCode() {
+    const status = await this.bridge.installers.openCode.statusOpenCodePlugin(this._captureInstallerOptions());
+    return {
+      state: status.installed ? 'installed' : 'not-installed',
+      installed: Boolean(status.installed),
+      conflict: false,
+      detail: status.installed ? 'managed plugin installed' : `plugin not installed (${status.thirdPartyFiles} third-party files preserved)`,
+    };
+  }
+
+  async uninstallCaptureOpenCode(options = {}) {
+    await this.bridge.installers.openCode.uninstallOpenCodePlugin({
+      ...this._captureInstallerOptions(),
+      unregisterConsumer: options.unregisterConsumer === true,
+      consumerName: this.bridgeConsumerName,
+    });
+    return { state: 'removed', detail: 'managed plugin removed' };
   }
 
   log(level, event, message, input = {}) {
@@ -479,6 +624,95 @@ class IntegrationManager {
       }
     }
     return results;
+  }
+
+  async operateCapture(operation, clients, options = {}) {
+    const results = [];
+    for (const rawClient of clients) {
+      const client = normalizeClient(rawClient);
+      const suffix = CLIENT_METHOD_SUFFIX[client];
+      try {
+        const result = await this[`${operation}Capture${suffix}`](options);
+        results.push({ client, label: CLIENT_LABELS[client], ok: true, ...result });
+      } catch (error) {
+        results.push({ client, label: CLIENT_LABELS[client], ok: false, state: 'failed', detail: error.message });
+      }
+    }
+    return results;
+  }
+
+  // One-click Integration Setup: register the host Bridge consumer once,
+  // then install BOTH capabilities per client. Knowledge Integration and
+  // Development Capture are reported separately; one failing component never
+  // rolls back or blocks the others.
+  async installAll(options = {}) {
+    const clients = options.clients && options.clients.length ? options.clients.map(normalizeClient) : this.detectClients();
+    const summary = { clients: [], bridge: null };
+    try {
+      summary.bridge = { ok: true, ...(await this.registerBridgeConsumer(options.bridgeConsumerMeta || {})) };
+    } catch (error) {
+      summary.bridge = { ok: false, state: 'failed', detail: error.message };
+    }
+    for (const client of clients) {
+      const suffix = CLIENT_METHOD_SUFFIX[client];
+      const entry = { client, label: CLIENT_LABELS[client] };
+      if (options.captureOnly !== true) {
+        try {
+          entry.knowledgeIntegration = { ok: true, ...(await this[`install${suffix}`](options)) };
+        } catch (error) {
+          entry.knowledgeIntegration = { ok: false, state: 'failed', detail: error.message };
+        }
+      }
+      if (options.knowledgeOnly !== true) {
+        try {
+          entry.developmentCapture = { ok: true, ...(await this[`installCapture${suffix}`]()) };
+        } catch (error) {
+          entry.developmentCapture = { ok: false, state: 'failed', detail: error.message };
+        }
+      }
+      summary.clients.push(entry);
+    }
+    return summary;
+  }
+
+  async statusAll(options = {}) {
+    const clients = options.clients && options.clients.length ? options.clients.map(normalizeClient) : this.detectClients();
+    const summary = { clients: [], bridge: null };
+    try {
+      summary.bridge = { ok: true, ...(await this.bridgeStatus()) };
+    } catch (error) {
+      summary.bridge = { ok: false, state: 'failed', bridgeHealthy: false, detail: error.message };
+    }
+    for (const client of clients) {
+      const suffix = CLIENT_METHOD_SUFFIX[client];
+      const entry = { client, label: CLIENT_LABELS[client], available: Boolean(this.executable(client)) };
+      try {
+        entry.knowledgeIntegration = { ok: true, ...(await this[`status${suffix}`]()) };
+      } catch (error) {
+        entry.knowledgeIntegration = { ok: false, state: 'failed', detail: error.message };
+      }
+      try {
+        entry.developmentCapture = { ok: true, ...(await this[`statusCapture${suffix}`]()) };
+      } catch (error) {
+        entry.developmentCapture = { ok: false, state: 'failed', detail: error.message };
+      }
+      summary.clients.push(entry);
+    }
+    return summary;
+  }
+
+  // Global disable: remove every connector first, then (and only then)
+  // unregister the host Bridge consumer (GATE INSTALL-003 semantics).
+  async disableAllCapture(options = {}) {
+    const clients = options.clients && options.clients.length ? options.clients.map(normalizeClient) : SUPPORTED_CLIENTS;
+    const results = await this.operateCapture('uninstall', clients, { unregisterConsumer: false });
+    let consumer = null;
+    try {
+      consumer = { ok: true, ...(await this.unregisterBridgeConsumer()) };
+    } catch (error) {
+      consumer = { ok: false, state: 'failed', detail: error.message };
+    }
+    return { clients: results, consumer };
   }
 }
 

@@ -17,7 +17,8 @@ const KB_BIN = path.join(ROOT, 'bin', 'project-knowledge-kb.js');
 const PID_FILE = path.join(os.tmpdir(), '.project-knowledge.pid');
 const ISOLATED_STATUS_PORT = 19000 + (process.pid % 1000);
 const TEST_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), `kb-bin-cli-${process.pid}-`));
-const TEST_ENV = { ...process.env, KB_DATA_DIR: TEST_DATA_DIR, KB_SKIP_MIGRATION: '1' };
+const TEST_BRIDGE_HOME = fs.mkdtempSync(path.join(os.tmpdir(), `kb-bin-cli-bridge-${process.pid}-`));
+const TEST_ENV = { ...process.env, KB_DATA_DIR: TEST_DATA_DIR, KB_SKIP_MIGRATION: '1', AI_CODING_EVENT_BRIDGE_HOME: TEST_BRIDGE_HOME };
 
 function assert(cond, msg) { if (!cond) throw new Error(msg); }
 

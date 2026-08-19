@@ -343,7 +343,15 @@ function restoreSessionFromDisk(sessionId) {
 }
 
 function buildClaudeEnvFromProfile(profile) {
-  const env = { CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' };
+  // Every Project-Knowledge-owned Claude Agent SDK session is internal AI
+  // runtime: its hooks must never be captured by the Bridge into Development
+  // Conversation (I-02/I-03). The markers are inherited by every child of the
+  // SDK session and checked by the Bridge before any Git/journal work.
+  const env = {
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+    AI_CODING_EVENT_BRIDGE_CAPTURE: '0',
+    AI_CODING_EVENT_ORIGIN: 'project-knowledge-internal',
+  };
   if (!profile || typeof profile !== 'object') return env;
 
   const apiKey = profile.apiKey || profile.authToken || profile.anthropicAuthToken || '';

@@ -8,7 +8,6 @@ const { createLoggingUiFixture } = require('./helpers/logging-ui-fixture');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const sitePort = 8500 + (process.pid % 200);
-const debugPort = 10100 + (process.pid % 200);
 const profileDir = path.join(os.tmpdir(), 'pk-project-status-profile-' + process.pid);
 
 (async () => {
@@ -17,7 +16,7 @@ const profileDir = path.join(os.tmpdir(), 'pk-project-status-profile-' + process
   let browser;
   try {
     await waitFor(() => requestJson(`http://127.0.0.1:${sitePort}/api/projects`).then(body => body.projects.length === 1), 'project API', 20000);
-    browser = await launchCdpBrowser({ chrome: findChrome(), debugPort, profileDir, url: `http://127.0.0.1:${sitePort}/`, width: 1200, height: 860 });
+    browser = await launchCdpBrowser({ chrome: findChrome(), profileDir, url: `http://127.0.0.1:${sitePort}/`, width: 1200, height: 860 });
     await waitFor(() => browser.evaluate('window.__PK_APP__ && window.__PK_APP__.getState().projects === 1'), 'project shell');
 
     const shell = await browser.evaluate(`(() => ({

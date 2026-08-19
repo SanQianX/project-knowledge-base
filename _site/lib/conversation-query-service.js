@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { DomainError, validateProjectId } = require('./contracts');
 const { ConversationStore } = require('./conversation-store');
+const { readDevelopmentEvents } = require('./conversation-exclusions');
 
 function localDate(iso) {
   const date = new Date(iso);
@@ -89,7 +90,7 @@ class ConversationQueryService {
     const limit = Math.max(1, Math.min(Number(input.limit || 50), 200));
     const cursor = decodeCursor(input.cursor, projectId, date);
     const groups = new Map();
-    for (const event of this.conversationStore.readEvents(projectId)) {
+    for (const event of readDevelopmentEvents(this.conversationStore, projectId)) {
       const turnId = event.turnId || `event:${event.eventId}`;
       let group = groups.get(turnId);
       if (!group) {

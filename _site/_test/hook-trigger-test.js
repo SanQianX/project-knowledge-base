@@ -63,20 +63,23 @@ assert.throws(() => uninstallHook({ repoPath: repo, projectId }), error => error
 assert(fs.readFileSync(installed.hookPath, 'utf8').includes('user-hook'));
 
 const offlineData = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-hook-offline-'));
+const offlineBridgeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-hook-offline-bridge-'));
 const offline = spawnSync(process.execPath, [TRIGGER, '--project-id', projectId, '--repo-root', repo, '--port', '65530'], {
   encoding: 'utf8',
   timeout: 10_000,
-  env: { ...process.env, KB_DATA_DIR: offlineData, KB_SKIP_MIGRATION: '1' },
+  env: { ...process.env, KB_DATA_DIR: offlineData, KB_SKIP_MIGRATION: '1', AI_CODING_EVENT_BRIDGE_HOME: offlineBridgeHome },
 });
 assert.strictEqual(offline.status, 0, offline.stderr);
 const hooksLogDir = path.join(offlineData, 'logs', 'projects', projectId);
 assert(fs.existsSync(hooksLogDir));
 const lines = fs.readdirSync(hooksLogDir).flatMap(file => fs.readFileSync(path.join(hooksLogDir, file), 'utf8').trim().split(/\r?\n/).filter(Boolean).map(JSON.parse));
 assert(lines.some(line => line.schema === 'log/v2' && line.event === 'hook.notification.degraded'));
-assert(lines.some(line => line.schema === 'log/v2' && line.event === 'hook.boundary.unavailable'));
-const gapsPath = path.join(offlineData, 'runtime', 'conversation-capture-gaps.jsonl');
-assert(fs.existsSync(gapsPath), 'Bridge unavailability must persist an explicit capture gap');
-const gaps = fs.readFileSync(gapsPath, 'utf8').trim().split(/\r?\n/).map(JSON.parse);
-assert(gaps.some(gap => gap.projectId === projectId && gap.reason === 'bridge-unavailable'));
+assert(lines.some(line => line.schema === 'log/v2' && line.event === 'hook.boundary.captured'), 'boundary is durably captured even when the server is offline');
+const boundaryLines = fs.readFileSync(path.join(offlineBridgeHome, 'journal', 'events.jsonl'), 'utf8').trim().split(/\r?\n/).map(JSON.parse);
+assert(boundaryLines.some(record =>
+  record.schema === 'git-commit-boundary/v1' &&
+  record.projectId === projectId &&
+  record.repoIdentity && record.repoIdentity.schema === 'repo-identity/v1' &&
+  typeof record.repoIdentity.workspaceId === 'string'), 'boundary carries a canonical v1 workspace identity in the isolated Bridge journal');
 
 console.log('hook-trigger-test PASS');

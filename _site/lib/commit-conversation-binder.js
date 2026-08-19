@@ -1,6 +1,7 @@
 const fs = require('fs');
 const { DomainError, validateProjectId } = require('./contracts');
 const { ConversationStore, sha256 } = require('./conversation-store');
+const { readDevelopmentEvents } = require('./conversation-exclusions');
 const { StorageLayout } = require('./storage-layout');
 
 function projectEvent(event) {
@@ -31,6 +32,9 @@ class CommitConversationBinder {
 
   repoMatches(left, right) {
     if (!left || !right) return false;
+    // workspaceId is the canonical primary key (I-06). commonDir/repoId are
+    // read-compat fallbacks for records stored before repo-identity/v1.
+    if (left.workspaceId && right.workspaceId) return String(left.workspaceId) === String(right.workspaceId);
     if (left.commonDir && right.commonDir) return this.layout.pathsEqual(left.commonDir, right.commonDir);
     if (left.repoId && right.repoId) return String(left.repoId) === String(right.repoId);
     return false;
@@ -59,7 +63,9 @@ class CommitConversationBinder {
     if (this.snapshotExists(projectId, commitSha)) return this.conversationStore.readSnapshot(projectId, commitSha);
 
     if (this.projectStore) await this.conversationStore.importLegacyRequirements(projectId);
-    const events = this.conversationStore.readEvents(projectId);
+    // Development Conversation reads are centralized: legacy embedded
+    // Workbench pairs are excluded here and in the query service alike.
+    const events = readDevelopmentEvents(this.conversationStore, projectId);
     let boundary = null;
     try { boundary = this.conversationStore.readBoundary(projectId, commitSha); }
     catch (error) {
@@ -109,7 +115,12 @@ class CommitConversationBinder {
           continue;
         }
         if (event.sequence <= startCursor) continue;
-        if (!event.turnId || !['high', 'trusted', 'explicit'].includes(event.identityConfidence)) {
+        // Automatic direct evidence requires exact identity. Legacy stored
+        // 'high'/'trusted' translate to exact for old known data only;
+        // 'explicit' is the explicit-fallback tier (I-18: no synthetic).
+        const rawConfidence = String(event.identityConfidence || '');
+        const effectiveConfidence = rawConfidence === 'high' || rawConfidence === 'trusted' ? 'exact' : rawConfidence;
+        if (!event.turnId || !['exact', 'explicit'].includes(effectiveConfidence)) {
           ambiguousCount += 1;
           continue;
         }
@@ -138,13 +149,18 @@ class CommitConversationBinder {
         && (bindingKind === 'explicit' || (event.sequence != null && event.sequence <= endCursor)));
       if (!userEvents.length) continue;
       const first = userEvents[0];
+      // I-13: no event beyond the commit boundary may enter a frozen
+      // snapshot — including assistant replies that arrived after the
+      // boundary but before a delayed binder run.
+      const assistantEvents = turnEvents.filter(event => event.role === 'assistant'
+        && (bindingKind === 'explicit' || (event.sequence != null && event.sequence <= endCursor)));
       turns.push({
         turnId,
         source: first.source,
         sessionId: first.sessionId,
         bindingKind,
         userEvents: userEvents.map(projectEvent),
-        assistantEvents: turnEvents.filter(event => event.role === 'assistant').map(projectEvent),
+        assistantEvents: assistantEvents.map(projectEvent),
       });
     }
     turns.sort((left, right) => {

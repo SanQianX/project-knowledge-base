@@ -186,6 +186,68 @@ class ConversationStore {
     return result;
   }
 
+  _projectWorkspaceId(projectId) {
+    try {
+      const config = this.projectStore && typeof this.projectStore.readConfig === 'function'
+        ? this.projectStore.readConfig(projectId)
+        : null;
+      const identity = config && config.repoIdentity;
+      return identity && typeof identity === 'object' && typeof identity.workspaceId === 'string'
+        ? identity.workspaceId
+        : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /**
+   * Project-scoped projection of a canonical Bridge journal event. The global
+   * eventId / sequence / turnId / repoIdentity are preserved verbatim; a new
+   * local sequence is never assigned; dedup is by eventId with DATA_CORRUPT on
+   * content drift; an exact event whose workspaceId differs from the project's
+   * canonical workspace is rejected instead of contaminating the store.
+   */
+  async appendBridgeEvent(projectId, bridgeEvent) {
+    if (!bridgeEvent || typeof bridgeEvent !== 'object' || bridgeEvent.schema !== SCHEMAS.aiCodingEvent) {
+      throw new DomainError('SCHEMA_UNSUPPORTED', 'Bridge conversation event must use ai-coding-event/v1.', { status: 409 });
+    }
+    if (bridgeEvent.eventType !== 'user_prompt' && bridgeEvent.eventType !== 'assistant_response') {
+      throw new DomainError('INVALID_ARGUMENT', 'Bridge conversation event must be a user_prompt or assistant_response.');
+    }
+    if (!bridgeEvent.eventId || typeof bridgeEvent.eventId !== 'string') {
+      throw new DomainError('INVALID_ARGUMENT', 'Bridge eventId is required.');
+    }
+    if (!Number.isInteger(bridgeEvent.sequence) || bridgeEvent.sequence < 0) {
+      throw new DomainError('INVALID_ARGUMENT', 'Bridge sequence is required for projected events.');
+    }
+    const configWorkspaceId = this._projectWorkspaceId(projectId);
+    const eventIdentity = bridgeEvent.repoIdentity;
+    const eventWorkspaceId = eventIdentity && typeof eventIdentity === 'object' && typeof eventIdentity.workspaceId === 'string'
+      ? eventIdentity.workspaceId
+      : null;
+    if (configWorkspaceId && eventWorkspaceId && configWorkspaceId !== eventWorkspaceId) {
+      throw new DomainError('DATA_CORRUPT', 'Bridge event workspaceId does not match the project workspace.', { status: 409 });
+    }
+    return this.appendEvent(projectId, {
+      eventId: bridgeEvent.eventId,
+      sequence: bridgeEvent.sequence,
+      source: bridgeEvent.source,
+      eventType: bridgeEvent.eventType,
+      role: bridgeEvent.role,
+      content: bridgeEvent.content == null ? '' : bridgeEvent.content,
+      sessionId: bridgeEvent.sessionId,
+      turnId: bridgeEvent.turnId,
+      projectPath: bridgeEvent.projectPath,
+      repoIdentity: eventIdentity,
+      branch: bridgeEvent.branch,
+      headAtCapture: bridgeEvent.headAtCapture,
+      capturedAt: bridgeEvent.capturedAt,
+      rawEventType: bridgeEvent.rawEventType,
+      identityConfidence: bridgeEvent.identityConfidence,
+      captureStatus: bridgeEvent.captureStatus,
+    });
+  }
+
   legacyRequirementToEvent(projectId, requirement) {
     if (!requirement || requirement.schema !== SCHEMAS.requirement || requirement.projectId !== projectId || !requirement.id) {
       throw new DomainError('INVALID_ARGUMENT', 'Legacy requirement record is invalid.');

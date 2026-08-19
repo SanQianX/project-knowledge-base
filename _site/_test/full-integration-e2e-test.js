@@ -16,11 +16,14 @@ const TEMP = fs.mkdtempSync(path.join(os.tmpdir(), `project-knowledge-e2e-${proc
 const DATA_DIR = path.join(TEMP, 'data');
 const REPO = path.join(TEMP, 'repo with 空格');
 const PROJECT_ID = 'project-full-e2e';
+// Git commits fire the managed hook -> hook-trigger -> Bridge journal.
+// Keep that journal inside the test sandbox, never the developer's home.
+const BRIDGE_HOME = path.join(TEMP, 'bridge-home');
 
 function git(args, allowFailure = false) {
   const result = spawnSync('git', ['-C', REPO, ...args], {
     encoding: 'utf8', windowsHide: true,
-    env: { ...process.env, KB_DATA_DIR: DATA_DIR, KB_SITE_PORT: String(PORT) },
+    env: { ...process.env, KB_DATA_DIR: DATA_DIR, KB_SITE_PORT: String(PORT), AI_CODING_EVENT_BRIDGE_HOME: BRIDGE_HOME },
   });
   if (!allowFailure) assert.strictEqual(result.status, 0, result.stderr || result.stdout);
   return { status: result.status, stdout: String(result.stdout || '').trim(), stderr: String(result.stderr || '').trim() };
@@ -46,7 +49,10 @@ async function json(method, route, body) {
 async function start() {
   const spawned = spawnServer({
     root: ROOT, port: PORT, dataDir: DATA_DIR, tag: 'full-e2e',
-    extraEnv: { KB_AUTOMATION_FAKE_CLAUDE: '1', KB_EMBEDDING_FAKE: '1', KB_MAINTENANCE_INTERVAL_MS: '600000' },
+    extraEnv: {
+      KB_AUTOMATION_FAKE_CLAUDE: '1', KB_EMBEDDING_FAKE: '1', KB_MAINTENANCE_INTERVAL_MS: '600000',
+      AI_CODING_EVENT_BRIDGE_HOME: BRIDGE_HOME,
+    },
   });
   let output = '';
   spawned.child.stdout.on('data', chunk => { output += chunk; });

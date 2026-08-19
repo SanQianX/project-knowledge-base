@@ -17,7 +17,8 @@ const { RequirementRecorder } = require('./requirement-recorder');
 const { ConversationStore } = require('./conversation-store');
 const { ConversationQueryService } = require('./conversation-query-service');
 const { BridgeAdapter } = require('./bridge-adapter');
-const { recordEmbeddedClaudeInput } = require('./requirement-adapters');
+const { BridgeConsumerService } = require('./bridge-consumer-service');
+const { IntegrationManager } = require('./integration-installer');
 const { Logger, LogRepository } = require('./structured-logger');
 const { CommitReconciler, reconcileProjectCommits } = require('./commit-reconciler');
 const { handlePostCommitEvent } = require('./post-commit-automation');
@@ -81,41 +82,6 @@ function configuredSecrets(settingsStore, extras = []) {
     // Logger construction must survive missing/corrupt pre-initialization settings without exposing secrets.
   }
   return [...new Set(secrets.filter(secret => typeof secret === 'string' && secret.length >= 4))];
-}
-
-function subscribeEmbeddedConversation(runtime, sessionId, projectId) {
-  const previous = runtime.embeddedConversationSubscriptions.get(sessionId);
-  if (previous) previous();
-  const unsubscribe = claudeCliRunner.subscribe(sessionId, event => {
-    if (!event || event.type !== 'claude/result' || event.isError || !event.result) return;
-    const capture = runtime.embeddedConversationCaptures.get(sessionId);
-    if (!capture || capture.projectId !== projectId) return;
-    runtime.embeddedConversationCaptures.delete(sessionId);
-    Promise.resolve(runtime.conversationStore.appendEvent(projectId, {
-      eventId: `embedded-assistant-${capture.requirementId}`,
-      sequence: null,
-      source: 'claude-code',
-      eventType: 'assistant_response',
-      role: 'assistant',
-      content: String(event.result),
-      sessionId,
-      turnId: capture.turnId,
-      projectPath: capture.userEvent.projectPath,
-      repoIdentity: capture.userEvent.repoIdentity,
-      branch: capture.userEvent.branch,
-      headAtCapture: capture.userEvent.headAtCapture,
-      capturedAt: new Date().toISOString(),
-      rawEventType: 'embedded-claude-result',
-      identityConfidence: 'high',
-      captureStatus: 'captured',
-    })).catch(error => runtime.logger.error('conversation.assistant_capture_failed', 'Embedded Claude assistant response could not be persisted.', {
-      projectId,
-      component: 'claude-workbench',
-      error,
-      context: { sessionId, turnId: capture.turnId, requirementId: capture.requirementId },
-    }));
-  });
-  runtime.embeddedConversationSubscriptions.set(sessionId, unsubscribe);
 }
 
 function normalizeLoggingPatch(input) {
@@ -499,6 +465,13 @@ function createRuntime(options = {}) {
   const activeTasks = new Map();
   const bridgeAdapter = options.bridgeAdapter || new BridgeAdapter({ dataDir: dataPath });
   const conversationStore = options.conversationStore || new ConversationStore({ layout, projectStore, logger });
+  const bridgeConsumerService = options.bridgeConsumerService || new BridgeConsumerService({
+    bridgeAdapter,
+    conversationStore,
+    registryStore,
+    projectStore,
+    logger,
+  });
   const conversationQuery = options.conversationQuery || new ConversationQueryService({
     layout, registryStore, projectStore, conversationStore, logger,
   });
@@ -529,12 +502,9 @@ function createRuntime(options = {}) {
     bridgeAdapter,
   });
   const migrationService = options.migrationService || new MigrationService({ layout, legacyDataDir: dataPath, logger });
-  const embeddedConversationCaptures = new Map();
-  const embeddedConversationSubscriptions = new Map();
   return {
     rootDir, dataPath, layout, settingsStore, registryStore, projectStore, logger, logRepository,
-    activeTasks, bridgeAdapter, conversationStore, conversationQuery, indexAdapter, indexService, promotionService, reconciler, lifecycleService, requirementRecorder, knowledgeRuntime, migrationService,
-    embeddedConversationCaptures, embeddedConversationSubscriptions,
+    activeTasks, bridgeAdapter, bridgeConsumerService, conversationStore, conversationQuery, indexAdapter, indexService, promotionService, reconciler, lifecycleService, requirementRecorder, knowledgeRuntime, migrationService,
   };
 }
 
@@ -968,9 +938,63 @@ function createRequestHandler(runtime, options = {}) {
           logger: runtime.logger,
           operationId,
           conversationStore: runtime.conversationStore,
+          bridgeConsumerService: runtime.bridgeConsumerService,
         }), 'git-hook');
         await runtime.logger.info('hook.event_accepted', 'Hook event accepted for background reconciliation.', { projectId, operationId, phase: 'accepted' });
         return send(res, 202, { ok: true, accepted: true, projectId, operationId });
+      }
+
+      // Bridge consumer wake-up (I-16): the notification body carries no
+      // conversation truth — the durable journal is drained regardless.
+      if (method === 'POST' && pathname === '/api/bridge/notify') {
+        if (runtime.bridgeConsumerService) {
+          runtime.bridgeConsumerService.handleNotification().catch(() => {
+            // Drain failures are logged by the service; wake-up stays 204.
+          });
+        }
+        return send(res, 204, {});
+      }
+      if (method === 'GET' && pathname === '/api/bridge/status') {
+        if (!runtime.bridgeConsumerService) return send(res, 200, { ok: true, available: false });
+        const status = await runtime.bridgeConsumerService.status();
+        return send(res, 200, { ok: true, available: true, status });
+      }
+
+      // Unified Integration Setup surface: one action manages Knowledge
+      // Integration and Development Capture per client, with separate status.
+      if (method === 'GET' && pathname === '/api/integrations/status') {
+        const manager = new IntegrationManager({ rootDir: runtime.rootDir });
+        const summary = await manager.statusAll({});
+        return send(res, 200, { ok: true, ...summary });
+      }
+      if (method === 'POST' && pathname === '/api/integrations/install') {
+        const body = await readJsonBody(req);
+        const manager = new IntegrationManager({ rootDir: runtime.rootDir });
+        const clients = Array.isArray(body.clients) && body.clients.length
+          ? body.clients.map(client => String(client))
+          : undefined;
+        const summary = await manager.installAll({
+          clients,
+          knowledgeOnly: body.knowledgeOnly === true,
+          captureOnly: body.captureOnly === true,
+          scope: body.scope || 'user',
+        });
+        await runtime.logger.info('integrations.install_completed', 'Integration setup completed.', { context: { clients: summary.clients.map(entry => entry.client) } });
+        return send(res, 200, { ok: true, ...summary });
+      }
+      if (method === 'POST' && pathname === '/api/integrations/uninstall') {
+        const body = await readJsonBody(req);
+        const manager = new IntegrationManager({ rootDir: runtime.rootDir });
+        if (body.disableAllCapture === true) {
+          const summary = await manager.disableAllCapture({});
+          return send(res, 200, { ok: true, ...summary });
+        }
+        const clients = Array.isArray(body.clients) && body.clients.length
+          ? body.clients.map(client => String(client))
+          : undefined;
+        const knowledgeResults = await manager.operate('uninstall', clients && clients.length ? clients : manager.detectClients(), { scope: body.scope || 'user' });
+        const captureResults = body.knowledgeOnly === true ? [] : await manager.operateCapture('uninstall', clients && clients.length ? clients : manager.detectClients(), {});
+        return send(res, 200, { ok: true, clients: knowledgeResults, capture: captureResults });
       }
 
       if (method === 'GET' && pathname === '/api/ai-profiles') {
@@ -1028,7 +1052,6 @@ function createRequestHandler(runtime, options = {}) {
         const profile = profileById(settings, profileId);
         if (!profile || profile.enabled === false) throw new DomainError('INVALID_ARGUMENT', 'A usable AI profile is required.', { status: 409 });
         const result = claudeCliRunner.startChatSession({ slug: projectId, projectPath: config.repoPath, kbPath: config.knowledgePath, aiProfile: profile, permissionMode: body.permissionMode });
-        subscribeEmbeddedConversation(runtime, result.sessionId, projectId);
         return send(res, 201, { ok: true, projectId, ...result });
       }
       if (method === 'GET' && pathname === '/api/claude/sessions') {
@@ -1056,28 +1079,11 @@ function createRequestHandler(runtime, options = {}) {
           const config = runtime.projectStore.readConfig(session.projectSlug);
           const settings = runtime.settingsStore.read();
           const profile = profileById(settings, config.aiProfileId || settings.ai.defaultProfileId);
-          const recorded = await recordEmbeddedClaudeInput({
-            recorder: runtime.requirementRecorder,
-            projectId: session.projectSlug,
-            session,
-            sessionId,
-            text: body.text,
-            explicitCommit: body.explicitCommit || null,
-            operationId: requestOperationId,
-            onRecorded: requirement => {
-              const userEvent = runtime.conversationStore.readEvents(session.projectSlug)
-                .find(event => event.legacyRequirementId === requirement.id);
-              if (!userEvent) throw new DomainError('DATA_CORRUPT', 'The embedded Prompt event was not persisted.', { status: 500, retryable: true });
-              runtime.embeddedConversationCaptures.set(sessionId, {
-                projectId: session.projectSlug,
-                requirementId: requirement.id,
-                turnId: requirement.turnId,
-                userEvent,
-              });
-            },
-            sendInput: text => claudeCliRunner.sendInput(sessionId, text, profile, { permissionMode: body.permissionMode }),
-          });
-          return send(res, 200, { ok: true, sessionId, requirementId: recorded.requirementId, requirementHash: recorded.requirementHash, ...recorded.result });
+          // Workbench chat is internal AI runtime (I-02): sending a message
+          // must NOT auto-record requirements or append Development
+          // Conversation events. External capture flows through the Bridge.
+          const result = await claudeCliRunner.sendInput(sessionId, body.text, profile, { permissionMode: body.permissionMode });
+          return send(res, 200, { ok: true, sessionId, ...result });
         }
         if (method === 'POST' && action === 'permission') {
           const body = await readJsonBody(req);
@@ -1144,12 +1150,18 @@ async function startServer(options = {}) {
   }
   await runtime.logger.info('server.listening', 'Project Knowledge server is listening.', { phase: 'running', context: { host, port } });
 
+  // Bridge consumer startup drain completes BEFORE commit reconciliation
+  // binds snapshots, so startup-bound snapshots never miss journal events.
+  const bridgeReady = Promise.resolve(
+    runtime.bridgeConsumerService ? runtime.bridgeConsumerService.start(`http://127.0.0.1:${port}/api/bridge/notify`) : null
+  ).catch(error => runtime.logger.error('bridge_consumer.startup_failed', 'Bridge consumer startup drain failed.', { error }));
+
   const startupPromise = Promise.all([
     runtime.indexService.retryDirtyProjects(),
-    ...runtime.registryStore.listIds().map(projectId => {
+    bridgeReady.then(() => Promise.all(runtime.registryStore.listIds().map(projectId => {
     const operationId = createId('op');
     return taskForProject(runtime, projectId, operationId, () => reconcileProjectCommits(projectId, 'startup', { reconciler: runtime.reconciler, operationId }), 'startup');
-    }),
+    }))),
   ]).catch(error => runtime.logger.error('reconcile.startup_failed', 'Startup recovery failed.', { error }));
 
   const maintenanceTimer = setInterval(() => {
@@ -1162,8 +1174,6 @@ async function startServer(options = {}) {
     if (stopping) return stopping;
     stopping = (async () => {
       clearInterval(maintenanceTimer);
-      for (const unsubscribe of runtime.embeddedConversationSubscriptions.values()) unsubscribe();
-      runtime.embeddedConversationSubscriptions.clear();
       await runtime.logger.info('server.shutdown_started', 'Server shutdown started.', { phase: 'shutdown', context: { reason } });
       const forceConnections = setTimeout(() => server.closeAllConnections?.(), Number(process.env.KB_SERVER_CLOSE_GRACE_MS || 2000));
       await new Promise(resolve => server.close(resolve));
@@ -1178,6 +1188,7 @@ async function startServer(options = {}) {
       if (!drained) await runtime.logger.warn('server.shutdown_drain_timeout', 'Server shutdown timed out waiting for background work.', { phase: 'shutdown', context: { drainTimeoutMs } });
       await runtime.knowledgeRuntime.close();
       await runtime.indexAdapter.close();
+      if (runtime.bridgeConsumerService) await runtime.bridgeConsumerService.stop().catch(() => {});
       await runtime.logger.close();
       runtimeEndpoint.clearEndpoint(runtime.dataPath, { pid: process.pid });
     })();
@@ -1217,7 +1228,6 @@ module.exports = {
   startServer,
   installProcessHandlers,
   mergeAiProfiles,
-  subscribeEmbeddedConversation,
   requestOriginAllowed,
   isLoopback,
   isProjectBusy,

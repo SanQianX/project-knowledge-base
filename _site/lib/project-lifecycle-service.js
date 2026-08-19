@@ -125,8 +125,14 @@ class ProjectLifecycleService {
       journal.repoPath = git.repoPath;
       journal.knowledgePath = knowledgePath;
       this.writeJournal(journal);
+      // Canonical workspace identity comes from the Bridge package; the old
+      // PK-only { commonDir } shape is never written for new imports.
+      const identityResult = this.bridgeAdapter && typeof this.bridgeAdapter.resolveRepoIdentity === 'function'
+        ? await this.bridgeAdapter.resolveRepoIdentity(git.repoPath)
+        : { status: 'unavailable', repoIdentity: null, reason: 'bridge-adapter-unavailable' };
+      const repoIdentityV1 = identityResult.status === 'ok' ? identityResult.repoIdentity : null;
       const conversationBaseline = this.bridgeAdapter && typeof this.bridgeAdapter.getHighWatermark === 'function'
-        ? await this.bridgeAdapter.getHighWatermark({ projectId, repoIdentity: { commonDir: git.commonDir }, repoPath: git.repoPath })
+        ? await this.bridgeAdapter.getHighWatermark({ projectId, repoIdentity: repoIdentityV1, repoPath: git.repoPath })
         : { status: 'unavailable', cursor: null, reason: 'bridge-adapter-unavailable' };
       const stateInput = git.head
         ? { trackingStartCommit: git.head, trackingMode: 'normal' }
@@ -137,12 +143,15 @@ class ProjectLifecycleService {
         captureStatus: conversationBaseline.status,
         lastError: conversationBaseline.status === 'captured' ? null : { reason: conversationBaseline.reason || 'unavailable' },
       };
+      if (!repoIdentityV1) {
+        stateInput.conversation.repoIdentityStatus = identityResult.reason || 'repo-identity-unavailable';
+      }
       const created = await this.projectStore.create(projectId, {
         displayName, storageName, repoPath: git.repoPath, knowledgePath,
         enabled: true, aiProfileId: input.aiProfileId || null,
         knowledgeLanguage: input.knowledgeLanguage || 'zh-CN',
         teamBinding: team ? team.binding : null,
-        repoIdentity: { commonDir: git.commonDir },
+        repoIdentity: repoIdentityV1 || null,
       }, stateInput);
       journal.created.metadata = this.layout.getProjectMetadataDir(projectId);
       journal.phase = 'metadata-created';

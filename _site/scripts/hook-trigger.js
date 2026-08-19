@@ -1,11 +1,21 @@
 const http = require('http');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const { execFileSync } = require('child_process');
 const { getDataDir } = require('../lib/data-dir');
 const { readLiveEndpoint } = require('../lib/runtime-endpoint');
 const { StorageLayout } = require('../lib/storage-layout');
 const { Logger } = require('../lib/structured-logger');
 const { BridgeAdapter } = require('../lib/bridge-adapter');
+
+let bridgeIdentityModule = null;
+try {
+  const bridgePackage = require('@sanqianx/ai-coding-event-bridge');
+  if (bridgePackage && typeof bridgePackage.buildRepoIdentityV1 === 'function') bridgeIdentityModule = bridgePackage;
+} catch (_) {
+  bridgeIdentityModule = null;
+}
 
 const args = process.argv.slice(2);
 function arg(name, fallback = '') {
@@ -77,10 +87,26 @@ function post(body) {
       branch: git(['branch', '--show-current']),
     };
     const operationId = arg('--operation-id', `op-${crypto.randomUUID()}`);
-    const commonDir = git(['rev-parse', '--path-format=absolute', '--git-common-dir']);
+    // Canonical repo-identity/v1 from the authoritative Git working tree.
+    // The old { commonDir }-only shape must never reach the Bridge again.
+    let repoIdentity = null;
+    if (bridgeIdentityModule) {
+      const toplevel = git(['rev-parse', '--show-toplevel']);
+      if (toplevel) {
+        let workspaceRoot = path.resolve(toplevel);
+        try { workspaceRoot = fs.realpathSync.native(workspaceRoot) || workspaceRoot; } catch { workspaceRoot = path.resolve(toplevel); }
+        const commonDir = git(['rev-parse', '--path-format=absolute', '--git-common-dir']);
+        const remoteRaw = git(['config', '--get', 'remote.origin.url']);
+        repoIdentity = bridgeIdentityModule.buildRepoIdentityV1({
+          workspaceRoot,
+          commonDir: commonDir ? path.resolve(commonDir) : null,
+          remote: remoteRaw ? bridgeIdentityModule.normalizeGitUrl(remoteRaw) : null,
+        });
+      }
+    }
     const boundaryResult = await bridge.appendCommitBoundary({
       projectId,
-      repoIdentity: commonDir ? { commonDir } : null,
+      repoIdentity,
       commitSha: payload.head,
       parentShas: git(['show', '-s', '--format=%P', 'HEAD']).split(/\s+/).filter(Boolean),
       branch: payload.branch || null,

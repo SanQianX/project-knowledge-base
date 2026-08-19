@@ -56,6 +56,16 @@ function requirementHash(text) {
   return `sha256:${crypto.createHash('sha256').update(text, 'utf8').digest('hex')}`;
 }
 
+// Canonical repo-identity/v1 builder from the Bridge package (synchronous
+// helpers only). Missing module degrades to null identity, never a guess.
+let bridgeIdentityModule = null;
+try {
+  const bridgeModule = require('@sanqianx/ai-coding-event-bridge');
+  if (bridgeModule && typeof bridgeModule.buildRepoIdentityV1 === 'function') bridgeIdentityModule = bridgeModule;
+} catch (_) {
+  bridgeIdentityModule = null;
+}
+
 class GitReader {
   run(repoPath, args) {
     return spawnSync('git', ['-C', path.resolve(repoPath), ...args], {
@@ -84,11 +94,25 @@ class GitReader {
       const branch = branchResult.status === 0
         ? optionalMetadata(String(branchResult.stdout || '').trim(), 'branch', 1024)
         : null;
+      const topResult = this.run(repoPath, ['rev-parse', '--show-toplevel']);
+      const top = topResult.status === 0 && String(topResult.stdout || '').trim()
+        ? path.resolve(String(topResult.stdout).trim())
+        : null;
       const commonResult = this.run(repoPath, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
       const commonDir = commonResult.status === 0 && String(commonResult.stdout || '').trim()
         ? path.resolve(String(commonResult.stdout).trim())
         : null;
-      return { headAtRecord: head, branch, repoIdentity: commonDir ? { commonDir } : null };
+      let repoIdentity = null;
+      if (top && bridgeIdentityModule) {
+        let workspaceRoot = top;
+        try { workspaceRoot = fs.realpathSync.native(top) || top; } catch (_) { workspaceRoot = top; }
+        const remoteResult = this.run(repoPath, ['config', '--get', 'remote.origin.url']);
+        const remote = remoteResult.status === 0 && String(remoteResult.stdout || '').trim()
+          ? bridgeIdentityModule.normalizeGitUrl(String(remoteResult.stdout).trim())
+          : null;
+        repoIdentity = bridgeIdentityModule.buildRepoIdentityV1({ workspaceRoot, commonDir, remote });
+      }
+      return { headAtRecord: head, branch, repoIdentity };
     } catch {
       return { headAtRecord: null, branch: null, repoIdentity: null };
     }

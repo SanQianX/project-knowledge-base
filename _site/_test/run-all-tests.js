@@ -12,6 +12,7 @@
 // Exit code is 0 only if every test passes.
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
@@ -21,6 +22,7 @@ const REPORT_PATH = path.join(TEST_DIR, 'TEST-REPORT.md');
 
 const args = process.argv.slice(2);
 const WRITE_REPORT = !args.includes('--no-report');
+const PER_TEST_TIMEOUT_MS = Number(process.env.PK_TEST_TIMEOUT_MS || 90_000);
 
 function listTestFiles() {
   return fs.readdirSync(TEST_DIR)
@@ -34,18 +36,38 @@ function tail(text, lines = 12) {
   return arr.slice(-lines).join('\n');
 }
 
+function classifyFailure(result) {
+  if (result.status !== null) {
+    return { kind: 'exit', label: `FAIL (exit ${result.status})` };
+  }
+  if (result.error && result.error.code === 'ETIMEDOUT') {
+    return { kind: 'timeout', label: `TIMEOUT (killed after ${PER_TEST_TIMEOUT_MS}ms, signal ${result.signal || 'none'})` };
+  }
+  const code = result.error && result.error.code ? result.error.code : 'unknown';
+  return { kind: 'error', label: `FAIL (spawn error ${code}, signal ${result.signal || 'none'})` };
+}
+
 function runOne(file) {
   const start = Date.now();
+  // Every test child gets its own Bridge journal sandbox so hook-trigger /
+  // server runtimes never touch the developer's ~/.ai-coding-event-bridge.
+  const bridgeHome = fs.mkdtempSync(path.join(os.tmpdir(), `kb-runall-bridge-${process.pid}-`));
   const result = spawnSync(process.execPath, [path.join(TEST_DIR, file)], {
     cwd: ROOT,
     encoding: 'utf-8',
-    timeout: 300_000,
-    env: { ...process.env, FORCE_COLOR: '0' },
+    timeout: PER_TEST_TIMEOUT_MS,
+    env: { ...process.env, FORCE_COLOR: '0', AI_CODING_EVENT_BRIDGE_HOME: bridgeHome },
   });
+  try { fs.rmSync(bridgeHome, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); } catch {}
+  const failure = result.status === 0 ? null : classifyFailure(result);
   return {
     file,
     passed: result.status === 0,
+    failureKind: failure ? failure.kind : null,
+    failureLabel: failure ? failure.label : null,
     exitCode: result.status,
+    signal: result.signal,
+    spawnErrorCode: result.error && result.error.code ? result.error.code : null,
     durationMs: Date.now() - start,
     stdout: result.stdout || '',
     stderr: result.stderr || '',
@@ -68,7 +90,7 @@ function runOne(file) {
     if (result.passed) {
       console.log(`PASS (${result.durationMs}ms)`);
     } else {
-      console.log(`FAIL (exit ${result.exitCode}, ${result.durationMs}ms)`);
+      console.log(`${result.failureLabel}, ${result.durationMs}ms`);
       if (result.outputTail) {
         console.log('--- tail ---');
         console.log(result.outputTail);
@@ -93,11 +115,16 @@ function runOne(file) {
     lines.push('');
     lines.push('## Summary');
     lines.push('');
+    lines.push(`**Per-test timeout**: ${PER_TEST_TIMEOUT_MS}ms (override with PK_TEST_TIMEOUT_MS)`);
+    lines.push('');
     lines.push('| # | File | Status | Exit | Duration |');
     lines.push('|--:|------|:------:|-----:|---------:|');
     results.forEach((result, index) => {
-      const status = result.passed ? 'PASS' : 'FAIL';
-      lines.push(`| ${index + 1} | \`${result.file}\` | ${status} | ${result.exitCode} | ${result.durationMs}ms |`);
+      const status = result.passed ? 'PASS' : (result.failureKind === 'timeout' ? 'TIMEOUT' : 'FAIL');
+      const exit = result.passed
+        ? String(result.exitCode)
+        : `${result.exitCode}${result.signal ? `, signal ${result.signal}` : ''}${result.spawnErrorCode ? `, error ${result.spawnErrorCode}` : ''}`;
+      lines.push(`| ${index + 1} | \`${result.file}\` | ${status} | ${exit} | ${result.durationMs}ms |`);
     });
     lines.push('');
     lines.push(`**Total**: ${results.length} | **Passed**: ${passed} | **Failed**: ${failed} | **Time**: ${totalDuration}ms`);

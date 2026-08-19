@@ -49,6 +49,13 @@ async function handlePostCommitEvent(event = {}, deps = {}) {
     }
     const commitExists = runGit(runtimeRoot, ['cat-file', '-e', `${boundary.commitSha}^{commit}`], { allowFailure: true });
     if (!commitExists.ok) throw new DomainError('INVALID_ARGUMENT', 'Hook boundary commit does not exist in the repository.');
+    // Ordering (T13): the boundary was appended before the Hook notified us;
+    // drain the journal THROUGH the boundary sequence before any snapshot is
+    // bound, so every same-workspace event <= boundaryEndCursor is already in
+    // the ConversationStore (or deterministically handled) at freeze time.
+    if (deps.bridgeConsumerService && typeof deps.bridgeConsumerService.drainThrough === 'function') {
+      await deps.bridgeConsumerService.drainThrough(Number(boundary.journalSequence), 'commit-boundary');
+    }
     if (deps.conversationStore && typeof deps.conversationStore.writeBoundary === 'function') {
       deps.conversationStore.writeBoundary(projectId, boundary);
     }
