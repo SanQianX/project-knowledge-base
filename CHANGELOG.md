@@ -1,5 +1,33 @@
 # Changelog
 
+## [4.2.3] - 2026-08-20
+
+- Development Conversation now captures real external Claude Code / Codex /
+  OpenCode sessions through `ai-coding-event-bridge` (repo-identity/v1 with
+  workspaceId as the primary key, durable Bridge-owned turn identity, and
+  exact-workspace project matching — unimported workspaces are skipped and
+  ACKed, never written into another project).
+- The internal Workbench capture path was removed: sending a Workbench chat
+  message no longer records requirements or conversation events (explicit
+  `record_requirement` still works), every internal SDK session runs with
+  `AI_CODING_EVENT_BRIDGE_CAPTURE=0`, and legacy embedded Workbench pairs are
+  excluded from presentation and new commit binding via
+  `conversation-exclusions/v1` without rewriting history.
+- Commit conversation snapshots are frozen strictly after
+  append-boundary -> drainThrough: no event beyond `boundaryEndCursor`
+  (assistant replies included) can enter a snapshot, and imports establish a
+  conversation baseline so pre-import history is never backfilled.
+- One Integration Setup action installs Knowledge Integration and Development
+  Capture for Claude Code / Codex / OpenCode with separate status reporting,
+  third-party config preservation, Codex notify conflict detection, and a
+  host-level Bridge consumer that survives per-connector uninstalls; new
+  `/api/bridge/*` and `/api/integrations/*` endpoints expose capture health.
+- Windows CI browser tests now fail fast: CDP launch failures clean up the
+  spawned browser tree and profile directory, report exit/stderr diagnostics,
+  use a dynamically discovered DevTools port with per-request timeouts, and
+  the test runner reports `TIMEOUT` explicitly under a configurable budget
+  (`PK_TEST_TIMEOUT_MS`, default 90s) instead of hanging for 300 seconds.
+
 ## [4.2.2] - 2026-08-19
 
 - Rebuilt the web Control Center visual layer to faithfully match the v13
