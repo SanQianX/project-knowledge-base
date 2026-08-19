@@ -102,6 +102,24 @@ function fixture() {
     assert.strictEqual(fs.existsSync(layout.getRecoveryPath()), false, 'fresh install must not create optional recovery dir');
   }
 
+  {
+    // Regression: legacy files carrying a UTF-8 BOM (common from PowerShell
+    // tooling) must migrate cleanly instead of failing as corrupt sources.
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-layout-v2-bom-'));
+    const layout = new StorageLayout({ dataDir });
+    const bom = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(JSON.stringify({
+      legacyA: { displayName: 'BOM A', localPath: path.join(dataDir, 'repo-a'), trackingStartCommit: 'track-a', enabled: true }
+    }), 'utf8')]);
+    fs.writeFileSync(path.join(dataDir, 'projects.json'), bom);
+    fs.writeFileSync(path.join(dataDir, 'team-git-providers.json'), Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from('{}', 'utf8')]));
+    const result = await new MigrationService({ layout, legacyDataDir: dataDir }).migrateIfNeeded();
+    assert.strictEqual(result.ok, true, 'BOM-prefixed legacy sources must migrate');
+    assert.strictEqual(result.migrated, true);
+    const registry = JSON.parse(fs.readFileSync(layout.getProjectRegistryPath(), 'utf8'));
+    assert.strictEqual(registry.schema, 'project-registry/v2');
+    assert.strictEqual(Object.keys(registry.projects).length, 1);
+  }
+
   console.log('project-layout-v2-migration-test PASS');
 })().catch(error => {
   console.error(error.stack || error.message);

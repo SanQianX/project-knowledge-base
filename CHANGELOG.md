@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.2.1] - 2026-08-19
+
+- Fixed the legacy layout migration failing with `Legacy migration source
+  JSON is corrupt` (and the server refusing to start) when any legacy source
+  file carries a UTF-8 BOM, which PowerShell and several editors commonly
+  write. BOM-prefixed sources are now parsed normally.
+
 ## [4.2.0] - 2026-08-19
 
 - Completed the v13 refactor: conversation capture contracts, atomic Bridge

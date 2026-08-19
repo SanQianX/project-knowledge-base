@@ -46,7 +46,12 @@ function deterministicProjectId(slug, config) {
 
 function safeReadJson(filePath, fallback = null) {
   if (!fs.existsSync(filePath)) return fallback;
-  try { return JSON.parse(fs.readFileSync(filePath, 'utf8')); }
+  try {
+    // Legacy files written via PowerShell/tooling often carry a UTF-8 BOM;
+    // JSON.parse rejects it, and a BOM must never fail the whole migration.
+    const raw = fs.readFileSync(filePath, 'utf8');
+    return JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
+  }
   catch (error) { throw new DomainError('DATA_CORRUPT', 'Legacy migration source JSON is corrupt.', { status: 500, cause: error, details: { category: path.basename(filePath) } }); }
 }
 
