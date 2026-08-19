@@ -50,7 +50,7 @@ const profileDir = path.join(os.tmpdir(), 'pk-project-status-profile-' + process
     console.log('project control panel task14 test PASS');
   } finally {
     if (browser) await browser.close();
-    server.cleanup();
+    await server.cleanup();
     fixture.cleanup();
   }
 })().catch(error => {

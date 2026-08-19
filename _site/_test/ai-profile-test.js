@@ -70,7 +70,6 @@ async function waitForServer() {
     assert(!Object.prototype.hasOwnProperty.call(result.data.error, 'stack'));
     console.log('ai-profile-test PASS');
   } finally {
-    spawned.cleanup();
-    fs.rmSync(dataDir, { recursive: true, force: true });
+    await spawned.cleanup();
   }
 })().catch(error => { console.error(error); process.exitCode = 1; });

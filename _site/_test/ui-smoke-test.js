@@ -64,7 +64,7 @@ const screenshotPath = path.join(os.tmpdir(), 'pk-ui-smoke-' + process.pid + '.p
     console.log('ui smoke test PASS');
   } finally {
     if (browser) await browser.close();
-    server.cleanup();
+    await server.cleanup();
     fixture.cleanup();
     try { fs.rmSync(screenshotPath, { force: true }); } catch {}
   }

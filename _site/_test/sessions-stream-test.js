@@ -86,8 +86,7 @@ async function waitFor(predicate) {
     stream.close();
     console.log('sessions-stream-test PASS');
   } finally {
-    spawned.cleanup();
-    fs.rmSync(dataDir, { recursive: true, force: true });
+    await spawned.cleanup();
     fs.rmSync(repoPath, { recursive: true, force: true });
   }
 })().catch(error => { console.error(error); process.exitCode = 1; });

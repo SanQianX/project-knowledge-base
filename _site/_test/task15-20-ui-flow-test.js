@@ -173,7 +173,7 @@ async function capture(browser, name) {
     console.log('task15-20 UI flow test PASS');
   } finally {
     if (browser) await browser.close();
-    server.cleanup();
+    await server.cleanup();
     fixture.cleanup();
   }
 })().catch(error => {

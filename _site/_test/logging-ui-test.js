@@ -95,7 +95,7 @@ async function jsonResponse(url) {
 
     console.log('logging UI test PASS');
   } finally {
-    server.cleanup();
+    await server.cleanup();
     fixture.cleanup();
   }
 })().catch(error => {

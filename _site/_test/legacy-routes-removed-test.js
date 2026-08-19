@@ -42,7 +42,6 @@ async function waitForServer() {
     }
     console.log('legacy-routes-removed-test PASS');
   } finally {
-    spawned.cleanup();
-    fs.rmSync(dataDir, { recursive: true, force: true });
+    await spawned.cleanup();
   }
 })().catch(error => { console.error(error); process.exitCode = 1; });

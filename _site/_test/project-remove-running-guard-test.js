@@ -72,7 +72,7 @@ async function waitForServer() {
     assert(!projects.data.projects.some(project => project.projectId === projectId));
     console.log('project-remove-running-guard-test PASS');
   } finally {
-    spawned.cleanup();
+    await spawned.cleanup();
     fs.rmSync(dataDir, { recursive: true, force: true });
     fs.rmSync(repoPath, { recursive: true, force: true });
   }

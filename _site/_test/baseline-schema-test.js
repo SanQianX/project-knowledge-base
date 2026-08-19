@@ -82,9 +82,8 @@ async function waitForServer() {
 
     console.log('baseline schema test PASS');
   } finally {
-    spawned.cleanup();
+    await spawned.cleanup();
     repo.cleanup();
-    try { fs.rmSync(dataDir, { recursive: true, force: true }); } catch {}
   }
 })().catch(error => {
   console.error(error.stack || error.message);

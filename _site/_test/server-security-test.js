@@ -90,8 +90,7 @@ async function waitForServer() {
     }
     console.log('server-security-test PASS');
   } finally {
-    spawned.cleanup();
-    fs.rmSync(dataDir, { recursive: true, force: true });
+    await spawned.cleanup();
     fs.rmSync(remoteDataDir, { recursive: true, force: true });
   }
 })().catch(error => { console.error(error); process.exitCode = 1; });

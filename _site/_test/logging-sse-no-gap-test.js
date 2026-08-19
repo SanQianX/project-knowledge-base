@@ -80,8 +80,7 @@ async function waitForServer() {
     assert(requestLogs.some(entry => entry.event === 'http.request_failed' && entry.operationId));
     console.log('logging-sse-no-gap-test PASS');
   } finally {
-    spawned.cleanup();
-    fs.rmSync(dataDir, { recursive: true, force: true });
+    await spawned.cleanup();
   }
 })().catch(error => {
   console.error(error.stack || error.message);
