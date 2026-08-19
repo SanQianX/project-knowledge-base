@@ -1,9 +1,10 @@
 name: Publish Windows desktop
 
+# Desktop releases are paused by product decision (2026-08-18): the packaged
+# runtime has a known baseline defect (folder-picker ASAR unpack on CI) and
+# web-only development is in progress. Re-enable the tag trigger when desktop
+# development resumes.
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       tag:
