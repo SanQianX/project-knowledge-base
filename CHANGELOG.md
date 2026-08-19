@@ -1,5 +1,32 @@
 # Changelog
 
+## [4.2.0] - 2026-08-19
+
+- Completed the v13 refactor: conversation capture contracts, atomic Bridge
+  commit boundaries with capture-gap persistence, and frozen
+  `CommitConversationSnapshot` binding so post-commit prompts never bind to
+  old commits and claims freeze their analyzer evidence.
+- Replaced `patch:null` handling for large diffs with an exact, hash-verified
+  patch chunk evidence bundle; commit analysis now carries frozen evidence,
+  retrieval, and conversation manifests end to end.
+- Unified user search and commit context selection into one
+  `KnowledgeRetrievalService` (hybrid recall, deterministic rerank, chunk
+  budgets) with an index source manifest and a Markdown delta overlay so
+  fresh knowledge is visible while the derived index is dirty.
+- Logging is now permanent per-day JSONL under `logs/system` and
+  `logs/projects/<id>` with reverse-chunk cursors, SSE streaming without
+  gaps, and immutable capture policy (no retention/capacity settings).
+- Background work registers per operation with one root `operationId`
+  propagated across HTTP, Hook, startup, and reconciler logs, and shutdown
+  drains every registered task.
+- Project delete is transactional with a journal, tombstone, and per-stage
+  recovery; migration no longer converts legacy logging knobs into settings.
+- Restored the full Control Center web shell (Workbench, Import, Settings)
+  with a mature run-records log view and a read-only development-conversation
+  page driven by frozen commit snapshots; logs left the standalone console.
+- Added non-release CI (Linux Node 18/24, Windows Node 24) for every push;
+  desktop packaging validation is paused for this web-only cycle.
+
 ## [4.1.23] - 2026-08-17
 
 - Replaced legacy whole-registry project state with schema-v2 settings, a

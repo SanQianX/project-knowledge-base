@@ -1,7 +1,7 @@
 {
   "name": "project-knowledge-desktop",
   "productName": "Project Knowledge",
-  "version": "4.1.23",
+  "version": "4.2.0",
   "description": "Windows desktop application for project-knowledge",
   "main": "main.cjs",
   "author": "SanQianX",
