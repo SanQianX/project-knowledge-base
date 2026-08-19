@@ -44,8 +44,15 @@ function spawnServer({ root, port, host = '127.0.0.1', dataDir, extraEnv = {}, t
   return {
     child,
     dataDir: dir,
-    cleanup: () => {
+    cleanup: async () => {
       try { child.kill(); } catch {}
+      // Windows keeps data-dir handles alive until the child fully exits;
+      // removing the directory before that races with EPERM.
+      await new Promise(resolve => {
+        const timer = setTimeout(resolve, 5000);
+        child.once('exit', () => { clearTimeout(timer); resolve(); });
+        if (child.exitCode !== null) { clearTimeout(timer); resolve(); }
+      });
       try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
     },
   };

@@ -106,8 +106,7 @@ async function waitForServer() {
     assert(!exportedLogs.includes('conversation-body'), 'conversation content must never leak into structured logs or export');
     console.log('conversation-api-test PASS');
   } finally {
-    spawned.cleanup();
-    fs.rmSync(dataDir, { recursive: true, force: true });
+    await spawned.cleanup();
   }
 })().catch(error => {
   console.error(error.stack || error.message);
