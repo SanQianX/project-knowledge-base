@@ -21,6 +21,8 @@ _site/_test/ui-test-report.json
 _site/_test/TEST-REPORT.md
 _site/_test/fixtures/*
 !_site/_test/fixtures/make-git-repos.js
+!_site/_test/fixtures/fake-browser-exit.js
+!_site/_test/fixtures/fake-browser-hang.js
 .hook-trigger-errors.log
 .jobs-log.json
 .jobs-archive/
