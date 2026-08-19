@@ -9,91 +9,181 @@
   <title>Project Knowledge</title>
 </head>
 <body>
-  <div class="shell" id="app">
-    <aside class="sidebar">
-      <div class="brand"><span class="brand-mark">K</span><span>Project Knowledge</span></div>
-      <div class="sidebar-head"><span>项目</span><span id="project-count">0</span></div>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="eyebrow">AI Knowledge Base</div>
+      <h1>Control Center</h1>
+      <div class="root" id="brand-root"></div>
+    </div>
+    <div class="project-area">
+      <div class="project-head"><span>项目 · 右键管理</span><button class="small-btn" type="button" data-go="import">导入项目</button></div>
       <div class="project-list" id="project-list"></div>
-      <div class="sidebar-actions">
-        <button class="nav-button active" data-view="workbench">工作台</button>
-        <button class="nav-button" data-view="import">导入项目</button>
-        <button class="nav-button" id="open-settings">设置</button>
-      </div>
-    </aside>
-    <div class="mobile-bar">
-      <strong>PK</strong><select class="input" id="mobile-project"></select>
-      <button class="icon-button" id="mobile-import" aria-label="导入项目">＋</button>
-      <button class="icon-button" id="mobile-settings" aria-label="设置">⚙</button>
     </div>
-    <main class="workspace">
-      <header class="topbar">
-        <div class="top-context"><h1 class="top-title" id="top-title">Project Knowledge</h1><div class="top-subtitle" id="top-subtitle">选择项目开始工作</div></div>
-        <div class="top-actions"><button class="button" id="top-import">导入项目</button><button class="icon-button" id="theme-button" aria-label="切换主题">◐</button><button class="icon-button" id="top-settings" aria-label="设置">⚙</button></div>
-      </header>
-      <section class="view active" id="view-workbench">
-        <div class="workbench"><div class="workbench-card">
-          <div class="workbench-head"><div><strong>Claude Workbench</strong><div class="meta" id="workbench-project">尚未选择项目</div></div><span class="status" id="workbench-status">就绪</span></div>
-          <div class="chat-list" id="chat-list"><div class="empty"><div><strong>从项目知识开始对话</strong><span>选择左侧项目，输入问题或开发需求。</span></div></div></div>
-          <div class="composer"><textarea class="input" id="chat-input" placeholder="向 Claude 描述需求…"></textarea><button class="button primary" id="chat-send">发送</button></div>
-        </div></div>
-      </section>
-      <section class="view" id="view-import">
-        <div class="page-heading"><div><h2>导入项目</h2><p>连接一个本地 Git 项目。导入不会生成推测性知识。</p></div></div>
-        <form class="card import-grid" id="import-form">
-          <div class="field full"><label for="import-path">本地项目目录</label><input class="input" id="import-path" required placeholder="D:\Projects\my-project"></div>
-          <div class="field"><label for="import-name">显示名称</label><input class="input" id="import-name" placeholder="我的项目"></div>
-          <div class="field"><label for="import-id">项目 ID（可选）</label><input class="input" id="import-id" placeholder="project-my-project"></div>
-          <div class="notice full" id="import-notice">系统会验证 Git 根目录、知识路径与 Hook 所有权。</div>
-          <div class="form-actions"><button type="button" class="button" id="import-cancel">取消</button><button class="button primary" type="submit">导入</button></div>
-        </form>
-      </section>
-    </main>
-  </div>
-
-  <div class="backdrop" id="settings-backdrop" hidden></div>
-  <aside class="settings-drawer" id="settings-drawer" aria-label="设置" hidden>
-    <nav class="settings-nav"><h2>设置</h2><button class="active" data-settings="ai">AI 模型</button><button data-settings="knowledge">知识存储</button><button data-settings="conversation">开发对话</button><button data-settings="logs">运行记录</button><button data-settings="client">桌面客户端</button><button class="settings-close" id="close-settings">关闭</button></nav>
-    <div class="settings-content">
-      <section class="settings-section active" id="settings-ai">
-        <div class="settings-head"><div><h3>AI 模型</h3><p>管理用于工作台与自动知识维护的模型配置。</p></div></div>
-        <div class="settings-scroll stack" id="profile-list"><div class="empty"><span>正在读取模型配置…</span></div></div>
-      </section>
-      <section class="settings-section" id="settings-knowledge">
-        <div class="settings-head"><div><h3>知识存储</h3><p>全局根目录仅影响以后导入的项目；已有项目路径保持不变。</p></div><button class="button primary" id="save-knowledge">保存</button></div>
-        <div class="settings-scroll stack">
-          <div class="storage-card"><div class="field"><label for="knowledge-root">知识根目录</label><input class="input" id="knowledge-root"></div></div>
-          <div class="storage-card"><div class="profile-title">项目关系</div><div class="field"><label for="relation-project">当前项目</label><select class="input" id="relation-project"></select></div><div class="relation-list" id="relation-list"></div><button class="button" id="save-relations">保存关系</button></div>
-          <div class="storage-card"><div class="profile-title">删除项目</div><p class="meta">默认只解除项目管理并保留外部 Markdown。删除知识需要再次明确确认。</p><button class="button danger" id="open-delete">删除当前项目…</button></div>
-        </div>
-      </section>
-      <section class="settings-section conversation-section" id="settings-conversation">
-        <div class="settings-head"><div><h3>开发对话</h3><p>按项目与日期查看真实 Prompt、AI 回复及提交状态。</p></div></div>
-        <div class="conversation-toolbar"><div class="field"><label for="conversation-project">项目</label><select class="input" id="conversation-project"></select></div><div class="field"><label for="conversation-date">日期</label><input class="input" id="conversation-date" type="date"></div></div>
-        <div class="conversation-list" id="conversation-list"><div class="empty"><span>选择项目查看开发对话。</span></div></div>
-      </section>
-      <section class="settings-section logs-section" id="settings-logs">
-        <div class="settings-head"><div><h3>运行记录</h3><p>查看项目与系统的持久运行记录。</p></div><span class="connection-note" id="logs-connection"></span></div>
-        <div class="logs-card">
-          <div class="logs-toolbar">
-            <div class="field"><label for="logs-date">日期</label><input class="input" id="logs-date" type="date"></div>
-            <div class="field"><label for="logs-project">项目</label><select class="input" id="logs-project"></select></div>
-            <div class="field"><label for="logs-scope">记录范围</label><select class="input" id="logs-scope"><option value="all">全部记录</option><option value="important">重要记录</option><option value="errors">仅异常</option></select></div>
-            <div class="field"><label for="logs-limit">显示数量</label><select class="input" id="logs-limit"><option>500</option><option>1000</option><option>2000</option><option>5000</option></select></div>
-            <div class="field"><label for="logs-search">搜索</label><input class="input" id="logs-search" placeholder="消息、组件或操作 ID"></div>
-            <button class="button" id="logs-export">导出</button>
-          </div>
-          <div class="record-shell"><div class="record-list" id="record-list"></div><button class="new-records" id="new-records" hidden></button></div>
-          <div class="logs-foot"><span id="logs-summary">0 条记录</span><span>永久保留 · 当前视图只读</span></div>
-        </div>
-      </section>
-      <section class="settings-section" id="settings-client">
-        <div class="settings-head"><div><h3>桌面客户端</h3><p>外观与本地服务连接。</p></div></div>
-        <div class="settings-scroll stack"><div class="storage-card"><div class="profile-title">外观</div><p class="meta">跟随当前窗口设置切换浅色或深色主题。</p><button class="button" id="client-theme">切换主题</button></div><div class="storage-card"><div class="profile-title">本地服务</div><p class="meta">所有项目数据均由当前 Project Knowledge 本地服务提供。</p></div></div>
-      </section>
-    </div>
+    <nav class="sidebar-nav">
+      <button class="nav-btn active" type="button" data-go="workbench"><span>Claude Code</span><span class="nav-badge">项目</span></button>
+    </nav>
   </aside>
 
-  <dialog id="delete-dialog"><div class="dialog-head"><h3>删除项目</h3></div><div class="dialog-body"><p id="delete-copy">确认解除当前项目？</p><label class="check"><input type="checkbox" id="delete-knowledge">同时删除项目知识目录</label><div class="field" id="delete-confirm-field" hidden><label for="delete-confirm">输入项目 ID 以确认删除知识</label><input class="input" id="delete-confirm"></div><div class="notice error" id="delete-error" hidden></div></div><div class="dialog-foot"><button class="button" id="delete-cancel">取消</button><button class="button danger" id="delete-submit">删除</button></div></dialog>
-  <script src="/app.js"></script>
+  <main class="main">
+    <header class="main-header">
+      <div><div class="subtitle">Project Knowledge</div><div class="page-title" id="page-title">Claude Code</div></div>
+      <div class="header-actions">
+        <button class="btn" type="button" id="theme-button">深色模式</button>
+        <button class="btn" type="button" id="open-settings">设置</button>
+      </div>
+    </header>
+
+    <div class="mobile-strip">
+      <select class="input" id="mobile-project" aria-label="选择项目"></select>
+      <button class="btn" type="button" data-go="import">导入项目</button>
+      <button class="btn" type="button" id="mobile-settings">设置</button>
+    </div>
+
+    <section class="view active" id="view-workbench">
+      <section class="panel workbench">
+        <div class="workbench-head"><span class="dot claude"></span><span class="workbench-title">Claude Code</span><span class="chip" id="wb-project">未选择项目</span><span class="chip" id="wb-model" hidden></span><span style="margin-left:auto" class="muted" id="wb-state">就绪</span></div>
+        <div class="chat" id="chat"><div class="empty-chat">从项目知识开始对话<div class="muted" style="margin-top:8px">选择左侧项目，输入问题或开发需求。</div></div></div>
+        <div class="composer">
+          <div class="composer-row"><textarea class="input" id="chat-input" placeholder="向 Claude 发送消息…"></textarea><button class="btn-primary send" type="button" id="send-btn" aria-label="发送">↑</button></div>
+          <div class="toolbar"><div class="token"><span class="dot good"></span><span>默认模式</span></div><div class="token"><span>💬</span><span class="nav-badge" id="msg-count">0</span></div><span style="margin-left:auto" class="muted">对话统一归档，可在 设置 → 开发对话 回看</span></div>
+        </div>
+      </section>
+    </section>
+
+    <section class="view" id="view-import">
+      <div class="split">
+        <section class="panel form-panel">
+          <div class="section-title">导入项目</div>
+          <div class="section-help">导入只建立项目登记、Git 跟踪基线和托管 Hook，不运行初始化分析。</div>
+          <form id="import-form" class="form-grid">
+            <div class="field"><label for="import-path">本地路径</label><input class="input code" id="import-path" required placeholder="D:\Projects\my-project"><span class="muted">只需要本地路径，其余信息由后端推断。</span></div>
+            <div class="notice"><strong>导入时自动完成</strong><div class="muted">• 验证 Git 仓库<br>• 记录当前 HEAD 为跟踪基线<br>• 在全局知识库根目录下确定知识路径<br>• 安装并验证托管 post-commit Hook<br>• 不运行 AI，不生成推测式初始化知识</div></div>
+            <div class="notice"><strong>知识库根目录</strong><div class="code" id="import-root">—</div><div class="muted" style="margin-top:5px">根目录可在 设置 → 知识库存储 中修改；导入页不再重复选择。</div></div>
+            <div class="notice" id="import-notice" hidden></div>
+            <div style="display:flex;gap:8px"><button class="btn-primary" type="submit">导入</button><button class="btn" type="reset">重置</button></div>
+          </form>
+        </section>
+        <aside class="panel preview-panel">
+          <div class="section-title">导入目标</div>
+          <div class="section-help">导入完成后展示实际落位。</div>
+          <div class="preview-list">
+            <div class="panel2 preview-item"><div class="preview-label">Project ID</div><div class="preview-value code" id="pv-project-id">导入后确定</div></div>
+            <div class="panel2 preview-item"><div class="preview-label">Repository</div><div class="preview-value code" id="pv-repo">导入后确定</div></div>
+            <div class="panel2 preview-item"><div class="preview-label">Knowledge Path</div><div class="preview-value code" id="pv-knowledge">导入后确定</div></div>
+            <div class="panel2 preview-item"><div class="preview-label">Managed Hook</div><div class="preview-value">导入事务内自动安装并验证</div></div>
+            <div class="panel2 preview-item"><div class="preview-label">First Knowledge</div><div class="preview-value">等待导入后的第一个新提交</div></div>
+          </div>
+        </aside>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="backdrop" id="settings-backdrop"></div>
+<aside class="drawer" id="settings-drawer" aria-label="设置">
+  <nav class="settings-nav"><h3>设置</h3><button class="active" type="button" data-settings="ai">AI 模型</button><button type="button" data-settings="knowledge">知识库存储</button><button type="button" data-settings="relations">知识关联</button><button type="button" data-settings="conversation">开发对话</button><button type="button" data-settings="logs">日志</button><button type="button" data-settings="client">桌面客户端</button></nav>
+  <div class="settings-content">
+    <div class="drawer-head"><div><h2 id="settings-title">AI 模型</h2><div class="section-help" id="settings-help">配置模型并为项目分配 Profile。</div></div><button class="btn" type="button" id="close-settings">×</button></div>
+
+    <section class="settings-section active" id="settings-ai">
+      <div class="settings-card panel2">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><strong>模型配置</strong><div style="display:flex;gap:8px"><button class="btn" type="button" id="profile-add">新增配置</button><button class="btn-primary" type="button" id="profile-save">保存模型配置</button></div></div>
+        <div class="field" style="margin-top:12px"><label for="profile-select">配置项</label><select class="input" id="profile-select"></select></div>
+        <div class="grid2" style="margin-top:12px">
+          <div class="field"><label for="profile-vendor">供应商名称</label><input class="input" id="profile-vendor"></div>
+          <div class="field"><label for="profile-model">当前使用模型</label><input class="input code" id="profile-model"></div>
+          <div class="field" style="grid-column:1/-1"><label for="profile-key">API Key</label><input class="input code" id="profile-key" type="password" placeholder="留空保持不变"></div>
+          <div class="field" style="grid-column:1/-1"><label for="profile-base-url">请求地址</label><input class="input code" id="profile-base-url"></div>
+        </div>
+        <div class="notice" id="profile-notice" hidden style="margin-top:12px"></div>
+      </div>
+      <div class="settings-card panel2"><strong>项目模型分配</strong><div id="assignment-list" style="margin-top:8px"></div></div>
+    </section>
+
+    <section class="settings-section" id="settings-knowledge">
+      <div class="settings-card panel2">
+        <strong>知识库存储</strong>
+        <p class="section-help">全局根目录只决定以后导入的项目；已有项目继续使用导入时固化的知识路径。</p>
+        <div class="field" style="margin-top:14px"><label for="knowledge-root">知识库根目录</label><input class="input code" id="knowledge-root"></div>
+        <button class="btn-primary" type="button" id="save-knowledge" style="margin-top:12px">保存</button>
+      </div>
+      <div class="settings-card panel2 danger-zone">
+        <strong>删除项目</strong>
+        <p class="section-help">默认只解除项目管理并保留外部知识文件；删除知识需要再次确认。</p>
+        <button class="btn-danger" type="button" id="open-delete" style="margin-top:10px">删除当前项目…</button>
+      </div>
+    </section>
+
+    <section class="settings-section" id="settings-relations">
+      <div class="settings-card panel2">
+        <strong>相关知识库</strong>
+        <p class="section-help">为当前项目显式选择允许联合检索的项目；写入仍只进入当前项目。</p>
+        <div id="relation-list" style="margin-top:8px"></div>
+        <button class="btn-primary" type="button" id="save-relations" style="margin-top:12px">保存关系</button>
+      </div>
+    </section>
+
+    <section class="settings-section" id="settings-conversation" data-layout-contract="fill-settings-available-height">
+      <div class="conversation-view">
+        <div class="conversation-frame">
+          <div class="conversation-toolbar">
+            <div class="conversation-filter"><label for="conversation-project">项目</label><select class="input" id="conversation-project"></select></div>
+            <div class="conversation-filter date"><label for="conversation-date">日期</label><input class="input" id="conversation-date" type="date"></div>
+          </div>
+          <div class="conversation-content">
+            <div class="conversation-stream" id="conversation-stream"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-section" id="settings-logs" data-layout-contract="fill-settings-available-height">
+      <div class="panel2 settings-card logs-card">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px">
+          <div><strong>运行记录</strong><p class="section-help">查看系统和项目的运行过程。正常记录保持安静，警告和错误会自动突出；点击记录可查看完整上下文。</p></div>
+          <button class="btn" type="button" id="logs-export">导出</button>
+        </div>
+        <div class="record-sync-warning" id="logs-connection">新记录同步暂时中断，正在自动恢复。</div>
+        <div class="record-toolbar">
+          <input class="input" id="logs-date" type="date" aria-label="记录日期">
+          <select class="input" id="logs-project" aria-label="项目筛选"><option value="">全部项目</option></select>
+          <select class="input" id="logs-scope" aria-label="记录范围"><option value="all">全部记录</option><option value="important">重要记录</option><option value="errors">仅异常</option></select>
+          <select class="input" id="logs-limit" aria-label="显示记录数量"><option value="500" selected>500 条</option><option value="1000">1000 条</option><option value="2000">2000 条</option><option value="5000">5000 条</option></select>
+          <input class="input record-search" id="logs-search" placeholder="搜索运行记录…">
+        </div>
+        <div class="record-shell">
+          <div class="record-list" id="record-list"></div>
+          <div class="record-empty" id="record-empty">这个筛选条件下没有运行记录。</div>
+          <button class="new-records" type="button" id="new-records" hidden>有新记录</button>
+          <div class="record-footer"><span id="logs-summary">正在读取运行记录…</span><span class="record-note">点击任意记录查看级别、阶段和操作详情</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-section" id="settings-client">
+      <div class="settings-card panel2">
+        <div style="display:flex;justify-content:space-between;align-items:center"><strong>桌面客户端</strong><span class="chip">Web</span></div>
+        <p class="section-help">桌面端与浏览器共享同一个本地后端和应用 Shell；外观跟随当前窗口主题。</p>
+        <button class="btn" type="button" id="client-theme" style="margin-top:10px">切换主题</button>
+      </div>
+    </section>
+  </div>
+</aside>
+
+<div class="context-menu" id="context-menu"><div class="muted" style="padding:5px 8px;font-size:10px" id="context-id">project</div><button type="button" id="remove-project">移除项目…</button></div>
+
+<dialog id="delete-dialog">
+  <div class="dialog-head"><h3>移除项目</h3></div>
+  <div class="dialog-body">
+    <p class="muted" id="delete-copy" style="margin:0;font-size:12px">确认移除项目？默认保留知识目录。</p>
+    <label class="check"><input type="checkbox" id="delete-knowledge">同时删除由本应用拥有的知识目录（危险）</label>
+    <div class="field" id="delete-confirm-field" hidden><label for="delete-confirm">输入项目 ID 以确认删除知识</label><input class="input code" id="delete-confirm"></div>
+    <div class="notice error" id="delete-error" hidden></div>
+  </div>
+  <div class="dialog-foot"><button class="btn" type="button" id="delete-cancel">取消</button><button class="btn-danger" type="button" id="delete-submit">移除项目</button></div>
+</dialog>
+
+<script src="/app.js"></script>
 </body>
 </html>

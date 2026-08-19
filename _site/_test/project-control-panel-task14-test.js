@@ -21,20 +21,20 @@ const profileDir = path.join(os.tmpdir(), 'pk-project-status-profile-' + process
     await waitFor(() => browser.evaluate('window.__PK_APP__ && window.__PK_APP__.getState().projects === 1'), 'project shell');
 
     const shell = await browser.evaluate(`(() => ({
-      projectButtons: document.querySelectorAll('#project-list .project-button').length,
-      selected: document.querySelector('#project-list .project-button.active')?.dataset.projectId,
-      name: document.querySelector('#project-list .project-name')?.textContent,
-      title: document.getElementById('top-title').textContent,
-      subtitle: document.getElementById('top-subtitle').textContent,
+      projectButtons: document.querySelectorAll('#project-list .project-card').length,
+      selected: document.querySelector('#project-list .project-card.active')?.dataset.projectId,
+      name: document.querySelector('#project-list .project-card.active .project-name')?.textContent,
+      chip: document.getElementById('wb-project').textContent,
+      path: document.querySelector('#project-list .project-card.active .project-path')?.textContent,
       workbench: !document.getElementById('view-workbench').hidden && document.getElementById('view-workbench').classList.contains('active'),
       manualControls: document.querySelectorAll('[data-install-hook], [data-uninstall-hook], [data-analyze], [data-simulate]').length,
-      mainConversationLinks: [...document.querySelectorAll('.sidebar-actions button')].filter(node => /开发对话|运行记录|系统日志/.test(node.textContent)).length
+      mainConversationLinks: [...document.querySelectorAll('.sidebar-nav .nav-btn, .mobile-strip button')].filter(node => /开发对话|运行记录|系统日志/.test(node.textContent)).length
     }))()`);
     assert.strictEqual(shell.projectButtons, 1);
     assert.strictEqual(shell.selected, fixture.projectId);
     assert.strictEqual(shell.name, '视觉检测知识库');
-    assert.strictEqual(shell.title, '视觉检测知识库');
-    assert(shell.subtitle.includes(fixture.repo.path));
+    assert.strictEqual(shell.chip, '视觉检测知识库');
+    assert(shell.path.includes(fixture.repo.path));
     assert.strictEqual(shell.workbench, true);
     assert.strictEqual(shell.manualControls, 0);
     assert.strictEqual(shell.mainConversationLinks, 0);

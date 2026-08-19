@@ -1,5 +1,21 @@
 # Changelog
 
+## [4.2.2] - 2026-08-19
+
+- Rebuilt the web Control Center visual layer to faithfully match the v13
+  reference design (`project-knowledge-base-faithful-repair-ui-v10.html`):
+  sidebar brand block with the knowledge root path, multi-line project cards
+  (name, id, repository path, status dot) with right-click removal, the
+  in-main-area header, full-height Workbench panel with chat bubbles, tool
+  cards, circular send button and composer toolbar, the reference design
+  tokens including the complete dark theme, and responsive breakpoints.
+- Restored the reference Settings drawer structure with separate AI model
+  editing (add/save profiles via the API), project model assignment,
+  knowledge relations, mature development-conversation turn cards with
+  commit labels, and the V7 run-records list geometry.
+- Import view now shows the reference split layout with a post-import
+  placement preview; UI contract tests were updated to the reference DOM.
+
 ## [4.2.1] - 2026-08-19
 
 - Fixed the legacy layout migration failing with `Legacy migration source

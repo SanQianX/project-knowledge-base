@@ -36,10 +36,10 @@ async function capture(browser, name) {
       window.__PK_APP__.renderWorkbenchEvent({ type: 'claude/text-delta', text: '索引已经准备好，可以继续检索。' });
       window.__PK_APP__.renderWorkbenchEvent({ type: 'claude/tool-use', id: 'tool-visual', name: 'Read', input: { path: 'README.md' } });
     })()`);
-    assert.strictEqual(await browser.evaluate("document.querySelectorAll('#chat-list .message-card.user, #chat-list .message-card.assistant, #chat-list .message-card.tool').length"), 3);
+    assert.strictEqual(await browser.evaluate("document.querySelectorAll('#chat .msg-row').length"), 3);
     await capture(browser, '02-workbench-cards-1920-light');
 
-    await browser.evaluate("document.querySelector('[data-view=import]').click()");
+    await browser.evaluate("document.querySelector('[data-go=\"import\"]').click()");
     assert.strictEqual(await browser.evaluate("document.getElementById('import-path').required"), true);
     assert.strictEqual(await browser.evaluate("document.querySelectorAll('#import-form [name=knowledgePath]').length"), 0, 'Import must consume the global knowledge root');
     await capture(browser, '03-import-1920-light');
@@ -58,15 +58,16 @@ async function capture(browser, name) {
       const cards = [...section.querySelectorAll('.turn-card')];
       const cardBounds = cards.map(card => card.getBoundingClientRect());
       return {
-        controls: section.querySelectorAll('.conversation-toolbar .field').length,
+        controls: section.querySelectorAll('.conversation-toolbar .conversation-filter').length,
         labels: [...section.querySelectorAll('.conversation-toolbar label')].map(node => node.textContent),
         hasAllProject: [...document.getElementById('conversation-project').options].some(node => /全部/.test(node.textContent)),
         forbidden: /来源|Session|搜索|时间线|Commit 视角|Bridge|provider|schema/.test(section.innerText),
         turns: cards.length,
         commits: [...section.querySelectorAll('.commit-label')].map(node => node.textContent),
+        refs: [...section.querySelectorAll('.commit-ref')].map(node => node.textContent),
         inside: cardBounds.every(rect => rect.left >= content.left && rect.right <= content.right + 1),
         pageOverflow: document.body.scrollWidth > document.documentElement.clientWidth + 1,
-        listScrolls: document.getElementById('conversation-list').scrollHeight > document.getElementById('conversation-list').clientHeight,
+        listScrolls: document.getElementById('conversation-stream').scrollHeight > document.getElementById('conversation-stream').clientHeight,
       };
     })()`);
     assert.strictEqual(conversation.controls, 2);
@@ -74,9 +75,11 @@ async function capture(browser, name) {
     assert.strictEqual(conversation.hasAllProject, false);
     assert.strictEqual(conversation.forbidden, false);
     assert.strictEqual(conversation.turns, 3);
-    assert(conversation.commits.some(value => value.startsWith('已提交 · 1111111')));
-    assert(conversation.commits.some(value => value.startsWith('关联提交 · 2222222')));
-    assert(conversation.commits.some(value => value === '未提交'));
+    assert(conversation.commits.includes('已提交'));
+    assert(conversation.commits.includes('关联提交'));
+    assert(conversation.commits.includes('未提交'));
+    assert(conversation.refs.includes('1111111'));
+    assert(conversation.refs.includes('2222222'));
     assert.strictEqual(conversation.inside, true);
     assert.strictEqual(conversation.pageOverflow, false);
     await capture(browser, '06-conversation-long-1920-light');
@@ -91,7 +94,7 @@ async function capture(browser, name) {
       const card = document.querySelector('.logs-card').getBoundingClientRect();
       const content = document.querySelector('.settings-content').getBoundingClientRect();
       const overlaps = rows.filter(row => {
-        const body = row.querySelector('.record-body').getBoundingClientRect();
+        const body = row.querySelector('.record-main').getBoundingClientRect();
         const time = row.querySelector('.record-time').getBoundingClientRect();
         return body.right + 8 > time.left;
       }).length;
@@ -100,8 +103,8 @@ async function capture(browser, name) {
         return /(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 1;
       }).map(node => node.id || node.className);
       const colorParts = level => {
-        const row = document.querySelector('.log-record[data-level=' + level + ']');
-        return row ? [row, row.querySelector('.record-message'), row.querySelector('.record-meta'), row.querySelector('.record-time')].map(node => getComputedStyle(node).color) : [];
+        const row = document.querySelector('.record-entry[data-level=' + level + '] .record-row');
+        return row ? [row, row.querySelector('.record-title'), row.querySelector('.record-meta'), row.querySelector('.record-time')].map(node => getComputedStyle(node).color) : [];
       };
       return {
         rows: rows.length,
@@ -112,7 +115,7 @@ async function capture(browser, name) {
         cardBottomGap: Math.round(content.bottom - card.bottom),
         warnColors: colorParts('warn'),
         errorColors: colorParts('error'),
-        severityMarks: document.querySelectorAll('.log-record svg, .log-record img, .log-record .dot, .log-record .severity').length,
+        severityMarks: document.querySelectorAll('.record-entry svg, .record-entry img, .record-entry .dot, .record-entry .severity').length,
         pageOverflow: document.body.scrollWidth > document.documentElement.clientWidth + 1,
         recordHeight: document.querySelector('.record-shell').getBoundingClientRect().height,
       };
@@ -129,8 +132,8 @@ async function capture(browser, name) {
     assert.strictEqual(desktopLogs.severityMarks, 0);
     assert.strictEqual(desktopLogs.pageOverflow, false);
 
-    await browser.evaluate("document.querySelector('.log-record[data-level=error] .record-row').click()");
-    assert.strictEqual(await browser.evaluate("document.querySelector('.log-record[data-level=error]').classList.contains('expanded')"), true);
+    await browser.evaluate("document.querySelector('.record-entry[data-level=error] .record-row').click()");
+    assert.strictEqual(await browser.evaluate("document.querySelector('.record-entry[data-level=error]').classList.contains('open')"), true);
     await capture(browser, '07-logs-1366x768-expanded-light');
     await browser.evaluate("document.getElementById('record-list').scrollTop = 0");
     await browser.evaluate("fetch('/api/health?ui-sse=' + Date.now()).then(response => response.json())");
@@ -162,7 +165,7 @@ async function capture(browser, name) {
     await capture(browser, '11-mobile-logs-390x844-dark');
     await browser.evaluate("window.__PK_APP__.showSettings('conversation')");
     await waitFor(() => browser.evaluate('window.__PK_APP__.getState().conversationTurns === 3'), 'mobile conversations');
-    assert.strictEqual(await browser.evaluate("document.querySelectorAll('.conversation-toolbar .field').length"), 2);
+    assert.strictEqual(await browser.evaluate("document.querySelectorAll('.conversation-toolbar .conversation-filter').length"), 2);
     assert.strictEqual(await browser.evaluate("document.body.scrollWidth <= document.documentElement.clientWidth + 1"), true);
     await capture(browser, '12-mobile-conversation-390x844-dark');
 

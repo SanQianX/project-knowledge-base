@@ -27,7 +27,7 @@ const screenshotPath = path.join(os.tmpdir(), 'pk-ui-smoke-' + process.pid + '.p
       shell: document.querySelectorAll('.shell').length,
       sidebar: getComputedStyle(document.querySelector('.sidebar')).display,
       workbench: document.getElementById('view-workbench').classList.contains('active'),
-      projects: document.querySelectorAll('#project-list .project-button').length,
+      projects: document.querySelectorAll('#project-list .project-card').length,
       unsafeImages: document.querySelectorAll('img').length,
       xss: window.__xss,
       bodyWidth: document.body.scrollWidth,
@@ -48,7 +48,7 @@ const screenshotPath = path.join(os.tmpdir(), 'pk-ui-smoke-' + process.pid + '.p
     await browser.setViewport(390, 844);
     const mobile = await browser.evaluate(`(() => ({
       sidebar: getComputedStyle(document.querySelector('.sidebar')).display,
-      mobileBar: getComputedStyle(document.querySelector('.mobile-bar')).display,
+      mobileBar: getComputedStyle(document.querySelector('.mobile-strip')).display,
       bodyWidth: document.body.scrollWidth,
       viewportWidth: document.documentElement.clientWidth,
       projectUsable: document.getElementById('mobile-project').getBoundingClientRect().width > 100

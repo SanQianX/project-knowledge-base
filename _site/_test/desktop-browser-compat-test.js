@@ -17,7 +17,7 @@ assert(!(ui + app).includes('file://'), 'product shell must not expose local fil
 assert(app.includes('URL.createObjectURL(blob)') && app.includes('URL.revokeObjectURL(url)'), 'diagnostic export must use a bounded blob URL');
 assert(app.includes('navigator.clipboard') && app.includes("document.execCommand('copy')"), 'copy must have a desktop-compatible fallback');
 assert(css.includes('@media(prefers-reduced-motion:reduce)'), 'reduced-motion compatibility is required');
-assert(css.includes('@media(max-width:820px)'), 'desktop narrow-window layout is required');
+assert(css.includes('@media(max-width:760px)'), 'desktop narrow-window layout is required');
 
 assert(preload.includes('project-knowledge:open-external') && preload.includes('openExternal:'), 'desktop preload bounded external-link bridge regressed');
 assert(main.includes('externalLink.registerExternalLink'), 'desktop main external-link policy regressed');
