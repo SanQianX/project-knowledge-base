@@ -6,7 +6,15 @@ const { spawnSync } = require('child_process');
 const crossSpawn = require('cross-spawn');
 const { applyEdits, modify, parse } = require('jsonc-parser');
 const packageInfo = require('../../package.json');
-const bridgeModule = require('@sanqianx/ai-coding-event-bridge');
+
+// Fail-open module resolution: a missing/unloadable Bridge package must
+// degrade Development Capture status, never crash server startup.
+let bridgeModule = null;
+try {
+  bridgeModule = require('@sanqianx/ai-coding-event-bridge');
+} catch (_) {
+  bridgeModule = null;
+}
 
 const INTEGRATION_NAME = 'project-knowledge';
 const MARKETPLACE_NAME = 'project-knowledge';
