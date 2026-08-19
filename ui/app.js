@@ -344,9 +344,16 @@
     if (state.logs.some(item => item.id === record.id)) return;
     const list = $('record-list'); const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 48;
     state.logs.push(record);
-    const limit = Number($('logs-limit').value || 500); if (state.logs.length > limit) state.logs.splice(0, state.logs.length - limit);
+    const limit = Number($('logs-limit').value || 500);
+    if (state.logs.length > limit) {
+      state.logs.splice(0, state.logs.length - limit);
+      while (list.children.length > state.logs.length) list.firstElementChild.remove();
+    }
+    $('record-empty').style.display = 'none';
+    list.append(createRecordEntry(record));
+    setText($('logs-summary'), `已加载 ${state.logs.length.toLocaleString()} 条 · 显示上限 ${limit.toLocaleString()} 条`);
     if (!atBottom) state.newLogs += 1;
-    renderLogs();
+    updateNewLogButton();
     if (atBottom) requestAnimationFrame(() => { list.scrollTop = list.scrollHeight; });
   }
   function updateNewLogButton() { const button = $('new-records'); button.hidden = !state.newLogs; button.textContent = `有 ${state.newLogs} 条新记录`; }
