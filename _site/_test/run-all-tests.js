@@ -49,7 +49,7 @@ function runOne(file) {
     durationMs: Date.now() - start,
     stdout: result.stdout || '',
     stderr: result.stderr || '',
-    outputTail: tail(result.stdout || result.stderr),
+    outputTail: tail(`${result.stdout || ''}\n${result.stderr || ''}`.trim()),
   };
 }
 
