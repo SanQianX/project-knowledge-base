@@ -1,6 +1,7 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
+  const { t: i18n, setLanguage, activeLanguage } = window.I18N || { t: k => k };
   const state = {
     projects: [], profiles: [], profileConfig: null, profileIndex: -1, profileKey: '',
     activeProjectId: '', view: 'workbench', settings: 'ai', settingsOpen: false,
@@ -92,9 +93,23 @@
     if (!state.activeProjectId || !state.projects.some(project => project.projectId === state.activeProjectId)) state.activeProjectId = state.projects[0]?.projectId || '';
     $('knowledge-root').value = body.settings?.knowledge?.rootPath || '';
     setText($('brand-root'), body.settings?.knowledge?.rootPath || '');
-    setText($('import-root'), body.settings?.knowledge?.rootPath || '—');
+    fillImportProfiles();
     renderProjects();
     if (state.settings === 'ai') fillProfileFields();
+  }
+
+  function fillImportProfiles() {
+    const select = $('import-profile');
+    if (!select) return;
+    select.replaceChildren();
+    select.append(option('', i18n('app.import.profile.help')));
+    for (const profile of state.profiles) {
+      const label = profile.name ? `${profile.name} · ${profile.id}` : profile.id;
+      select.append(option(profile.id, label));
+    }
+    if (state.profileConfig && state.profileConfig.defaultProfileId) {
+      select.value = state.profileConfig.defaultProfileId;
+    }
   }
 
   const settingsTitles = {
@@ -452,15 +467,144 @@
 
   async function submitImport(event) {
     event.preventDefault();
-    const notice = $('import-notice');
+    const notice = $('import-notice') || (() => { const n = document.createElement('div'); n.id = 'import-notice'; n.className = 'notice'; n.hidden = true; document.querySelector('#import-form').appendChild(n); return n; })();
+    const payload = buildImportPayload();
     try {
-      const body = await api('/api/projects/import', { method: 'POST', body: JSON.stringify({ localPath: $('import-path').value }) });
+      const body = await api('/api/projects/import', { method: 'POST', body: JSON.stringify(payload) });
       notice.hidden = false; notice.className = 'notice'; notice.textContent = '项目已导入。';
-      setText($('pv-project-id'), body.projectId || body.project?.projectId || '');
-      setText($('pv-repo'), body.project?.config?.repoPath || $('import-path').value);
-      setText($('pv-knowledge'), body.project?.config?.knowledgePath || '');
-      await loadState(); selectProject(body.projectId); showView('workbench'); event.target.reset();
+      const projectId = body.projectId || body.project?.projectId || '';
+      const config = body.project?.config || body.config || {};
+      // T07: the preview-pane labels changed. Only pv-repo + pv-knowledge-root
+      // survive in the new layout; pv-project-id / pv-knowledge were dropped
+      // because they duplicate the project sidebar. Guard against null.
+      if ($('pv-repo')) setText($('pv-repo'), config.repoPath || payload.localPath);
+      if ($('pv-knowledge-root')) setText($('pv-knowledge-root'), config.knowledgePath || '');
+      await loadState(); selectProject(projectId); showView('workbench'); event.target.reset();
     } catch (error) { notice.hidden = false; notice.className = 'notice error'; notice.textContent = error.message; }
+  }
+
+  // T07 — build the import payload from the new UI controls.
+  function buildImportPayload() {
+    const payload = {
+      localPath: $('import-path').value,
+      aiProfileId: $('import-profile').value || null,
+      knowledgeLanguage: $('import-language').value || 'zh-CN',
+    };
+    if ($('import-team-enabled').checked) {
+      const storePath = $('import-team-store').value.trim();
+      const kbSubdir = $('import-team-subdir').value.trim();
+      const provider = $('import-team-provider').value;
+      if (storePath && kbSubdir) {
+        payload.teamBinding = { provider, storePath, kbSubdir };
+      }
+    }
+    return payload;
+  }
+
+  // T07 — preflight the import whenever any input changes; update the
+  // preview pane, problem list, and Import button enable state.
+  let preflightSeq = 0;
+  let preflightTimer = null;
+  function schedulePreflight() {
+    if (preflightTimer) clearTimeout(preflightTimer);
+    preflightTimer = setTimeout(runPreflight, 250);
+  }
+  async function runPreflight() {
+    const seq = ++preflightSeq;
+    const submit = $('import-submit');
+    const path = $('import-path').value.trim();
+    if (!path) {
+      submit.disabled = true;
+      setText($('pv-git-status'), '等待路径输入');
+      setText($('pv-hook'), '等待 preflight');
+      setText($('pv-ai-profile'), '—');
+      setText($('pv-knowledge-root'), $('knowledge-root').value || '—');
+      $('import-preflight').hidden = true;
+      $('import-errors').hidden = true;
+      $('import-auto-init').hidden = true;
+      return;
+    }
+    const payload = buildImportPayload();
+    try {
+      const result = await api('/api/projects/preflight-import', { method: 'POST', body: JSON.stringify(payload) });
+      if (seq !== preflightSeq) return;
+      renderPreflight(result);
+    } catch (error) {
+      if (seq !== preflightSeq) return;
+      submit.disabled = true;
+      const err = $('import-errors');
+      err.hidden = false;
+      err.textContent = `Preflight 失败：${error.message}`;
+    }
+  }
+  function renderPreflight(result) {
+    const submit = $('import-submit');
+    submit.disabled = !result.ready;
+    setText($('pv-knowledge-root'), result.effective && result.effective.knowledgeRoot || '—');
+    if (result.effective && result.effective.aiProfile) {
+      setText($('pv-ai-profile'), `${result.effective.aiProfile.id} (${result.effective.aiProfile.source})`);
+    } else {
+      setText($('pv-ai-profile'), '—');
+    }
+    const gitCheck = result.checks && result.checks.git;
+    if (gitCheck && gitCheck.ok) {
+      const desc = gitCheck.emptyRepo
+        ? 'Git 仓库（空仓库）'
+        : gitCheck.headCommit
+          ? `Git 仓库 @ ${gitCheck.headCommit.slice(0, 7)}`
+          : 'Git 仓库';
+      setText($('pv-git-status'), desc);
+    } else if (gitCheck && gitCheck.plannedInit) {
+      setText($('pv-git-status'), '非 Git 目录（将自动初始化）');
+    } else {
+      setText($('pv-git-status'), '路径无效');
+    }
+    const hookCheck = result.checks && result.checks.hook;
+    if (hookCheck && hookCheck.ok) {
+      setText($('pv-hook'), hookCheck.reason === 'legacy-v1' ? '已检测到 v1 Hook，将升级到 v2' : '准备安装托管 Hook');
+    } else if (hookCheck && hookCheck.reason === 'third-party') {
+      setText($('pv-hook'), '⚠ 第三方 Hook（不会覆盖）');
+    } else {
+      setText($('pv-hook'), '—');
+    }
+    const autoInit = $('import-auto-init');
+    autoInit.hidden = !result.plannedGitInit;
+    const preNotice = $('import-preflight');
+    if (result.ready) {
+      preNotice.hidden = false;
+      preNotice.className = 'notice';
+      preNotice.textContent = '所有前置条件就绪，可以导入。';
+    } else {
+      preNotice.hidden = true;
+    }
+    const errNotice = $('import-errors');
+    if (result.problems && result.problems.length) {
+      errNotice.hidden = false;
+      errNotice.className = 'notice error';
+      errNotice.replaceChildren();
+      const strong = document.createElement('strong'); strong.textContent = '导入前需要处理：'; errNotice.append(strong);
+      const list = document.createElement('ul');
+      list.style.margin = '6px 0 0 18px';
+      list.style.padding = '0';
+      for (const problem of result.problems) {
+        const li = document.createElement('li');
+        li.textContent = `${problem.message} [${problem.code}]`;
+        if (problem.action) {
+          const hint = document.createElement('span');
+          hint.className = 'muted';
+          hint.style.marginLeft = '6px';
+          hint.textContent = `操作：${problem.action}`;
+          li.append(hint);
+        }
+        list.append(li);
+      }
+      errNotice.append(list);
+    } else {
+      // Clear stale text from a previous render so the notice does not
+      // display a phantom problem after the user fixes the input.
+      errNotice.hidden = true;
+      errNotice.textContent = '';
+    }
   }
   async function sendChat() {
     const project = activeProject(), text = $('chat-input').value.trim(); if (!project || !text) return;
@@ -500,7 +644,70 @@
   $('close-settings').addEventListener('click', closeSettings); $('settings-backdrop').addEventListener('click', closeSettings);
   $('theme-button').addEventListener('click', toggleTheme); $('client-theme').addEventListener('click', toggleTheme);
   $('mobile-project').addEventListener('change', event => selectProject(event.target.value));
+  // T10: UI language toggle in the settings drawer header.
+  const uiLang = $('ui-language');
+  if (uiLang) {
+    uiLang.value = activeLanguage();
+    uiLang.addEventListener('change', event => {
+      setLanguage(event.target.value);
+      renderI18nLabels();
+    });
+  }
+  window.__PK_I18N_ONCHANGE__ = () => {
+    if (uiLang) uiLang.value = activeLanguage();
+    renderI18nLabels();
+  };
+  function renderI18nLabels() {
+    const map = {
+      'wb-state': 'app.workbench.state.ready',
+      'import-language': null, // options translated at fill time
+    };
+    for (const [id, key] of Object.entries(map)) {
+      const node = $(id);
+      if (node && key) node.textContent = i18n(key);
+    }
+    // Re-render import view labels if visible.
+    if ($('import-path') && $('import-path').placeholder) {
+      $('import-path').placeholder = i18n('app.import.path.placeholder');
+    }
+  }
   $('import-form').addEventListener('submit', submitImport);
+  // T07: any change in the import form re-runs preflight; the Import button
+  // stays disabled until every required prerequisite is satisfied.
+  for (const id of ['import-path', 'import-language', 'import-profile', 'import-team-enabled', 'import-team-store', 'import-team-subdir', 'import-team-provider']) {
+    $(id).addEventListener('input', schedulePreflight);
+    $(id).addEventListener('change', schedulePreflight);
+  }
+  // T07: Desktop folder picker — only visible when the Desktop preload has
+  // exposed window.projectKnowledgeDesktop.pickFolder.
+  const desktop = typeof window !== 'undefined' ? window.projectKnowledgeDesktop : null;
+  if (desktop && typeof desktop.pickFolder === 'function') {
+    const picker = $('import-pick-folder');
+    picker.hidden = false;
+    picker.addEventListener('click', async () => {
+      try {
+        const result = await desktop.pickFolder();
+        if (result && result.path) {
+          $('import-path').value = result.path;
+          schedulePreflight();
+        }
+      } catch (error) {
+        const err = $('import-errors');
+        err.hidden = false;
+        err.className = 'notice error';
+        err.textContent = `目录选择器失败：${error.message}`;
+      }
+    });
+  }
+  // T07: reset button must re-run preflight so the Import button state matches
+  // an empty form.
+  const importReset = $('import-reset');
+  if (importReset) {
+    importReset.addEventListener('click', () => setTimeout(schedulePreflight, 0));
+  }
+  // T07: whenever settings panel closes, knowledge root may have changed;
+  // re-run preflight so the preview reflects the new root.
+  for (const id of ['knowledge-root']) $(id).addEventListener('change', schedulePreflight);
   $('send-btn').addEventListener('click', sendChat);
   $('chat-input').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendChat(); } });
   $('save-knowledge').addEventListener('click', async () => { try { await api('/api/settings', { method: 'PATCH', body: JSON.stringify({ knowledge: { rootPath: $('knowledge-root').value } }) }); await loadState(); } catch (error) { alert(error.message); } });
