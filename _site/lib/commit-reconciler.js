@@ -232,12 +232,21 @@ class CommitReconciler {
     const processed = [];
     while (true) {
       if (!scan.commits.length) {
-        await this.projectStore.updateState(projectId, draft => {
-          if (!draft.analysis.activeClaim) draft.analysis.status = 'idle';
-          draft.analysis.lastError = null;
-        });
-        await this.log('debug', 'reconcile.no_pending', 'No pending commits.', { projectId, operationId });
-        return { ok: true, status: 'idle', processed };
+        // Only set status='idle' when we never processed any commits in
+        // this runSweep call. When we DID process commits and the re-scan
+        // finds nothing more, the per-commit advanceState() has already
+        // set status='state.advanced'; resetting it here would clobber
+        // that observable post-processing state and is what the user sees
+        // as the analysis "never advancing" in the UI.
+        if (!processed.length) {
+          await this.projectStore.updateState(projectId, draft => {
+            if (!draft.analysis.activeClaim) draft.analysis.status = 'idle';
+            draft.analysis.lastError = null;
+          });
+          await this.log('debug', 'reconcile.no_pending', 'No pending commits.', { projectId, operationId });
+          return { ok: true, status: 'idle', processed };
+        }
+        return { ok: true, status: 'completed', processed };
       }
       for (const commitSha of scan.commits) {
         const result = await this.processCommit(projectId, trigger, operationId, config, scan.branch, commitSha);

@@ -143,6 +143,14 @@ async function waitFor(predicate, { label, timeoutMs = 60_000, intervalMs = 200 
       const secondFile = path.join(knowledgePath, 'changes', `${headSha.slice(0, 12)}.md`);
       assert(fs.existsSync(firstFile), `first pending commit must have a knowledge Markdown file at ${firstFile}`);
       assert(fs.existsSync(secondFile), `second pending commit (HEAD) must have a knowledge Markdown file at ${secondFile}`);
+      // The reconciler re-scans after each batch and may overwrite
+      // analysis.status with 'idle' if it sees an empty commit list. The
+      // post-fix runSweep only writes 'idle' when nothing was processed,
+      // so we still read 'state.advanced' here. Wait briefly to give
+      // any trailing reconcile work a chance to settle so the read is
+      // deterministic across fast and slow machines (the CI failure was
+      // a timing race around this exact transition).
+      await new Promise(resolve => setTimeout(resolve, 500));
       const finalState = await (await fetch(`${BASE}/api/projects/${projectId}`)).json();
       assert.strictEqual(finalState.project.state.lastAnalyzedCommit, headSha);
       assert.strictEqual(finalState.project.state.trackingStartCommit, baselineSha);

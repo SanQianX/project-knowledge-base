@@ -195,6 +195,12 @@ async function killServer(server) {
       });
       stateA = await waitForState(serverA, projectA, s => s.lastAnalyzedCommit === headA, 'scenario A reconciliation');
     }
+    // Give the trailing reconcile work a chance to settle so the post-
+    // fix runSweep does not overwrite analysis.status with 'idle' between
+    // waitForState returning and the assertion reading the state.
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const finalStateA = await (await serverFetch(serverA, `${serverA.base}/api/projects/${projectA}`, undefined)).body;
+    stateA = finalStateA.project.state;
     assert.strictEqual(stateA.analysis.activeClaim, null, 'analysis.activeClaim must be null after promotion');
     assert.strictEqual(stateA.analysis.status, 'state.advanced', 'analysis.status must be state.advanced');
     assert.strictEqual(stateA.trackingStartCommit, stateA.lastAnalyzedCommit === headA ? stateA.trackingStartCommit : null);
