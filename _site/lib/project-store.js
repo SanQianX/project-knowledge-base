@@ -173,6 +173,33 @@ class ProjectStore {
     });
   }
 
+  /**
+   * Deliberate one-way upgrade: write a canonical repo-identity/v1 onto a
+   * project that was imported before v4.2.3 (repoIdentity null or a legacy
+   * { commonDir }-only shape). Only the Bridge consumer migration calls
+   * this; it is intentionally not reachable through the generic config
+   * update path. Rewrites are refused once a v1 identity exists.
+   */
+  async migrateRepoIdentity(projectId, repoIdentity) {
+    validateProjectId(projectId);
+    if (!repoIdentity || typeof repoIdentity !== 'object'
+      || repoIdentity.schema !== 'repo-identity/v1'
+      || typeof repoIdentity.workspaceId !== 'string'
+      || typeof repoIdentity.workspaceRoot !== 'string' || !repoIdentity.workspaceRoot) {
+      throw new DomainError('INVALID_ARGUMENT', 'migrateRepoIdentity requires a canonical repo-identity/v1 object.');
+    }
+    return this.withProjectLock(projectId, async () => {
+      const current = this.readConfig(projectId);
+      if (current.repoIdentity && typeof current.repoIdentity.workspaceId === 'string') {
+        return current;
+      }
+      const next = { ...current, repoIdentity };
+      validateProjectConfig(next, projectId);
+      this.atomic.writeJsonAtomic(this.layout.getProjectConfigPath(projectId), next);
+      return next;
+    });
+  }
+
   async updateState(projectId, updater, options = {}) {
     validateProjectId(projectId);
     if (typeof updater !== 'function') throw new DomainError('INVALID_ARGUMENT', 'State updater must be a function.');

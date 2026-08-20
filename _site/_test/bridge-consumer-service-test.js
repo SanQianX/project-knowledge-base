@@ -70,6 +70,20 @@ async function bridgeEvent(eventType, role, content, repoIdentity, sessionId, tu
   const started = await service.start();
   assert.strictEqual(started.started, true);
 
+  // The notifyUrl passed to start() must land in the registered consumer
+  // meta — connector wake-ups are routed through it. Regression: start(url)
+  // used to ignore its argument, leaving meta {} and drains unnotified.
+  {
+    const registered = await adapter.getConsumer('project-knowledge');
+    assert.strictEqual(registered.consumer.meta.notifyUrl, undefined, 'baseline service registered without notifyUrl');
+    const svc = new BridgeConsumerService({
+      bridgeAdapter: adapter, conversationStore: store, registryStore: registry, projectStore: projects, logger: null,
+    });
+    await svc.start('http://127.0.0.1:5757/api/bridge/notify');
+    const withUrl = await adapter.getConsumer('project-knowledge');
+    assert.strictEqual(withUrl.consumer.meta.notifyUrl, 'http://127.0.0.1:5757/api/bridge/notify', 'start(notifyUrl) wires the wake-up URL into consumer meta');
+  }
+
   // Phase A: develop in unimported CCB.
   const ccbUser = await bridgeEvent('user_prompt', 'user', 'Modify CCB parser', ccbIdentity, 'ccb-s1', 'turn-ccb-1');
   await bridgeEvent('assistant_response', 'assistant', 'CCB parser modified', ccbIdentity, 'ccb-s1', 'turn-ccb-1');
@@ -223,6 +237,56 @@ async function bridgeEvent(eventType, role, content, repoIdentity, sessionId, tu
   const offlineEvents = store2.readEvents('project-offline');
   assert.strictEqual(offlineEvents.length, 1, 'only post-attachment events project');
   assert.ok(offlineEvents[0].content.includes('after offline project attached'));
+
+  // Legacy upgrade (isolated world): a project imported before v4.2.3 has no
+  // workspaceId in its config. One drain backfills the canonical identity
+  // automatically and the project's conversations start projecting without
+  // any manual step.
+  {
+    const temp3 = fs.mkdtempSync(path.join(os.tmpdir(), `kb-bridge-consumer-legacy-${process.pid}-`));
+    const layout3 = new StorageLayout({ dataDir: path.join(temp3, 'data') });
+    const registry3 = new ProjectRegistryStore({ layout: layout3 });
+    const projects3 = new ProjectStore({ layout: layout3 });
+    const adapter3 = new BridgeAdapter({ dataDir: layout3.dataDir, bridgeModule, bridgeHomeDir: path.join(temp3, 'bridge-home') });
+    const store3 = new ConversationStore({ layout: layout3, projectStore: projects3, logger: null });
+    const emit3 = (eventType, role, content, repoIdentity, sessionId, turnId) =>
+      adapter3.bridge.appendConversationEvent({ source: 'claude-code', eventType, role, content, sessionId, turnId, repoIdentity });
+    await registry3.initialize();
+
+    const legacyPath = gitRepo('ccs-legacy');
+    const legacyIdentity = (await bridgeModule.resolveRepoContext(legacyPath)).repoIdentity;
+    await projects3.create('project-legacy', {
+      storageName: 'project-legacy', displayName: 'project-legacy',
+      repoPath: legacyPath, knowledgePath: path.join(temp3, 'knowledge', 'project-legacy'),
+      repoIdentity: { commonDir: path.join(legacyPath, '.git') }, // pre-v4.2.3 shape
+    }, {});
+    await registry3.add('project-legacy', { displayName: 'project-legacy' });
+    const legacyService = new BridgeConsumerService({
+      bridgeAdapter: adapter3, conversationStore: store3, registryStore: registry3, projectStore: projects3, logger: null,
+    });
+    await legacyService.start();
+    await emit3('user_prompt', 'user', 'legacy project conversation', legacyIdentity, 'legacy-s1', 'turn-legacy-1');
+    await legacyService.drain('legacy-migration');
+    const migratedConfig = projects3.readConfig('project-legacy');
+    assert.strictEqual(migratedConfig.repoIdentity.workspaceId, legacyIdentity.workspaceId, 'identity auto-migrated to v1 on first drain');
+    assert.ok(Number.isInteger(projects3.readState('project-legacy').conversationBaselineCursor), 'baseline established during the same drain');
+    const legacyEvents = store3.readEvents('project-legacy');
+    assert.strictEqual(legacyEvents.length, 1, 'post-migration conversation projected automatically');
+    assert.strictEqual(legacyEvents[0].content, 'legacy project conversation');
+
+    // Collision guard: a second legacy project pointing at the same working
+    // tree must NOT receive the same workspaceId (that would create the
+    // ambiguity the consumer refuses to guess through).
+    await projects3.create('project-legacy-clone', {
+      storageName: 'project-legacy-clone', displayName: 'project-legacy-clone',
+      repoPath: legacyPath, knowledgePath: path.join(temp3, 'knowledge', 'project-legacy-clone'),
+      repoIdentity: null,
+    }, {});
+    await registry3.add('project-legacy-clone', { displayName: 'project-legacy-clone' });
+    await legacyService.drain('legacy-collision');
+    const cloneConfig = projects3.readConfig('project-legacy-clone');
+    assert.ok(!(cloneConfig.repoIdentity && cloneConfig.repoIdentity.workspaceId), 'colliding workspace is never written to a second project');
+  }
 
   console.log('bridge-consumer-service-test PASS');
 })().catch(error => {

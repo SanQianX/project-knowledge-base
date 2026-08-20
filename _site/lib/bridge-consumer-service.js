@@ -66,6 +66,67 @@ class BridgeConsumerService {
     return map;
   }
 
+  /**
+   * Upgrade path for projects imported before v4.2.3: their config carries
+   * no workspaceId, so the exact-match consumer would skip them forever.
+   * For every such project with an existing repoPath, resolve the canonical
+   * repo-identity/v1 and persist it. A workspaceId already claimed by
+   * another project is never written twice — ambiguity stays visible as a
+   * configuration problem instead of being silently created here.
+   */
+  async _ensureWorkspaceIdentities() {
+    if (!this.projectStore || typeof this.projectStore.readConfig !== 'function') return;
+    if (!this.bridgeAdapter || typeof this.bridgeAdapter.resolveRepoIdentity !== 'function') return;
+    const ids = this.registryStore && typeof this.registryStore.listIds === 'function'
+      ? this.registryStore.listIds()
+      : [];
+    const claimed = new Map();
+    const pending = [];
+    for (const projectId of ids) {
+      try {
+        const config = this.projectStore.readConfig(projectId);
+        const identity = config && config.repoIdentity;
+        if (identity && typeof identity.workspaceId === 'string') {
+          claimed.set(identity.workspaceId, projectId);
+        } else if (config.repoPath) {
+          pending.push({ projectId, repoPath: config.repoPath, displayName: config.displayName || projectId });
+        }
+      } catch {
+        // Unreadable configs are left alone; migration never blocks the drain.
+      }
+    }
+    for (const entry of pending) {
+      try {
+        const resolved = await this.bridgeAdapter.resolveRepoIdentity(entry.repoPath);
+        if (resolved.status !== 'ok' || !resolved.repoIdentity) continue;
+        const workspaceId = resolved.repoIdentity.workspaceId;
+        if (claimed.has(workspaceId)) {
+          await this._log('warn', 'bridge_consumer.identity_collision', 'Legacy project resolves to a workspace already claimed by another project; skipping identity migration.', {
+            component: 'bridge-consumer',
+            projectId: entry.projectId,
+            claimedBy: claimed.get(workspaceId),
+            workspaceIdHash: workspaceId,
+          });
+          continue;
+        }
+        if (typeof this.projectStore.migrateRepoIdentity !== 'function') return;
+        await this.projectStore.migrateRepoIdentity(entry.projectId, resolved.repoIdentity);
+        claimed.set(workspaceId, entry.projectId);
+        await this._log('info', 'bridge_consumer.identity_backfilled', 'Legacy project upgraded with a canonical workspace identity.', {
+          component: 'bridge-consumer',
+          projectId: entry.projectId,
+          workspaceIdHash: workspaceId,
+        });
+      } catch (error) {
+        await this._log('warn', 'bridge_consumer.identity_backfill_failed', 'Legacy project identity migration failed; project stays capture-inactive.', {
+          component: 'bridge-consumer',
+          projectId: entry.projectId,
+          error,
+        });
+      }
+    }
+  }
+
   // I-14 recovery policy: a project imported while the Bridge was unavailable
   // gets its baseline established at the CURRENT high watermark on the first
   // successful attachment — pre-import global history is never backfilled.
@@ -175,6 +236,7 @@ class BridgeConsumerService {
         this._lastDrainErrorCode = highResult.reason || 'bridge-unavailable';
         break;
       }
+      await this._ensureWorkspaceIdentities();
       await this._ensureBaselines(highResult.cursor);
       const target = through === undefined ? highResult.cursor : Math.min(through, highResult.cursor);
       if (ack >= target) break;
@@ -241,8 +303,9 @@ class BridgeConsumerService {
     return next;
   }
 
-  async start() {
+  async start(notifyUrl) {
     if (this._started) return { started: false };
+    if (notifyUrl) this.notifyUrl = notifyUrl;
     const meta = this.notifyUrl ? { notifyUrl: this.notifyUrl } : {};
     const registration = await this.bridgeAdapter.registerConsumer(this.consumerName, meta);
     this._started = true;
