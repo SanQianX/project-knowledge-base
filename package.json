@@ -1,6 +1,6 @@
 {
   "name": "project-knowledge",
-  "version": "4.2.3",
+  "version": "4.2.4",
   "description": "Knowledge base manager with Git integration, AI-driven analysis, and bilingual (zh-CN/en-US) knowledge output",
   "main": "_site/server.js",
   "scripts": {
@@ -65,13 +65,13 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.141",
     "@huggingface/transformers": "3.8.1",
-    "@sanqianx/ai-coding-event-bridge": "^0.1.0",
     "@lancedb/lancedb": "0.31.0",
     "@modelcontextprotocol/sdk": "1.29.0",
+    "@sanqianx/ai-coding-event-bridge": "^0.1.1",
     "cross-spawn": "7.0.6",
-    "jsonc-parser": "3.3.1",
     "http-proxy-agent": "7.0.2",
     "https-proxy-agent": "7.0.6",
+    "jsonc-parser": "3.3.1",
     "socks-proxy-agent": "8.0.5",
     "ws": "^8.21.0"
   }

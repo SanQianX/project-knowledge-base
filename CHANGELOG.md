@@ -1,5 +1,24 @@
 # Changelog
 
+## [4.2.4] - 2026-08-20
+
+- Fixed the Bridge consumer never receiving connector wake-ups on a fresh
+  install: `BridgeConsumerService.start(notifyUrl)` ignored its argument, so
+  the `project-knowledge` consumer registered with empty metadata. Captured
+  conversations piled up in the journal until the next server restart instead
+  of appearing in Development Conversation immediately. The wake-up URL now
+  lands in the consumer registration and drains fire per event.
+- Projects imported before v4.2.3 (no canonical `repo-identity/v1`) are
+  upgraded automatically: on the first consumer drain after updating, each
+  legacy project with an existing repository path gets its workspace identity
+  resolved and persisted, its conversation baseline established, and its
+  external conversations start projecting — no manual migration step. A
+  workspace already claimed by another project is never written twice.
+- The Bridge dependency now resolves to `@sanqianx/ai-coding-event-bridge`
+  0.1.1, which accepts Claude Code's real `hook_event_name` payload field
+  (previously such payloads were misrouted to the Codex connector and lost as
+  capture gaps).
+
 ## [4.2.3] - 2026-08-20
 
 - Development Conversation now captures real external Claude Code / Codex /
