@@ -23,6 +23,7 @@ const { Logger, LogRepository } = require('./structured-logger');
 const { CommitReconciler, reconcileProjectCommits } = require('./commit-reconciler');
 const { handlePostCommitEvent } = require('./post-commit-automation');
 const { KnowledgePromotionService, hashBuffer } = require('./knowledge-promotion');
+const { resolveEffectiveAiProfile } = require('./ai-profile-resolver');
 const { IndexService } = require('./index-service');
 const { KnowledgeDatabase } = require('./knowledge-db');
 const { LocalEmbeddingService } = require('./embedding-service');
@@ -395,8 +396,8 @@ class RuntimeKnowledgeAnalyzer {
   async runClaim(input) {
     if (process.env.KB_AUTOMATION_FAKE_CLAUDE === '1') return this.fakeResult(input);
     const settings = this.settingsStore.read();
-    const profile = profileById(settings, input.config.aiProfileId);
-    if (!profile || profile.enabled === false) throw new DomainError('INVALID_ARGUMENT', 'The configured AI profile is unavailable.', { status: 409 });
+    const resolved = resolveEffectiveAiProfile(settings, input.config);
+    const profile = resolved.profile;
     const contract = `\n\nOUTPUT CONTRACT\nRead exact Git evidence only beneath ${input.evidenceRoot}. Write only beneath ${input.stagingPath}. Put Markdown under files/<allowed-path> and write ${input.manifestPath} with schema knowledge-staging-manifest/v1, projectId ${input.projectId}, runId ${input.claim.runId}, commitSha ${input.claim.commitSha}, and non-empty operations. Each operation needs path, operation, sha256, reason, and evidenceReferences containing commit:${input.claim.commitSha}, patch:${input.claim.patchHash}, conversation:${input.claim.conversationSnapshotHash}, and retrieval:${input.claim.retrievalManifestHash}. Do not read or modify source files, final knowledge, other runs, or indexes.`;
     const started = claudeCliRunner.startAutomationSession({
       slug: input.projectId,
@@ -488,6 +489,7 @@ function createRuntime(options = {}) {
     conversationStore,
     retrievalService: knowledgeRuntime.retrievalService,
     claimProcessor: promotionService,
+    settingsStore,
     logger,
   });
   const lifecycleService = options.lifecycleService || new ProjectLifecycleService({
@@ -513,21 +515,123 @@ async function migrateManagedHooks(runtime) {
   for (const projectId of runtime.registryStore.listIds()) {
     const config = runtime.projectStore.readConfig(projectId);
     const state = runtime.projectStore.readState(projectId);
-    if (state.hook.migrationVersion >= 2 || !fs.existsSync(config.repoPath)) continue;
+    if (!fs.existsSync(config.repoPath)) continue;
+    if (state.hook.migrationVersion >= 2) {
+      results.push({ projectId, ok: true, status: 'verified', reason: 'already-migrated', migrationVersion: state.hook.migrationVersion });
+      continue;
+    }
+    let outcome;
     try {
-      const result = hookManager.migrateManagedHook({ repoPath: config.repoPath, projectId, triggerScriptPath: TRIGGER_SCRIPT_PATH });
-      await runtime.projectStore.updateState(projectId, draft => {
-        draft.hook.migrationVersion = 2;
-        draft.hook.managedVersion = Number(result.managedVersion || 2);
-        draft.hook.lastVerifiedAt = new Date().toISOString();
-      });
-      results.push({ projectId, ok: true, ...result });
+      outcome = await reconcileLegacyHookMigration(runtime, projectId, config, state);
     } catch (error) {
       await runtime.logger.warn('hook.migration_failed', 'Managed Hook migration could not be completed.', { projectId, error });
-      results.push({ projectId, ok: false, error: { code: error.code || 'HOOK_INVALID', message: error.message } });
+      outcome = { ok: false, status: 'failed', reason: error.code || 'HOOK_INVALID', error: { code: error.code || 'HOOK_INVALID', message: error.message } };
+    }
+    if (outcome.status === 'verified') {
+      await runtime.projectStore.updateState(projectId, draft => {
+        draft.hook.migrationVersion = 2;
+        draft.hook.managedVersion = Number(outcome.managedVersion || 2);
+        draft.hook.lastVerifiedAt = new Date().toISOString();
+        if (outcome.conflict) draft.hook.lastConflict = outcome.conflict;
+        else delete draft.hook.lastConflict;
+      });
+      results.push({ projectId, ok: true, status: 'verified', managedVersion: outcome.managedVersion, reason: outcome.reason });
+    } else if (outcome.status === 'conflict') {
+      await runtime.projectStore.updateState(projectId, draft => {
+        if (outcome.conflict) draft.hook.lastConflict = outcome.conflict;
+      });
+      results.push({ projectId, ok: false, status: 'conflict', reason: outcome.reason, conflict: outcome.conflict });
+    } else {
+      // 'failed' or 'pending' — leave migrationVersion at its prior value so the
+      // next startup can re-attempt. Persist the failure reason so the UI can
+      // surface it (T04 will read this).
+      await runtime.projectStore.updateState(projectId, draft => {
+        draft.hook.lastConflict = outcome.conflict || { code: outcome.reason || 'HOOK_INVALID', message: outcome.error && outcome.error.message || 'Hook migration did not verify.', retryable: true };
+      });
+      results.push({ projectId, ok: false, status: outcome.status || 'failed', reason: outcome.reason, error: outcome.error });
     }
   }
   return results;
+}
+
+// One-pass state machine for a single project's legacy hook migration.
+// Returns an outcome object — the caller (migrateManagedHooks) is responsible
+// for persisting the resulting state. The outcome shape:
+//   { status: 'verified', managedVersion, reason }  — hook is installed + verified
+//   { status: 'conflict', reason, conflict }       — third-party hook present, no overwrite
+//   { status: 'failed',   reason, error }           — write/verify failed; no migration
+//   { status: 'pending',  reason }                  — unknown state; leave migrationVersion alone
+async function reconcileLegacyHookMigration(runtime, projectId, config, state) {
+  const repoPath = config.repoPath;
+  // Use the public hook-manager surface; we never write to the repo ourselves.
+  const status = hookManager.readHookStatus({ repoPath, projectId });
+  // Case 1: already current v2 + verified.
+  if (status.kbManaged && status.managedVersion === 2 && status.installed) {
+    return { status: 'verified', managedVersion: status.managedVersion, reason: 'current' };
+  }
+  // Case 4: third-party hook. Do not overwrite.
+  if (!status.kbManaged && status.reason && /third-party/i.test(status.reason)) {
+    return {
+      status: 'conflict',
+      reason: 'third-party',
+      conflict: { code: 'HOOK_CONFLICT', message: 'A third-party post-commit hook is installed; Project-Knowledge will not overwrite it.', reason: status.reason },
+    };
+  }
+  // Case 5: managed hook exists but its marker belongs to another project.
+  if (status.kbManaged && status.managedVersion === 2 && !status.installed) {
+    return {
+      status: 'conflict',
+      reason: 'wrong-project',
+      conflict: { code: 'HOOK_CONFLICT', message: 'A managed hook belonging to another project is installed.', projectId: status.projectId },
+    };
+  }
+  // Case 2 + 3: delegate to migrateManagedHook which handles v1 replacement
+  // and reports reason=missing for the missing case. Then install + verify
+  // for the missing path.
+  let migrateOutcome;
+  try {
+    migrateOutcome = hookManager.migrateManagedHook({
+      repoPath, projectId, triggerScriptPath: TRIGGER_SCRIPT_PATH,
+    });
+  } catch (error) {
+    if (error && error.code === 'HOOK_CONFLICT') {
+      return {
+        status: 'conflict',
+        reason: 'third-party',
+        conflict: { code: 'HOOK_CONFLICT', message: error.message, reason: error.details && error.details.reason },
+      };
+    }
+    throw error;
+  }
+  if (migrateOutcome.migrated) {
+    // Case 2: v1 -> v2 succeeded via the legacy replacement path.
+    const verify = hookManager.readHookStatus({ repoPath, projectId });
+    if (!verify.kbManaged || verify.managedVersion !== 2 || !verify.installed) {
+      throw new DomainError('HOOK_INVALID', 'Migrated v1 -> v2 hook did not verify.', { status: 500 });
+    }
+    return { status: 'verified', managedVersion: verify.managedVersion, reason: 'v1-migrated' };
+  }
+  if (migrateOutcome.reason === 'current') {
+    // migrateManagedHook returned reason=current but we already filtered that
+    // path above; this is a defensive fallback.
+    return { status: 'verified', managedVersion: migrateOutcome.managedVersion, reason: 'current' };
+  }
+  if (migrateOutcome.reason === 'missing') {
+    // Case 3: missing entirely. Install + verify.
+    const installed = hookManager.installHook({
+      repoPath, projectId, triggerScriptPath: TRIGGER_SCRIPT_PATH,
+    });
+    if (!installed || installed.ok !== true) {
+      throw new DomainError('HOOK_INVALID', 'Newly installed hook failed to install.', { status: 500 });
+    }
+    const verify = hookManager.readHookStatus({ repoPath, projectId });
+    if (!verify.kbManaged || verify.managedVersion !== 2 || !verify.installed) {
+      throw new DomainError('HOOK_INVALID', 'Newly installed hook did not verify.', { status: 500 });
+    }
+    return { status: 'verified', managedVersion: verify.managedVersion, reason: 'installed' };
+  }
+  // Unknown — leave pending so the next startup re-attempts.
+  return { status: 'pending', reason: migrateOutcome.reason || 'unknown' };
 }
 
 async function initializeRuntime(runtime) {
@@ -788,6 +892,14 @@ function createRequestHandler(runtime, options = {}) {
       }
 
       if (method === 'GET' && pathname === '/api/projects') return send(res, 200, { ok: true, projects: listProjectViews(runtime.registryStore, runtime.projectStore) });
+      // T06: pure preflight endpoint — never mutates state. The UI calls
+      // this on path pick / language change / profile change to keep the
+      // "Import" button disabled until every prerequisite is satisfied.
+      if (method === 'POST' && pathname === '/api/projects/preflight-import') {
+        const body = await readJsonBody(req);
+        const result = await runtime.lifecycleService.preflightImport(body);
+        return send(res, 200, { ok: true, ...result });
+      }
       if (method === 'POST' && pathname === '/api/projects/import') {
         const body = await readJsonBody(req);
         const result = await runtime.lifecycleService.importProject(body);
@@ -850,6 +962,108 @@ function createRequestHandler(runtime, options = {}) {
         if (!runtime.registryStore.readDisplaySnapshot(projectId)) throw new DomainError('PROJECT_NOT_FOUND', 'Project was not found.', { status: 404 });
         const config = runtime.projectStore.readConfig(projectId);
         return send(res, 200, { ok: true, projectId, ...(await inspectGitRepository(config.repoPath)) });
+      }
+      // T04: per-project hook health snapshot. Lets the UI explain exactly why
+      // commit auto-update is unavailable (missing / conflict / wrong-project /
+      // broken-managed) without forcing the user to inspect .git/hooks manually.
+      const hookStatusMatch = pathname.match(/^\/api\/projects\/([^/]+)\/hook-status$/);
+      if (hookStatusMatch && method === 'GET') {
+        const projectId = validateProjectId(decodeURIComponent(hookStatusMatch[1]));
+        if (!runtime.registryStore.readDisplaySnapshot(projectId)) throw new DomainError('PROJECT_NOT_FOUND', 'Project was not found.', { status: 404 });
+        const config = runtime.projectStore.readConfig(projectId);
+        const state = runtime.projectStore.readState(projectId);
+        let status;
+        try {
+          status = hookManager.readHookStatus({ repoPath: config.repoPath, projectId });
+        } catch (error) {
+          status = { ok: true, installed: false, repoPath: config.repoPath, reason: error.message };
+        }
+        const repairable = fs.existsSync(config.repoPath)
+          && !(status.installed && status.kbManaged && status.managedVersion === 2)
+          && !(!status.kbManaged && status.reason && /third-party/i.test(status.reason || ''))
+          && !(status.kbManaged && !status.installed);
+        return send(res, 200, {
+          ok: true,
+          projectId,
+          hook: {
+            repoPath: status.repoPath,
+            hookPath: status.hookPath || null,
+            installed: Boolean(status.installed),
+            managed: Boolean(status.kbManaged),
+            managedVersion: status.managedVersion || 0,
+            runtimeTarget: 'node', // T02 contract: hook body uses ELECTRON_RUN_AS_NODE=1 prefix
+            lastVerifiedAt: state.hook && state.hook.lastVerifiedAt || null,
+            migrationVersion: state.hook && state.hook.migrationVersion || 0,
+            conflict: state.hook && state.hook.lastConflict || null,
+            reason: status.reason || null,
+            repairAvailable: Boolean(repairable),
+          },
+        });
+      }
+      // T04: explicit repair action. Only repairs missing/broken managed hooks;
+      // never overwrites a third-party hook (that requires a separate UX decision).
+      const hookRepairMatch = pathname.match(/^\/api\/projects\/([^/]+)\/hook-repair$/);
+      if (hookRepairMatch && method === 'POST') {
+        const projectId = validateProjectId(decodeURIComponent(hookRepairMatch[1]));
+        if (!runtime.registryStore.readDisplaySnapshot(projectId)) throw new DomainError('PROJECT_NOT_FOUND', 'Project was not found.', { status: 404 });
+        const config = runtime.projectStore.readConfig(projectId);
+        if (!fs.existsSync(config.repoPath)) {
+          throw new DomainError('PROJECT_NOT_FOUND', 'Project repository path is missing on disk.', { status: 404 });
+        }
+        const status = hookManager.readHookStatus({ repoPath: config.repoPath, projectId });
+        if (!status.kbManaged && status.reason && /third-party/i.test(status.reason || '')) {
+          throw new DomainError('HOOK_CONFLICT', 'A third-party post-commit hook is installed; Project-Knowledge will not overwrite it.', {
+            status: 409,
+            details: { reason: status.reason },
+          });
+        }
+        const installResult = hookManager.installHook({
+          repoPath: config.repoPath, projectId, triggerScriptPath: TRIGGER_SCRIPT_PATH,
+        });
+        const verify = hookManager.readHookStatus({ repoPath: config.repoPath, projectId });
+        await runtime.projectStore.updateState(projectId, draft => {
+          draft.hook.migrationVersion = 2;
+          draft.hook.managedVersion = verify.managedVersion || 2;
+          draft.hook.lastVerifiedAt = new Date().toISOString();
+          delete draft.hook.lastConflict;
+        });
+        await runtime.logger.info('hook.repair_completed', 'Hook repair succeeded.', { projectId, phase: 'verify', managedVersion: verify.managedVersion });
+        return send(res, 200, {
+          ok: true,
+          projectId,
+          installed: verify.kbManaged && verify.installed,
+          managedVersion: verify.managedVersion,
+          hookPath: verify.hookPath,
+        });
+      }
+      // T13: Project Goal editor — read / write GOAL.md atomically.
+      //   GET    /api/projects/:projectId/goal  -> { content, exists }
+      //   PUT    /api/projects/:projectId/goal  -> { ok }  body: { content }
+      // Atomic write guarantees the file is never partially written, and
+      // only the project's own knowledgePath is touched — no cross-project
+      // side effects. Other knowledge files in the same project are
+      // untouched; the goal file is a single dedicated file.
+      const goalMatch = pathname.match(/^\/api\/projects\/([^/]+)\/goal$/);
+      if (goalMatch) {
+        const projectId = validateProjectId(decodeURIComponent(goalMatch[1]));
+        if (!runtime.registryStore.readDisplaySnapshot(projectId)) throw new DomainError('PROJECT_NOT_FOUND', 'Project was not found.', { status: 404 });
+        const config = runtime.projectStore.readConfig(projectId);
+        const goalPath = path.join(config.knowledgePath, 'GOAL.md');
+        if (method === 'GET') {
+          if (!fs.existsSync(goalPath)) {
+            return send(res, 200, { ok: true, projectId, exists: false, content: '' });
+          }
+          return send(res, 200, { ok: true, projectId, exists: true, content: fs.readFileSync(goalPath, 'utf8') });
+        }
+        if (method === 'PUT') {
+          const body = await readJsonBody(req);
+          if (typeof body.content !== 'string') throw new DomainError('INVALID_ARGUMENT', 'content must be a string.');
+          if (body.content.length > 256 * 1024) throw new DomainError('INVALID_ARGUMENT', 'content exceeds 256KB limit.', { status: 413 });
+          const AtomicFile = require('./atomic-file');
+          AtomicFile.writeFileAtomic(goalPath, body.content, { mode: 0o644 });
+          await runtime.logger.info('goal.updated', 'Project GOAL.md updated.', { projectId, phase: 'goal', context: { bytes: body.content.length } });
+          return send(res, 200, { ok: true, projectId, exists: true, path: goalPath });
+        }
       }
       const contextPackMatch = pathname.match(/^\/api\/projects\/([^/]+)\/context-pack$/);
       if (contextPackMatch && method === 'POST') {
@@ -1048,9 +1262,8 @@ function createRequestHandler(runtime, options = {}) {
         if (!runtime.registryStore.readDisplaySnapshot(projectId)) throw new DomainError('PROJECT_NOT_FOUND', 'Project was not found.', { status: 404 });
         const config = runtime.projectStore.readConfig(projectId);
         const settings = runtime.settingsStore.read();
-        const profileId = config.aiProfileId || settings.ai.defaultProfileId;
-        const profile = profileById(settings, profileId);
-        if (!profile || profile.enabled === false) throw new DomainError('INVALID_ARGUMENT', 'A usable AI profile is required.', { status: 409 });
+        const resolved = resolveEffectiveAiProfile(settings, config);
+        const profile = resolved.profile;
         const result = claudeCliRunner.startChatSession({ slug: projectId, projectPath: config.repoPath, kbPath: config.knowledgePath, aiProfile: profile, permissionMode: body.permissionMode });
         return send(res, 201, { ok: true, projectId, ...result });
       }
@@ -1078,7 +1291,8 @@ function createRequestHandler(runtime, options = {}) {
           if (typeof body.text !== 'string' || !body.text.trim()) throw new DomainError('INVALID_ARGUMENT', 'text must be a non-empty string.');
           const config = runtime.projectStore.readConfig(session.projectSlug);
           const settings = runtime.settingsStore.read();
-          const profile = profileById(settings, config.aiProfileId || settings.ai.defaultProfileId);
+          const resolved = resolveEffectiveAiProfile(settings, config);
+          const profile = resolved.profile;
           // Workbench chat is internal AI runtime (I-02): sending a message
           // must NOT auto-record requirements or append Development
           // Conversation events. External capture flows through the Bridge.
@@ -1224,6 +1438,7 @@ module.exports = {
   RuntimeKnowledgeAnalyzer,
   createRuntime,
   initializeRuntime,
+  migrateManagedHooks,
   createRequestHandler,
   startServer,
   installProcessHandlers,

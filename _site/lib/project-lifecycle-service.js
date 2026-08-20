@@ -5,6 +5,7 @@ const { spawnSync } = require('child_process');
 const { DomainError, createId } = require('./contracts');
 const AtomicFile = require('./atomic-file');
 const hookManagerDefault = require('./hook-manager');
+const { resolveEffectiveAiProfile } = require('./ai-profile-resolver');
 
 function slugify(value) {
   const slug = String(value || '').trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
@@ -34,6 +35,177 @@ class ProjectLifecycleService {
     this.isProjectBusy = options.isProjectBusy || (() => false);
     this.bridgeAdapter = options.bridgeAdapter || null;
     this.fault = options.fault || (() => {});
+  }
+
+  // T06: pure preflight — does NOT mutate any state. Reports every
+  // prerequisite the UI must show before the user clicks Import. Any
+  // missing prerequisite is surfaced as a `problems[]` entry with an
+  // actionable message and an `action` the UI can offer (e.g. a
+  // "Configure knowledge root" link). The shape is intentionally flat so
+  // the UI can render it directly without per-field branching.
+  async preflightImport(input = {}) {
+    const localPath = String(input.localPath || '').trim();
+    const settings = this.settingsStore.read();
+    const problems = [];
+    const checks = {};
+    let knowledgeRoot = '';
+    try {
+      knowledgeRoot = this.layout.getKnowledgeRootPath(settings);
+    } catch (error) {
+      if (error && error.code === 'INVALID_ARGUMENT') {
+        problems.push({ code: 'KNOWLEDGE_ROOT_MISSING', message: 'Knowledge root is not configured.', action: 'CONFIGURE_KNOWLEDGE_ROOT' });
+        checks.knowledgeRoot = { ok: false, reason: 'unconfigured' };
+      } else {
+        throw error;
+      }
+    }
+
+    // Check 1: path exists and is a directory.
+    if (!localPath) {
+      problems.push({ code: 'PATH_REQUIRED', message: 'A local repository path is required.', action: 'CHOOSE_PATH' });
+      checks.path = { ok: false, reason: 'missing' };
+    } else if (!fs.existsSync(localPath) || !fs.statSync(localPath).isDirectory()) {
+      problems.push({ code: 'PATH_MISSING', message: 'The selected path does not exist or is not a directory.', action: 'CHOOSE_PATH' });
+      checks.path = { ok: false, reason: 'not-a-directory' };
+    } else {
+      checks.path = { ok: true };
+    }
+
+    // Check 2: git repository or can be initialized.
+    let repoInspection = null;
+    let plannedGitInit = false;
+    if (checks.path.ok) {
+      const inside = runGit(localPath, ['rev-parse', '--is-inside-work-tree'], { allowFailure: true });
+      if (!inside.ok) {
+        plannedGitInit = true;
+        checks.git = { ok: false, status: 'non-git', plannedInit: true, message: 'Directory is not a Git repository. Import will run `git init` before proceeding.' };
+      } else {
+        const top = runGit(localPath, ['rev-parse', '--show-toplevel']);
+        const head = runGit(localPath, ['rev-parse', '--verify', 'HEAD'], { allowFailure: true });
+        const commonDir = runGit(localPath, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
+        const branch = runGit(localPath, ['branch', '--show-current'], { allowFailure: true });
+        repoInspection = {
+          ok: true,
+          repoPath: top.ok ? path.resolve(top.stdout) : path.resolve(localPath),
+          commonDir: commonDir.ok ? path.resolve(commonDir.stdout) : '',
+          headCommit: head.ok ? head.stdout : null,
+          branch: branch.ok ? branch.stdout : '',
+          emptyRepo: !head.ok,
+        };
+        checks.git = { ok: true, status: repoInspection.emptyRepo ? 'empty' : 'ok', repoPath: repoInspection.repoPath, commonDir: repoInspection.commonDir, headCommit: repoInspection.headCommit, branch: repoInspection.branch };
+      }
+    }
+
+    // Check 3: knowledge root configured + writable.
+    if (!knowledgeRoot) {
+      problems.push({ code: 'KNOWLEDGE_ROOT_MISSING', message: 'Knowledge root is not configured.', action: 'CONFIGURE_KNOWLEDGE_ROOT' });
+      checks.knowledgeRoot = { ok: false, reason: 'unconfigured' };
+    } else if (!fs.existsSync(knowledgeRoot)) {
+      try {
+        fs.mkdirSync(knowledgeRoot, { recursive: true });
+      } catch (error) {
+        problems.push({ code: 'KNOWLEDGE_ROOT_NOT_WRITABLE', message: `Knowledge root is not writable: ${error.message}`, action: 'CONFIGURE_KNOWLEDGE_ROOT' });
+        checks.knowledgeRoot = { ok: false, reason: 'not-writable', path: knowledgeRoot };
+      }
+      checks.knowledgeRoot = checks.knowledgeRoot || { ok: true, path: knowledgeRoot, created: true };
+    } else {
+      try {
+        fs.accessSync(knowledgeRoot, fs.constants.W_OK);
+        checks.knowledgeRoot = { ok: true, path: knowledgeRoot };
+      } catch (error) {
+        problems.push({ code: 'KNOWLEDGE_ROOT_NOT_WRITABLE', message: `Knowledge root is not writable: ${error.message}`, action: 'CONFIGURE_KNOWLEDGE_ROOT' });
+        checks.knowledgeRoot = { ok: false, reason: 'not-writable', path: knowledgeRoot };
+      }
+    }
+
+    // Check 4: effective AI profile availability.
+    let aiProfile = null;
+    try {
+      const resolved = resolveEffectiveAiProfile(settings, { aiProfileId: input.aiProfileId || null });
+      aiProfile = { id: resolved.profileId, source: resolved.source };
+      checks.aiProfile = { ok: true, ...aiProfile };
+    } catch (error) {
+      if (error && error.code === 'AI_PROFILE_REQUIRED') {
+        problems.push({ code: 'AI_PROFILE_REQUIRED', message: 'No usable AI profile is configured. Configure one before importing.', action: 'CONFIGURE_AI_PROFILE' });
+        checks.aiProfile = { ok: false };
+      } else {
+        throw error;
+      }
+    }
+
+    // Check 5: duplicate / already-managed project.
+    if (repoInspection && repoInspection.ok) {
+      for (const config of this.listConfigs()) {
+        if (this.layout.pathsEqual(config.repoPath, repoInspection.repoPath)
+          || (config.repoIdentity && config.repoIdentity.commonDir && repoInspection.commonDir
+              && this.layout.pathsEqual(config.repoIdentity.commonDir, repoInspection.commonDir))) {
+          problems.push({ code: 'DUPLICATE_PROJECT', message: 'This Git repository is already managed by another project.', action: 'OPEN_EXISTING_PROJECT', existingProjectId: config.projectId });
+          checks.duplicate = { ok: false, existingProjectId: config.projectId };
+          break;
+        }
+      }
+      if (!checks.duplicate) checks.duplicate = { ok: true };
+    }
+
+    // Check 6: existing non-managed hook conflict.
+    if (repoInspection && repoInspection.ok) {
+      try {
+        const hookStatus = this.hookManager.readHookStatus({ repoPath: repoInspection.repoPath });
+        if (!hookStatus.kbManaged && hookStatus.reason && /third-party/i.test(hookStatus.reason)) {
+          problems.push({ code: 'HOOK_CONFLICT', message: 'A third-party post-commit hook is installed. Project-Knowledge will not overwrite it.', action: 'INSPECT_HOOK' });
+          checks.hook = { ok: false, reason: 'third-party' };
+        } else if (!hookStatus.kbManaged && hookStatus.reason && /legacy managed hook/i.test(hookStatus.reason)) {
+          // Legacy v1 hook: import will replace it; that's the migration
+          // path (T03 case 2), not a conflict.
+          checks.hook = { ok: true, reason: 'legacy-v1' };
+        } else {
+          checks.hook = { ok: true };
+        }
+      } catch (error) {
+        checks.hook = { ok: true, reason: 'no-hooks-dir' };
+      }
+    }
+
+    // Check 7: knowledge language selection (zh-CN / en-US).
+    const requestedLanguage = input.knowledgeLanguage || 'zh-CN';
+    if (!['zh-CN', 'en-US'].includes(requestedLanguage)) {
+      problems.push({ code: 'KNOWLEDGE_LANGUAGE_INVALID', message: `knowledgeLanguage must be 'zh-CN' or 'en-US'; got '${requestedLanguage}'.`, action: 'CHOOSE_LANGUAGE' });
+      checks.knowledgeLanguage = { ok: false, requested: requestedLanguage };
+    } else {
+      checks.knowledgeLanguage = { ok: true, value: requestedLanguage };
+    }
+
+    // Check 8: optional team binding compatibility.
+    let teamBinding = null;
+    if (input.teamBinding) {
+      try {
+        teamBinding = this.normalizeTeamBinding(input.teamBinding);
+        if (!fs.existsSync(teamBinding.knowledgePath) || !fs.statSync(teamBinding.knowledgePath).isDirectory()) {
+          problems.push({ code: 'TEAM_KB_MISSING', message: 'The selected team knowledge directory does not exist.', action: 'CHOOSE_TEAM_STORE' });
+          checks.teamBinding = { ok: false, reason: 'missing' };
+        } else {
+          checks.teamBinding = { ok: true };
+        }
+      } catch (error) {
+        problems.push({ code: 'TEAM_BINDING_INVALID', message: error.message, action: 'CHOOSE_TEAM_STORE' });
+        checks.teamBinding = { ok: false };
+      }
+    }
+
+    const ready = problems.length === 0;
+    return {
+      ok: ready,
+      ready,
+      plannedGitInit,
+      problems,
+      checks,
+      effective: {
+        aiProfile,
+        knowledgeRoot: checks.knowledgeRoot && checks.knowledgeRoot.path || null,
+        knowledgeLanguage: checks.knowledgeLanguage && checks.knowledgeLanguage.value || null,
+        teamBinding: !!teamBinding,
+      },
+    };
   }
 
   transactionPath(operationId) { return this.layout.getRuntimePath('transactions', `${operationId}.json`); }
