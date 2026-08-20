@@ -11,10 +11,39 @@
 
 ### npm
 
+Complete new-machine setup is two commands:
+
 ```bash
 npm install -g project-knowledge
+project-knowledge-integrations install
 project-knowledge
 ```
+
+1. `npm install -g project-knowledge` installs the knowledge base CLI and its
+   bundled `ai-coding-event-bridge` dependency — nothing else to install.
+2. `project-knowledge-integrations install` is the one-time Integration Setup.
+   For every detected client (Claude Code / Codex / OpenCode) it installs two
+   independent capabilities, reported separately:
+   - **Knowledge Integration** — plugin / MCP / Skill so agents can query the
+     knowledge base;
+   - **Development Capture** — managed Bridge hooks / notify / plugin so the
+     agent conversations in real Git workspaces are captured into each
+     imported project's Development Conversation.
+   It also registers the host-level `project-knowledge` Bridge consumer.
+   No client UI needs to be opened; third-party hooks and configs are
+   preserved, and a Codex notify conflict is reported instead of overwritten.
+3. `project-knowledge` starts the local backend. Projects imported with older
+   versions are upgraded automatically on the first drain (canonical workspace
+   identity + conversation baseline — no manual migration).
+
+Notes:
+
+- Restart already-running Claude Code sessions once after installing
+  Development Capture — hooks load at session start. Only conversations after
+  setup are captured; history is never backfilled.
+- To narrow the setup: `--ide claude`, `--capture-only`, `--knowledge-only`;
+  to remove capture per client: `uninstall --capture-only`; to disable
+  capture globally (including the Bridge consumer): `disable-capture`.
 
 The local service listens on `127.0.0.1:5757` by default. The CLI can select a
 nearby free port and records the active loopback endpoint so managed Git Hooks

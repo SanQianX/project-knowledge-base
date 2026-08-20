@@ -5,10 +5,34 @@
 
 ## 安装与运行
 
+新机器完整安装只需三条命令：
+
 ```bash
 npm install -g project-knowledge
+project-knowledge-integrations install
 project-knowledge
 ```
+
+1. `npm install -g project-knowledge` 安装知识库 CLI,内置
+   `ai-coding-event-bridge` 依赖,无需再装其它包。
+2. `project-knowledge-integrations install` 是一次性的 Integration Setup,
+   对检测到的每个客户端(Claude Code / Codex / OpenCode)同时安装两类
+   相互独立、分别上报状态的能力:
+   - **Knowledge Integration**:插件 / MCP / Skill,让外部 Agent 能查询知识库;
+   - **Development Capture**:托管的 Bridge hooks / notify / plugin,把真实
+     Git 工作区里的 Agent 对话捕捉进已导入项目的「开发对话」。
+   同时注册 host 级 `project-knowledge` Bridge consumer。全程无需打开任何
+   客户端 UI;第三方 hooks 与配置完整保留;Codex notify 冲突只上报不覆盖。
+3. `project-knowledge` 启动本地服务。旧版本导入的项目会在第一次 drain 时
+   自动升级(补写 canonical workspace 身份 + 建立对话 baseline),无需手工迁移。
+
+注意事项:
+
+- 装完 Development Capture 后,已在运行的 Claude Code 会话需重启一次
+  (hooks 在会话启动时加载)。只捕捉配置之后的对话,历史不回填。
+- 按需收窄安装范围:`--ide claude` / `--capture-only` / `--knowledge-only`;
+  按客户端移除捕捉:`uninstall --capture-only`;全局禁用捕捉(含注销 Bridge
+  consumer):`disable-capture`。
 
 默认只监听 `127.0.0.1:5757`。CLI 会记录实际 loopback endpoint，托管 Git
 Hook 不依赖写死端口。
