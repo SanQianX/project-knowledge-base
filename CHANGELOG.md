@@ -1,5 +1,45 @@
 # Changelog
 
+## [4.2.5] - 2026-08-20
+
+- Restored the v4.1.22 → v4.2.x product contract that the recent
+  refactor had broken. The shared ` `resolveEffectiveAiProfile` resolver
+  is the single source of truth for "which AI profile does this project
+  use right now" (project → default → first-usable → AI_PROFILE_REQUIRED),
+  and the Workbench / analyzer / CommitReconciler paths no longer
+  carry their own drift-prone fallback logic.
+- Hook runtime: post-commit hooks now prefix `ELECTRON_RUN_AS_NODE=1`
+  in the shell body so a packaged Desktop install no longer tries to
+  launch the Electron GUI from a Git hook invocation. Node ignores the
+  env var so CLI installs are unaffected.
+- Hook migration state machine: a missing legacy hook is no longer
+  silently marked migrationVersion=2. The new state machine only
+  advances migrationVersion when install + readback verify succeed,
+  persists third-party conflicts in state.hook.lastConflict for UI
+  consumption, and reports status=verified|conflict|pending|failed per
+  project.
+- Hook health API: GET /api/projects/:id/hook-status and POST
+  /api/projects/:id/hook-repair expose every required field
+  (installed / managed / managedVersion / runtimeTarget / lastVerifiedAt
+  / conflict / reason / repairAvailable) and refuse to overwrite
+  third-party hooks.
+- Import UX: a new preflight endpoint and UI flow (Desktop folder
+  picker, knowledge language selector, AI profile selector, optional
+  Team Knowledge binding, per-problem action hints, auto preflight on
+  every input change, Import button stays disabled until ready=true)
+  replace the path-only dialog.
+- Knowledge language control: import + per-project PATCH both accept
+  knowledgeLanguage; changing it affects only future generated
+  knowledge, never historical files.
+- Project Goal editor: GET/PUT /api/projects/:id/goal atomically reads
+  and writes the project's GOAL.md, scoped to its own knowledgePath.
+- UI language toggle (zh-CN / en-US) persists in localStorage and
+  re-renders the most-visible labels without a reload.
+- P0 E2E gate proves the four primary contract scenarios (fresh /
+  legacy / offline / no-conversation) against the live server.
+  105 root + 2 desktop tests pass; the G00–G08 acceptance gates are
+  green.
+
 ## [4.2.4] - 2026-08-20
 
 - Fixed the Bridge consumer never receiving connector wake-ups on a fresh
