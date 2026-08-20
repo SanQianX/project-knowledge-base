@@ -1,5 +1,23 @@
 # Changelog
 
+## [4.2.6] - 2026-08-20
+
+- Hotfix for the v4.2.5 commit-reconciler regression: the post-batch
+  re-scan was unconditionally writing `analysis.status='idle'` even
+  after a successful batch of commits, clobbering the
+  `'state.advanced'` value that `advanceState()` had just set. The CI
+  suite surfaced this on a fast runner where the test's state read
+  raced ahead of the trailing re-scan; on slower machines the bug
+  passed silently. runSweep() now only marks `'idle'` when this call
+  never processed any commits, leaving a freshly-promoted batch's
+  `state.advanced` visible to the UI.
+- Bumped `plugins/project-knowledge/.mcp.json` from
+  `project-knowledge@4.2.4` to `project-knowledge@4.2.6` so the
+  integration-adapters MCP-pin assertion matches the package version.
+  (The v4.2.5 release had bumped everything except this MCP pin.)
+
+105 root + 2 desktop tests pass.
+
 ## [4.2.5] - 2026-08-20
 
 - Restored the v4.1.22 → v4.2.x product contract that the recent
