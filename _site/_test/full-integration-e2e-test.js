@@ -96,6 +96,12 @@ async function waitForState(predicate, label) {
     server = await start();
     let result = await json('PATCH', '/api/settings', { knowledge: { rootPath: path.join(TEMP, '用户知识') } });
     assert(result.response.ok, JSON.stringify(result.body));
+    result = await json('PUT', '/api/ai-profiles', {
+      schema: 'ai-profiles/v1',
+      defaultProfileId: 'fake-profile',
+      profiles: [{ id: 'fake-profile', name: 'Fake', enabled: true, vendor: 'anthropic', model: 'fake', apiKeyUpdate: { mode: 'replace', value: 'fake-key-for-test' } }],
+    });
+    assert(result.response.ok, JSON.stringify(result.body));
     result = await json('POST', '/api/projects/import', {
       projectId: PROJECT_ID, localPath: REPO, displayName: 'Full E2E', aiProfileId: 'fake-profile', knowledgeLanguage: 'en-US',
     });

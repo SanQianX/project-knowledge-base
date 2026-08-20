@@ -48,7 +48,7 @@ function commit(target, name) {
     layout,
     registryStore: registry,
     projectStore: projects,
-    settingsStore: { read: () => ({ knowledge: { rootPath: knowledgeRoot } }) },
+    settingsStore: { read: () => ({ knowledge: { rootPath: knowledgeRoot }, ai: { schema: 'ai-profiles/v1', profiles: [{ id: 'test-profile', enabled: true, vendor: 'anthropic', model: 'm' }], defaultProfileId: null } }) },
     triggerScriptPath: path.join(temp, 'hook-trigger.js'),
     hookManager: {
       installHook: options => { installed.push(options.projectId); return { ok: true, managedVersion: 2 }; },
@@ -78,7 +78,13 @@ function commit(target, name) {
       return { stateAdvanced: true };
     },
   };
-  const reconciler = new CommitReconciler({ layout, registryStore: registry, projectStore: projects, claimProcessor: processor });
+  const reconciler = new CommitReconciler({
+    layout,
+    registryStore: registry,
+    projectStore: projects,
+    settingsStore: { read: () => ({ knowledge: { rootPath: knowledgeRoot }, ai: { schema: 'ai-profiles/v1', profiles: [{ id: 'test-profile', enabled: true, vendor: 'anthropic', model: 'm' }], defaultProfileId: null } }) },
+    claimProcessor: processor,
+  });
   const initialSweep = await reconciler.reconcile('project-existing', 'startup');
   assert.strictEqual(initialSweep.status, 'idle');
   assert.strictEqual(processorCalls, 0, 'startup after import must not analyze pre-import history');

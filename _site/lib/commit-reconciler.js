@@ -18,6 +18,7 @@ const { renderCommitPrompt, sha256 } = require('./commit-prompt');
 const { KnowledgeRetrievalService } = require('./knowledge-retrieval-service');
 const { manifestHash: calculateRetrievalManifestHash } = require('./knowledge-retrieval-service');
 const { sha256: knowledgeContentHash } = require('./knowledge-schema');
+const { resolveEffectiveAiProfile } = require('./ai-profile-resolver');
 
 const inFlightProjects = new Map();
 
@@ -126,6 +127,7 @@ class CommitReconciler {
     this.claimStore = options.claimStore || new CommitClaimStore({ layout: this.layout });
     this.claimProcessor = options.claimProcessor || null;
     this.logger = options.logger || null;
+    this.settingsStore = options.settingsStore || null;
     this.batchSize = Math.max(1, Number(options.batchSize || 200));
     this.requireAiProfile = options.requireAiProfile !== false;
   }
@@ -389,8 +391,13 @@ class CommitReconciler {
     let prepared;
     try {
       prepared = await this.prepareClaim(projectId, trigger, operationId, config, branch, commitSha);
-      if (this.requireAiProfile && !config.aiProfileId) {
-        throw new DomainError('INVALID_ARGUMENT', 'No AI profile is configured for commit analysis.', { status: 409 });
+      if (this.requireAiProfile) {
+        // Use the shared effective-profile resolver so a project with no explicit
+        // aiProfileId can still analyze via the global default or first-usable
+        // profile. The resolver throws AI_PROFILE_REQUIRED if nothing usable
+        // exists, which becomes a clear actionable error rather than a silent
+        // null deref.
+        resolveEffectiveAiProfile(this.settingsStore ? this.settingsStore.read() : null, config);
       }
       if (!this.claimProcessor || typeof this.claimProcessor.processClaim !== 'function') {
         throw new DomainError('INVALID_ARGUMENT', 'Knowledge claim processor is unavailable.', { status: 503, retryable: true });

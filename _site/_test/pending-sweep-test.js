@@ -89,7 +89,13 @@ function commit(repo, label) {
       return { stateAdvanced: true };
     },
   };
-  const reconciler = new CommitReconciler({ layout, registryStore: registry, projectStore: projects, claimProcessor: processor });
+  const reconciler = new CommitReconciler({
+    layout,
+    registryStore: registry,
+    projectStore: projects,
+    settingsStore: { read: () => ({ knowledge: { rootPath: '' }, ai: { schema: 'ai-profiles/v1', profiles: [{ id: 'test-profile', enabled: true, vendor: 'anthropic', model: 'm' }], defaultProfileId: null } }) },
+    claimProcessor: processor,
+  });
   const swept = await dispatchPendingAutomations({ concurrency: 2 }, {
     layout, registryStore: registry, projectStore: projects, reconciler,
   });
