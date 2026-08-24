@@ -7,6 +7,8 @@ const { StorageLayout } = require('./storage-layout');
 const { defaultSettings, validateSettings } = require('./settings-store');
 const { emptyRegistry, validateRegistry } = require('./project-registry-store');
 const { defaultProjectConfig, defaultProjectState, validateProjectConfig, validateProjectState } = require('./project-store');
+const { LEGACY_ASSETS, getLegacyAsset, assetPath } = require('./legacy-data-manifest');
+const { STATES, classifyDataState } = require('./data-state-classifier');
 
 function hashBuffer(buffer) { return crypto.createHash('sha256').update(buffer).digest('hex'); }
 function hashFile(filePath) { return hashBuffer(fs.readFileSync(filePath)); }
@@ -80,6 +82,19 @@ function verifySourceSnapshot(entries) {
   return true;
 }
 
+function directoryDigest(root) {
+  const hash = crypto.createHash('sha256');
+  const walk = current => {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const item = path.join(current, entry.name);
+      hash.update(`${entry.isDirectory() ? 'd' : 'f'}:${path.relative(root, item).replace(/\\/g, '/')}\0`);
+      if (entry.isDirectory()) walk(item); else if (entry.isFile()) hash.update(fs.readFileSync(item));
+    }
+  };
+  walk(root);
+  return hash.digest('hex');
+}
+
 class MigrationService {
   constructor(options = {}) {
     this.layout = options.layout || new StorageLayout(options);
@@ -93,18 +108,46 @@ class MigrationService {
     const completionPath = this.layout.getMigrationCompletionPath();
     if (!fs.existsSync(completionPath)) return null;
     const marker = this.atomic.readJsonStrict(completionPath, { category: 'layout-migration-completion' });
-    return marker && marker.schema === 'layout-migration-completion/v1' && marker.migrationId === SCHEMA_VERSIONS.layoutMigration
+    return marker && ['layout-migration-completion/v1', 'layout-migration-completion/v2'].includes(marker.schema) && marker.migrationId === SCHEMA_VERSIONS.layoutMigration
       ? marker
       : null;
   }
 
+  completionMarker({ runId = '', registry, settings, modelsMigrated = false } = {}) {
+    const profiles = settings && settings.ai && Array.isArray(settings.ai.profiles) ? settings.ai.profiles : [];
+    return {
+      schema: 'layout-migration-completion/v2',
+      migrationId: SCHEMA_VERSIONS.layoutMigration,
+      runId,
+      sourceRoot: this.legacyDataDir,
+      sourceManifestHash: hashBuffer(Buffer.from(JSON.stringify(LEGACY_ASSETS.map(asset => [asset.source, asset.target, asset.kind])))),
+      projectCount: registry.projectOrder.length,
+      aiProfileCount: profiles.length,
+      knowledgeRootConfigured: Boolean(settings.knowledge && settings.knowledge.rootPath),
+      embeddingConfigured: Boolean(settings.embedding && Object.keys(settings.embedding).length),
+      modelsMigrated,
+      completedAt: new Date().toISOString(),
+      verified: true,
+    };
+  }
+
+  validateCompletedState(marker) {
+    try {
+      const registry = this.atomic.readJsonStrict(this.layout.getProjectRegistryPath(), { category: 'project-registry' });
+      validateRegistry(registry);
+      const settings = this.atomic.readJsonStrict(this.layout.getSettingsPath(), { category: 'settings' });
+      validateSettings(settings);
+      for (const projectId of registry.projectOrder) {
+        validateProjectConfig(this.atomic.readJsonStrict(this.layout.getProjectConfigPath(projectId), { category: 'project-config' }), projectId);
+        validateProjectState(this.atomic.readJsonStrict(this.layout.getProjectStatePath(projectId), { category: 'project-state' }));
+      }
+      if (Number.isInteger(marker.projectCount) && marker.projectCount !== registry.projectOrder.length) return { ok: false, reason: 'completion-project-count-mismatch' };
+      return { ok: true, registry, settings };
+    } catch (error) { return { ok: false, reason: 'completion-state-invalid', error }; }
+  }
+
   discover() {
-    const names = [
-      'projects.json', 'knowledge-store.json', 'ai-profiles.json', 'embedding-config.json',
-      'logging.json', 'claude-prompts.json', 'github-team.json', 'team-git-providers.json',
-      'knowledge-scopes.json', '.hook-trigger-errors.log',
-    ];
-    const paths = names.map(name => path.join(this.legacyDataDir, name)).filter(file => fs.existsSync(file));
+    const paths = LEGACY_ASSETS.map(asset => assetPath(this.legacyDataDir, asset)).filter(file => fs.existsSync(file));
     const knowledgeStore = safeReadJson(path.join(this.legacyDataDir, 'knowledge-store.json'), {});
     const indexCandidates = [
       path.join(this.legacyDataDir, 'knowledge.lancedb'),
@@ -116,6 +159,7 @@ class MigrationService {
       legacyProjectsPath: path.join(this.legacyDataDir, 'projects.json'),
       knowledgeStore,
       indexPath,
+      modelsPath: assetPath(this.legacyDataDir, getLegacyAsset('models')),
       sources: sourceSnapshot(paths),
     };
   }
@@ -188,18 +232,31 @@ class MigrationService {
 
   async migrateIfNeeded(options = {}) {
     const existingCompletion = this.completion();
-    if (existingCompletion) return { ok: true, migrated: false, completed: true, marker: existingCompletion };
-    const discovery = this.discover();
-    this.injectFault(options, 'discovery');
-    const legacyProjects = safeReadJson(discovery.legacyProjectsPath, null);
-    if (!legacyProjects) return { ok: true, migrated: false, completed: false, reason: 'fresh-install' };
-    if (legacyProjects.schema === SCHEMAS.projectRegistry && legacyProjects.schemaVersion === 2 && fs.existsSync(this.layout.getSettingsPath())) {
-      validateRegistry(legacyProjects);
-      validateSettings(this.atomic.readJsonStrict(this.layout.getSettingsPath(), { category: 'settings' }));
-      const marker = { schema: 'layout-migration-completion/v1', migrationId: SCHEMA_VERSIONS.layoutMigration, completedAt: new Date().toISOString(), verified: true };
+    if (existingCompletion) {
+      const verified = this.validateCompletedState(existingCompletion);
+      if (!verified.ok) return { ok: false, migrated: false, completed: false, requiresManualRecovery: true, reason: verified.reason, error: verified.error };
+      if (existingCompletion.schema === 'layout-migration-completion/v2') return { ok: true, migrated: false, completed: true, marker: existingCompletion };
+      const marker = this.completionMarker({ runId: existingCompletion.runId || 'v1-marker-upgrade', registry: verified.registry, settings: verified.settings, modelsMigrated: fs.existsSync(this.layout.getCachePath('models')) });
       this.atomic.writeJsonAtomic(this.layout.getMigrationCompletionPath(), marker);
       return { ok: true, migrated: false, completed: true, marker };
     }
+    const state = classifyDataState(this.legacyDataDir);
+    if (state.state === STATES.FRESH) return { ok: true, migrated: false, completed: false, reason: 'fresh-install' };
+    if (state.state === STATES.CORRUPT || state.state === STATES.MIGRATION_INCOMPLETE) {
+      return { ok: false, migrated: false, completed: false, requiresManualRecovery: true, reason: state.state.toLowerCase() };
+    }
+    const discovery = this.discover();
+    this.injectFault(options, 'discovery');
+    const legacyProjects = safeReadJson(discovery.legacyProjectsPath, null);
+    if (legacyProjects.schema === SCHEMAS.projectRegistry && legacyProjects.schemaVersion === 2 && fs.existsSync(this.layout.getSettingsPath())) {
+      validateRegistry(legacyProjects);
+      const settings = this.atomic.readJsonStrict(this.layout.getSettingsPath(), { category: 'settings' });
+      validateSettings(settings);
+      const marker = this.completionMarker({ runId: 'validated-existing-v2', registry: legacyProjects, settings, modelsMigrated: fs.existsSync(this.layout.getCachePath('models')) });
+      this.atomic.writeJsonAtomic(this.layout.getMigrationCompletionPath(), marker);
+      return { ok: true, migrated: false, completed: true, marker };
+    }
+    if (!legacyProjects || state.state !== STATES.LEGACY) return { ok: false, migrated: false, completed: false, requiresManualRecovery: true, reason: 'legacy-project-registry-missing' };
 
     const migrationId = options.migrationRunId || `layout-v2-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
     const recoveryDir = this.layout.getRecoveryPath(migrationId);
@@ -245,6 +302,20 @@ class MigrationService {
         stageJson(path.join('projects', record.projectId, 'state.json'), record.state);
       }
       stageJson('projects.json', projectData.registry);
+      let modelsMigrated = false;
+      if (fs.existsSync(discovery.modelsPath)) {
+        const modelTarget = this.layout.getCachePath('models');
+        if (fs.existsSync(modelTarget)) {
+          if (directoryDigest(discovery.modelsPath) !== directoryDigest(modelTarget)) {
+            throw new DomainError('MIGRATION_TARGET_CONFLICT', 'Legacy model cache conflicts with the current model cache.', { status: 409, details: { category: 'cache/models' } });
+          }
+        } else {
+          const relative = path.join('cache', 'models');
+          copyRecursive(discovery.modelsPath, path.join(stagingDir, relative));
+          staged.push({ relative, kind: 'directory', hash: directoryDigest(path.join(stagingDir, relative)) });
+          modelsMigrated = true;
+        }
+      }
       if (discovery.indexPath) {
         const relative = path.join('index', 'knowledge.lancedb');
         copyRecursive(discovery.indexPath, path.join(stagingDir, relative));
@@ -311,14 +382,7 @@ class MigrationService {
       this.atomic.writeJsonAtomic(journalPath, journal);
       this.injectFault(options, 'open-verification');
 
-      const marker = {
-        schema: 'layout-migration-completion/v1',
-        migrationId: SCHEMA_VERSIONS.layoutMigration,
-        runId: migrationId,
-        completedAt: new Date().toISOString(),
-        verified: true,
-        projectCount: openedRegistry.projectOrder.length,
-      };
+      const marker = this.completionMarker({ runId: migrationId, registry: openedRegistry, settings: this.atomic.readJsonStrict(this.layout.getSettingsPath(), { category: 'settings' }), modelsMigrated });
       this.atomic.writeJsonAtomic(this.layout.getMigrationCompletionPath(), marker);
       journal.phase = 'completed';
       journal.completedAt = marker.completedAt;

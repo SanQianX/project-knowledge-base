@@ -639,6 +639,13 @@ async function initializeRuntime(runtime) {
   if (!legacyMove.ok) throw new DomainError('MIGRATION_FAILED', 'Legacy runtime relocation failed.', { status: 500, details: { reason: legacyMove.error || '' } });
   await runtime.logger.info('server.startup_started', 'Server startup began.', { phase: 'migration' });
   const migration = await runtime.migrationService.migrateIfNeeded();
+  if (!migration.ok || migration.requiresManualRecovery) {
+    throw new DomainError('MIGRATION_FAILED', 'Runtime data migration did not complete safely.', {
+      status: 500,
+      details: { reason: migration.reason || (migration.error && migration.error.code) || '' },
+    });
+  }
+  dataDir.ensureDataDir(runtime.dataPath);
   await runtime.settingsStore.initialize();
   await runtime.registryStore.initialize();
   const recoveredPromotions = await runtime.promotionService.recoverAll();

@@ -1,172 +1,75 @@
-// _site/lib/data-dir.js
-//
-// Resolves a stable, version-independent data directory for project-knowledge
-// runtime state. Runtime data lives OUTSIDE the npm install directory so that
-// `npm install -g project-knowledge` upgrades do not destroy user config
-// (project registry, AI profiles with API keys, generated knowledge bases,
-// logs, AI workspaces).
-//
-// Resolution order (highest priority first):
-//   1. KB_DATA_DIR env var — used by tests and power users who want a custom
-//      location. Set to "." to use the current working directory.
-//   2. <os.homedir()>/.project-knowledge — the default user-specific location.
-//
-// On first run after upgrade from a 1.x install, the legacy runtime files
-// (which lived inside the npm package directory) are silently migrated into
-// the new data dir. After that, all updates keep the data dir untouched and
-// data survives every future `npm install -g project-knowledge`.
-
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
+const { LEGACY_ASSETS, assetPath } = require('./legacy-data-manifest');
+const { isEmptyJson } = require('./data-state-classifier');
 
 let _resolved = null;
 
-function getDataDir() {
-  if (_resolved) return _resolved;
-  const fromEnv = process.env.KB_DATA_DIR;
-  const dataDir = fromEnv
-    ? path.resolve(fromEnv)
-    : path.join(os.homedir(), '.project-knowledge');
-  try {
-    fs.mkdirSync(dataDir, { recursive: true });
-  } catch (err) {
-    // Best-effort. Callers will surface a write error when they actually
-    // try to write inside the dir; we don't want to crash here just because
-    // the user's homedir is read-only or the path is bogus.
-  }
-  _resolved = dataDir;
-  return dataDir;
+function resolveDataDirPath(options = {}) {
+  const fromEnv = options.dataDir === undefined ? process.env.KB_DATA_DIR : options.dataDir;
+  const homeDir = options.homeDir || os.homedir();
+  return path.resolve(fromEnv || path.join(homeDir, '.project-knowledge'));
 }
-
-// Reset the cached resolution. Tests use this to switch KB_DATA_DIR between
-// cases without re-requiring the module.
-function _resetCache() {
-  _resolved = null;
+function ensureDataDir(dataDir = resolveDataDirPath()) { fs.mkdirSync(dataDir, { recursive: true }); return path.resolve(dataDir); }
+function getDataDir() { if (!_resolved) _resolved = resolveDataDirPath(); return _resolved; }
+function _resetCache() { _resolved = null; }
+function fileDigest(filePath) { return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex'); }
+function directoryDigest(root) {
+  const hash = crypto.createHash('sha256');
+  const walk = current => {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const filePath = path.join(current, entry.name);
+      const relative = path.relative(root, filePath).replace(/\\/g, '/');
+      hash.update(`${entry.isDirectory() ? 'd' : 'f'}:${relative}\0`);
+      if (entry.isDirectory()) walk(filePath); else if (entry.isFile()) hash.update(fs.readFileSync(filePath));
+    }
+  };
+  walk(root); return hash.digest('hex');
 }
-
-function hasMigrated() {
-  return fs.existsSync(path.join(getDataDir(), 'projects.json'));
+function isEmptyAsset(filePath, asset) {
+  if (!fs.existsSync(filePath)) return true;
+  if (asset.kind === 'dir') return fs.readdirSync(filePath).length === 0;
+  if (fs.statSync(filePath).size === 0) return true;
+  if (!filePath.endsWith('.json')) return false;
+  try { const raw = fs.readFileSync(filePath, 'utf8'); return isEmptyJson(JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw)); } catch { return false; }
 }
-
-// Legacy 1.x locations — these lived inside the npm package root. The
-// package root for an installed package is the directory that contains
-// _site/server.js, _site/lib/, package.json, etc.
-const LEGACY_FILE_PATHS = [
-  'projects.json',
-  'ai-profiles.json',
-  'knowledge-store.json',
-  'logging.json',
-  '.jobs-log.json',
-  'claude-prompts.json',
-  '.hook-trigger-errors.log',
-];
-
-const LEGACY_DIR_PATHS = [
-  'projects',  // generated KB trees
-  'logs',      // structured logs
-];
-
-const LEGACY_AI_DIR = path.join('_site', '_ai');  // per-project AI workspaces lived under _site/_ai/
-
-function copyDir(src, dest) {
-  fs.mkdirSync(dest, { recursive: true });
-  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
-    const from = path.join(src, entry.name);
-    const to = path.join(dest, entry.name);
-    if (entry.isDirectory()) copyDir(from, to);
-    else if (entry.isFile()) fs.copyFileSync(from, to);
+function assetsEqual(source, target, asset) { return asset.kind === 'dir' ? directoryDigest(source) === directoryDigest(target) : fileDigest(source) === fileDigest(target); }
+function copyDir(source, target) {
+  fs.mkdirSync(target, { recursive: true });
+  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+    const from = path.join(source, entry.name); const to = path.join(target, entry.name);
+    if (entry.isDirectory()) copyDir(from, to); else if (entry.isFile()) fs.copyFileSync(from, to);
   }
 }
 
 function migrateFromLegacy({ legacyRoot, logger } = {}) {
-  // Test escape hatch. Set KB_SKIP_MIGRATION=1 to run against a clean data
-  // dir without pulling the user's real registry in from the package root.
-  if (process.env.KB_SKIP_MIGRATION === '1') {
-    return { ok: true, migrated: false, reason: 'skipped via KB_SKIP_MIGRATION=1' };
-  }
-  if (!legacyRoot) {
-    return { ok: true, migrated: false, reason: 'no legacy root provided' };
-  }
-  if (!fs.existsSync(legacyRoot)) {
-    return { ok: true, migrated: false, reason: 'legacy root does not exist' };
-  }
+  if (process.env.KB_SKIP_MIGRATION === '1') return { ok: true, migrated: false, reason: 'skipped via KB_SKIP_MIGRATION=1' };
+  if (!legacyRoot || !fs.existsSync(legacyRoot)) return { ok: true, migrated: false, reason: legacyRoot ? 'legacy root does not exist' : 'no legacy root provided' };
   const dataDir = getDataDir();
-  // Safety check: if the legacy root equals the data dir, there's nothing
-  // to migrate (we'd be copying onto ourselves).
-  if (path.resolve(legacyRoot) === path.resolve(dataDir)) {
-    return { ok: true, migrated: false, reason: 'legacy root equals data dir' };
+  if (path.resolve(legacyRoot) === dataDir) return { ok: true, migrated: false, reason: 'legacy root equals data dir' };
+  const sources = LEGACY_ASSETS.filter(asset => fs.existsSync(assetPath(legacyRoot, asset)));
+  if (!sources.length) return { ok: true, migrated: false, reason: 'no legacy assets found' };
+  const conflicts = [];
+  for (const asset of sources) {
+    const source = assetPath(legacyRoot, asset); const target = assetPath(dataDir, asset, 'target');
+    if (fs.existsSync(target) && !isEmptyAsset(target, asset) && !assetsEqual(source, target, asset)) conflicts.push(asset.target);
   }
-  if (hasMigrated()) {
-    return { ok: true, migrated: false, reason: 'already migrated' };
-  }
-
-  const result = {
-    ok: true,
-    migrated: false,
-    files: 0,
-    dirs: 0,
-    source: legacyRoot,
-    target: dataDir,
-  };
-
-  for (const rel of LEGACY_FILE_PATHS) {
-    const from = path.join(legacyRoot, rel);
-    const to = path.join(dataDir, rel);
-    if (fs.existsSync(from) && !fs.existsSync(to)) {
-      try {
-        fs.mkdirSync(path.dirname(to), { recursive: true });
-        fs.copyFileSync(from, to);
-        result.files++;
-      } catch (err) {
-        result.ok = false;
-        result.error = `failed to migrate ${rel}: ${err.message}`;
-        return result;
-      }
+  if (conflicts.length) return { ok: false, migrated: false, requiresManualRecovery: true, reason: 'legacy-data-conflict', conflicts, source: legacyRoot, target: dataDir };
+  ensureDataDir(dataDir);
+  const result = { ok: true, migrated: false, files: 0, dirs: 0, source: legacyRoot, target: dataDir };
+  try {
+    for (const asset of sources) {
+      const source = assetPath(legacyRoot, asset); const target = assetPath(dataDir, asset, 'target');
+      if (fs.existsSync(target) && assetsEqual(source, target, asset)) continue;
+      if (asset.kind === 'dir') { if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true }); copyDir(source, target); result.dirs++; }
+      else { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.copyFileSync(source, target); result.files++; }
     }
-  }
-  for (const rel of LEGACY_DIR_PATHS) {
-    const from = path.join(legacyRoot, rel);
-    const to = path.join(dataDir, rel);
-    if (fs.existsSync(from) && !fs.existsSync(to)) {
-      try {
-        copyDir(from, to);
-        result.dirs++;
-      } catch (err) {
-        result.ok = false;
-        result.error = `failed to migrate ${rel}/: ${err.message}`;
-        return result;
-      }
-    }
-  }
-  const aiFrom = path.join(legacyRoot, LEGACY_AI_DIR);
-  const aiTo = path.join(dataDir, '_ai');
-  if (fs.existsSync(aiFrom) && !fs.existsSync(aiTo)) {
-    try {
-      copyDir(aiFrom, aiTo);
-      result.dirs++;
-    } catch (err) {
-      result.ok = false;
-      result.error = `failed to migrate _site/_ai/: ${err.message}`;
-      return result;
-    }
-  }
-
-  if (result.files > 0 || result.dirs > 0) {
-    result.migrated = true;
-    if (logger) {
-      logger(`migrated runtime data to ${dataDir} (${result.files} files, ${result.dirs} dirs from ${legacyRoot})`);
-    }
-  }
-  return result;
+    result.migrated = result.files > 0 || result.dirs > 0;
+    if (result.migrated && logger) logger(`migrated runtime data to ${dataDir} (${result.files} files, ${result.dirs} dirs from ${legacyRoot})`);
+    return result;
+  } catch (error) { return { ...result, ok: false, error: `failed to relocate legacy runtime data: ${error.message}` }; }
 }
 
-module.exports = {
-  getDataDir,
-  hasMigrated,
-  migrateFromLegacy,
-  LEGACY_FILE_PATHS,
-  LEGACY_DIR_PATHS,
-  LEGACY_AI_DIR,
-  _resetCache,
-};
+module.exports = { resolveDataDirPath, ensureDataDir, getDataDir, migrateFromLegacy, LEGACY_ASSETS, _resetCache };
