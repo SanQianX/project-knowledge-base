@@ -247,7 +247,10 @@ class MigrationService {
     }
     const discovery = this.discover();
     this.injectFault(options, 'discovery');
-    const legacyProjects = safeReadJson(discovery.legacyProjectsPath, null);
+    // A user may have configured only AI/embedding/knowledge settings before
+    // ever importing a project. That is still legacy user data and must be
+    // migrated into an explicitly empty v2 registry, never treated as Fresh.
+    const legacyProjects = safeReadJson(discovery.legacyProjectsPath, {});
     if (legacyProjects && legacyProjects.schema === SCHEMAS.projectRegistry && legacyProjects.schemaVersion === 2 && fs.existsSync(this.layout.getSettingsPath())) {
       validateRegistry(legacyProjects);
       const settings = this.atomic.readJsonStrict(this.layout.getSettingsPath(), { category: 'settings' });
@@ -256,7 +259,7 @@ class MigrationService {
       this.atomic.writeJsonAtomic(this.layout.getMigrationCompletionPath(), marker);
       return { ok: true, migrated: false, completed: true, marker };
     }
-    if (!legacyProjects || state.state !== STATES.LEGACY) return { ok: false, migrated: false, completed: false, requiresManualRecovery: true, reason: 'legacy-project-registry-missing' };
+    if (state.state !== STATES.LEGACY) return { ok: false, migrated: false, completed: false, requiresManualRecovery: true, reason: 'legacy-state-not-migratable' };
 
     const migrationId = options.migrationRunId || `layout-v2-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
     const recoveryDir = this.layout.getRecoveryPath(migrationId);

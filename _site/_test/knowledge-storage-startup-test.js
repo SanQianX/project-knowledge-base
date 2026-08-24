@@ -4,6 +4,7 @@ const os = require('os');
 const path = require('path');
 const { StorageLayout } = require('../lib/storage-layout');
 const { SettingsStore } = require('../lib/settings-store');
+const { ProjectRegistryStore } = require('../lib/project-registry-store');
 const { KnowledgeDatabase } = require('../lib/knowledge-db');
 const { EMBEDDING_DIMENSIONS } = require('../lib/knowledge-schema');
 const { spawnServer } = require('./helpers/spawn-server');
@@ -23,6 +24,7 @@ async function get(route) {
   const configuredRoot = path.join(dataDir, 'selected-knowledge-root');
   const settings = new SettingsStore({ layout });
   await settings.initialize({ knowledge: { rootPath: configuredRoot } });
+  await new ProjectRegistryStore({ layout }).initialize();
   const internalIndex = layout.getIndexPath();
   const database = new KnowledgeDatabase({ dbPath: internalIndex });
   const vector = new Array(EMBEDDING_DIMENSIONS).fill(0);

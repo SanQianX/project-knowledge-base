@@ -88,7 +88,8 @@ async function waitForServer() {
 
     fs.renameSync(oldRepo, movedRepo);
     const reconciler = new CommitReconciler({ layout, registryStore, projectStore, requireAiProfile: false });
-    const moved = await handlePostCommitEvent({ schema: 'hook-event/v2', projectId: 'project-stable', repoRoot: movedRepo }, { layout, registryStore, projectStore, reconciler });
+    reconciler.processCommitEvent = async input => ({ ok: true, projectId: input.projectId, commitSha: input.commitSha, status: 'completed', processed: [] });
+    const moved = await handlePostCommitEvent({ schema: 'hook-event/v2', projectId: 'project-stable', repoRoot: movedRepo, head: baseline, branch: 'main' }, { layout, registryStore, projectStore, reconciler });
     assert.strictEqual(moved.ok, true);
     assert.strictEqual(projectStore.readConfig('project-stable').repoPath, path.resolve(movedRepo));
     assert.strictEqual(projectStore.readConfig('project-stable').projectId, 'project-stable');
