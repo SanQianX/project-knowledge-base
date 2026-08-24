@@ -1,5 +1,14 @@
 # Changelog
 
+## [4.2.15] - 2026-08-25
+
+- Repaired Codex Development Conversation turns without rewriting durable
+  history: generated control/context records are excluded, orphan assistant
+  responses are projected onto the correct user turn within the same session,
+  and stale open-turn facts no longer duplicate commit associations.
+- Removed synthetic empty-user and pending-assistant UI messages, with focused
+  projection, binding, API, and real-history regression coverage.
+
 ## [4.2.14] - 2026-08-25
 
 - Recovered commit analysis safely after a server restart by making leftover
