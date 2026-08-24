@@ -74,8 +74,11 @@ const runner = require('../lib/claude-cli-runner');
     const html = fs.readFileSync(path.join(ROOT, 'ui', 'index.html'), 'utf8');
     const app = fs.readFileSync(path.join(ROOT, 'ui', 'app.js'), 'utf8');
     assert(html.includes('id="view-workbench"') && html.includes('id="chat-input"'));
+    assert(html.includes('id="wb-session"') && html.includes('id="wb-new-session"') && html.includes('id="wb-stop-session"'));
     assert(app.includes('/api/claude/sessions') && app.includes('/events'));
-    assert(app.includes("'claude/text-delta'") && app.includes("'claude/tool-use'"));
+    assert(app.includes('/api/claude/sessions-stream') && app.includes('loadClaudeSessions') && app.includes('attachSession'));
+    assert(app.includes("'claude/thinking-delta'") && app.includes("'claude/text-delta'") && app.includes("'claude/tool-use'") && app.includes("'claude/permission-request'"));
+    assert(/hookAutomation[\s\S]+event\.kind === 'create'/.test(app), 'new Hook automation sessions must become visible immediately');
 
     runner.deleteSession(started.sessionId);
     console.log('chat runner contract test PASS');

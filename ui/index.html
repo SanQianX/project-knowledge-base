@@ -42,11 +42,19 @@
 
     <section class="view active" id="view-workbench">
       <section class="panel workbench">
-        <div class="workbench-head"><span class="dot claude"></span><span class="workbench-title">Claude Code</span><span class="chip" id="wb-project">未选择项目</span><span class="chip" id="wb-model" hidden></span><span style="margin-left:auto" class="muted" id="wb-state">就绪</span></div>
+        <div class="workbench-head">
+          <span class="dot claude"></span><span class="workbench-title">Claude Code</span><span class="chip" id="wb-project">未选择项目</span><span class="chip" id="wb-model" hidden></span>
+          <div class="workbench-session-controls">
+            <select class="input workbench-session" id="wb-session" aria-label="历史会话"><option value="">新会话</option></select>
+            <button class="btn compact" type="button" id="wb-new-session">新会话</button>
+            <button class="btn compact" type="button" id="wb-stop-session" disabled>停止</button>
+          </div>
+          <span class="muted" id="wb-state">就绪</span>
+        </div>
         <div class="chat" id="chat"><div class="empty-chat">从项目知识开始对话<div class="muted" style="margin-top:8px">选择左侧项目，输入问题或开发需求。</div></div></div>
         <div class="composer">
           <div class="composer-row"><textarea class="input" id="chat-input" placeholder="向 Claude 发送消息…"></textarea><button class="btn-primary send" type="button" id="send-btn" aria-label="发送">↑</button></div>
-          <div class="toolbar"><div class="token"><span class="dot good"></span><span>默认模式</span></div><div class="token"><span>💬</span><span class="nav-badge" id="msg-count">0</span></div><span style="margin-left:auto" class="muted">对话统一归档，可在 设置 → 开发对话 回看</span></div>
+          <div class="toolbar"><div class="token"><span class="dot good"></span><span>默认模式</span></div><div class="token"><span>💬</span><span class="nav-badge" id="msg-count">0</span></div><span style="margin-left:auto" class="muted">Claude Workbench 会话保存在本机；外部开发对话可在 设置 → 开发对话 回看</span></div>
         </div>
       </section>
     </section>

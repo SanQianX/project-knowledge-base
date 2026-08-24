@@ -9,7 +9,8 @@
     projects: [], profiles: [], profileConfig: null, profileIndex: -1, profileKey: '',
     activeProjectId: '', view: 'workbench', settings: 'ai', settingsOpen: false,
     conversationCursor: null, conversationTurns: [], logs: [], logStream: null, logCursor: '', newLogs: 0,
-    activeSessionId: '', sessionStream: null, assistantContent: null, toolCards: new Map(), lastUserText: '',
+    activeSessionId: '', activeSession: null, sessions: [], sessionStream: null, sessionListStream: null,
+    assistantContent: null, thinkingContent: null, toolCards: new Map(), pendingPermission: null,
     messageCount: 0, pendingDeleteId: '',
   };
   const today = () => { const d = new Date(), pad = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
@@ -77,9 +78,16 @@
     const profile = project && state.profiles.find(item => item.id === project.config.aiProfileId);
     if (profile) { setText(modelChip, `${profile.vendor || profile.id} · ${profile.model || profile.mainModel || ''}`); modelChip.hidden = false; }
     else { setText(modelChip, ''); modelChip.hidden = true; }
-    $('chat-input').disabled = !project; $('send-btn').disabled = !project;
+    $('chat-input').disabled = !project; $('send-btn').disabled = !project; $('wb-new-session').disabled = !project; $('wb-session').disabled = !project;
   }
-  function selectProject(projectId) { if (projectId !== state.activeProjectId) closeSessionStream(); state.activeProjectId = projectId; renderProjects(); if (state.settings === 'conversation') loadConversations(true); }
+  function selectProject(projectId) {
+    const changed = projectId !== state.activeProjectId;
+    if (changed) closeSessionStream();
+    state.activeProjectId = projectId;
+    renderProjects();
+    if (changed || !state.activeSessionId) loadClaudeSessions(projectId, true).catch(() => {});
+    if (state.settings === 'conversation') loadConversations(true);
+  }
   const viewTitles = { workbench: 'Claude Code', import: '导入项目' };
   function showView(view) {
     state.view = view;
@@ -98,6 +106,7 @@
     setText($('brand-root'), body.settings?.knowledge?.rootPath || '');
     fillImportProfiles();
     renderProjects();
+    await loadClaudeSessions(state.activeProjectId, true);
     if (state.settings === 'ai') fillProfileFields();
   }
 
@@ -400,6 +409,12 @@
 
   function clearChatEmpty() { $('chat').querySelector('.empty-chat')?.remove(); }
   function bumpMessageCount() { state.messageCount += 1; setText($('msg-count'), String(state.messageCount)); }
+  function resetWorkbenchMessages(message = '选择历史会话，或发送消息开始新会话。') {
+    $('chat').replaceChildren();
+    const empty = document.createElement('div'); empty.className = 'empty-chat'; empty.textContent = message; $('chat').append(empty);
+    state.messageCount = 0; setText($('msg-count'), '0');
+    state.assistantContent = null; state.thinkingContent = null; state.toolCards.clear(); state.pendingPermission = null;
+  }
   function appendBubble(kind, build) {
     clearChatEmpty();
     const row = document.createElement('div'); row.className = `msg-row${kind === 'user' ? ' user' : ''}`;
@@ -409,33 +424,59 @@
     bumpMessageCount();
     return { row, bubble };
   }
+  function appendStatus(text, kind = 'status') {
+    if (!text) return null;
+    return appendBubble(kind, bubble => { bubble.classList.add(kind); bubble.textContent = text; });
+  }
+  function ensureAssistantContent() {
+    if (!state.assistantContent) {
+      state.assistantContent = appendBubble('assistant', bubble => {
+        const name = document.createElement('strong'); name.textContent = 'Claude';
+        bubble.append(name, document.createElement('br'), document.createElement('br'));
+        const content = document.createElement('span'); bubble.append(content);
+      }).bubble.querySelector('span:last-child');
+    }
+    return state.assistantContent;
+  }
+  function setWorkbenchState(next) {
+    const label = { idle: '就绪', running: '运行中', spawning: '启动中', 'pending-permission': '等待授权', failed: '失败', aborted: '已停止', ended: '已结束' }[next] || next || '就绪';
+    setText($('wb-state'), label);
+    $('wb-stop-session').disabled = !['running', 'spawning', 'pending-permission'].includes(next);
+    if (state.activeSession) state.activeSession.state = next;
+  }
+  async function resolveWorkbenchPermission(requestId, allow) {
+    if (!state.activeSessionId || !requestId) return;
+    try {
+      await api(`/api/claude/sessions/${encodeURIComponent(state.activeSessionId)}/permission`, {
+        method: 'POST', body: JSON.stringify({ requestId, decision: { allow } }),
+      });
+    } catch (error) { appendStatus(error.message, 'error'); }
+  }
   function renderWorkbenchEvent(event) {
     if (!event || !event.type) return;
-    if (event.type === 'claude/message-start' && event.role === 'assistant') state.assistantContent = null;
-    if (event.type === 'claude/user-prompt' && event.text && event.text !== state.lastUserText) {
-      state.lastUserText = event.text;
+    if (event.type === 'claude/message-start' && event.role === 'assistant') { state.assistantContent = null; state.thinkingContent = null; }
+    if (event.type === 'claude/user-prompt' && event.text) {
       appendBubble('user', bubble => { bubble.textContent = event.text; });
     }
+    if (event.type === 'claude/thinking-start') {
+      state.thinkingContent = appendBubble('thinking', bubble => {
+        bubble.classList.add('thinking');
+        const name = document.createElement('strong'); name.textContent = '思考过程';
+        bubble.append(name, document.createElement('br'), document.createElement('br'));
+        bubble.append(document.createElement('span'));
+      }).bubble.querySelector('span:last-child');
+    }
+    if (event.type === 'claude/thinking-delta' && event.text) {
+      if (!state.thinkingContent) renderWorkbenchEvent({ type: 'claude/thinking-start' });
+      state.thinkingContent.textContent += event.text;
+    }
     if (event.type === 'claude/text-delta' && event.text) {
-      if (!state.assistantContent) {
-        state.assistantContent = appendBubble('assistant', bubble => {
-          const name = document.createElement('strong'); name.textContent = 'Claude';
-          bubble.append(name, document.createElement('br'), document.createElement('br'));
-          const content = document.createElement('span'); bubble.append(content);
-        }).bubble.querySelector('span:last-child');
-      }
-      state.assistantContent.textContent += event.text; $('chat').scrollTop = $('chat').scrollHeight;
+      ensureAssistantContent().textContent += event.text; $('chat').scrollTop = $('chat').scrollHeight;
     }
     if (event.type === 'claude/result' && event.result && !event.isError) {
-      if (!state.assistantContent) {
-        state.assistantContent = appendBubble('assistant', bubble => {
-          const name = document.createElement('strong'); name.textContent = 'Claude';
-          bubble.append(name, document.createElement('br'), document.createElement('br'));
-          const content = document.createElement('span'); bubble.append(content);
-        }).bubble.querySelector('span:last-child');
-      }
-      state.assistantContent.textContent = event.result;
+      ensureAssistantContent().textContent = event.result;
     }
+    if (event.type === 'claude/result' && event.isError) appendStatus(event.result || 'Claude 返回错误结果。', 'error');
     if (event.type === 'claude/tool-use-start' || event.type === 'claude/tool-use') {
       const key = event.id || `${event.name || 'tool'}-${state.toolCards.size}`;
       let item = state.toolCards.get(key);
@@ -454,18 +495,109 @@
       setText(code, event.input ? JSON.stringify(event.input, null, 2) : (event.summary || '运行中'));
       $('chat').scrollTop = $('chat').scrollHeight;
     }
+    if (event.type === 'claude/tool-input-delta' && event.text && state.toolCards.size) {
+      const latest = [...state.toolCards.values()].at(-1); const code = latest && latest.bubble.querySelector('.tool-code');
+      if (code) code.textContent = `${code.textContent === '运行中' ? '' : code.textContent}${event.text}`;
+    }
+    if (event.type === 'claude/tool-policy') appendStatus(`工具策略 · ${event.toolName || 'Tool'} · ${event.decision || ''}${event.reason ? ` · ${event.reason}` : ''}`);
+    if (event.type === 'claude/permission-request') {
+      state.pendingPermission = event;
+      appendBubble('permission', bubble => {
+        bubble.classList.add('permission');
+        const summary = event.summary || {};
+        const title = document.createElement('strong'); title.textContent = `需要授权 · ${summary.toolName || summary.title || 'Tool'}`;
+        const detail = document.createElement('div'); detail.className = 'tool-code'; detail.textContent = summary.promptPreview || summary.description || '';
+        const actions = document.createElement('div'); actions.className = 'permission-actions';
+        const allow = document.createElement('button'); allow.type = 'button'; allow.className = 'btn-primary'; allow.textContent = '允许'; allow.addEventListener('click', () => resolveWorkbenchPermission(event.requestId, true));
+        const deny = document.createElement('button'); deny.type = 'button'; deny.className = 'btn'; deny.textContent = '拒绝'; deny.addEventListener('click', () => resolveWorkbenchPermission(event.requestId, false));
+        actions.append(allow, deny); bubble.append(title, detail, actions);
+      });
+    }
+    if (event.type === 'claude/permission-resolved') state.pendingPermission = null;
+    if (event.type === 'claude/retry') appendStatus(`模型暂时不可用，正在重试 ${event.attempt || 1}/${event.maxRetries || event.attempt || 1}…`);
+    if (event.type === 'claude/restored') appendStatus('已恢复本机会话记录。');
+    if (event.type === 'claude/kbpath-updated' || event.type === 'claude/conversation-reset') appendStatus(event.message || '工作目录变化，旧会话上下文已清理。');
+    if (event.type === 'claude/aborted') appendStatus('会话已由用户停止。');
     if (event.type === 'claude/state') {
-      setText($('wb-state'), event.state === 'idle' ? '就绪' : event.state);
+      setWorkbenchState(event.state);
       if (['ended', 'failed', 'aborted'].includes(event.state)) state.assistantContent = null;
     }
     if (event.type === 'claude/error') appendBubble('error', bubble => { bubble.textContent = event.message || 'Claude 会话失败。'; });
   }
-  function closeSessionStream() { if (state.sessionStream) state.sessionStream.close(); state.sessionStream = null; state.activeSessionId = ''; state.assistantContent = null; state.toolCards.clear(); }
+  function sessionLabel(session) {
+    const stamp = session.startedAt ? new Date(session.startedAt).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '未知时间';
+    const source = session.source === 'git-hook' || session.automation ? 'Commit 分析' : '对话';
+    return `${stamp} · ${source} · ${session.state || 'idle'}${session.legacySource ? ' · 历史数据' : ''}`;
+  }
+  function projectSessions(projectId = state.activeProjectId) {
+    return state.sessions.filter(session => session.projectSlug === projectId).sort((a, b) => String(b.startedAt || '').localeCompare(String(a.startedAt || '')));
+  }
+  function renderSessionSelect() {
+    const select = $('wb-session'); select.replaceChildren(option('', '新会话'));
+    for (const session of projectSessions()) select.append(option(session.sessionId, sessionLabel(session)));
+    select.value = projectSessions().some(session => session.sessionId === state.activeSessionId) ? state.activeSessionId : '';
+  }
+  function closeSessionStream() {
+    if (state.sessionStream) state.sessionStream.close();
+    state.sessionStream = null; state.activeSessionId = ''; state.activeSession = null;
+    state.assistantContent = null; state.thinkingContent = null; state.toolCards.clear(); state.pendingPermission = null;
+    setWorkbenchState('idle'); renderSessionSelect();
+  }
+  async function attachSession(sessionId) {
+    if (!sessionId) { closeSessionStream(); resetWorkbenchMessages(); return; }
+    if (state.activeSessionId === sessionId && state.sessionStream) return;
+    if (state.sessionStream) state.sessionStream.close();
+    state.sessionStream = null; state.activeSessionId = sessionId;
+    state.activeSession = state.sessions.find(session => session.sessionId === sessionId) || null;
+    renderSessionSelect(); resetWorkbenchMessages('正在恢复会话…');
+    try {
+      const body = await api(`/api/claude/sessions/${encodeURIComponent(sessionId)}`);
+      if (state.activeSessionId !== sessionId) return;
+      state.activeSession = { ...(state.activeSession || {}), ...(body.session || {}) };
+      setWorkbenchState(state.activeSession.state || 'idle');
+      subscribeSession(sessionId);
+    } catch (error) {
+      if (state.activeSessionId === sessionId) appendStatus(error.message, 'error');
+    }
+  }
   function subscribeSession(sessionId) {
     if (state.sessionStream) state.sessionStream.close();
     const stream = new EventSource(`/api/claude/sessions/${encodeURIComponent(sessionId)}/events`); state.sessionStream = stream;
-    for (const type of ['claude/message-start', 'claude/user-prompt', 'claude/text-delta', 'claude/result', 'claude/tool-use-start', 'claude/tool-use', 'claude/state', 'claude/error']) stream.addEventListener(type, event => { try { renderWorkbenchEvent(JSON.parse(event.data)); } catch {} });
+    stream.onopen = () => { if (state.activeSessionId === sessionId) resetWorkbenchMessages('会话中还没有可显示的消息。'); };
+    for (const type of ['claude/init', 'claude/restored', 'claude/kbpath-updated', 'claude/conversation-reset', 'claude/message-start', 'claude/message-stop', 'claude/user-prompt', 'claude/thinking-start', 'claude/thinking-delta', 'claude/text-delta', 'claude/result', 'claude/tool-use-start', 'claude/tool-input-delta', 'claude/tool-use', 'claude/tool-policy', 'claude/permission-request', 'claude/permission-resolved', 'claude/retry', 'claude/state', 'claude/error', 'claude/aborted', 'claude/turn-end']) stream.addEventListener(type, event => { try { renderWorkbenchEvent(JSON.parse(event.data)); } catch {} });
     stream.onerror = () => { if (state.activeSessionId === sessionId) setText($('wb-state'), '正在重连'); };
+  }
+  async function loadClaudeSessions(projectId, autoRestore = false) {
+    if (!projectId) { state.sessions = []; renderSessionSelect(); return; }
+    const body = await api(`/api/claude/sessions?projectId=${encodeURIComponent(projectId)}`);
+    const others = state.sessions.filter(session => session.projectSlug !== projectId);
+    state.sessions = [...others, ...(body.sessions || [])]; renderSessionSelect();
+    if (autoRestore && !state.activeSessionId) {
+      const latest = projectSessions(projectId)[0];
+      if (latest) await attachSession(latest.sessionId); else resetWorkbenchMessages();
+    }
+  }
+  function applySessionsSnapshot(sessions) {
+    state.sessions = Array.isArray(sessions) ? sessions : []; renderSessionSelect();
+    if (!state.activeSessionId) {
+      const latest = projectSessions()[0]; if (latest) attachSession(latest.sessionId).catch(() => {});
+    }
+  }
+  function applySessionsChange(event) {
+    if (!event || !event.sessionId || !event.projectSlug) return;
+    const index = state.sessions.findIndex(session => session.sessionId === event.sessionId);
+    if (index >= 0) state.sessions[index] = { ...state.sessions[index], ...event };
+    else state.sessions.push({ ...event });
+    renderSessionSelect();
+    if (state.activeSessionId === event.sessionId) { state.activeSession = { ...(state.activeSession || {}), ...event }; setWorkbenchState(event.state); }
+    const hookAutomation = event.source === 'git-hook' || event.promptKey === 'post-commit-automation';
+    if (event.projectSlug === state.activeProjectId && hookAutomation && (event.kind === 'create' || event.active)) attachSession(event.sessionId).catch(() => {});
+  }
+  function openSessionListStream() {
+    if (state.sessionListStream) return;
+    const stream = new EventSource('/api/claude/sessions-stream'); state.sessionListStream = stream;
+    stream.addEventListener('claude/snapshot', event => { try { applySessionsSnapshot(JSON.parse(event.data).sessions || []); } catch {} });
+    stream.addEventListener('claude/sessions-changed', event => { try { applySessionsChange(JSON.parse(event.data)); } catch {} });
   }
 
   async function submitImport(event) {
@@ -611,17 +743,22 @@
   }
   async function sendChat() {
     const project = activeProject(), text = $('chat-input').value.trim(); if (!project || !text) return;
-    state.lastUserText = text;
-    appendBubble('user', bubble => { bubble.textContent = text; });
     $('chat-input').value = ''; state.assistantContent = null;
     try {
       if (!state.activeSessionId) {
         const started = await api('/api/claude/sessions', { method: 'POST', body: JSON.stringify({ projectId: project.projectId }) });
-        state.activeSessionId = started.sessionId; subscribeSession(started.sessionId);
+        await loadClaudeSessions(project.projectId, false);
+        await attachSession(started.sessionId);
       }
       await api(`/api/claude/sessions/${encodeURIComponent(state.activeSessionId)}/input`, { method: 'POST', body: JSON.stringify({ text }) });
     } catch (error) { appendBubble('error', bubble => { bubble.textContent = error.message; }); }
   }
+  async function stopWorkbenchSession() {
+    if (!state.activeSessionId) return;
+    try { await api(`/api/claude/sessions/${encodeURIComponent(state.activeSessionId)}/abort`, { method: 'POST' }); }
+    catch (error) { appendStatus(error.message, 'error'); }
+  }
+  function newWorkbenchSession() { closeSessionStream(); resetWorkbenchMessages('发送消息开始新的 Claude 会话。'); $('chat-input').focus(); }
 
   function openContextmenu(projectId, x, y) {
     state.pendingDeleteId = projectId;
@@ -717,6 +854,9 @@
   for (const id of ['knowledge-root']) $(id).addEventListener('change', schedulePreflight);
   $('send-btn').addEventListener('click', sendChat);
   $('chat-input').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendChat(); } });
+  $('wb-session').addEventListener('change', event => attachSession(event.target.value).catch(error => appendStatus(error.message, 'error')));
+  $('wb-new-session').addEventListener('click', newWorkbenchSession);
+  $('wb-stop-session').addEventListener('click', stopWorkbenchSession);
   $('save-knowledge').addEventListener('click', async () => { try { await api('/api/settings', { method: 'PATCH', body: JSON.stringify({ knowledge: { rootPath: $('knowledge-root').value } }) }); await loadState(); } catch (error) { alert(error.message); } });
   $('profile-select').addEventListener('change', event => { bindProfileDraft(); state.profileIndex = Number(event.target.value); fillProfileFields(); });
   for (const id of ['profile-vendor', 'profile-model', 'profile-base-url']) $(id).addEventListener('input', bindProfileDraft);
@@ -759,6 +899,6 @@
   document.documentElement.dataset.theme = storedTheme;
   setText($('theme-button'), storedTheme === 'dark' ? '浅色模式' : '深色模式');
   $('logs-date').value = today(); $('conversation-date').value = today();
-  window.__PK_APP__ = { getState: () => ({ projects: state.projects.length, activeProjectId: state.activeProjectId, view: state.view, settings: state.settings, settingsOpen: state.settingsOpen, conversationTurns: state.conversationTurns.length, logCount: state.logs.length, newLogs: state.newLogs }), openSettings, showSettings, loadLogs, renderWorkbenchEvent };
-  loadState().catch(error => { setText($('brand-root'), error.message); });
+  window.__PK_APP__ = { getState: () => ({ projects: state.projects.length, activeProjectId: state.activeProjectId, view: state.view, settings: state.settings, settingsOpen: state.settingsOpen, conversationTurns: state.conversationTurns.length, logCount: state.logs.length, newLogs: state.newLogs, sessionCount: projectSessions().length, activeSessionId: state.activeSessionId, activeSessionState: state.activeSession && state.activeSession.state || '' }), openSettings, showSettings, loadLogs, loadClaudeSessions, attachSession, renderWorkbenchEvent };
+  loadState().then(openSessionListStream).catch(error => { setText($('brand-root'), error.message); });
 })();
