@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.2.7] - 2026-08-24
+
+- Made runtime data migration fail closed: existing legacy data is now
+  discovered and relocated safely, migration failures prevent startup,
+  and settings-only legacy data is preserved instead of being treated as
+  a fresh install.
+- Restricted Knowledge Analysis to explicit post-commit hook events.
+  Startup, bridge synchronization, historical catch-up, and offline
+  commits no longer trigger implicit analysis.
+- Preserved conversation and commit-boundary facts across offline periods
+  without allowing those facts to contaminate a later online commit.
+
 ## [4.2.6] - 2026-08-20
 
 - Hotfix for the v4.2.5 commit-reconciler regression: the post-batch
