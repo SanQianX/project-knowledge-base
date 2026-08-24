@@ -64,10 +64,18 @@ class ConversationQueryService {
     });
   }
 
-  annotations(projectId) {
+  annotations(projectId, events = []) {
     const byTurn = new Map();
+    const closedAtByTurn = new Map(events
+      .filter(event => event.turnId && Number.isInteger(event.developmentTurnClosedAtSequence))
+      .map(event => [event.turnId, event.developmentTurnClosedAtSequence]));
     for (const snapshot of this.conversationStore.listSnapshots(projectId)) {
       for (const turn of snapshot.turns) {
+        const closedAt = closedAtByTurn.get(turn.turnId);
+        if (turn.bindingKind === 'shared-spanning'
+          && Number.isInteger(snapshot.boundaryStartCursor)
+          && Number.isInteger(closedAt)
+          && closedAt <= snapshot.boundaryStartCursor) continue;
         const current = byTurn.get(turn.turnId) || [];
         current.push({
           commitSha: snapshot.commitSha,
@@ -90,7 +98,8 @@ class ConversationQueryService {
     const limit = Math.max(1, Math.min(Number(input.limit || 50), 200));
     const cursor = decodeCursor(input.cursor, projectId, date);
     const groups = new Map();
-    for (const event of readDevelopmentEvents(this.conversationStore, projectId)) {
+    const events = readDevelopmentEvents(this.conversationStore, projectId);
+    for (const event of events) {
       const turnId = event.turnId || `event:${event.eventId}`;
       let group = groups.get(turnId);
       if (!group) {
@@ -99,7 +108,7 @@ class ConversationQueryService {
       }
       group.events.push(event);
     }
-    const annotations = this.annotations(projectId);
+    const annotations = this.annotations(projectId, events);
     let projected = [...groups.values()].map(group => {
       group.events.sort((left, right) => String(left.capturedAt).localeCompare(String(right.capturedAt)) || left.eventId.localeCompare(right.eventId));
       const first = group.events[0];
@@ -126,7 +135,7 @@ class ConversationQueryService {
         renderAs: 'plain-text',
         key: `${first.capturedAt}|${group.turnId}`,
       };
-    }).filter(turn => turn.date === date)
+    }).filter(turn => turn.userEventIds.length > 0 && turn.date === date)
       .sort((left, right) => right.key.localeCompare(left.key));
     if (cursor) projected = projected.filter(turn => turn.key < cursor.beforeKey);
     const page = projected.slice(0, limit);

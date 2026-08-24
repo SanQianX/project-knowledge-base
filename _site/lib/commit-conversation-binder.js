@@ -63,8 +63,8 @@ class CommitConversationBinder {
     if (this.snapshotExists(projectId, commitSha)) return this.conversationStore.readSnapshot(projectId, commitSha);
 
     if (this.projectStore) await this.conversationStore.importLegacyRequirements(projectId);
-    // Development Conversation reads are centralized: legacy embedded
-    // Workbench pairs are excluded here and in the query service alike.
+    // Development Conversation reads are centralized: exclusions and Codex
+    // turn repair are identical here and in the query service.
     const events = readDevelopmentEvents(this.conversationStore, projectId);
     let boundary = null;
     try { boundary = this.conversationStore.readBoundary(projectId, commitSha); }
@@ -134,7 +134,10 @@ class CommitConversationBinder {
           && event.sequence != null
           && event.sequence <= startCursor
           && this.repoMatches(event.repoIdentity, boundary.repoIdentity));
-        if (user) selected.set(turnId, 'shared-spanning');
+        const closedAt = user && user.developmentTurnClosedAtSequence;
+        if (user && !(Number.isInteger(closedAt) && closedAt <= startCursor)) {
+          selected.set(turnId, 'shared-spanning');
+        }
       }
     }
 

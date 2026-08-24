@@ -270,10 +270,8 @@
         const text = document.createElement('div'); text.className = 'turn-text'; text.textContent = value;
         message.append(roleNode, text); return message;
       };
-      card.append(
-        makeMessage('user', '你', turn.userPrompt || '（无用户文本）'),
-        makeMessage('assistant', 'AI', turn.assistantReply || '（尚无回复）'),
-      );
+      if (turn.userPrompt) card.append(makeMessage('user', '你', turn.userPrompt));
+      if (turn.assistantReply) card.append(makeMessage('assistant', 'AI', turn.assistantReply));
       const foot = document.createElement('div'); foot.className = 'turn-foot';
       const label = document.createElement('span'); label.className = `commit-label ${turn.annotation.status}`;
       label.textContent = labels[turn.annotation.status] || '未提交';

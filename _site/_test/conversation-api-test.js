@@ -61,6 +61,10 @@ async function waitForServer() {
     turns: [{ turnId: 'turn-1', source: 'codex', sessionId: 'session-api', bindingKind: 'direct', userEvents: [projectEvent(r1)], assistantEvents: [projectEvent(a1)] }],
   });
   store.writeSnapshot(projectId, {
+    commitSha: '3'.repeat(40), repoIdentity, parentSha: '2'.repeat(40), boundaryStartCursor: 5, boundaryEndCursor: 5, status: 'available',
+    turns: [{ turnId: 'turn-2', source: 'codex', sessionId: 'session-api', bindingKind: 'shared-spanning', userEvents: [projectEvent(r2)], assistantEvents: [projectEvent(a2)] }],
+  });
+  store.writeSnapshot(projectId, {
     commitSha: '2'.repeat(40), repoIdentity, parentSha: '1'.repeat(40), boundaryStartCursor: 2, boundaryEndCursor: 4, status: 'available',
     turns: [{ turnId: 'turn-2', source: 'codex', sessionId: 'session-api', bindingKind: 'shared-spanning', userEvents: [projectEvent(r2)], assistantEvents: [projectEvent(a2)] }],
   });
@@ -93,6 +97,7 @@ async function waitForServer() {
     assert.strictEqual(turn1.annotation.status, 'committed');
     assert.strictEqual(turn1.annotation.commits[0].shortSha, '1111111');
     assert.strictEqual(turn2.annotation.status, 'associated');
+    assert.deepStrictEqual(turn2.annotation.commits.map(commit => commit.shortSha), ['2222222'], 'stale shared-spanning annotations after the next user turn are hidden');
     assert.strictEqual(turn3.annotation.status, 'uncommitted');
     assert(allTurns.every(turn => turn.date === date));
 

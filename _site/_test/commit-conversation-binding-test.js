@@ -66,10 +66,10 @@ const { CommitConversationBinder } = require('../lib/commit-conversation-binder'
   assert.deepStrictEqual(frozenC2.turns[0].assistantEvents.map(event => event.eventId), ['a1'], 'the assistant reply inside the C2 window belongs to the spanning turn');
   assert.strictEqual(frozenC2.turns[0].turnId, frozenC1.turns[0].turnId, 'spanning turns must retain one stable identity across commits');
 
-  store.writeBoundary(projectId, { commitSha: c3, repoIdentity, parentShas: [c2], branch: 'main', committedAt: '2026-08-18T02:07:00.000Z', bridgeCursorAtCommit: 7, journalSequence: 7, openTurnIdsAtCommit: [], operationId: 'op-c3' });
+  store.writeBoundary(projectId, { commitSha: c3, repoIdentity, parentShas: [c2], branch: 'main', committedAt: '2026-08-18T02:07:00.000Z', bridgeCursorAtCommit: 7, journalSequence: 7, openTurnIdsAtCommit: ['turn-1'], operationId: 'op-c3' });
   const frozenC3 = await binder.bind({ projectId, commitSha: c3 });
   assert.strictEqual(frozenC3.status, 'no-new-user-prompt');
-  assert.deepStrictEqual(frozenC3.turns, [], 'a previous requirement must not be copied into a commit with no new user prompt');
+  assert.deepStrictEqual(frozenC3.turns, [], 'a stale Bridge open-turn id must not copy a closed requirement into a later commit');
 
   await append({ eventId: 'r-merge', sequence: 8, eventType: 'user_prompt', role: 'user', content: 'Merge-window requirement.', turnId: 'turn-merge' });
   store.writeBoundary(projectId, { commitSha: cMerge, repoIdentity, parentShas: [c1, c2], branch: 'main', committedAt: '2026-08-18T02:10:00.000Z', bridgeCursorAtCommit: 10, journalSequence: 10, openTurnIdsAtCommit: [], operationId: 'op-merge' });
