@@ -5,7 +5,12 @@
   "main": "_site/server.js",
   "scripts": {
     "start": "node _site/server.js",
-    "test": "node _site/_test/run-all-tests.js"
+    "test": "node _site/_test/run-all-tests.js",
+    "release:sync": "node _site/scripts/sync-release-version.js",
+    "release:verify": "node _site/scripts/sync-release-version.js --check && node _site/_test/integration-adapters-test.js",
+    "preversion": "npm run release:verify",
+    "version": "npm run release:sync",
+    "postversion": "npm run release:verify"
   },
   "bin": {
     "project-knowledge": "bin/project-knowledge.js",

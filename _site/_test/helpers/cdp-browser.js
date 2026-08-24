@@ -79,6 +79,11 @@ function hasExited(child) {
   return !child || child.exitCode !== null || child.signalCode !== null;
 }
 
+function isWindowsChromeLauncher(executable) {
+  if (process.platform !== "win32") return false;
+  return /(?:chrome|msedge)\.exe$/i.test(path.basename(String(executable || "")));
+}
+
 function waitForExit(child, timeoutMs = 3000) {
   if (hasExited(child)) return Promise.resolve();
   return new Promise(resolve => {
@@ -88,15 +93,35 @@ function waitForExit(child, timeoutMs = 3000) {
   });
 }
 
-async function terminateProcessTree(child) {
-  if (hasExited(child)) return;
-  if (process.platform === "win32" && child.pid) {
+function terminateProfileProcesses(profileDir) {
+  if (process.platform !== "win32" || !profileDir) return;
+  const command = "$profile = $env:PK_CDP_PROFILE; "
+    + "Get-CimInstance Win32_Process -Filter \"Name = 'chrome.exe' OR Name = 'msedge.exe'\" "
+    + "| Where-Object { $_.CommandLine -and $_.CommandLine.IndexOf($profile, [System.StringComparison]::OrdinalIgnoreCase) -ge 0 } "
+    + "| ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }";
+  try {
+    spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], {
+      stdio: "ignore",
+      timeout: 10000,
+      windowsHide: true,
+      env: { ...process.env, PK_CDP_PROFILE: profileDir },
+    });
+  } catch {}
+}
+
+async function terminateProcessTree(child, profileDir) {
+  if (!hasExited(child) && process.platform === "win32" && child.pid) {
     try {
       spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore", timeout: 10000 });
     } catch {}
   }
-  try { child.kill(); } catch {}
-  await waitForExit(child, 3000);
+  if (!hasExited(child)) {
+    try { child.kill(); } catch {}
+    await waitForExit(child, 3000);
+  }
+  // Windows Chrome can detach from the launcher process. Always clean by the
+  // unique test profile as well, otherwise later CDP launches become flaky.
+  terminateProfileProcesses(profileDir);
 }
 
 function removeProfileDir(profileDir) {
@@ -108,7 +133,7 @@ function removeProfileDir(profileDir) {
 
 async function cleanupSpawnedBrowser(child, profileDir) {
   try {
-    await terminateProcessTree(child);
+    await terminateProcessTree(child, profileDir);
   } catch {}
   if (profileDir) removeProfileDir(profileDir);
 }
@@ -141,18 +166,19 @@ function describeEarlyExit(exitInfo, spawnError) {
   return "browser exited before exposing CDP (exit code " + code + signal + ")";
 }
 
-async function waitForDevToolsPort(profileDir, state, timeoutMs) {
+async function waitForDevToolsPort(profileDir, state, timeoutMs, tolerateLauncherExit) {
   const portFile = path.join(profileDir, "DevToolsActivePort");
   return waitFor(() => {
-    if (state.exited) {
+    let text;
+    try { text = fs.readFileSync(portFile, "utf8"); } catch {}
+    const port = Number.parseInt(String(text || "").split(/\r?\n/, 1)[0], 10);
+    if (Number.isInteger(port) && port > 0) return port;
+    if (state.exited && !tolerateLauncherExit) {
       const error = new Error(describeEarlyExit(state.exitInfo, state.spawnError));
       error.fatal = true;
       throw error;
     }
-    let text;
-    try { text = fs.readFileSync(portFile, "utf8"); } catch { return null; }
-    const port = Number.parseInt(String(text).split(/\r?\n/, 1)[0], 10);
-    return Number.isInteger(port) && port > 0 ? port : null;
+    return null;
   }, "DevToolsActivePort file", timeoutMs);
 }
 
@@ -162,6 +188,7 @@ async function launchCdpBrowser(options) {
   const launchTimeoutMs = Number(options.launchTimeoutMs || DEFAULT_LAUNCH_TIMEOUT_MS);
   const explicitPort = Number(options.debugPort) > 0 ? Number(options.debugPort) : 0;
   const prependArgs = Array.isArray(options.prependArgs) ? options.prependArgs : [];
+  const tolerateLauncherExit = isWindowsChromeLauncher(chrome);
 
   removeProfileDir(profileDir);
   fs.mkdirSync(profileDir, { recursive: true });
@@ -225,10 +252,10 @@ async function launchCdpBrowser(options) {
       state.exitInfo = { code, signal };
     });
 
-    const debugPort = explicitPort || await waitForDevToolsPort(profileDir, state, launchTimeoutMs);
+    const debugPort = explicitPort || await waitForDevToolsPort(profileDir, state, launchTimeoutMs, tolerateLauncherExit);
 
     const pages = await waitFor(() => {
-      if (state.exited) {
+      if (state.exited && !tolerateLauncherExit) {
         const error = new Error(describeEarlyExit(state.exitInfo, state.spawnError));
         error.fatal = true;
         throw error;
@@ -309,7 +336,7 @@ async function launchCdpBrowser(options) {
 
     async function close() {
       try { socket.close(); } catch {}
-      await terminateProcessTree(child);
+      await terminateProcessTree(child, profileDir);
       removeProfileDir(profileDir);
     }
 
@@ -319,4 +346,4 @@ async function launchCdpBrowser(options) {
   }
 }
 
-module.exports = { launchCdpBrowser, requestJson, waitFor, wait };
+module.exports = { isWindowsChromeLauncher, launchCdpBrowser, requestJson, waitFor, wait };

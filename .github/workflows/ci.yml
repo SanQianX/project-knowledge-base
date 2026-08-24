@@ -29,6 +29,7 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
+      - run: npm run release:verify
       - run: npm test -- --no-report
       - run: npm pack --dry-run --json
 
@@ -54,6 +55,8 @@ jobs:
         shell: pwsh
         run: |
           npm ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run release:verify
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm test -- --no-report
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
