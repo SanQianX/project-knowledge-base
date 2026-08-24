@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.2.17] - 2026-08-25
+
+- Recognized a healthy Project Knowledge fan-out nested inside Codex Desktop's
+  computer-use `--previous-notify` wrapper. Integration status and one-click
+  repair no longer report a false third-party conflict or attempt to wrap the
+  notifier again.
+
 ## [4.2.16] - 2026-08-25
 
 - Upgraded AI Coding Event Bridge to 0.1.2 so one Codex task can be captured

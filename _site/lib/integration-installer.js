@@ -110,7 +110,39 @@ function codexNotifyLine(source) {
   }
 }
 
+const NESTED_NOTIFY_MARKERS = new Set(['--previous-notify', '--next-base64', '--bridge-base64']);
+
+function decodeNestedNotify(marker, value) {
+  if (!NESTED_NOTIFY_MARKERS.has(marker) || typeof value !== 'string' || value.length > 1024 * 1024) return null;
+  const candidates = marker === '--previous-notify'
+    ? [value, Buffer.from(value, 'base64').toString('utf8')]
+    : [Buffer.from(value, 'base64').toString('utf8')];
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (Array.isArray(parsed) && parsed.every(item => typeof item === 'string')) return parsed;
+    } catch {
+      // Try the next supported representation.
+    }
+  }
+  return null;
+}
+
+function notifyTreeSome(args, predicate, depth = 0) {
+  if (!Array.isArray(args) || depth > 8) return false;
+  if (predicate(args)) return true;
+  for (let index = 0; index < args.length - 1; index += 1) {
+    const nested = decodeNestedNotify(args[index], args[index + 1]);
+    if (nested && notifyTreeSome(nested, predicate, depth + 1)) return true;
+  }
+  return false;
+}
+
 function isDevTaskRadarNotify(args) {
+  return notifyTreeSome(args, isDirectDevTaskRadarNotify);
+}
+
+function isDirectDevTaskRadarNotify(args) {
   return Array.isArray(args) && args.some(arg => /devtask-radar[\\/]connectors[\\/]codex[\\/]notify-hook\.js$/i.test(arg));
 }
 
@@ -123,26 +155,22 @@ function codexNotifyFanoutPath(rootDir) {
 }
 
 function isProjectKnowledgeFanout(args, rootDir, bridgeHomeDir) {
-  if (!Array.isArray(args) || args[0] !== 'node' || args[1] !== codexNotifyFanoutPath(rootDir)) return false;
-  const bridgeIndex = args.indexOf('--bridge-base64');
-  if (bridgeIndex < 0 || !args[bridgeIndex + 1]) return false;
-  try {
-    const bridge = JSON.parse(Buffer.from(args[bridgeIndex + 1], 'base64').toString('utf8'));
-    return Array.isArray(bridge) && bridge.join('\n') === bridgeNextNotifyArgs(bridgeHomeDir).join('\n');
-  } catch {
-    return false;
-  }
+  return notifyTreeSome(args, candidate => {
+    if (candidate[0] !== 'node' || candidate[1] !== codexNotifyFanoutPath(rootDir)) return false;
+    const bridgeIndex = candidate.indexOf('--bridge-base64');
+    if (bridgeIndex < 0 || !candidate[bridgeIndex + 1]) return false;
+    try {
+      const bridge = JSON.parse(Buffer.from(candidate[bridgeIndex + 1], 'base64').toString('utf8'));
+      return Array.isArray(bridge) && bridge.join('\n') === bridgeNextNotifyArgs(bridgeHomeDir).join('\n');
+    } catch {
+      return false;
+    }
+  });
 }
 
 function isBridgeNextNotify(args, bridgeHomeDir) {
-  const marker = args.indexOf('--next-base64');
-  if (marker < 0 || !args[marker + 1]) return false;
-  try {
-    const next = JSON.parse(Buffer.from(args[marker + 1], 'base64').toString('utf8'));
-    return Array.isArray(next) && next.join('\n') === bridgeNextNotifyArgs(bridgeHomeDir).join('\n');
-  } catch {
-    return false;
-  }
+  const expected = bridgeNextNotifyArgs(bridgeHomeDir).join('\n');
+  return notifyTreeSome(args, candidate => candidate.join('\n') === expected);
 }
 
 function isBridgeOnlyNotify(args, bridgeHomeDir) {
@@ -153,7 +181,7 @@ function chainBridgeAfterDevTaskRadar(configFile, bridgeHomeDir) {
   if (!configFile || !fs.existsSync(configFile)) return { chained: false, reason: 'config-not-found' };
   const source = fs.readFileSync(configFile, 'utf8');
   const parsed = codexNotifyLine(source);
-  if (!parsed || !isDevTaskRadarNotify(parsed.args)) return { chained: false, reason: 'unsupported-third-party-notify' };
+  if (!parsed || !isDirectDevTaskRadarNotify(parsed.args)) return { chained: false, reason: 'unsupported-third-party-notify' };
   if (isBridgeNextNotify(parsed.args, bridgeHomeDir)) return { chained: true, changed: false };
   if (parsed.args.includes('--next-base64')) return { chained: false, reason: 'third-party-next-notify-present' };
   const next = Buffer.from(JSON.stringify(bridgeNextNotifyArgs(bridgeHomeDir))).toString('base64');
@@ -169,8 +197,9 @@ function wrapDevTaskRadarNotify(configFile, rootDir, bridgeHomeDir) {
   if (!configFile || !fs.existsSync(configFile)) return { chained: false, reason: 'config-not-found' };
   const source = fs.readFileSync(configFile, 'utf8');
   const parsed = codexNotifyLine(source);
-  if (!parsed || !JSON.stringify(parsed.args).includes('devtask-radar')) return { chained: false, reason: 'unsupported-third-party-notify' };
+  if (!parsed) return { chained: false, reason: 'unsupported-third-party-notify' };
   if (isProjectKnowledgeFanout(parsed.args, rootDir, bridgeHomeDir)) return { chained: true, changed: false };
+  if (!JSON.stringify(parsed.args).includes('devtask-radar')) return { chained: false, reason: 'unsupported-third-party-notify' };
   const next = Buffer.from(JSON.stringify(parsed.args)).toString('base64');
   const bridge = Buffer.from(JSON.stringify(bridgeNextNotifyArgs(bridgeHomeDir))).toString('base64');
   const fanout = ['node', codexNotifyFanoutPath(rootDir), '--next-base64', next, '--bridge-base64', bridge];

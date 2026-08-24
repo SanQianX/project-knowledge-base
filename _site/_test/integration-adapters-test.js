@@ -168,6 +168,28 @@ async function main() {
   const nestedStatus = await nestedManager.statusCaptureCodex();
   assert(nestedStatus.installed && !nestedStatus.conflict, 'status should recognize the managed nested fan-out wrapper');
 
+  // Codex Desktop computer-use wraps the existing notifier as a JSON array in
+  // --previous-notify. The managed fan-out is still installed and must not be
+  // misreported as a third-party conflict or wrapped a second time.
+  const desktopWrappedConfig = path.join(TEMP, 'desktop-wrapped-codex-config.toml');
+  const desktopWrappedArgs = ['C:/runtime/codex-computer-use.exe', 'turn-ended', '--previous-notify', JSON.stringify(nestedConfig)];
+  fs.writeFileSync(desktopWrappedConfig, `notify = ${JSON.stringify(desktopWrappedArgs)}\n`, 'utf8');
+  const desktopWrappedManager = new IntegrationManager({
+    rootDir: ROOT,
+    homeDir: path.join(TEMP, 'desktop-wrapped-codex-home'),
+    bridgeHomeDir: path.join(TEMP, 'nested-bridge-home'),
+    codexConfigFile: desktopWrappedConfig,
+  });
+  const desktopWrappedStatus = await desktopWrappedManager.statusCaptureCodex();
+  assert(desktopWrappedStatus.installed && !desktopWrappedStatus.conflict,
+    'Codex Desktop outer wrapper should preserve managed capture health');
+  const beforeDesktopInstall = fs.readFileSync(desktopWrappedConfig, 'utf8');
+  const desktopWrappedInstall = await desktopWrappedManager.installCaptureCodex();
+  assert(desktopWrappedInstall.installed && !desktopWrappedInstall.conflict,
+    'one-click repair should recognize the nested managed fan-out');
+  assert(fs.readFileSync(desktopWrappedConfig, 'utf8') === beforeDesktopInstall,
+    'healthy Codex Desktop wrapper must remain byte-for-byte unchanged');
+
   const bridgeOnlyConfig = path.join(TEMP, 'bridge-only-codex-config.toml');
   const bridgeOnlyManager = new IntegrationManager({
     rootDir: ROOT,
