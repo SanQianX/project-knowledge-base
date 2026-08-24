@@ -248,7 +248,7 @@ class MigrationService {
     const discovery = this.discover();
     this.injectFault(options, 'discovery');
     const legacyProjects = safeReadJson(discovery.legacyProjectsPath, null);
-    if (legacyProjects.schema === SCHEMAS.projectRegistry && legacyProjects.schemaVersion === 2 && fs.existsSync(this.layout.getSettingsPath())) {
+    if (legacyProjects && legacyProjects.schema === SCHEMAS.projectRegistry && legacyProjects.schemaVersion === 2 && fs.existsSync(this.layout.getSettingsPath())) {
       validateRegistry(legacyProjects);
       const settings = this.atomic.readJsonStrict(this.layout.getSettingsPath(), { category: 'settings' });
       validateSettings(settings);

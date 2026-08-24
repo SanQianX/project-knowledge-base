@@ -267,9 +267,8 @@ async function killServer(server) {
     await killServer(serverB);
   }
 
-  // Scenario C — backend offline, then restart
-  // We add a new commit to legacyRepo while the backend is offline, then
-  // start a fresh server and assert startup reconciliation catches up.
+  // Scenario C — backend offline, then restart. Restart must preserve facts
+  // but must not infer this missed commit for knowledge analysis.
   fs.writeFileSync(path.join(legacyRepo, 'feature-c.txt'), 'feature c (offline)\n');
   git(legacyRepo, ['add', 'feature-c.txt']);
   git(legacyRepo, ['commit', '-q', '-m', 'scenario-c: offline commit']);
@@ -283,27 +282,12 @@ async function killServer(server) {
     await waitForHealth(serverC);
     const projectIdC = (await serverFetch(serverC, `${serverC.base}/api/state`, undefined))
       .body.projects.find(p => p.config.displayName === 'Legacy').projectId;
-    let stateC = null;
-    for (let attempt = 0; attempt < 30; attempt += 1) {
-      try {
-        const r = await serverFetch(serverC, `${serverC.base}/api/projects/${projectIdC}`, undefined);
-        if (r.status === 200 && r.body.project.state.lastAnalyzedCommit === headC) {
-          stateC = r.body.project.state;
-          break;
-        }
-      } catch {}
-      await new Promise(resolve => setTimeout(resolve, 200));
-    }
-    if (!stateC) {
-      await serverFetch(serverC, `${serverC.base}/api/hooks/post-commit`, {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          schema: 'hook-event/v2', projectId: projectIdC, repoRoot: legacyRepo,
-          head: headC, branch: 'main', operationId: `op-scenario-c-${Date.now()}`,
-        }),
-      });
-      stateC = await waitForState(serverC, projectIdC, s => s.lastAnalyzedCommit === headC, 'scenario C startup reconciliation');
-    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const stateC = (await serverFetch(serverC, `${serverC.base}/api/projects/${projectIdC}`, undefined)).body.project.state;
+    assert.notStrictEqual(stateC.lastAnalyzedCommit, headC, 'startup must not analyze an offline commit');
+    const legacyKbC = (await serverFetch(serverC, `${serverC.base}/api/state`, undefined))
+      .body.projects.find(p => p.config.displayName === 'Legacy').config.knowledgePath;
+    assert.strictEqual(fs.existsSync(path.join(legacyKbC, 'changes', `${headC.slice(0, 12)}.md`)), false);
   } finally {
     await killServer(serverC);
   }

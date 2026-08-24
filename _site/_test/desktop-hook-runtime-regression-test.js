@@ -172,8 +172,15 @@ process.exit(0);
       nodeExecutable: fakeNode,
     });
     assert.strictEqual(installed.ok, true);
-    // Execute the installed hook via sh (the same path Git for Windows uses).
-    const sh = process.platform === 'win32' ? 'bash' : 'sh';
+    // Execute with Git for Windows' own POSIX shell. A bare `bash` can resolve
+    // to WSL, which cannot consume a Windows hook path.
+    let sh = 'sh';
+    if (process.platform === 'win32') {
+      const where = spawnSync('where.exe', ['git'], { encoding: 'utf8', windowsHide: true });
+      const gitPath = String(where.stdout || '').split(/\r?\n/).find(Boolean);
+      const candidate = gitPath && path.join(path.dirname(path.dirname(gitPath)), 'bin', 'sh.exe');
+      sh = candidate && fs.existsSync(candidate) ? candidate : 'bash';
+    }
     const result = spawnSync(sh, [installed.hookPath], {
       encoding: 'utf8',
       windowsHide: true,

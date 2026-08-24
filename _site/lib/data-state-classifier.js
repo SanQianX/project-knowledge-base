@@ -21,7 +21,10 @@ function classifyDataState(root) {
   const projects = readJson(path.join(root, 'projects.json'));
   const settings = readJson(path.join(root, 'settings.json'));
   if (projects.error || settings.error) return { state: STATES.CORRUPT, projects, settings };
-  const hasLegacyAssets = LEGACY_ASSETS.some(asset => fs.existsSync(assetPath(root, asset)));
+  // Logs and hook diagnostics can be created before startup classification;
+  // alone they are not user configuration evidence and must not turn a clean
+  // install into an impossible legacy migration.
+  const hasLegacyAssets = LEGACY_ASSETS.some(asset => asset.authority !== 'history' && fs.existsSync(assetPath(root, asset)));
   const isV2 = projects.value && projects.value.schema === SCHEMAS.projectRegistry && projects.value.schemaVersion === 2;
   const settingsV2 = settings.value && settings.value.schema === SCHEMAS.settings && settings.value.schemaVersion === 2;
   if (isV2 && settingsV2) return { state: STATES.V2_VALID, projects, settings, hasLegacyAssets };

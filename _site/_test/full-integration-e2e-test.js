@@ -144,13 +144,20 @@ async function waitForState(predicate, label) {
     const offlineTwo = commit('offline-two', 'second offline change');
     assert.notStrictEqual(offlineOne, offlineTwo);
     server = await start();
-    state = await waitForState(current => current.lastAnalyzedCommit === offlineTwo && current.index.dirty === false, 'startup ordered catch-up');
+    await new Promise(resolve => setTimeout(resolve, 500));
+    result = await json('GET', `/api/projects/${PROJECT_ID}`);
+    state = result.body.project.state;
+    assert.strictEqual(state.lastAnalyzedCommit, onlineCommit, 'restart must not analyze offline commits');
+    assert.strictEqual(fs.existsSync(path.join(knowledgePath, 'changes', `${offlineOne.slice(0, 12)}.md`)), false);
+    assert.strictEqual(fs.existsSync(path.join(knowledgePath, 'changes', `${offlineTwo.slice(0, 12)}.md`)), false);
+    const onlineAfterRestart = commit('online-after-restart', 'explicit hook after offline commits');
+    state = await waitForState(current => current.lastAnalyzedCommit === onlineAfterRestart && current.index.dirty === false, 'explicit online Hook after restart');
     assert.strictEqual(state.analysis.activeClaim, null);
-    assert(fs.existsSync(path.join(knowledgePath, 'changes', `${offlineOne.slice(0, 12)}.md`)));
-    assert(fs.existsSync(path.join(knowledgePath, 'changes', `${offlineTwo.slice(0, 12)}.md`)));
+    assert(fs.existsSync(path.join(knowledgePath, 'changes', `${onlineAfterRestart.slice(0, 12)}.md`)));
     result = await json('GET', `/api/logs?projectId=${PROJECT_ID}&pageSize=500`);
-    assert.strictEqual(result.body.entries.filter(entry => entry.event === 'reconcile.commit_completed' && entry.commitSha === offlineOne).length, 1);
-    assert.strictEqual(result.body.entries.filter(entry => entry.event === 'reconcile.commit_completed' && entry.commitSha === offlineTwo).length, 1);
+    assert.strictEqual(result.body.entries.filter(entry => entry.event === 'reconcile.commit_completed' && entry.commitSha === offlineOne).length, 0);
+    assert.strictEqual(result.body.entries.filter(entry => entry.event === 'reconcile.commit_completed' && entry.commitSha === offlineTwo).length, 0);
+    assert.strictEqual(result.body.entries.filter(entry => entry.event === 'reconcile.commit_completed' && entry.commitSha === onlineAfterRestart).length, 1);
     console.log('full-integration-e2e-test PASS');
   } finally {
     await stop(server);
