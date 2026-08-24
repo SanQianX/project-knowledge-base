@@ -1,6 +1,6 @@
 {
   "name": "project-knowledge",
-  "version": "4.2.15",
+  "version": "4.2.16",
   "description": "Knowledge base manager with Git integration, AI-driven analysis, and bilingual (zh-CN/en-US) knowledge output",
   "main": "_site/server.js",
   "scripts": {
@@ -73,7 +73,7 @@
     "@huggingface/transformers": "3.8.1",
     "@lancedb/lancedb": "0.31.0",
     "@modelcontextprotocol/sdk": "1.29.0",
-    "@sanqianx/ai-coding-event-bridge": "^0.1.1",
+    "@sanqianx/ai-coding-event-bridge": "^0.1.2",
     "cross-spawn": "7.0.6",
     "http-proxy-agent": "7.0.2",
     "https-proxy-agent": "7.0.6",

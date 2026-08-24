@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.2.16] - 2026-08-25
+
+- Upgraded AI Coding Event Bridge to 0.1.2 so one Codex task can be captured
+  across every continuation rollout. Existing single-file cursors migrate in
+  place without replaying consumed history, and real nested turn identities
+  keep commentary and final responses attached to the correct user prompt.
+- Added a joint Codex / Claude Code / OpenCode restart-and-recovery gate that
+  verifies durable capture, control-message exclusion, exact workspace
+  attribution, turn grouping, and duplicate-notification idempotency.
+- Kept Windows CDP failure tests fast and reliable by restricting detached
+  profile cleanup to actual Chrome/Edge launchers.
+
 ## [4.2.15] - 2026-08-25
 
 - Repaired Codex Development Conversation turns without rewriting durable

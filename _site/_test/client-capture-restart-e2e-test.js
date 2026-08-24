@@ -1,6 +1,6 @@
 // Run: node _site/_test/client-capture-restart-e2e-test.js
 //
-// T21 gates: OpenCode + Codex external sessions are captured into the
+// T21 gates: OpenCode + Claude Code + Codex external sessions are captured into the
 // imported project's Development Conversation; Project-Knowledge offline
 // accumulation is recovered by the startup drain in order without
 // duplicates; fake/duplicate notifications never fabricate events.
@@ -16,8 +16,10 @@ const { ProjectStore } = require('../lib/project-store');
 const { ConversationStore } = require('../lib/conversation-store');
 const { BridgeAdapter } = require('../lib/bridge-adapter');
 const { BridgeConsumerService } = require('../lib/bridge-consumer-service');
+const { readDevelopmentEvents } = require('../lib/conversation-exclusions');
 const bridgePackage = require('@sanqianx/ai-coding-event-bridge');
 const opencodeEntry = require('@sanqianx/ai-coding-event-bridge/src/connectors/opencode/hook-entry');
+const claudeEntry = require('@sanqianx/ai-coding-event-bridge/src/connectors/claude-code/hook-entry');
 const codexEntry = require('@sanqianx/ai-coding-event-bridge/src/connectors/codex/hook-entry');
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), `kb-client-e2e-${process.pid}-`));
@@ -38,15 +40,23 @@ execSync('git add . && git commit -q -m init', { cwd: ccs, shell: true, stdio: '
 const sessionsRoot = path.join(temp, 'codex-sessions');
 fs.mkdirSync(sessionsRoot, { recursive: true });
 
-function codexSessionFile(sessionId, cwd, turns) {
+function codexSessionFile(sessionId, cwd, turns, { day = '20', suffix = '' } = {}) {
+  const dir = path.join(sessionsRoot, '2026', '08', day);
+  fs.mkdirSync(dir, { recursive: true });
   const lines = [JSON.stringify({ type: 'session_meta', payload: { cwd } })];
-  for (const [index, turn] of turns.entries()) {
+  for (const turn of turns) {
     lines.push(JSON.stringify({
       type: 'response_item',
-      payload: { type: 'message', role: turn.role, turn_id: `${sessionId}-turn-${index}`, content: [{ type: turn.role === 'user' ? 'input_text' : 'output_text', text: turn.text }] },
+      payload: {
+        type: 'message',
+        role: turn.role,
+        phase: turn.phase,
+        internal_chat_message_metadata_passthrough: { turn_id: turn.turnId },
+        content: [{ type: turn.role === 'user' ? 'input_text' : 'output_text', text: turn.text }],
+      },
     }));
   }
-  const file = path.join(sessionsRoot, `rollout-2026-08-20-${sessionId}.jsonl`);
+  const file = path.join(dir, `rollout-2026-08-${day}T00-00-00-${sessionId}${suffix ? `_${suffix}` : ''}.jsonl`);
   fs.writeFileSync(file, `${lines.join('\n')}\n`);
   return file;
 }
@@ -68,14 +78,51 @@ async function main() {
   assert.match(ocUser.turnId, /^turn_/, 'Bridge mints the user turnId');
   assert.strictEqual(ocAssistant.turnId, ocUser.turnId, 'assistant binds to the same durable turn');
 
-  // Codex external session driven by authoritative session_meta cwd (GATE CLIENT-CODEX-001).
-  codexSessionFile('codex-s1', ccs, [
-    { role: 'user', text: 'Codex prompt in CCS' },
-    { role: 'assistant', text: 'Codex reply in CCS' },
+  // Claude Code real hook payload names and durable prompt/Stop pairing
+  // (GATE CLIENT-CLAUDE-001).
+  const claudeUser = await claudeEntry.main({ home: bridgeHome, payload: {
+    hook_event_name: 'UserPromptSubmit', session_id: 'claude-s1', cwd: ccs, prompt: 'Claude prompt in CCS',
+  } });
+  const claudeAssistant = await claudeEntry.main({ home: bridgeHome, payload: {
+    hook_event_name: 'Stop', session_id: 'claude-s1', cwd: ccs, last_assistant_message: 'Claude reply in CCS',
+  } });
+  assert.strictEqual(claudeAssistant.turnId, claudeUser.turnId, 'Claude Stop closes the submitted prompt turn');
+
+  // Codex external session driven by authoritative session_meta cwd and the
+  // real nested turn id. Simulate an installed Bridge 0.1.1 cursor pinned to
+  // the first rollout, then discover and recover its continuation (GATE
+  // CLIENT-CODEX-001 / CODEX-CURSOR-MIGRATION-001).
+  const codexFirst = codexSessionFile('codex-s1', ccs, [
+    { role: 'user', turnId: 'codex-turn-1', text: '<environment_context>generated transport context</environment_context>' },
+    { role: 'user', turnId: 'codex-turn-1', text: 'Codex prompt in CCS' },
+    { role: 'assistant', turnId: 'codex-turn-1', phase: 'commentary', text: 'Codex working in CCS' },
   ]);
+  const codexFirstResult = await codexEntry.main({ home: bridgeHome, payload: { session_id: 'codex-s1', sessions_root: sessionsRoot } });
+  assert.strictEqual(codexFirstResult.status, 'captured');
+  assert.strictEqual(codexFirstResult.captured, 3);
+  const codexCursorFile = path.join(bridgeHome, 'cursors', 'codex', 'codex-s1.json');
+  const codexCursorV2 = JSON.parse(fs.readFileSync(codexCursorFile, 'utf8'));
+  const firstFileCursor = Object.values(codexCursorV2.files)[0];
+  fs.writeFileSync(codexCursorFile, JSON.stringify({
+    sessionId: 'codex-s1',
+    filePath: codexFirst,
+    byteOffset: firstFileCursor.byteOffset,
+    lastRecordKey: firstFileCursor.lastRecordKey,
+    activeCwd: firstFileCursor.activeCwd,
+    repoIdentity: firstFileCursor.repoIdentity,
+    projectPath: firstFileCursor.projectPath,
+    branch: firstFileCursor.branch,
+    headAtCapture: firstFileCursor.headAtCapture,
+  }));
+  codexSessionFile('codex-s1', ccs, [
+    { role: 'assistant', turnId: 'codex-turn-1', phase: 'final_answer', text: 'Codex reply in CCS' },
+  ], { day: '21', suffix: 'continuation' });
   const codexResult = await codexEntry.main({ home: bridgeHome, payload: { session_id: 'codex-s1', sessions_root: sessionsRoot } });
-  assert.strictEqual(codexResult.status, 'captured');
-  assert.strictEqual(codexResult.captured, 2);
+  assert.strictEqual(codexResult.captured, 1, 'continuation captured without replaying the first rollout');
+  assert.strictEqual(codexResult.files, 2);
+  const migratedCursor = JSON.parse(fs.readFileSync(codexCursorFile, 'utf8'));
+  assert.strictEqual(migratedCursor.schema, 'codex-cursor/v2');
+  assert.strictEqual(Object.keys(migratedCursor.files).length, 2);
 
   // OFFLINE-001: the consumer process was "stopped" while the events above
   // accumulated; a fresh service instance (restart) recovers everything from
@@ -84,8 +131,10 @@ async function main() {
     bridgeAdapter: adapter, conversationStore: store, registryStore: registry, projectStore: projects, logger: null,
   });
   await restarted.start();
-  const events = store.readEvents('project-ccs');
-  assert.strictEqual(events.length, 4, 'startup drain recovered all external events');
+  const rawEvents = store.readEvents('project-ccs');
+  assert.strictEqual(rawEvents.length, 8, 'startup drain recovered every durable external record');
+  const events = readDevelopmentEvents(store, 'project-ccs');
+  assert.strictEqual(events.length, 7, 'generated Codex context is excluded from Development Conversation');
   assert.deepStrictEqual(
     events.map(event => event.sequence).sort((a, b) => a - b),
     [...events.map(event => event.sequence)].sort((a, b) => a - b),
@@ -93,11 +142,15 @@ async function main() {
   const ocEvents = events.filter(event => event.source === 'opencode');
   assert.strictEqual(ocEvents.length, 2);
   assert.strictEqual(ocEvents[0].turnId, ocEvents[1].turnId, 'OpenCode turn grouped durably');
+  const claudeEvents = events.filter(event => event.source === 'claude-code');
+  assert.strictEqual(claudeEvents.length, 2);
+  assert.strictEqual(claudeEvents[0].turnId, claudeEvents[1].turnId, 'Claude Code turn grouped durably');
   const codexEvents = events.filter(event => event.source === 'codex');
-  assert.strictEqual(codexEvents.length, 2);
+  assert.strictEqual(codexEvents.length, 3);
   assert.ok(codexEvents.every(event => event.repoIdentity.workspaceId === identity.workspaceId),
     'Codex events attributed from session_meta.cwd, not the session file location');
-  assert.strictEqual(new Set(events.map(event => event.eventId)).size, 4, 'no duplicates after recovery');
+  assert.ok(codexEvents.every(event => event.turnId === 'codex-turn-1'), 'all Codex phases share the real turn identity');
+  assert.strictEqual(new Set(events.map(event => event.eventId)).size, 7, 'no duplicates after recovery');
 
   // NOTIFY-001: fake/duplicate notifications with garbage bodies never
   // fabricate journal events; the consumer only drains the durable journal.
