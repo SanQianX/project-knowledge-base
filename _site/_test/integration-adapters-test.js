@@ -152,6 +152,34 @@ async function main() {
   const chainedStatus = await chainedManager.statusCaptureCodex();
   assert(chainedStatus.installed && !chainedStatus.conflict, 'status should recognize the compatible chained notifier');
 
+  const nestedCodexConfig = path.join(TEMP, 'nested-codex-config.toml');
+  const nestedDevTask = ['node', 'C:/tools/devtask-radar/connectors/codex/notify-hook.js', '--next-base64', oldNotifier];
+  fs.writeFileSync(nestedCodexConfig, `notify = ["C:/runtime/codex-computer-use.exe", "turn-ended", "--previous-notify", ${JSON.stringify(JSON.stringify(nestedDevTask))}]\n`, 'utf8');
+  const nestedManager = new IntegrationManager({
+    rootDir: ROOT,
+    homeDir: path.join(TEMP, 'nested-codex-home'),
+    bridgeHomeDir: path.join(TEMP, 'nested-bridge-home'),
+    codexConfigFile: nestedCodexConfig,
+  });
+  const nested = await nestedManager.installCaptureCodex();
+  assert(nested.installed && !nested.conflict, 'a nested DevTask Radar notifier should be preserved through the fan-out wrapper');
+  const nestedConfig = JSON.parse(fs.readFileSync(nestedCodexConfig, 'utf8').replace(/^\s*notify\s*=\s*/, '').trim());
+  assert(nestedConfig.join(' ').includes('codex-notify-fanout.cjs'), 'nested notifier chain should use the Project Knowledge fan-out wrapper');
+  const nestedStatus = await nestedManager.statusCaptureCodex();
+  assert(nestedStatus.installed && !nestedStatus.conflict, 'status should recognize the managed nested fan-out wrapper');
+
+  const bridgeOnlyConfig = path.join(TEMP, 'bridge-only-codex-config.toml');
+  const bridgeOnlyManager = new IntegrationManager({
+    rootDir: ROOT,
+    homeDir: path.join(TEMP, 'bridge-only-codex-home'),
+    bridgeHomeDir: path.join(TEMP, 'bridge-only-bridge-home'),
+    codexConfigFile: bridgeOnlyConfig,
+  });
+  const bridgeOnly = await bridgeOnlyManager.installCaptureCodex();
+  assert(bridgeOnly.installed && !bridgeOnly.conflict, 'a fresh Codex install should use the payload-preserving fan-out wrapper');
+  const bridgeOnlyArgs = JSON.parse(fs.readFileSync(bridgeOnlyConfig, 'utf8').replace(/^\s*notify\s*=\s*/, '').trim());
+  assert(bridgeOnlyArgs.join(' ').includes('codex-notify-fanout.cjs'), 'fresh Codex install should use the Project Knowledge fan-out wrapper');
+
   const integrationLogs = [];
   const failingManager = new IntegrationManager({
     rootDir: ROOT,
