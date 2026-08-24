@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.2.9] - 2026-08-24
+
+- Made persisted UI-language selection fully reliable across page reloads and
+  slower browser runners: translated labels now re-render, and the document
+  language is initialized from the saved preference.
+
 ## [4.2.8] - 2026-08-24
 
 - Fixed release metadata drift by deriving plugin manifests, marketplace
