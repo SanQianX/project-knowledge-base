@@ -89,10 +89,53 @@ function cleanupOrphanedRuns(_projects, deps = {}) {
   return { activeClaims, recoveredFromFrozenClaims: activeClaims };
 }
 
+async function recoverOrphanedClaims(deps = {}) {
+  const resolved = stores(deps);
+  const recovered = [];
+  for (const projectId of resolved.registryStore.listIds()) {
+    const state = resolved.projectStore.readState(projectId);
+    const orphaned = state.analysis.activeClaim;
+    if (!orphaned) continue;
+    if (orphaned.phase === 'failed' && orphaned.error && orphaned.error.code === 'ORPHANED_CLAIM') continue;
+    const recoveredAt = typeof deps.now === 'function' ? deps.now() : new Date().toISOString();
+    const error = {
+      code: 'ORPHANED_CLAIM',
+      message: 'Commit analysis was interrupted by a previous process exit.',
+      phase: String(orphaned.phase || state.analysis.status || 'unknown'),
+      retryable: false,
+      ts: recoveredAt,
+    };
+    await resolved.projectStore.updateState(projectId, draft => {
+      if (!draft.analysis.activeClaim) return;
+      draft.analysis.activeClaim.phase = 'failed';
+      draft.analysis.activeClaim.error = error;
+      draft.analysis.status = 'failed';
+      draft.analysis.lastError = error;
+    }, { expectedRevision: state.revision });
+    recovered.push({
+      projectId,
+      commitSha: String(orphaned.commitSha || ''),
+      runId: String(orphaned.runId || ''),
+      previousPhase: error.phase,
+    });
+    if (deps.logger && typeof deps.logger.warn === 'function') {
+      await deps.logger.warn('reconcile.orphaned_claim_recovered', 'An interrupted commit claim was made terminal without retrying analysis.', {
+        projectId,
+        commitSha: String(orphaned.commitSha || ''),
+        runId: String(orphaned.runId || ''),
+        phase: 'recovery',
+        context: { previousPhase: error.phase },
+      });
+    }
+  }
+  return recovered;
+}
+
 module.exports = {
   CommitReconciler,
   cleanupOrphanedRuns,
   handlePostCommitEvent,
+  recoverOrphanedClaims,
   reconcileProjectCommits,
   renderCommitPrompt,
 };

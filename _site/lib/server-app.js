@@ -21,7 +21,7 @@ const { BridgeConsumerService } = require('./bridge-consumer-service');
 const { IntegrationManager } = require('./integration-installer');
 const { Logger, LogRepository } = require('./structured-logger');
 const { CommitReconciler } = require('./commit-reconciler');
-const { handlePostCommitEvent } = require('./post-commit-automation');
+const { handlePostCommitEvent, recoverOrphanedClaims } = require('./post-commit-automation');
 const { KnowledgePromotionService, hashBuffer } = require('./knowledge-promotion');
 const { resolveEffectiveAiProfile } = require('./ai-profile-resolver');
 const { IndexService } = require('./index-service');
@@ -649,6 +649,11 @@ async function initializeRuntime(runtime) {
   await runtime.settingsStore.initialize();
   await runtime.registryStore.initialize();
   const recoveredPromotions = await runtime.promotionService.recoverAll();
+  // Promotion recovery runs first because it can legitimately finish and clear
+  // a claim. Any claim left after that belonged to the previous process. Make
+  // it terminal without invoking Claude or selecting another Git commit; only
+  // a future explicit Hook event may start fresh work.
+  const recoveredClaims = await recoverOrphanedClaims(runtime);
   const recoveredIndexes = runtime.registryStore.listIds().filter(projectId => runtime.projectStore.readState(projectId).index.dirty);
   const orphanedOperations = runtime.logRepository.findOrphanedOperations();
   if (orphanedOperations.length) {
@@ -660,9 +665,9 @@ async function initializeRuntime(runtime) {
   const hooks = await migrateManagedHooks(runtime);
   await runtime.logger.info('server.startup_ready', 'Server stores and recovery services are ready.', {
     phase: 'listen',
-    context: { migration, recoveredPromotions: recoveredPromotions.length, recoveredIndexes: recoveredIndexes.length, orphanedOperations: orphanedOperations.length, hooks: hooks.length },
+    context: { migration, recoveredPromotions: recoveredPromotions.length, recoveredClaims: recoveredClaims.length, recoveredIndexes: recoveredIndexes.length, orphanedOperations: orphanedOperations.length, hooks: hooks.length },
   });
-  return { migration, recoveredPromotions, recoveredIndexes, orphanedOperations, hooks };
+  return { migration, recoveredPromotions, recoveredClaims, recoveredIndexes, orphanedOperations, hooks };
 }
 
 function safeStaticFile(pathname) {

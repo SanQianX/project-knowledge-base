@@ -11,4 +11,6 @@ assert.deepEqual(contracts.TRIGGERS, ['git-hook']);
 assert.equal(/reconcileProjectCommits\(projectId, 'startup'/.test(server), false);
 assert.equal(server.includes('reconcile.startup_failed'), false);
 assert.equal(Object.hasOwn(automation, 'dispatchPendingAutomations'), false);
+assert.equal(typeof automation.recoverOrphanedClaims, 'function');
+assert.equal(/recoverOrphanedClaims\(runtime\)/.test(server), true);
 console.log('startup-analysis-disabled-test PASS');
