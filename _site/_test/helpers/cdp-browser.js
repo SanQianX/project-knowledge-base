@@ -126,9 +126,10 @@ async function terminateProcessTree(child, profileDir) {
     try { child.kill(); } catch {}
     await waitForExit(child, 3000);
   }
-  // Windows Chrome can detach from the launcher process. Always clean by the
-  // unique test profile as well, otherwise later CDP launches become flaky.
-  terminateProfileProcesses(profileDir);
+  // Windows Chrome/Edge can detach from the launcher process. Clean those
+  // launchers by their unique profile, but do not pay for a machine-wide CIM
+  // scan when a non-browser failure fixture (for example node.exe) exited.
+  if (child && isWindowsChromeLauncher(child.spawnfile)) terminateProfileProcesses(profileDir);
 }
 
 function removeProfileDir(profileDir) {
