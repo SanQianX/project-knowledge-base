@@ -96,6 +96,35 @@ function commit(target, name) {
   assert.strictEqual(projects.readState('project-existing').lastAnalyzedCommit, laterCommit, 'an event SHA remains valid even after HEAD advances');
   assert.strictEqual(processorCalls, 2);
 
+  const terminalFailedCommit = 'a'.repeat(40);
+  await projects.updateState('project-existing', state => {
+    state.analysis.activeClaim = {
+      schema: 'commit-claim/v1', projectId: 'project-existing', commitSha: terminalFailedCommit, parents: [], requirementIds: [], requirementBinding: 'unavailable',
+      promptTemplateVersion: 'v1', promptHash: 'prompt', patchHash: 'patch', evidenceHash: 'evidence', evidenceManifestHash: 'manifest', retrievalManifestHash: 'retrieval', knowledgePath: knowledgeRoot,
+      runId: 'failed-run', operationId: 'failed-operation', phase: 'failed', attempt: 1, fingerprint: 'failed-fingerprint', error: { code: 'EPERM', retryable: false },
+    };
+    state.analysis.status = 'failed';
+  });
+  const explicitAfterFailure = commit(existingRepo, 'after-terminal-failure');
+  await reconciler.processCommitEvent({ projectId: 'project-existing', commitSha: explicitAfterFailure, branch: 'main' });
+  assert.strictEqual(projects.readState('project-existing').lastAnalyzedCommit, explicitAfterFailure, 'only the new explicit Hook SHA may proceed after a terminal failure');
+  assert.strictEqual(processorCalls, 3, 'terminal failed claims must not retry their old SHA');
+
+  const retryableFailedCommit = 'b'.repeat(40);
+  await projects.updateState('project-existing', state => {
+    state.analysis.activeClaim = {
+      schema: 'commit-claim/v1', projectId: 'project-existing', commitSha: retryableFailedCommit, parents: [], requirementIds: [], requirementBinding: 'unavailable',
+      promptTemplateVersion: 'v1', promptHash: 'prompt', patchHash: 'patch', evidenceHash: 'evidence', evidenceManifestHash: 'manifest', retrievalManifestHash: 'retrieval', knowledgePath: knowledgeRoot,
+      runId: 'retryable-run', operationId: 'retryable-operation', phase: 'failed', attempt: 1, fingerprint: 'retryable-fingerprint', error: { code: 'EAGAIN', retryable: true },
+    };
+    state.analysis.status = 'failed';
+  });
+  const blockedByRetryable = commit(existingRepo, 'after-retryable-failure');
+  const blockedResult = await reconciler.processCommitEvent({ projectId: 'project-existing', commitSha: blockedByRetryable, branch: 'main' });
+  assert.strictEqual(blockedResult.status, 'failed');
+  assert.strictEqual(processorCalls, 3, 'retryable claims must remain blocked instead of being silently superseded');
+  assert.strictEqual(projects.readState('project-existing').analysis.activeClaim.commitSha, retryableFailedCommit);
+
   const emptyRepo = repo('empty-repo', false);
   const emptyImported = await lifecycle.importProject({ localPath: emptyRepo, projectId: 'project-empty', aiProfileId: 'test-profile' });
   assert.strictEqual(emptyImported.state.trackingMode, 'empty-repo');
@@ -103,7 +132,7 @@ function commit(target, name) {
   const firstCommit = commit(emptyRepo, 'first');
   await reconciler.processCommitEvent({ projectId: 'project-empty', commitSha: firstCommit, branch: 'main' });
   assert.strictEqual(projects.readState('project-empty').lastAnalyzedCommit, firstCommit, 'first commit after empty import must be analyzed');
-  assert.strictEqual(processorCalls, 3);
+  assert.strictEqual(processorCalls, 4);
 
   console.log('tracking-start-test PASS');
 })().catch(error => {

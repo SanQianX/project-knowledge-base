@@ -173,7 +173,41 @@ class CommitReconciler {
   async prepareClaim(projectId, trigger, operationId, config, branch, commitSha) {
     const state = this.projectStore.readState(projectId);
     if (state.analysis.activeClaim) {
-      const claim = validateClaim(state.analysis.activeClaim, projectId, commitSha);
+      const activeClaim = state.analysis.activeClaim;
+      // A terminal failure must not turn a project into a permanent dead end.
+      // We only release it while processing a *new, explicit* Hook SHA; the
+      // failed SHA is never retried, scanned, or inferred from history.
+      if (activeClaim.commitSha !== commitSha) {
+        validateClaim(activeClaim, projectId, activeClaim.commitSha);
+        const terminalFailure = activeClaim.phase === 'failed'
+          && activeClaim.error
+          && activeClaim.error.retryable !== true;
+        if (!terminalFailure) {
+          throw new DomainError('PROJECT_BUSY', 'Another unfinished commit claim already exists.', { status: 409, retryable: true });
+        }
+        await this.projectStore.updateState(projectId, draft => {
+          const current = draft.analysis.activeClaim;
+          if (!current || current.commitSha !== activeClaim.commitSha || current.fingerprint !== activeClaim.fingerprint) {
+            throw new DomainError('PROJECT_BUSY', 'The active commit claim changed while preparing this Hook event.', { status: 409, retryable: true });
+          }
+          draft.analysis.activeClaim = null;
+          draft.analysis.status = 'idle';
+          draft.analysis.lastError = {
+            code: 'FAILED_CLAIM_SUPERSEDED',
+            message: 'A terminal failed claim was preserved for diagnostics and superseded by a newer explicit Hook commit.',
+            retryable: false,
+            ts: new Date().toISOString(),
+          };
+        });
+        await this.log('warn', 'reconcile.failed_claim_superseded', 'A terminal failed claim was superseded by a newer explicit Hook commit.', {
+          projectId,
+          previousCommitSha: activeClaim.commitSha,
+          commitSha,
+          previousFailure: activeClaim.error,
+        });
+        return this.prepareClaim(projectId, trigger, operationId, config, branch, commitSha);
+      }
+      const claim = validateClaim(activeClaim, projectId, commitSha);
       const snapshot = this.claimStore.read(projectId, commitSha);
       if (snapshot.claimFingerprint !== claimFingerprint(claim)
         || snapshot.evidence.patchHash !== claim.patchHash

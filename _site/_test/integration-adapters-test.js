@@ -133,6 +133,25 @@ async function main() {
   assert(codexCalls.some(call => call.args.join(' ') === 'plugin remove project-knowledge@project-knowledge'), 'Codex should remove the cached plugin during update');
   assert(codexCalls.some(call => call.args.join(' ') === 'plugin add project-knowledge@project-knowledge'), 'Codex should install the refreshed plugin');
 
+  const chainedCodexConfig = path.join(TEMP, 'codex-config.toml');
+  const oldNotifier = Buffer.from(JSON.stringify(['node', 'C:/existing-notify.js'])).toString('base64');
+  fs.writeFileSync(chainedCodexConfig, `notify = ["node", "C:/tools/devtask-radar/connectors/codex/notify-hook.js", "--previous-notify", "${oldNotifier}"]\n`, 'utf8');
+  const chainedManager = new IntegrationManager({
+    rootDir: ROOT,
+    homeDir: path.join(TEMP, 'codex-home'),
+    bridgeHomeDir: path.join(TEMP, 'bridge-home'),
+    codexConfigFile: chainedCodexConfig,
+  });
+  const chained = await chainedManager.installCaptureCodex();
+  assert(chained.installed && !chained.conflict, 'a compatible DevTask Radar notifier should chain Bridge instead of blocking capture');
+  const chainedConfig = JSON.parse(fs.readFileSync(chainedCodexConfig, 'utf8').replace(/^\s*notify\s*=\s*/, '').trim());
+  const nextIndex = chainedConfig.indexOf('--next-base64');
+  assert(nextIndex >= 0, 'compatible notifier chain should append a downstream Bridge notifier');
+  const nextNotify = JSON.parse(Buffer.from(chainedConfig[nextIndex + 1], 'base64').toString('utf8'));
+  assert(nextNotify.join(' ').includes('bridge-hook.cjs'), 'downstream notifier must be the Bridge shim');
+  const chainedStatus = await chainedManager.statusCaptureCodex();
+  assert(chainedStatus.installed && !chainedStatus.conflict, 'status should recognize the compatible chained notifier');
+
   const integrationLogs = [];
   const failingManager = new IntegrationManager({
     rootDir: ROOT,

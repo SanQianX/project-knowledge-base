@@ -83,6 +83,54 @@ function writeFileAtomic(filePath, content) {
   fs.renameSync(temporary, filePath);
 }
 
+function codexNotifyLine(source) {
+  const lines = String(source || '').split(/\r?\n/);
+  const index = lines.findIndex(line => /^\s*notify\s*=/.test(line));
+  if (index < 0) return null;
+  const value = lines[index].replace(/^\s*notify\s*=\s*/, '');
+  try {
+    const args = JSON.parse(value);
+    return Array.isArray(args) && args.every(item => typeof item === 'string') ? { lines, index, args } : null;
+  } catch {
+    return null;
+  }
+}
+
+function isDevTaskRadarNotify(args) {
+  return Array.isArray(args) && args.some(arg => /devtask-radar[\\/]connectors[\\/]codex[\\/]notify-hook\.js$/i.test(arg));
+}
+
+function bridgeNextNotifyArgs(bridgeHomeDir) {
+  return ['node', path.join(bridgeHomeDir, 'bin', 'bridge-hook.cjs')];
+}
+
+function isBridgeNextNotify(args, bridgeHomeDir) {
+  const marker = args.indexOf('--next-base64');
+  if (marker < 0 || !args[marker + 1]) return false;
+  try {
+    const next = JSON.parse(Buffer.from(args[marker + 1], 'base64').toString('utf8'));
+    return Array.isArray(next) && next.join('\n') === bridgeNextNotifyArgs(bridgeHomeDir).join('\n');
+  } catch {
+    return false;
+  }
+}
+
+function chainBridgeAfterDevTaskRadar(configFile, bridgeHomeDir) {
+  if (!configFile || !fs.existsSync(configFile)) return { chained: false, reason: 'config-not-found' };
+  const source = fs.readFileSync(configFile, 'utf8');
+  const parsed = codexNotifyLine(source);
+  if (!parsed || !isDevTaskRadarNotify(parsed.args)) return { chained: false, reason: 'unsupported-third-party-notify' };
+  if (isBridgeNextNotify(parsed.args, bridgeHomeDir)) return { chained: true, changed: false };
+  if (parsed.args.includes('--next-base64')) return { chained: false, reason: 'third-party-next-notify-present' };
+  const next = Buffer.from(JSON.stringify(bridgeNextNotifyArgs(bridgeHomeDir))).toString('base64');
+  const args = [...parsed.args, '--next-base64', next];
+  const indentation = (parsed.lines[parsed.index].match(/^\s*/) || [''])[0];
+  parsed.lines[parsed.index] = `${indentation}notify = ${JSON.stringify(args)}`;
+  const eol = source.includes('\r\n') ? '\r\n' : '\n';
+  writeFileAtomic(configFile, parsed.lines.join(eol));
+  return { chained: true, changed: true };
+}
+
 function updateJsoncValue(filePath, propertyPath, value) {
   let source = fs.existsSync(filePath)
     ? fs.readFileSync(filePath, 'utf8')
@@ -275,6 +323,10 @@ class IntegrationManager {
     }
     const result = await this.bridge.installers.codex.installCodexNotify(this._captureInstallerOptions());
     if (result.conflict) {
+      const chained = chainBridgeAfterDevTaskRadar(this.codexConfigFile || path.join(this.homeDir, '.codex', 'config.toml'), this.bridgeHomeDir);
+      if (chained.chained) {
+        return { state: 'installed', installed: true, conflict: false, detail: 'Bridge notify chained after the compatible DevTask Radar notifier' };
+      }
       return { state: 'conflict', installed: false, conflict: true, detail: 'third-party notify present; not overwritten' };
     }
     return { state: 'installed', installed: true, conflict: false, detail: 'managed notify installed' };
@@ -282,6 +334,14 @@ class IntegrationManager {
 
   async statusCaptureCodex() {
     const status = await this.bridge.installers.codex.statusCodexNotify(this._captureInstallerOptions());
+    if (status.thirdParty) {
+      const configFile = this.codexConfigFile || path.join(this.homeDir, '.codex', 'config.toml');
+      const source = fs.existsSync(configFile) ? fs.readFileSync(configFile, 'utf8') : '';
+      const parsed = codexNotifyLine(source);
+      if (parsed && isDevTaskRadarNotify(parsed.args) && isBridgeNextNotify(parsed.args, this.bridgeHomeDir)) {
+        return { state: 'installed', installed: true, conflict: false, detail: 'Bridge notify chained after the compatible DevTask Radar notifier' };
+      }
+    }
     return {
       state: status.installed ? 'installed' : status.thirdParty ? 'conflict' : 'not-installed',
       installed: Boolean(status.installed),
