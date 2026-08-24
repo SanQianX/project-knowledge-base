@@ -20,7 +20,7 @@ const { BridgeAdapter } = require('./bridge-adapter');
 const { BridgeConsumerService } = require('./bridge-consumer-service');
 const { IntegrationManager } = require('./integration-installer');
 const { Logger, LogRepository } = require('./structured-logger');
-const { CommitReconciler, reconcileProjectCommits } = require('./commit-reconciler');
+const { CommitReconciler } = require('./commit-reconciler');
 const { handlePostCommitEvent } = require('./post-commit-automation');
 const { KnowledgePromotionService, hashBuffer } = require('./knowledge-promotion');
 const { resolveEffectiveAiProfile } = require('./ai-profile-resolver');
@@ -1371,19 +1371,16 @@ async function startServer(options = {}) {
   }
   await runtime.logger.info('server.listening', 'Project Knowledge server is listening.', { phase: 'running', context: { host, port } });
 
-  // Bridge consumer startup drain completes BEFORE commit reconciliation
-  // binds snapshots, so startup-bound snapshots never miss journal events.
+  // Startup drains durable conversation/boundary facts. It deliberately does
+  // not infer or submit Git commits for knowledge analysis.
   const bridgeReady = Promise.resolve(
     runtime.bridgeConsumerService ? runtime.bridgeConsumerService.start(`http://127.0.0.1:${port}/api/bridge/notify`) : null
   ).catch(error => runtime.logger.error('bridge_consumer.startup_failed', 'Bridge consumer startup drain failed.', { error }));
 
   const startupPromise = Promise.all([
     runtime.indexService.retryDirtyProjects(),
-    bridgeReady.then(() => Promise.all(runtime.registryStore.listIds().map(projectId => {
-    const operationId = createId('op');
-    return taskForProject(runtime, projectId, operationId, () => reconcileProjectCommits(projectId, 'startup', { reconciler: runtime.reconciler, operationId }), 'startup');
-    }))),
-  ]).catch(error => runtime.logger.error('reconcile.startup_failed', 'Startup recovery failed.', { error }));
+    bridgeReady,
+  ]).catch(error => runtime.logger.error('startup.recovery_failed', 'Startup recovery failed.', { error }));
 
   const maintenanceTimer = setInterval(() => {
     runtime.indexService.retryDirtyProjects().catch(error => runtime.logger.error('index.retry_failed', 'Index retry failed.', { error }));

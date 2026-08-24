@@ -1,7 +1,7 @@
 const assert = require('assert');
 const contracts = require('../lib/contracts');
 
-assert.deepStrictEqual(contracts.TRIGGERS, ['git-hook', 'startup']);
+assert.deepStrictEqual(contracts.TRIGGERS, ['git-hook']);
 assert.deepStrictEqual(contracts.LOG_LEVELS, ['trace', 'debug', 'info', 'warn', 'error', 'fatal']);
 assert.strictEqual(contracts.SCHEMAS.projectState, 'project-state/v2');
 assert.strictEqual(contracts.SCHEMA_VERSIONS.layoutMigration, 'layout-v2');
@@ -9,6 +9,7 @@ assert.strictEqual(contracts.SCHEMA_VERSIONS.layoutMigration, 'layout-v2');
 for (const trigger of contracts.TRIGGERS) assert.strictEqual(contracts.validateTrigger(trigger), trigger);
 assert.throws(() => contracts.validateTrigger('simulate'), error => error.code === 'INVALID_TRIGGER');
 assert.throws(() => contracts.validateTrigger('project-init'), error => error.code === 'INVALID_TRIGGER');
+assert.throws(() => contracts.validateTrigger('startup'), error => error.code === 'INVALID_TRIGGER');
 
 const publicProfile = contracts.publicAiProfileView({
   id: 'primary',

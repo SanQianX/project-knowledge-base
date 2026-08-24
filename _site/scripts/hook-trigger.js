@@ -141,7 +141,7 @@ function post(body) {
         await logger.debug('hook.notification.completed', 'Hook notification delivered.', { phase: 'notify' });
       }
     } catch (error) {
-      await logger.warn('hook.notification.degraded', 'Knowledge service is unavailable; startup reconciliation will catch up.', { phase: 'notify', error });
+      await logger.warn('hook.notification.degraded', 'Knowledge service is unavailable; this commit was not submitted for knowledge analysis.', { phase: 'notify', error });
     }
   } catch (error) {
     await logger.error('hook.script.failed', 'Hook trigger failed.', { phase: 'runtime', error });

@@ -77,36 +77,6 @@ async function handlePostCommitEvent(event = {}, deps = {}) {
   });
 }
 
-async function dispatchPendingAutomations(options = {}, deps = {}) {
-  if (typeof deps.readProjects === 'function' && !deps.projectStore && !deps.registryStore) {
-    return { ok: true, dispatched: 0, results: [], legacyStoreSkipped: true };
-  }
-  const resolved = stores(deps);
-  const projectIds = resolved.registryStore.listIds().filter(projectId => resolved.projectStore.readConfig(projectId).enabled !== false);
-  const concurrency = Math.max(1, Math.min(Number(options.concurrency || deps.startupConcurrency || 3), 8));
-  const results = new Array(projectIds.length);
-  let cursor = 0;
-  async function worker() {
-    while (true) {
-      const index = cursor;
-      cursor += 1;
-      if (index >= projectIds.length) return;
-      const projectId = projectIds[index];
-      try {
-        results[index] = await reconcileProjectCommits(projectId, 'startup', { ...deps, ...resolved });
-      } catch (error) {
-        results[index] = { ok: false, projectId, error: { code: error.code || 'INVALID_ARGUMENT', message: error.message } };
-      }
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(concurrency, projectIds.length) }, () => worker()));
-  return {
-    ok: results.every(result => result && result.ok),
-    dispatched: results.reduce((total, result) => total + Number(result && result.processed && result.processed.length || 0), 0),
-    results,
-  };
-}
-
 function cleanupOrphanedRuns(_projects, deps = {}) {
   if (!deps.projectStore && !deps.registryStore && !deps.layout) {
     return { activeClaims: 0, recoveredFromFrozenClaims: 0, legacyStoreSkipped: true };
@@ -119,20 +89,10 @@ function cleanupOrphanedRuns(_projects, deps = {}) {
   return { activeClaims, recoveredFromFrozenClaims: activeClaims };
 }
 
-// Transitional read-only shims keep the pre-T10 server observable while the
-// legacy queue/routes are being removed. They never enqueue or discover work.
-function getQueueSize() { return 0; }
-function drainQueue() { return []; }
-function listAutomationRuns() { return []; }
-
 module.exports = {
   CommitReconciler,
   cleanupOrphanedRuns,
-  drainQueue,
-  dispatchPendingAutomations,
   handlePostCommitEvent,
-  getQueueSize,
-  listAutomationRuns,
   reconcileProjectCommits,
   renderCommitPrompt,
 };

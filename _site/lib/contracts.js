@@ -25,7 +25,7 @@ const SCHEMA_VERSIONS = Object.freeze({
   layoutMigration: 'layout-v2',
 });
 
-const TRIGGERS = Object.freeze(['git-hook', 'startup']);
+const TRIGGERS = Object.freeze(['git-hook']);
 const TRIGGER_SET = new Set(TRIGGERS);
 const LOG_LEVELS = Object.freeze(['trace', 'debug', 'info', 'warn', 'error', 'fatal']);
 const LOG_LEVEL_SET = new Set(LOG_LEVELS);
@@ -127,7 +127,7 @@ function assertSchema(actual, expected, category = 'data') {
 
 function validateTrigger(trigger) {
   if (!TRIGGER_SET.has(trigger)) {
-    throw new DomainError('INVALID_TRIGGER', 'Trigger must be git-hook or startup.', {
+    throw new DomainError('INVALID_TRIGGER', 'Trigger must be git-hook.', {
       details: { trigger: String(trigger || '') },
     });
   }
