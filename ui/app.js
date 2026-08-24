@@ -658,6 +658,10 @@
     renderI18nLabels();
   };
   function renderI18nLabels() {
+    document.querySelectorAll('[data-i18n]').forEach(node => {
+      const key = node.dataset.i18n;
+      if (key) node.textContent = i18n(key);
+    });
     const map = {
       'wb-state': 'app.workbench.state.ready',
       'import-language': null, // options translated at fill time

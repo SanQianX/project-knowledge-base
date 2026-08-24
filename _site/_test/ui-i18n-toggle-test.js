@@ -16,6 +16,20 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const sitePort = 7980 + (process.pid % 200);
 const profileDir = path.join(os.tmpdir(), 'pk-i18n-' + process.pid);
 
+async function waitForLanguage(browser, language, label) {
+  await waitFor(async () => {
+    const state = await browser.evaluate(`(() => ({
+      appReady: Boolean(window.__PK_APP__),
+      active: window.I18N && window.I18N.activeLanguage(),
+      select: document.getElementById('ui-language')?.value,
+      documentLanguage: document.documentElement.lang,
+    }))()`);
+    return state.appReady && state.active === language && state.select === language && state.documentLanguage === (language === 'en-US' ? 'en' : 'zh-CN')
+      ? { ok: true }
+      : null;
+  }, label, 20000);
+}
+
 (async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-i18n-data-' + process.pid + '-'));
   const server = spawnServer({
@@ -60,28 +74,21 @@ const profileDir = path.join(os.tmpdir(), 'pk-i18n-' + process.pid);
       sel.value = 'en-US';
       sel.dispatchEvent(new Event('change', { bubbles: true }));
     })()`);
-    await waitFor(async () => {
-      const lang = await browser.evaluate('window.I18N.activeLanguage()');
-      return lang === 'en-US' ? { ok: true } : null;
-    }, 'language switched to en-US', 5000);
+    await waitForLanguage(browser, 'en-US', 'language switched to en-US');
+    assert.strictEqual(await browser.evaluate('document.querySelector("label[for=ui-language]").textContent'), 'UI language');
 
     // Case 3: persistence across reload — preference must survive a hard
     // reload. The browser context keeps localStorage across reloads.
     await browser.evaluate('location.reload()');
-    await waitFor(async () => {
-      const ready = await browser.evaluate('Boolean(window.I18N && window.I18N.activeLanguage() === "en-US")');
-      return ready ? { ok: true } : null;
-    }, 'language persists after reload', 20000);
+    await waitForLanguage(browser, 'en-US', 'language persists after reload');
 
     // Case 4: switch back to zh-CN and verify activeLanguage reflects it.
     await browser.evaluate(`(() => {
       document.getElementById('ui-language').value = 'zh-CN';
       document.getElementById('ui-language').dispatchEvent(new Event('change', { bubbles: true }));
     })()`);
-    await waitFor(async () => {
-      const lang = await browser.evaluate('window.I18N.activeLanguage()');
-      return lang === 'zh-CN' ? { ok: true } : null;
-    }, 'switch back to zh-CN', 5000);
+    await waitForLanguage(browser, 'zh-CN', 'switch back to zh-CN');
+    assert.strictEqual(await browser.evaluate('document.querySelector("label[for=ui-language]").textContent'), '界面语言');
 
     // Case 5: unknown key returns the key string (no missing-key placeholder).
     {

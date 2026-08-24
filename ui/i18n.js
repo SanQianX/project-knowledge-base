@@ -141,5 +141,8 @@
     return Object.keys(DICT);
   }
 
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = activeLanguage() === 'en-US' ? 'en' : 'zh-CN';
+  }
   window.I18N = { t, setLanguage, activeLanguage, availableLanguages };
 })();
