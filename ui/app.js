@@ -1,7 +1,10 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const { t: i18n, setLanguage, activeLanguage } = window.I18N || { t: k => k };
+  const i18nApi = window.I18N || {};
+  const i18n = typeof i18nApi.t === 'function' ? i18nApi.t : key => key;
+  const setLanguage = typeof i18nApi.setLanguage === 'function' ? i18nApi.setLanguage : () => {};
+  const activeLanguage = typeof i18nApi.activeLanguage === 'function' ? i18nApi.activeLanguage : () => 'zh-CN';
   const state = {
     projects: [], profiles: [], profileConfig: null, profileIndex: -1, profileKey: '',
     activeProjectId: '', view: 'workbench', settings: 'ai', settingsOpen: false,

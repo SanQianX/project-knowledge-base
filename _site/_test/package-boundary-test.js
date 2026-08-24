@@ -1,4 +1,5 @@
 const assert = require('assert');
+const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
@@ -27,4 +28,15 @@ for (const candidate of forbidden) {
 }
 assert(files.includes('docs/README.zh-CN.md'));
 assert(files.includes('ui/index.html'));
+
+// Every local asset referenced by the packaged HTML must be present in the
+// tarball. This is deliberately derived from index.html so adding a future
+// script, stylesheet, or icon cannot silently produce a broken npm install.
+const html = fs.readFileSync(path.join(root, 'ui', 'index.html'), 'utf8');
+const referencedAssets = [...html.matchAll(/<(?:script|link)\b[^>]*(?:src|href)="(\/[^"?#]+)(?:[?#][^"]*)?"/gi)]
+  .map(match => `ui/${match[1].replace(/^\//, '')}`);
+assert(referencedAssets.length > 0, 'ui/index.html must reference packaged assets');
+for (const asset of referencedAssets) {
+  assert(files.includes(asset), `HTML references an asset missing from the npm package: ${asset}`);
+}
 console.log('package-boundary-test PASS');
