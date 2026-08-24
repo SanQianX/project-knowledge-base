@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -97,22 +98,35 @@ function syncReleaseVersion(rootDir) {
   return { version, changed };
 }
 
+function stageReleaseVersionFiles(rootDir, files) {
+  if (!files.length) return;
+  const result = spawnSync('git', ['-C', rootDir, 'add', '--', ...files], {
+    encoding: 'utf8',
+    windowsHide: true,
+  });
+  if (result.status !== 0) {
+    throw new Error(`failed to stage synchronized release files: ${(result.stderr || result.stdout || '').trim()}`);
+  }
+}
+
 function parseArgs(argv) {
   let rootDir = path.resolve(__dirname, '..', '..');
   let check = false;
   let tag = null;
+  let stage = false;
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--check') check = true;
+    else if (arg === '--stage') stage = true;
     else if (arg === '--root') rootDir = path.resolve(argv[++index] || '');
     else if (arg === '--tag') tag = String(argv[++index] || '').trim();
     else throw new Error(`Unknown argument: ${arg}`);
   }
-  return { rootDir, check, tag };
+  return { rootDir, check, tag, stage };
 }
 
 function main(argv = process.argv.slice(2)) {
-  const { rootDir, check, tag } = parseArgs(argv);
+  const { rootDir, check, tag, stage } = parseArgs(argv);
   if (check) {
     const result = inspectReleaseVersion(rootDir);
     if (result.drift.length) {
@@ -125,8 +139,9 @@ function main(argv = process.argv.slice(2)) {
     return result;
   }
   const result = syncReleaseVersion(rootDir);
+  if (stage) stageReleaseVersionFiles(rootDir, result.changed);
   console.log(result.changed.length
-    ? `synchronized release version ${result.version}: ${result.changed.join(', ')}`
+    ? `${stage ? 'synchronized and staged' : 'synchronized'} release version ${result.version}: ${result.changed.join(', ')}`
     : `release version ${result.version} is already synchronized`);
   return result;
 }
@@ -140,4 +155,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { inspectReleaseVersion, main, releaseVersionTargets, syncReleaseVersion };
+module.exports = { inspectReleaseVersion, main, releaseVersionTargets, stageReleaseVersionFiles, syncReleaseVersion };

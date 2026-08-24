@@ -1,6 +1,6 @@
 {
   "name": "project-knowledge",
-  "version": "4.2.7",
+  "version": "4.2.8",
   "description": "Knowledge base manager with Git integration, AI-driven analysis, and bilingual (zh-CN/en-US) knowledge output",
   "main": "_site/server.js",
   "scripts": {
@@ -9,7 +9,7 @@
     "release:sync": "node _site/scripts/sync-release-version.js",
     "release:verify": "node _site/scripts/sync-release-version.js --check && node _site/_test/integration-adapters-test.js",
     "preversion": "npm run release:verify",
-    "version": "npm run release:sync",
+    "version": "node _site/scripts/sync-release-version.js --stage",
     "postversion": "npm run release:verify"
   },
   "bin": {

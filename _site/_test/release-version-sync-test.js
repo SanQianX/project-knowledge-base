@@ -34,8 +34,19 @@ function run(args) {
   });
 }
 
+function git(args) {
+  const result = spawnSync('git', args, { cwd: TEMP, encoding: 'utf8', windowsHide: true });
+  assert.strictEqual(result.status, 0, result.stderr || result.stdout);
+  return result;
+}
+
 try {
   copyFixture();
+  git(['init', '-q']);
+  git(['config', 'user.email', 'release-test@example.local']);
+  git(['config', 'user.name', 'Release Test']);
+  git(['add', '.']);
+  git(['commit', '-q', '-m', 'fixture']);
   const rootPackage = path.join(TEMP, 'package.json');
   const value = JSON.parse(fs.readFileSync(rootPackage, 'utf8'));
   value.version = '9.8.7';
@@ -45,7 +56,7 @@ try {
   assert.notStrictEqual(before.status, 0, 'check must fail before derived version files are synchronized');
   assert.match(before.stderr, /out of sync/);
 
-  const sync = run([]);
+  const sync = run(['--stage']);
   assert.strictEqual(sync.status, 0, sync.stderr || sync.stdout);
   const check = run(['--check']);
   assert.strictEqual(check.status, 0, check.stderr || check.stdout);
@@ -66,9 +77,20 @@ try {
   assert(mcp.mcpServers['project-knowledge'].args.includes('project-knowledge@9.8.7'));
   assert.strictEqual(desktopLock.version, '9.8.7');
   assert.strictEqual(desktopLock.packages[''].version, '9.8.7');
+  const staged = git(['diff', '--cached', '--name-only']);
+  const stagedFiles = staged.stdout.split(/\r?\n/).filter(Boolean).sort();
+  assert.deepStrictEqual(stagedFiles, [
+    '.claude-plugin/marketplace.json',
+    'desktop/package-lock.json',
+    'desktop/package.json',
+    'package-lock.json',
+    'plugins/project-knowledge/.claude-plugin/plugin.json',
+    'plugins/project-knowledge/.codex-plugin/plugin.json',
+    'plugins/project-knowledge/.mcp.json',
+  ]);
   const scripts = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).scripts;
   assert.strictEqual(scripts.preversion, 'npm run release:verify');
-  assert.strictEqual(scripts.version, 'npm run release:sync');
+  assert.strictEqual(scripts.version, 'node _site/scripts/sync-release-version.js --stage');
   assert.strictEqual(scripts.postversion, 'npm run release:verify');
   console.log('release-version-sync-test PASS');
 } finally {
