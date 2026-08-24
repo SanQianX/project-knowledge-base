@@ -85,22 +85,25 @@ function commit(target, name) {
     settingsStore: { read: () => ({ knowledge: { rootPath: knowledgeRoot }, ai: { schema: 'ai-profiles/v1', profiles: [{ id: 'test-profile', enabled: true, vendor: 'anthropic', model: 'm' }], defaultProfileId: null } }) },
     claimProcessor: processor,
   });
-  const initialSweep = await reconciler.reconcile('project-existing', 'startup');
-  assert.strictEqual(initialSweep.status, 'idle');
+  await assert.rejects(reconciler.reconcile('project-existing', 'startup'), error => error.code === 'INVALID_TRIGGER');
   assert.strictEqual(processorCalls, 0, 'startup after import must not analyze pre-import history');
   const nextCommit = commit(existingRepo, 'after-import');
-  await reconciler.reconcile('project-existing', 'git-hook');
+  const laterCommit = commit(existingRepo, 'after-import-later');
+  await reconciler.processCommitEvent({ projectId: 'project-existing', commitSha: nextCommit, branch: 'main' });
   assert.strictEqual(projects.readState('project-existing').lastAnalyzedCommit, nextCommit);
   assert.strictEqual(processorCalls, 1);
+  await reconciler.processCommitEvent({ projectId: 'project-existing', commitSha: laterCommit, branch: 'main' });
+  assert.strictEqual(projects.readState('project-existing').lastAnalyzedCommit, laterCommit, 'an event SHA remains valid even after HEAD advances');
+  assert.strictEqual(processorCalls, 2);
 
   const emptyRepo = repo('empty-repo', false);
   const emptyImported = await lifecycle.importProject({ localPath: emptyRepo, projectId: 'project-empty', aiProfileId: 'test-profile' });
   assert.strictEqual(emptyImported.state.trackingMode, 'empty-repo');
   assert.strictEqual(emptyImported.state.trackingStartCommit, null);
   const firstCommit = commit(emptyRepo, 'first');
-  await reconciler.reconcile('project-empty', 'git-hook');
+  await reconciler.processCommitEvent({ projectId: 'project-empty', commitSha: firstCommit, branch: 'main' });
   assert.strictEqual(projects.readState('project-empty').lastAnalyzedCommit, firstCommit, 'first commit after empty import must be analyzed');
-  assert.strictEqual(processorCalls, 2);
+  assert.strictEqual(processorCalls, 3);
 
   console.log('tracking-start-test PASS');
 })().catch(error => {

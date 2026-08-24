@@ -2,8 +2,6 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { StorageLayout } = require('../lib/storage-layout');
-const { CommitReconciler, reconcileProjectCommits } = require('../lib/commit-reconciler');
 const { activeTaskPromises, isProjectBusy, taskForProject } = require('../lib/server-app');
 
 function deferred() {
@@ -37,18 +35,6 @@ function deferred() {
   assert.strictEqual(runtime.activeTasks.has('project-a'), false, 'empty project task map must be removed');
   assert(records.some(record => record.event === 'background.operation_failed' && record.operationId === 'op-fast'));
   assert(records.some(record => record.event === 'background.operation_completed' && record.operationId === 'op-long'));
-
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-operation-context-'));
-  const layout = new StorageLayout({ dataDir });
-  const reconciler = new CommitReconciler({ layout });
-  let captured;
-  reconciler.runOwner = async (projectId, trigger, operationId) => {
-    captured = { projectId, trigger, operationId };
-    return { ok: true, projectId, trigger, operationId, processed: [] };
-  };
-  const result = await reconcileProjectCommits('project-root', 'git-hook', { reconciler, operationId: 'op-http-root' });
-  assert.strictEqual(result.operationId, 'op-http-root');
-  assert.deepStrictEqual(captured, { projectId: 'project-root', trigger: 'git-hook', operationId: 'op-http-root' });
 
   console.log('background-task-registry-test PASS');
 })().catch(error => {

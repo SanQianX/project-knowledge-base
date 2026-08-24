@@ -24,6 +24,8 @@ assert(reconciler.includes('validateTrigger(trigger)'));
 assert(contracts.includes("Object.freeze(['git-hook'])"), 'git-hook must be the only analysis trigger');
 assert(!server.includes("reconcileProjectCommits(projectId, 'startup'"), 'startup must not submit commit analysis');
 assert(!automation.includes('dispatchPendingAutomations'), 'pending startup dispatcher must be deleted');
+assert(reconciler.includes('processCommitEvent'), 'Hook events must have an explicit commit processor');
+assert(!reconciler.includes('this.scanner.scan('), 'knowledge analysis must not scan baseline..HEAD');
 assert(logger.includes('LOG_LEVELS,') && logger.includes('new Set(LOG_LEVELS)'), 'the v2 logger must use the shared six-level contract');
 assert(logger.includes('class LogRepository'));
 assert(!ui.includes('tailwindcss.com'));

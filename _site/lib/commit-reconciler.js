@@ -19,8 +19,9 @@ const { KnowledgeRetrievalService } = require('./knowledge-retrieval-service');
 const { manifestHash: calculateRetrievalManifestHash } = require('./knowledge-retrieval-service');
 const { sha256: knowledgeContentHash } = require('./knowledge-schema');
 const { resolveEffectiveAiProfile } = require('./ai-profile-resolver');
+const { CommitProcessingLedger } = require('./commit-processing-ledger');
 
-const inFlightProjects = new Map();
+const explicitQueues = new Map();
 
 function publicFailure(error, phase) {
   return {
@@ -125,6 +126,7 @@ class CommitReconciler {
       logger: options.logger,
     });
     this.claimStore = options.claimStore || new CommitClaimStore({ layout: this.layout });
+    this.processingLedger = options.processingLedger || new CommitProcessingLedger({ layout: this.layout });
     this.claimProcessor = options.claimProcessor || null;
     this.logger = options.logger || null;
     this.settingsStore = options.settingsStore || null;
@@ -136,129 +138,35 @@ class CommitReconciler {
     if (this.logger && typeof this.logger[level] === 'function') await this.logger[level](event, message, context);
   }
 
-  async requestRescan(projectId) {
-    const entry = inFlightProjects.get(projectId);
-    if (entry) entry.rescanRequested = true;
-    try {
-      await this.projectStore.updateState(projectId, state => {
-        state.analysis.rescanRequested = true;
-      });
-    } catch (error) {
-      await this.log('warn', 'reconcile.rescan_request_failed', 'A concurrent rescan request could not be persisted.', { projectId, error });
-    }
-  }
-
   async reconcile(projectId, trigger, context = {}) {
     validateProjectId(projectId);
     validateTrigger(trigger);
-    const operationId = context.operationId || createId('op');
-    const existing = inFlightProjects.get(projectId);
-    if (existing) {
-      await this.requestRescan(projectId);
-      await this.log('debug', 'reconcile.owner_joined', 'Reconciliation joined the active project owner.', {
-        projectId,
-        operationId,
-        context: { ownerOperationId: existing.operationId, trigger },
-      });
-      return existing.promise;
-    }
-    const entry = { operationId, rescanRequested: false, promise: null };
-    const promise = AtomicFile.withFileLock(
-      `${this.layout.getProjectLockPath(projectId)}.reconcile`,
-      () => this.runOwner(projectId, trigger, operationId, entry),
-      { timeoutMs: 10_000, staleMs: 120_000 },
-    );
-    entry.promise = promise;
-    inFlightProjects.set(projectId, entry);
-    try {
-      return await promise;
-    } finally {
-      if (inFlightProjects.get(projectId) === entry) inFlightProjects.delete(projectId);
-    }
+    if (!context.commitSha) throw new DomainError('INVALID_ARGUMENT', 'Commit reconciliation requires an explicit Hook commit SHA.');
+    return this.processCommitEvent({ projectId, commitSha: context.commitSha, branch: context.branch || '', operationId: context.operationId || createId('op') });
   }
 
-  async runOwner(projectId, trigger, operationId, entry) {
-    const aggregate = { ok: true, projectId, trigger, operationId, processed: [], rescans: 0 };
-    do {
-      entry.rescanRequested = false;
-      await this.projectStore.updateState(projectId, state => { state.analysis.rescanRequested = false; });
-      const result = await this.runSweep(projectId, trigger, operationId);
-      aggregate.processed.push(...result.processed);
-      aggregate.ok = aggregate.ok && result.ok;
-      aggregate.status = result.status;
-      aggregate.error = result.error;
-      if (!result.ok) return aggregate;
-      if (entry.rescanRequested) aggregate.rescans += 1;
-    } while (entry.rescanRequested);
-    return aggregate;
-  }
-
-  async runSweep(projectId, trigger, operationId) {
-    const config = this.projectStore.readConfig(projectId);
-    if (config.enabled === false) return { ok: true, status: 'disabled', processed: [] };
-    let state = this.projectStore.readState(projectId);
-    let scan = await this.scanner.scan(config, state, { batchSize: this.batchSize });
-    if (scan.status === 'not-git') {
-      return this.failWithoutClaim(projectId, operationId, new DomainError('INVALID_ARGUMENT', scan.error, { status: 409 }), 'scanning');
-    }
-    if (scan.status === 'empty-repo') {
-      if (state.trackingStartCommit || state.lastAnalyzedCommit) {
-        return this.markDiverged(projectId, operationId, 'Repository no longer has a HEAD for the stored baseline.');
-      }
-      if (state.trackingMode !== 'empty-repo') {
-        await this.projectStore.updateState(projectId, draft => {
-          draft.trackingMode = 'empty-repo';
-          draft.analysis.status = 'idle';
-          draft.analysis.lastError = null;
-        });
-        await this.log('info', 'reconcile.empty_repo_tracked', 'Empty repository tracking mode established.', { projectId, operationId });
-      } else {
-        await this.log('debug', 'reconcile.no_pending', 'No pending commits.', { projectId, operationId });
-      }
-      return { ok: true, status: 'empty-repo', processed: [] };
-    }
-    if (scan.status === 'establish-tracking') {
-      await this.projectStore.updateState(projectId, draft => {
-        if (!draft.trackingStartCommit && !draft.lastAnalyzedCommit) draft.trackingStartCommit = scan.head;
-        draft.trackingMode = 'normal';
-        draft.analysis.status = 'idle';
-        draft.analysis.lastError = null;
-      });
-      await this.log('info', 'reconcile.tracking_started', 'Tracking baseline established without analysis.', { projectId, operationId, commitSha: scan.head });
-      return { ok: true, status: 'tracking-started', processed: [] };
-    }
-    if (scan.status === 'history-diverged') return this.markDiverged(projectId, operationId, scan.error);
-
-    const processed = [];
-    while (true) {
-      if (!scan.commits.length) {
-        // Only set status='idle' when we never processed any commits in
-        // this runSweep call. When we DID process commits and the re-scan
-        // finds nothing more, the per-commit advanceState() has already
-        // set status='state.advanced'; resetting it here would clobber
-        // that observable post-processing state and is what the user sees
-        // as the analysis "never advancing" in the UI.
-        if (!processed.length) {
-          await this.projectStore.updateState(projectId, draft => {
-            if (!draft.analysis.activeClaim) draft.analysis.status = 'idle';
-            draft.analysis.lastError = null;
-          });
-          await this.log('debug', 'reconcile.no_pending', 'No pending commits.', { projectId, operationId });
-          return { ok: true, status: 'idle', processed };
-        }
-        return { ok: true, status: 'completed', processed };
-      }
-      for (const commitSha of scan.commits) {
-        const result = await this.processCommit(projectId, trigger, operationId, config, scan.branch, commitSha);
-        processed.push(result);
-        if (!result.ok) return { ok: false, status: 'failed', processed, error: result.error };
-      }
-      state = this.projectStore.readState(projectId);
-      scan = await this.scanner.scan(config, state, { batchSize: this.batchSize });
-      if (scan.status === 'history-diverged') return this.markDiverged(projectId, operationId, scan.error, processed);
-      if (scan.status !== 'ok') {
-        return this.failWithoutClaim(projectId, operationId, new DomainError('INVALID_ARGUMENT', `Unexpected scanner status after state advance: ${scan.status}.`), 'scanning', processed);
-      }
+  async processCommitEvent({ projectId, commitSha, branch = '', operationId = '' } = {}) {
+    validateProjectId(projectId);
+    validateSha(commitSha);
+    const existingQueue = explicitQueues.get(projectId) || { tail: Promise.resolve(), pending: new Map() };
+    explicitQueues.set(projectId, existingQueue);
+    if (existingQueue.pending.has(commitSha)) return existingQueue.pending.get(commitSha);
+    const queued = existingQueue.tail.catch(() => {}).then(async () => {
+      const completed = this.processingLedger.read(projectId, commitSha);
+      if (completed) return { ok: true, projectId, commitSha, status: 'already-completed', processed: [], ledger: completed };
+      const config = this.projectStore.readConfig(projectId);
+      if (config.enabled === false) return { ok: true, projectId, commitSha, status: 'disabled', processed: [] };
+      const result = await this.processCommit(projectId, 'git-hook', operationId || createId('op'), config, branch, commitSha);
+      if (!result.ok) return { ok: false, projectId, commitSha, status: 'failed', processed: [result], error: result.error };
+      const ledger = this.processingLedger.complete(projectId, commitSha, { runId: result.runId, claimFingerprint: result.claimFingerprint || '' });
+      return { ok: true, projectId, commitSha, status: 'completed', processed: [result], ledger };
+    });
+    existingQueue.pending.set(commitSha, queued);
+    existingQueue.tail = queued.catch(() => {});
+    try { return await queued; }
+    finally {
+      existingQueue.pending.delete(commitSha);
+      if (!existingQueue.pending.size) explicitQueues.delete(projectId);
     }
   }
 
@@ -437,7 +345,7 @@ class CommitReconciler {
         commitSha,
         phase: 'state.advanced',
       });
-      return { ok: true, commitSha, runId: prepared.claim.runId, retry: prepared.retry };
+      return { ok: true, commitSha, runId: prepared.claim.runId, claimFingerprint: prepared.claim.fingerprint, retry: prepared.retry };
     } catch (error) {
       const failure = publicFailure(error, prepared && prepared.claim && prepared.claim.phase || 'evidence.prepared');
       let stateUpdateError = null;
@@ -489,12 +397,13 @@ class CommitReconciler {
 
 async function reconcileProjectCommits(projectId, trigger, deps = {}) {
   const reconciler = deps.reconciler instanceof CommitReconciler ? deps.reconciler : new CommitReconciler(deps);
-  return reconciler.reconcile(projectId, trigger, { operationId: deps.operationId || '' });
+  return reconciler.reconcile(projectId, trigger, { operationId: deps.operationId || '', commitSha: deps.commitSha || '', branch: deps.branch || '' });
 }
 
 module.exports = {
   CommitClaimStore,
   CommitReconciler,
+  CommitProcessingLedger,
   claimFingerprint,
   reconcileProjectCommits,
   validateClaim,

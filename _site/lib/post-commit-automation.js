@@ -6,6 +6,7 @@ const { ProjectRegistryStore } = require('./project-registry-store');
 const { ProjectStore } = require('./project-store');
 const { runGit } = require('./project-lifecycle-service');
 const { CommitReconciler, reconcileProjectCommits } = require('./commit-reconciler');
+const { validateSha } = require('./scanner');
 const { renderCommitPrompt } = require('./commit-prompt');
 
 function stores(deps = {}) {
@@ -20,6 +21,7 @@ function stores(deps = {}) {
 async function handlePostCommitEvent(event = {}, deps = {}) {
   if (event.schema !== SCHEMAS.hookEvent) throw new DomainError('SCHEMA_UNSUPPORTED', 'Hook event must use hook-event/v2.', { status: 409 });
   const projectId = validateProjectId(event.projectId);
+  const commitSha = validateSha(event.head, 'Hook event head');
   if (!event.repoRoot) throw new DomainError('INVALID_ARGUMENT', 'Hook event repoRoot is required.');
   const resolved = stores(deps);
   if (!resolved.registryStore.readDisplaySnapshot(projectId)) throw new DomainError('PROJECT_NOT_FOUND', 'Hook projectId is not registered.', { status: 404 });
@@ -34,7 +36,7 @@ async function handlePostCommitEvent(event = {}, deps = {}) {
     const state = resolved.projectStore.readState(projectId);
     const baseline = state.lastAnalyzedCommit || state.trackingStartCommit;
     if (baseline) {
-      const reachable = runGit(runtimeRoot, ['merge-base', '--is-ancestor', baseline, 'HEAD'], { allowFailure: true });
+      const reachable = runGit(runtimeRoot, ['merge-base', '--is-ancestor', baseline, commitSha], { allowFailure: true });
       if (!reachable.ok) throw new DomainError('PROJECT_NOT_FOUND', 'Moved Hook repository does not contain the project baseline.', { status: 404 });
     }
   }
@@ -44,7 +46,7 @@ async function handlePostCommitEvent(event = {}, deps = {}) {
   }
   if (event.boundary && event.boundary.status === 'captured' && event.boundary.boundary) {
     const boundary = event.boundary.boundary;
-    if (boundary.projectId !== projectId || boundary.commitSha !== event.head) {
+    if (boundary.projectId !== projectId || boundary.commitSha !== commitSha) {
       throw new DomainError('INVALID_ARGUMENT', 'Hook boundary identity does not match the Hook event.');
     }
     const commitExists = runGit(runtimeRoot, ['cat-file', '-e', `${boundary.commitSha}^{commit}`], { allowFailure: true });
@@ -71,10 +73,8 @@ async function handlePostCommitEvent(event = {}, deps = {}) {
       },
     });
   }
-  return reconcileProjectCommits(projectId, 'git-hook', {
-    ...deps,
-    ...resolved,
-  });
+  const reconciler = deps.reconciler instanceof CommitReconciler ? deps.reconciler : new CommitReconciler({ ...deps, ...resolved });
+  return reconciler.processCommitEvent({ projectId, commitSha, branch: event.branch || '', operationId: deps.operationId || event.operationId || '' });
 }
 
 function cleanupOrphanedRuns(_projects, deps = {}) {
