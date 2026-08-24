@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.2.14] - 2026-08-25
+
+- Recovered commit analysis safely after a server restart by making leftover
+  claims terminal without running startup analysis or replaying historical or
+  offline commits; the next explicit Git Hook event processes only its own SHA.
+- Restored v4.1.21 Claude Workbench history through the migrated project's
+  legacy slug while preserving the original session files and preferring the
+  canonical runtime record on duplicate session IDs.
+- Restored historical session selection and live Commit automation visibility
+  in the Claude Code UI, including prompts, thinking, tools, permissions,
+  retries, results, stop controls, and real browser regression coverage.
+
 ## [4.2.13] - 2026-08-25
 
 - Restored the globally installed web UI by including `ui/i18n.js` in the
