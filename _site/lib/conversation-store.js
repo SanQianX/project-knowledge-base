@@ -302,7 +302,7 @@ class ConversationStore {
     const filePath = this.layout.getProjectCommitBoundaryPath(projectId, commitSha);
     if (fs.existsSync(filePath)) {
       const existing = this.readBoundary(projectId, commitSha);
-      if (existing.boundaryHash !== boundary.boundaryHash) throw new DomainError('IMMUTABLE_FIELD', 'Commit boundary is already frozen.', { status: 409 });
+      if (existing.boundaryHash !== boundary.boundaryHash) throw new DomainError('DATA_CORRUPT', 'Conflicting evidence was supplied for an existing commit boundary.', { status: 409 });
       return existing;
     }
     this.atomic.writeJsonAtomic(filePath, boundary);

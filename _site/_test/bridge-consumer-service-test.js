@@ -127,6 +127,21 @@ async function bridgeEvent(eventType, role, content, repoIdentity, sessionId, tu
   assert.strictEqual(statusAfter.consumerRegistered, true);
   assert.strictEqual(statusAfter.bridgeHealthy, true);
 
+  // Boundaries are facts too: a startup/notify drain persists them without
+  // asking the knowledge analyzer to scan or analyze any commit.
+  const boundaryCommit = 'a'.repeat(40);
+  const capturedBoundary = await adapter.appendCommitBoundary({
+    projectId: 'project-ccs', repoIdentity: ccsIdentity, commitSha: boundaryCommit,
+    parentShas: [], branch: 'main', bridgeCursorAtCommit: boundaryUser.sequence,
+    openTurnIdsAtCommit: ['turn-ccs-2'], operationId: 'op-boundary-consumer',
+  });
+  assert.strictEqual(capturedBoundary.status, 'captured');
+  const boundaryDrain = await service.drainThrough(capturedBoundary.boundary.journalSequence, 'startup');
+  assert.strictEqual(boundaryDrain.stats.boundariesPersisted, 1);
+  assert.strictEqual(store.readBoundary('project-ccs', boundaryCommit).commitSha, boundaryCommit);
+  await service.drain('duplicate-boundary');
+  assert.strictEqual(store.readBoundary('project-ccs', boundaryCommit).commitSha, boundaryCommit, 'duplicate boundary drains are idempotent');
+
   // Contiguous ACK under forced persist failure (GATE ACK-001 semantics).
   const failStore = {
     appendBridgeEvent: async (projectId, record) => {

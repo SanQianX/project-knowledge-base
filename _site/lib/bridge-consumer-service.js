@@ -175,6 +175,36 @@ class BridgeConsumerService {
    * workspace-to-project mapping).
    */
   async _processRecord(record, workspaceMap, stats) {
+    if (record && record.schema === 'git-commit-boundary/v1') {
+      const identity = record.repoIdentity;
+      const workspaceId = identity && typeof identity === 'object' && typeof identity.workspaceId === 'string' ? identity.workspaceId : null;
+      const matches = workspaceId ? (workspaceMap.get(workspaceId) || []) : [];
+      if (!workspaceId) { stats.skippedNoWorkspace += 1; return 'skipped-no-workspace'; }
+      if (matches.length === 0) { stats.skippedUnregistered += 1; return 'unregistered-workspace'; }
+      if (matches.length > 1) {
+        const error = new Error(`workspaceId ${workspaceId} maps to multiple projects`);
+        error.code = 'PROJECT_AMBIGUOUS';
+        throw error;
+      }
+      const { projectId, baselineCursor } = matches[0];
+      if (record.projectId !== projectId) {
+        const error = new Error('Commit boundary projectId does not match its workspace mapping.');
+        error.code = 'DATA_CORRUPT';
+        throw error;
+      }
+      if (Number.isInteger(baselineCursor) && record.sequence <= baselineCursor) { stats.skippedBelowBaseline += 1; return 'skipped-below-baseline'; }
+      try {
+        this.conversationStore.writeBoundary(projectId, {
+          ...record,
+          parentShas: record.parentShas || record.parents || [],
+          bridgeCursorAtCommit: Number.isInteger(record.bridgeCursorAtCommit) ? record.bridgeCursorAtCommit : record.sequence,
+          journalSequence: Number.isInteger(record.journalSequence) ? record.journalSequence : record.sequence,
+          openTurnIdsAtCommit: record.openTurnIdsAtCommit || record.openTurnIds || [],
+        });
+        stats.boundariesPersisted += 1;
+        return 'boundary-persisted';
+      } catch (error) { stats.failed += 1; error.sequence = record.sequence; throw error; }
+    }
     if (!record || record.schema !== 'ai-coding-event/v1') {
       stats.skippedTransport += 1;
       return 'skipped-transport';
@@ -228,7 +258,7 @@ class BridgeConsumerService {
   }
 
   async _drainLoop({ through, reason }) {
-    const stats = { persisted: 0, skippedTransport: 0, skippedNoWorkspace: 0, skippedUnregistered: 0, skippedBelowBaseline: 0, failed: 0 };
+    const stats = { persisted: 0, boundariesPersisted: 0, skippedTransport: 0, skippedNoWorkspace: 0, skippedUnregistered: 0, skippedBelowBaseline: 0, failed: 0 };
     let ack = await this._currentAck();
     for (;;) {
       const highResult = await this.bridgeAdapter.getHighWatermark();

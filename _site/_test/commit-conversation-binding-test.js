@@ -42,7 +42,10 @@ const { CommitConversationBinder } = require('../lib/commit-conversation-binder'
     ...input,
   });
   await append({ eventId: 'r1', sequence: 1, eventType: 'user_prompt', role: 'user', content: 'Requirement before C1.', turnId: 'turn-1' });
-  store.writeBoundary(projectId, { commitSha: c1, repoIdentity, parentShas: [], branch: 'main', committedAt: '2026-08-18T02:02:00.000Z', bridgeCursorAtCommit: 2, journalSequence: 2, openTurnIdsAtCommit: ['turn-1'], operationId: 'op-c1' });
+  const boundaryC1 = { commitSha: c1, repoIdentity, parentShas: [], branch: 'main', committedAt: '2026-08-18T02:02:00.000Z', bridgeCursorAtCommit: 2, journalSequence: 2, openTurnIdsAtCommit: ['turn-1'], operationId: 'op-c1' };
+  store.writeBoundary(projectId, boundaryC1);
+  assert.strictEqual(store.writeBoundary(projectId, boundaryC1).commitSha, c1, 'identical bridge/hook boundary is idempotent');
+  assert.throws(() => store.writeBoundary(projectId, { ...boundaryC1, branch: 'other' }), error => error.code === 'DATA_CORRUPT');
   await append({ eventId: 'a1', sequence: 3, eventType: 'assistant_response', role: 'assistant', content: 'Late assistant before claim.', turnId: 'turn-1' });
   await append({ eventId: 'r2', sequence: 4, eventType: 'user_prompt', role: 'user', content: 'Requirement after C1.', turnId: 'turn-2', headAtCapture: c1 });
 
