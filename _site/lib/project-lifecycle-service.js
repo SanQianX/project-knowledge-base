@@ -76,11 +76,15 @@ class ProjectLifecycleService {
     let plannedGitInit = false;
     if (checks.path.ok) {
       const inside = runGit(localPath, ['rev-parse', '--is-inside-work-tree'], { allowFailure: true });
-      if (!inside.ok) {
+      const top = inside.ok ? runGit(localPath, ['rev-parse', '--show-toplevel'], { allowFailure: true }) : null;
+      // A folder merely nested below another repository is not itself an
+      // importable Git project. This matters on CI workspaces and prevents a
+      // selected plain folder from silently inheriting its parent's history.
+      const isRepoRoot = Boolean(top && top.ok && path.resolve(top.stdout) === path.resolve(localPath));
+      if (!inside.ok || !isRepoRoot) {
         plannedGitInit = true;
         checks.git = { ok: false, status: 'non-git', plannedInit: true, message: 'Directory is not a Git repository. Import will run `git init` before proceeding.' };
       } else {
-        const top = runGit(localPath, ['rev-parse', '--show-toplevel']);
         const head = runGit(localPath, ['rev-parse', '--verify', 'HEAD'], { allowFailure: true });
         const commonDir = runGit(localPath, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
         const branch = runGit(localPath, ['branch', '--show-current'], { allowFailure: true });
