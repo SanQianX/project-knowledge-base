@@ -6,7 +6,7 @@ const WebSocket = require('ws');
 
 const MAX_STREAM_TAIL_BYTES = 32 * 1024;
 const DEFAULT_HTTP_TIMEOUT_MS = 1000;
-const DEFAULT_LAUNCH_TIMEOUT_MS = Number(process.env.KB_CDP_LAUNCH_TIMEOUT_MS || 20000);
+const DEFAULT_LAUNCH_TIMEOUT_MS = Number(process.env.KB_CDP_LAUNCH_TIMEOUT_MS || (process.platform === 'linux' ? 30000 : 20000));
 
 function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -82,6 +82,13 @@ function hasExited(child) {
 function isWindowsChromeLauncher(executable) {
   if (process.platform !== "win32") return false;
   return /(?:chrome|msedge)\.exe$/i.test(path.basename(String(executable || "")));
+}
+
+function platformLaunchArgs(platform = process.platform) {
+  // GitHub Linux runners occasionally leave Chrome alive without publishing
+  // DevToolsActivePort when its sandbox or shared-memory backing stalls.
+  // These flags are scoped to isolated, disposable test browsers only.
+  return platform === 'linux' ? ['--disable-dev-shm-usage', '--no-sandbox'] : [];
 }
 
 function waitForExit(child, timeoutMs = 3000) {
@@ -226,6 +233,7 @@ async function launchCdpBrowser(options) {
   try {
     child = spawn(chrome, [
       ...prependArgs,
+      ...platformLaunchArgs(),
       "--headless=new",
       "--disable-gpu",
       "--disable-background-networking",
@@ -346,4 +354,4 @@ async function launchCdpBrowser(options) {
   }
 }
 
-module.exports = { isWindowsChromeLauncher, launchCdpBrowser, requestJson, waitFor, wait };
+module.exports = { isWindowsChromeLauncher, platformLaunchArgs, launchCdpBrowser, requestJson, waitFor, wait };

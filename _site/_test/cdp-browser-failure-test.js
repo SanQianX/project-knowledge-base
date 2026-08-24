@@ -7,7 +7,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { isWindowsChromeLauncher, launchCdpBrowser } = require('./helpers/cdp-browser');
+const { isWindowsChromeLauncher, platformLaunchArgs, launchCdpBrowser } = require('./helpers/cdp-browser');
 
 const FIXTURE_EXIT = path.join(__dirname, 'fixtures', 'fake-browser-exit.js');
 const FIXTURE_HANG = path.join(__dirname, 'fixtures', 'fake-browser-hang.js');
@@ -62,6 +62,8 @@ async function expectLaunchFailure(scenario) {
 (async () => {
   assert.strictEqual(isWindowsChromeLauncher('C:/Program Files/Google/Chrome/Application/chrome.exe'), process.platform === 'win32');
   assert.strictEqual(isWindowsChromeLauncher(process.execPath), false);
+  assert.deepStrictEqual(platformLaunchArgs('linux'), ['--disable-dev-shm-usage', '--no-sandbox']);
+  assert.deepStrictEqual(platformLaunchArgs('win32'), []);
   const exitDuration = await expectLaunchFailure({
     name: 'immediate-exit',
     options: profileDir => ({
