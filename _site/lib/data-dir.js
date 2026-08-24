@@ -49,7 +49,13 @@ function migrateFromLegacy({ legacyRoot, logger } = {}) {
   if (!legacyRoot || !fs.existsSync(legacyRoot)) return { ok: true, migrated: false, reason: legacyRoot ? 'legacy root does not exist' : 'no legacy root provided' };
   const dataDir = getDataDir();
   if (path.resolve(legacyRoot) === dataDir) return { ok: true, migrated: false, reason: 'legacy root equals data dir' };
-  const sources = LEGACY_ASSETS.filter(asset => fs.existsSync(assetPath(legacyRoot, asset)));
+  // Packaged application roots may include empty scaffolding such as
+  // `projects/`. It is not user data and must never conflict with populated
+  // runtime data during startup relocation.
+  const sources = LEGACY_ASSETS.filter(asset => {
+    const source = assetPath(legacyRoot, asset);
+    return fs.existsSync(source) && !isEmptyAsset(source, asset);
+  });
   if (!sources.length) return { ok: true, migrated: false, reason: 'no legacy assets found' };
   const conflicts = [];
   for (const asset of sources) {

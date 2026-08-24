@@ -56,5 +56,22 @@ function write(file, value = '{}') { fs.mkdirSync(path.dirname(file), { recursiv
     assert.equal(result.requiresManualRecovery, true);
     assert.equal(JSON.parse(fs.readFileSync(path.join(destination, 'projects.json'))).newer.repoPath, 'C:/new');
   } finally { process.env.KB_DATA_DIR = saved; dataDir._resetCache(); clean(source); clean(destination); }
+
+  // The installed package can contain empty scaffolding directories (for
+  // example projects/) while the user data directory contains real projects.
+  // Empty package scaffolding is not a legacy source and must not block startup.
+  const packageRoot = temp('empty-package-root');
+  const userData = temp('existing-user-data');
+  try {
+    fs.mkdirSync(path.join(packageRoot, 'projects'), { recursive: true });
+    write(path.join(userData, 'projects', 'project-real', 'config.json'), JSON.stringify({ id: 'project-real' }));
+    process.env.KB_DATA_DIR = userData;
+    dataDir._resetCache();
+    const result = dataDir.migrateFromLegacy({ legacyRoot: packageRoot });
+    assert.equal(result.ok, true, 'empty package scaffolding must not be a migration conflict');
+    assert.equal(result.migrated, false);
+    assert.equal(result.reason, 'no legacy assets found');
+    assert.equal(fs.existsSync(path.join(userData, 'projects', 'project-real', 'config.json')), true);
+  } finally { process.env.KB_DATA_DIR = saved; dataDir._resetCache(); clean(packageRoot); clean(userData); }
   console.log('data-dir-migration-test PASS');
 })();
