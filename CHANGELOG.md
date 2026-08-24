@@ -1,5 +1,15 @@
 # Changelog
 
+## [4.2.8] - 2026-08-24
+
+- Fixed release metadata drift by deriving plugin manifests, marketplace
+  metadata, MCP package pins, and both lockfiles from the root package
+  version during the standard npm version lifecycle.
+- Added release and tag-version guards to CI and the npm publishing workflow,
+  so a mismatched release is rejected before packaging or publishing.
+- Stabilized Windows browser E2E tests by handling Chrome launcher detachment
+  and cleaning every test-specific Chrome process by its isolated profile.
+
 ## [4.2.7] - 2026-08-24
 
 - Made runtime data migration fail closed: existing legacy data is now
