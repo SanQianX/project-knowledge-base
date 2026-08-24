@@ -191,6 +191,8 @@ function toPersistedSession(session) {
     automation: !!session.automation,
     automationRunId: session.automationRunId || null,
     metadata: session.metadata || {},
+    legacyProjectSlug: session.legacyProjectSlug || null,
+    legacySource: session.legacySource === true,
     permissionMode: session.permissionMode || 'default',
     startedAt: session.startedAt,
     endedAt: session.endedAt,
@@ -233,28 +235,56 @@ function scanPersistedRecords(projectSlug = null) {
     const registry = projectRegistryStore.read({ allowMissing: true });
     projectDirs = registry.projectOrder
       .filter(projectId => !projectSlug || projectId === projectSlug)
-      .map(projectId => ({ name: projectId, kbPath: projectStore.readConfig(projectId).knowledgePath }));
+      .map(projectId => {
+        const config = projectStore.readConfig(projectId);
+        const legacySlug = config.legacyExtensions && typeof config.legacyExtensions.slug === 'string'
+          ? config.legacyExtensions.slug.trim()
+          : '';
+        return {
+          name: projectId,
+          kbPath: config.knowledgePath,
+          legacySlugs: legacySlug && legacySlug !== projectId ? [legacySlug] : [],
+        };
+      });
   } catch { return []; }
-  const records = [];
+  const records = new Map();
   for (const entry of projectDirs) {
     const dirs = [
-      storageLayout.getRuntimePath('claude-sessions', entry.name),
-      path.join(entry.kbPath, '_ai', WORKBENCH_DIR),
+      { path: storageLayout.getRuntimePath('claude-sessions', entry.name), legacySlug: null },
+      { path: path.join(entry.kbPath, '_ai', WORKBENCH_DIR), legacySlug: null },
     ];
-    try { dirs.push(path.join(aiWorkspace.projectAIPath(entry.name), WORKBENCH_DIR)); } catch {
+    try { dirs.push({ path: path.join(aiWorkspace.projectAIPath(entry.name), WORKBENCH_DIR), legacySlug: null }); } catch {
       // The legacy workspace location is optional during v2 session discovery.
     }
-    for (const dir of dirs) {
+    for (const legacySlug of entry.legacySlugs) {
+      try { dirs.push({ path: path.join(aiWorkspace.projectAIPath(legacySlug), WORKBENCH_DIR), legacySlug }); } catch {
+        // Invalid migration metadata is ignored without hiding canonical v2 sessions.
+      }
+    }
+    const visited = new Set();
+    for (const source of dirs) {
+      const dir = path.resolve(source.path);
+      if (visited.has(dir)) continue;
+      visited.add(dir);
       let files = [];
       try { files = fs.readdirSync(dir); } catch { continue; }
       for (const file of files) {
         if (!file.endsWith('.json')) continue;
         const record = readPersistedRecord(path.join(dir, file));
-        if (record) records.push(record);
+        if (!record || records.has(record.sessionId)) continue;
+        const acceptedSlugs = new Set([entry.name, ...entry.legacySlugs]);
+        if (record.projectSlug && !acceptedSlugs.has(record.projectSlug)) continue;
+        const originalProjectSlug = record.projectSlug || '';
+        records.set(record.sessionId, {
+          ...record,
+          projectSlug: entry.name,
+          legacyProjectSlug: source.legacySlug || (originalProjectSlug !== entry.name ? originalProjectSlug : '') || record.legacyProjectSlug || null,
+          legacySource: source.legacySlug != null || originalProjectSlug !== entry.name || record.legacySource === true,
+        });
       }
     }
   }
-  return records.sort((a, b) => String(b.updatedAt || b.startedAt || '').localeCompare(String(a.updatedAt || a.startedAt || '')));
+  return [...records.values()].sort((a, b) => String(b.updatedAt || b.startedAt || '').localeCompare(String(a.updatedAt || a.startedAt || '')));
 }
 
 function findPersistedRecord(sessionId) {
@@ -317,6 +347,8 @@ function restoreSessionFromDisk(sessionId) {
     metadata: record.metadata || {},
     automation: !!record.automation,
     automationRunId: record.automationRunId || null,
+    legacyProjectSlug: record.legacyProjectSlug || null,
+    legacySource: record.legacySource === true,
     permissionMode: record.permissionMode || 'default',
     safetyPolicy: null,
   };
@@ -462,6 +494,8 @@ function sessionSummary(s) {
     source: s.source || 'manual',
     automation: !!s.automation,
     automationRunId: s.automationRunId || null,
+    legacyProjectSlug: s.legacyProjectSlug || null,
+    legacySource: s.legacySource === true,
     permissionMode: s.permissionMode || 'default',
     startedAt: s.startedAt,
     endedAt: s.endedAt,
@@ -1294,6 +1328,8 @@ function getState(sessionId) {
     source: s.source || 'manual',
     automation: !!s.automation,
     automationRunId: s.automationRunId || null,
+    legacyProjectSlug: s.legacyProjectSlug || null,
+    legacySource: s.legacySource === true,
     permissionMode: s.permissionMode || 'default',
     startedAt: s.startedAt,
     endedAt: s.endedAt,
@@ -1474,6 +1510,8 @@ function demoteStaleActiveSessions(opts = {}) {
       metadata: record.metadata || {},
       automation: !!record.automation,
       automationRunId: record.automationRunId || null,
+      legacyProjectSlug: record.legacyProjectSlug || null,
+      legacySource: record.legacySource === true,
       permissionMode: record.permissionMode || 'default',
       safetyPolicy: null,
     };
