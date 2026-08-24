@@ -1,0 +1,47 @@
+{
+  "schema": "p0-data-incident-report/v1",
+  "redacted": true,
+  "observedAt": "2026-08-24",
+  "packageVersion": "v4.2.6",
+  "gitHead": "d2020adae60237d3eb667a4d39407190f71c148a",
+  "effectiveDataDir": "C:\\Users\\SanQian\\.project-knowledge",
+  "environment": {
+    "KB_DATA_DIR": null,
+    "KB_SKIP_MIGRATION": null,
+    "KB_RUNTIME_MODE": null
+  },
+  "currentData": {
+    "projects": 7,
+    "aiProfiles": 2,
+    "hasApiKey": true,
+    "knowledgeRoot": "D:\\SanQian.Xu\\knowledge",
+    "embeddingConfigured": true,
+    "models": { "legacyFiles": 0, "cacheFiles": 0 },
+    "layoutMigration": { "completed": true, "projectCount": 7 }
+  },
+  "recovery": {
+    "failedRuns": 2,
+    "completedRuns": 1,
+    "failedCode": "DATA_CORRUPT",
+    "backupAssets": [
+      "projects.json",
+      "ai-profiles.json",
+      "knowledge-store.json",
+      "embedding-config.json",
+      "knowledge-scopes.json",
+      "knowledge.lancedb"
+    ]
+  },
+  "hypotheses": {
+    "H1_wrong_data_dir": "rejected",
+    "H2_empty_target_relocation_skip": "not_observed_locally; confirmed_source_risk",
+    "H3_empty_completion_marker": "rejected",
+    "H4_empty_v2_locked": "rejected",
+    "H5_incomplete_relocation_manifest": "confirmed_source_risk",
+    "H6_legacy_models_not_moved": "not_observed_locally; confirmed_source_risk",
+    "H7_data_left_in_install_dir": "rejected",
+    "H8_env_override": "rejected",
+    "H9_failed_migration_then_defaults": "confirmed_source_risk; two local failures recorded"
+  },
+  "secretsPrinted": false
+}
