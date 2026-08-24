@@ -1,5 +1,14 @@
 # Changelog
 
+## [4.2.13] - 2026-08-25
+
+- Restored the globally installed web UI by including `ui/i18n.js` in the
+  npm package; a missing or incomplete localization runtime can no longer
+  abort project, AI profile, Knowledge Root, and conversation loading.
+- Added package-asset closure validation plus a real
+  `npm pack -> npm install -> server -> Chrome` release smoke test, so CI
+  rejects tarballs whose UI differs from the tested source tree.
+
 ## [4.2.9] - 2026-08-24
 
 - Made persisted UI-language selection fully reliable across page reloads and
