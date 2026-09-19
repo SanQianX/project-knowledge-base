@@ -25,7 +25,7 @@ const screenshotPath = path.join(os.tmpdir(), 'pk-ui-smoke-' + process.pid + '.p
       title: document.title,
       shell: document.querySelectorAll('.shell').length,
       sidebar: getComputedStyle(document.querySelector('.sidebar')).display,
-      workbench: document.getElementById('view-workbench').classList.contains('active'),
+      terminalView: document.getElementById('view-terminal').classList.contains('active'),
       projects: document.querySelectorAll('#project-list .project-card').length,
       unsafeImages: document.querySelectorAll('img').length,
       xss: window.__xss,
@@ -35,7 +35,7 @@ const screenshotPath = path.join(os.tmpdir(), 'pk-ui-smoke-' + process.pid + '.p
     assert.strictEqual(snapshot.title, 'Project Knowledge');
     assert.strictEqual(snapshot.shell, 1);
     assert.notStrictEqual(snapshot.sidebar, 'none');
-    assert.strictEqual(snapshot.workbench, true);
+    assert.strictEqual(snapshot.terminalView, true);
     assert.strictEqual(snapshot.projects, 1);
     assert.strictEqual(snapshot.unsafeImages, 0);
     assert.strictEqual(snapshot.xss, undefined);

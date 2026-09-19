@@ -155,16 +155,16 @@ function git(repo, args) {
       return disabled === false ? { ok: true } : null;
     }, 'language reset restores ready', 20000);
 
-    // Case 5: submit form -> project imported; UI navigates to workbench.
+    // Case 5: submit form -> project imported; UI navigates to the terminal view.
     await browser.evaluate(`(() => {
       const form = document.getElementById('import-form');
       if (typeof form.requestSubmit === 'function') form.requestSubmit();
       else form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     })()`);
     await waitFor(async () => {
-      const visible = await browser.evaluate("document.getElementById('view-workbench').classList.contains('active')");
+      const visible = await browser.evaluate("document.getElementById('view-terminal').classList.contains('active')");
       return visible ? { ok: true } : null;
-    }, 'import navigates to workbench', 30000);
+    }, 'import navigates to terminal view', 30000);
 
     // Case 6: folder picker button is hidden in Web mode (no projectKnowledgeDesktop).
     {

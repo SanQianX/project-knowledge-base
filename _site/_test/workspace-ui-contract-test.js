@@ -9,19 +9,17 @@ const script = fs.readFileSync(path.join(ROOT, 'ui', 'app.js'), 'utf8');
 
 for (const contract of [
   'id="project-list"',
-  'id="view-workbench"',
+  'id="view-terminal"',
+  'id="view-search"',
   'id="view-import"',
   'id="settings-drawer"',
-  'data-settings="ai"',
-  'data-settings="knowledge"',
   'data-settings="conversation"',
   'data-settings="logs"',
-  'data-settings="client"',
   'id="delete-dialog"',
 ]) assert(html.includes(contract), 'missing v13 shell contract: ' + contract);
 
 const desktopNav = html.slice(html.indexOf('<aside class="sidebar">'), html.indexOf('</aside>'));
-assert(desktopNav.includes('data-go="workbench"') && desktopNav.includes('data-go="import"'));
+assert(desktopNav.includes('data-go="terminal"') && desktopNav.includes('data-go="search"') && desktopNav.includes('data-go="import"'));
 assert(!/开发对话|运行记录|系统日志/.test(desktopNav), 'conversation and logs must not be duplicated in main navigation');
 assert(!html.includes('data-install-hook') && !html.includes('data-analyze') && !html.includes('data-simulate'), 'manual Hook/analysis controls are forbidden');
 

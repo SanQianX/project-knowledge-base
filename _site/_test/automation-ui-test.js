@@ -9,7 +9,7 @@ const server = fs.readFileSync(path.join(ROOT, '_site', 'lib', 'server-app.js'),
 
 assert.strictEqual((html.match(/class="shell"/g) || []).length, 1, 'production UI must have one full product shell');
 assert.strictEqual((html.match(/id="settings-logs"/g) || []).length, 1, 'production UI must have one Settings logs section');
-assert(html.includes('id="view-workbench"') && html.includes('id="view-import"'), 'Workbench and Import must remain reachable');
+assert(html.includes('id="view-terminal"') && html.includes('id="view-search"') && html.includes('id="view-import"'), 'Terminal, Search and Import must remain reachable');
 
 const forbiddenUi = [
   /\/api\/projects\/[^"' ]+\/hook/,

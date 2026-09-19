@@ -1,0 +1,85 @@
+diff --git a/apps/agent-terminal/app.css b/apps/agent-terminal/app.css
+index f879ba4..a21f5ed 100644
+--- a/apps/agent-terminal/app.css
++++ b/apps/agent-terminal/app.css
+@@ -562,3 +562,6 @@ body.light .msg.ai.error { color:#b42318; border-color:rgba(180,35,24,.25); back
+ @media (prefers-reduced-motion: reduce) {
+   *, *::before, *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; }
+ }
++
++/* ===== embed mode（被知识库壳嵌入）：折叠左侧项目栏，由壳 postMessage 控制 ===== */
++body.embed-collapse .sidebar { display: none; }
+diff --git a/apps/agent-terminal/app.js b/apps/agent-terminal/app.js
+index 192c863..7df1fcc 100644
+--- a/apps/agent-terminal/app.js
++++ b/apps/agent-terminal/app.js
+@@ -2162,5 +2162,69 @@ function wireChrome() {
+   });
+ }
+ 
++/* ===================== embed bridge（被外部壳嵌入时受控） =====================
++ * 约定：壳通过 postMessage 发送 {type:'kb:sidebar', visible} 折叠/展开左侧项目栏，
++ * {type:'kb:select-project', project} 按 id/name/rootPath 选中项目。
++ * URL 参数：?embed=1 进入嵌入态（默认折叠项目栏，sidebar=1 保持展开），project= 预选。
++ * 就绪后向父窗口回发 {type:'kb:ready', app:'agent-terminal'}；选中结果回发 kb:projects。 */
++function embedAllowedOrigin(origin) {
++  if (origin === 'null') return true; // file:// 壳
++  try {
++    const u = new URL(origin);
++    return u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.hostname === '[::1]';
++  } catch { return false; }
++}
++function setEmbedSidebarVisible(visible) {
++  document.body.classList.toggle('embed-collapse', !visible);
++}
++function embedSelectProject(ref) {
++  const refStr = String(ref || '');
++  if (!refStr) return false;
++  const project = state.projects.find(p => p.id === refStr || p.name === refStr || (p.rootPath || '') === refStr);
++  if (!project) return false;
++  if (state.activeProjectId !== project.id) {
++    detachSession();
++    resetStream();
++    setBusyState('idle');
++    state.activeProjectId = project.id;
++    state.currentProfileId = undefined;
++    state.currentModel = null;
++    state.currentAgent = project.defaultAgentId || 'claude-code';
++    $('session-title').textContent = '新会话';
++    applyCapabilityGates();
++    renderModelLabel();
++  }
++  state.expanded.add(project.id);
++  renderProjectList();
++  return true;
++}
++window.addEventListener('message', ev => {
++  if (!embedAllowedOrigin(ev.origin)) return;
++  const data = ev.data;
++  if (!data || typeof data !== 'object') return;
++  if (data.type === 'kb:sidebar') setEmbedSidebarVisible(!!data.visible);
++  else if (data.type === 'kb:select-project' && ev.source) {
++    const ok = embedSelectProject(data.project);
++    ev.source.postMessage({
++      type: 'kb:projects', app: 'agent-terminal', ok,
++      activeProjectId: state.activeProjectId,
++      projects: state.projects.map(p => ({ id: p.id, name: p.name, rootPath: p.rootPath })),
++    }, '*');
++  }
++});
++function embedInit() {
++  const q = new URLSearchParams(location.search);
++  if (q.get('embed') === '1') {
++    setEmbedSidebarVisible(q.get('sidebar') !== '1');
++    const preset = q.get('project');
++    if (preset) {
++      const trySelect = () => { if (!embedSelectProject(preset)) setTimeout(trySelect, 500); };
++      setTimeout(trySelect, 0);
++    }
++  }
++  if (window.parent !== window) window.parent.postMessage({ type: 'kb:ready', app: 'agent-terminal' }, '*');
++}
++embedInit();
++
+ if (client) init();
+ else document.addEventListener('DOMContentLoaded', () => toast('client SDK 加载失败', true));

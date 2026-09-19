@@ -21,13 +21,14 @@
       <div class="project-list" id="project-list"></div>
     </div>
     <nav class="sidebar-nav">
-      <button class="nav-btn active" type="button" data-go="workbench"><span>Claude Code</span><span class="nav-badge">项目</span></button>
+      <button class="nav-btn active" type="button" data-go="terminal"><span>🤖 Agent 终端</span><span class="nav-badge">终端</span><span class="nav-fold" data-fold="term" title="模块项目列表：已折叠，点击展开">▤</span></button>
+      <button class="nav-btn" type="button" data-go="search"><span>🔎 知识检索</span><span class="nav-badge">检索</span><span class="nav-fold" data-fold="vh" title="模块项目列表：已折叠，点击展开">▤</span></button>
     </nav>
   </aside>
 
   <main class="main">
     <header class="main-header">
-      <div><div class="subtitle">Project Knowledge</div><div class="page-title" id="page-title">Claude Code</div></div>
+      <div><div class="subtitle">Project Knowledge</div><div class="page-title" id="page-title">Agent 终端</div></div>
       <div class="header-actions">
         <button class="btn" type="button" id="theme-button">深色模式</button>
         <button class="btn" type="button" id="open-settings">设置</button>
@@ -40,48 +41,55 @@
       <button class="btn" type="button" id="mobile-settings">设置</button>
     </div>
 
-    <section class="view active" id="view-workbench">
-      <section class="panel workbench">
-        <div class="workbench-head">
-          <span class="dot claude"></span><span class="workbench-title">Claude Code</span><span class="chip" id="wb-project">未选择项目</span><span class="chip" id="wb-model" hidden></span>
-          <div class="workbench-session-controls">
-            <select class="input workbench-session" id="wb-session" aria-label="历史会话"><option value="">新会话</option></select>
-            <button class="btn compact" type="button" id="wb-new-session">新会话</button>
-            <button class="btn compact" type="button" id="wb-stop-session" disabled>停止</button>
-          </div>
-          <span class="muted" id="wb-state">就绪</span>
-        </div>
-        <div class="chat" id="chat"><div class="empty-chat">从项目知识开始对话<div class="muted" style="margin-top:8px">选择左侧项目，输入问题或开发需求。</div></div></div>
-        <div class="composer">
-          <div class="composer-row"><textarea class="input" id="chat-input" placeholder="向 Claude 发送消息…"></textarea><button class="btn-primary send" type="button" id="send-btn" aria-label="发送">↑</button></div>
-          <div class="toolbar"><div class="token"><span class="dot good"></span><span>默认模式</span></div><div class="token"><span>💬</span><span class="nav-badge" id="msg-count">0</span></div><span style="margin-left:auto" class="muted">Claude Workbench 会话保存在本机；外部开发对话可在 设置 → 开发对话 回看</span></div>
-        </div>
-      </section>
+    <!-- Agent 终端：原版 claude-ai-workbench UI（嵌入模式） -->
+    <section class="view active" id="view-terminal">
+      <div class="embed-head">
+        <span class="embed-status" id="st-5760"><span class="st-dot"></span><span class="st-text">检测 127.0.0.1:5760 …</span></span>
+        <span class="chip" id="sync-5760">联动: —</span>
+        <a class="btn compact embed-open" id="open-5760" href="#" target="_blank" rel="noopener">独立打开 ↗</a>
+      </div>
+      <div class="embed"><iframe id="fr-5760" title="Agent Terminal"></iframe></div>
+    </section>
+
+    <!-- 知识检索：原版 vector-hub 控制台（嵌入模式） -->
+    <section class="view" id="view-search">
+      <div class="embed-head">
+        <span class="embed-status" id="st-8787"><span class="st-dot"></span><span class="st-text">检测 127.0.0.1:8787 …</span></span>
+        <span class="chip" id="sync-8787">联动: —</span>
+        <a class="btn compact embed-open" id="open-8787" href="#" target="_blank" rel="noopener">独立打开 ↗</a>
+      </div>
+      <div class="embed"><iframe id="fr-8787" title="vector-hub 控制台"></iframe></div>
     </section>
 
     <section class="view" id="view-import">
       <div class="split">
         <section class="panel form-panel">
           <div class="section-title">导入项目</div>
-          <div class="section-help">导入只建立项目登记、Git 跟踪基线和托管 Hook，不运行初始化分析。下方的所有输入都会触发后端 preflight，导入按钮在所有必填项就绪前保持禁用。</div>
+          <div class="section-help">导入只建立项目登记、Git 跟踪基线和托管 Hook，不运行初始化分析。两个地址在导入时由人选定，项目与模块的一一对应在登记那一刻确定。</div>
           <form id="import-form" class="form-grid">
-            <div class="field"><label for="import-path">本地路径</label>
+            <div class="field"><label for="import-path">① 开发项目地址 · 登记到 Agent 终端</label>
               <div style="display:flex;gap:8px">
                 <input class="input code" id="import-path" required placeholder="D:\Projects\my-project" style="flex:1">
                 <button class="btn" type="button" id="import-pick-folder" hidden>选择目录…</button>
               </div>
-              <span class="muted">桌面端会调用原生目录选择器；Web 模式请直接输入绝对路径。</span>
+              <span class="muted import-field-help">终端会话将按此路径映射回本项目</span>
+            </div>
+            <div class="field"><label for="import-knowledge-path">② 知识库地址 · 登记到 vector-hub</label>
+              <div style="display:flex;gap:8px">
+                <input class="input code" id="import-knowledge-path" placeholder="留空使用默认知识根目录" style="flex:1">
+                <button class="btn" type="button" id="import-pick-knowledge" hidden>选择目录…</button>
+              </div>
+              <span class="muted import-field-help">源 Markdown 为唯一真相，向量索引可随时重建</span>
             </div>
             <div class="field"><label for="import-language">知识输出语言</label>
               <select class="input" id="import-language">
                 <option value="zh-CN">中文（zh-CN）</option>
                 <option value="en-US">English (en-US)</option>
               </select>
-              <span class="muted">导入后可随时在项目设置中切换。</span>
             </div>
-            <div class="field"><label for="import-profile">AI 配置</label>
+            <div class="field"><label for="import-profile">AI 配置（在 Agent 终端内设置）</label>
               <select class="input" id="import-profile"></select>
-              <span class="muted" id="import-profile-source">由后端解析；不指定则使用默认 / 第一个可用配置。</span>
+              <span class="muted">模型与凭据的唯一入口在终端界面（顶栏 ⚙）；此处仅选择本项目使用的配置。</span>
             </div>
             <div class="field"><label for="import-team-enabled"><input type="checkbox" id="import-team-enabled"> 使用 Team Knowledge（可选）</label>
               <div id="import-team-fields" hidden style="margin-top:8px;display:grid;gap:8px">
@@ -91,7 +99,6 @@
                   <select class="input" id="import-team-provider"><option value="github">GitHub</option><option value="gitea">Gitea</option></select>
                 </div>
               </div>
-              <span class="muted">仅当项目需要绑定到共享知识库时填写。</span>
             </div>
             <div class="notice" id="import-preflight" hidden></div>
             <div class="notice error" id="import-errors" hidden></div>
@@ -101,13 +108,14 @@
         </section>
         <aside class="panel preview-panel">
           <div class="section-title">导入目标</div>
-          <div class="section-help">导入完成后展示实际落位。</div>
+          <div class="section-help">导入完成后展示实际落位与模块登记结果。</div>
           <div class="preview-list">
             <div class="panel2 preview-item"><div class="preview-label">Git 状态</div><div class="preview-value" id="pv-git-status">等待 preflight</div></div>
             <div class="panel2 preview-item"><div class="preview-label">Repository</div><div class="preview-value code" id="pv-repo">导入后确定</div></div>
             <div class="panel2 preview-item"><div class="preview-label">知识根目录</div><div class="preview-value code" id="pv-knowledge-root">—</div></div>
             <div class="panel2 preview-item"><div class="preview-label">Effective AI Profile</div><div class="preview-value code" id="pv-ai-profile">—</div></div>
             <div class="panel2 preview-item"><div class="preview-label">Hook 状态</div><div class="preview-value" id="pv-hook">等待 preflight</div></div>
+            <div class="panel2 preview-item"><div class="preview-label">模块登记</div><div class="preview-value" id="pv-modules">待登记</div></div>
           </div>
         </aside>
       </div>
@@ -117,49 +125,11 @@
 
 <div class="backdrop" id="settings-backdrop"></div>
 <aside class="drawer" id="settings-drawer" aria-label="设置">
-  <nav class="settings-nav"><h3>设置</h3><button class="active" type="button" data-settings="ai">AI 模型</button><button type="button" data-settings="knowledge">知识库存储</button><button type="button" data-settings="relations">知识关联</button><button type="button" data-settings="conversation">开发对话</button><button type="button" data-settings="logs">日志</button><button type="button" data-settings="client">桌面客户端</button></nav>
+  <nav class="settings-nav"><h3>设置</h3><button class="active" type="button" data-settings="conversation">开发对话</button><button type="button" data-settings="logs">日志</button></nav>
   <div class="settings-content">
-    <div class="drawer-head"><div><h2 id="settings-title">AI 模型</h2><div class="section-help" id="settings-help">配置模型并为项目分配 Profile。</div></div><div style="display:flex;gap:8px;align-items:center"><label for="ui-language" data-i18n="app.language.toggle" style="font-size:12px;color:var(--muted)">界面语言</label><select class="input" id="ui-language" style="width:auto"><option value="zh-CN">中文</option><option value="en-US">English</option></select><button class="btn" type="button" id="close-settings">×</button></div></div>
+    <div class="drawer-head"><div><h2 id="settings-title">开发对话</h2><div class="section-help" id="settings-help">查看项目开发过程中的需求与 AI 回复。</div></div><div style="display:flex;gap:8px;align-items:center"><label for="ui-language" data-i18n="app.language.toggle" style="font-size:12px;color:var(--muted)">界面语言</label><select class="input" id="ui-language" style="width:auto"><option value="zh-CN">中文</option><option value="en-US">English</option></select><button class="btn" type="button" id="close-settings">×</button></div></div>
 
-    <section class="settings-section active" id="settings-ai">
-      <div class="settings-card panel2">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><strong data-i18n="app.settings.ai.help">配置模型并为项目分配 Profile。</strong><div style="display:flex;gap:8px"><button class="btn" type="button" id="profile-add">新增配置</button><button class="btn-primary" type="button" id="profile-save">保存模型配置</button></div></div>
-        <div class="field" style="margin-top:12px"><label for="profile-select">配置项</label><select class="input" id="profile-select"></select></div>
-        <div class="grid2" style="margin-top:12px">
-          <div class="field"><label for="profile-vendor">供应商名称</label><input class="input" id="profile-vendor"></div>
-          <div class="field"><label for="profile-model">当前使用模型</label><input class="input code" id="profile-model"></div>
-          <div class="field" style="grid-column:1/-1"><label for="profile-key">API Key</label><input class="input code" id="profile-key" type="password" placeholder="留空保持不变"></div>
-          <div class="field" style="grid-column:1/-1"><label for="profile-base-url">请求地址</label><input class="input code" id="profile-base-url"></div>
-        </div>
-        <div class="notice" id="profile-notice" hidden style="margin-top:12px"></div>
-      </div>
-      <div class="settings-card panel2"><strong>项目模型分配</strong><div id="assignment-list" style="margin-top:8px"></div></div>
-    </section>
-
-    <section class="settings-section" id="settings-knowledge">
-      <div class="settings-card panel2">
-        <strong>知识库存储</strong>
-        <p class="section-help">全局根目录只决定以后导入的项目；已有项目继续使用导入时固化的知识路径。</p>
-        <div class="field" style="margin-top:14px"><label for="knowledge-root">知识库根目录</label><input class="input code" id="knowledge-root"></div>
-        <button class="btn-primary" type="button" id="save-knowledge" style="margin-top:12px">保存</button>
-      </div>
-      <div class="settings-card panel2 danger-zone">
-        <strong>删除项目</strong>
-        <p class="section-help">默认只解除项目管理并保留外部知识文件；删除知识需要再次确认。</p>
-        <button class="btn-danger" type="button" id="open-delete" style="margin-top:10px">删除当前项目…</button>
-      </div>
-    </section>
-
-    <section class="settings-section" id="settings-relations">
-      <div class="settings-card panel2">
-        <strong>相关知识库</strong>
-        <p class="section-help">为当前项目显式选择允许联合检索的项目；写入仍只进入当前项目。</p>
-        <div id="relation-list" style="margin-top:8px"></div>
-        <button class="btn-primary" type="button" id="save-relations" style="margin-top:12px">保存关系</button>
-      </div>
-    </section>
-
-    <section class="settings-section" id="settings-conversation" data-layout-contract="fill-settings-available-height">
+    <section class="settings-section active" id="settings-conversation" data-layout-contract="fill-settings-available-height">
       <div class="conversation-view">
         <div class="conversation-frame">
           <div class="conversation-toolbar">
@@ -195,24 +165,17 @@
         </div>
       </div>
     </section>
-
-    <section class="settings-section" id="settings-client">
-      <div class="settings-card panel2">
-        <div style="display:flex;justify-content:space-between;align-items:center"><strong>桌面客户端</strong><span class="chip">Web</span></div>
-        <p class="section-help">桌面端与浏览器共享同一个本地后端和应用 Shell；外观跟随当前窗口主题。</p>
-        <button class="btn" type="button" id="client-theme" style="margin-top:10px">切换主题</button>
-      </div>
-    </section>
   </div>
 </aside>
 
-<div class="context-menu" id="context-menu"><div class="muted" style="padding:5px 8px;font-size:10px" id="context-id">project</div><button type="button" id="remove-project">移除项目…</button></div>
+<div class="context-menu" id="context-menu"><div class="muted" style="padding:5px 8px;font-size:10px" id="context-id">project</div><button type="button" id="archive-all-projects">归档该项目全部会话</button><button type="button" id="remove-project">移除项目…</button></div>
 
 <dialog id="delete-dialog">
   <div class="dialog-head"><h3>移除项目</h3></div>
   <div class="dialog-body">
     <p class="muted" id="delete-copy" style="margin:0;font-size:12px">确认移除项目？默认保留知识目录。</p>
-    <label class="check"><input type="checkbox" id="delete-knowledge">同时删除由本应用拥有的知识目录（危险）</label>
+    <p class="muted" style="margin:0;font-size:12px">同时解除模块登记：终端项目（保留会话记录）、vector-hub 索引（不动源文件）。</p>
+    <label class="check"><input type="checkbox" id="delete-knowledge"> 同时删除由本应用拥有的知识目录（危险）</label>
     <div class="field" id="delete-confirm-field" hidden><label for="delete-confirm">输入项目 ID 以确认删除知识</label><input class="input code" id="delete-confirm"></div>
     <div class="notice error" id="delete-error" hidden></div>
   </div>

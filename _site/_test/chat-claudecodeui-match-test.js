@@ -73,12 +73,11 @@ const runner = require('../lib/claude-cli-runner');
 
     const html = fs.readFileSync(path.join(ROOT, 'ui', 'index.html'), 'utf8');
     const app = fs.readFileSync(path.join(ROOT, 'ui', 'app.js'), 'utf8');
-    assert(html.includes('id="view-workbench"') && html.includes('id="chat-input"'));
-    assert(html.includes('id="wb-session"') && html.includes('id="wb-new-session"') && html.includes('id="wb-stop-session"'));
-    assert(app.includes('/api/claude/sessions') && app.includes('/events'));
-    assert(app.includes('/api/claude/sessions-stream') && app.includes('loadClaudeSessions') && app.includes('attachSession'));
-    assert(app.includes("'claude/thinking-delta'") && app.includes("'claude/text-delta'") && app.includes("'claude/tool-use'") && app.includes("'claude/permission-request'"));
-    assert(/hookAutomation[\s\S]+event\.kind === 'create'/.test(app), 'new Hook automation sessions must become visible immediately');
+    // T2: 内嵌终端取代旧 workbench 聊天面板 —— 壳经 kb:* 协议与会话/事件交互
+    assert(html.includes('id="view-terminal"') && html.includes('id="fr-5760"'));
+    assert(html.includes('id="view-search"') && html.includes('id="fr-8787"'));
+    assert(app.includes("'kb:select-project'") && app.includes("'kb:list-sessions'") && app.includes("'kb:open-session'"));
+    assert(app.includes("'kb:archive-session'") && app.includes("'kb:sidebar'"), 'embed protocol wiring must cover sessions and fold');
 
     runner.deleteSession(started.sessionId);
     console.log('chat runner contract test PASS');

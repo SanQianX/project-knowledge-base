@@ -23,24 +23,28 @@ const profileDir = path.join(os.tmpdir(), 'pk-project-status-profile-' + process
       projectButtons: document.querySelectorAll('#project-list .project-card').length,
       selected: document.querySelector('#project-list .project-card.active')?.dataset.projectId,
       name: document.querySelector('#project-list .project-card.active .project-name')?.textContent,
-      chip: document.getElementById('wb-project').textContent,
+      badges: document.querySelectorAll('#project-list .mbadge').length,
       path: document.querySelector('#project-list .project-card.active .project-path')?.textContent,
-      workbench: !document.getElementById('view-workbench').hidden && document.getElementById('view-workbench').classList.contains('active'),
+      terminalView: document.getElementById('view-terminal').classList.contains('active'),
       manualControls: document.querySelectorAll('[data-install-hook], [data-uninstall-hook], [data-analyze], [data-simulate]').length,
       mainConversationLinks: [...document.querySelectorAll('.sidebar-nav .nav-btn, .mobile-strip button')].filter(node => /开发对话|运行记录|系统日志/.test(node.textContent)).length
     }))()`);
     assert.strictEqual(shell.projectButtons, 1);
     assert.strictEqual(shell.selected, fixture.projectId);
     assert.strictEqual(shell.name, '视觉检测知识库');
-    assert.strictEqual(shell.chip, '视觉检测知识库');
+    assert.strictEqual(shell.badges, 2);
     assert(shell.path.includes(fixture.repo.path));
-    assert.strictEqual(shell.workbench, true);
+    assert.strictEqual(shell.terminalView, true);
     assert.strictEqual(shell.manualControls, 0);
     assert.strictEqual(shell.mainConversationLinks, 0);
 
-    await browser.evaluate("window.__PK_APP__.openSettings('knowledge')");
-    await waitFor(() => browser.evaluate("document.getElementById('settings-knowledge').classList.contains('active')"), 'knowledge settings');
-    await browser.evaluate("document.getElementById('open-delete').click()");
+    // 删除入口：右键项目卡 → 管理菜单 → 移除项目（原"知识库存储"设置节已按终版移除）
+    await browser.evaluate(`(() => {
+      const card = document.querySelector('#project-list .project-card');
+      card.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 300, clientY: 200 }));
+    })()`);
+    await waitFor(() => browser.evaluate("document.getElementById('context-menu').classList.contains('show')"), 'context menu');
+    await browser.evaluate("document.getElementById('remove-project').click()");
     await waitFor(() => browser.evaluate("document.getElementById('delete-dialog').open"), 'delete modal');
     assert((await browser.evaluate("document.getElementById('delete-copy').textContent")).includes('视觉检测知识库'));
     await browser.evaluate("document.getElementById('delete-knowledge').click()");

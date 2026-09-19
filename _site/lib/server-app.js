@@ -24,6 +24,7 @@ const { CommitReconciler } = require('./commit-reconciler');
 const { handlePostCommitEvent, recoverOrphanedClaims } = require('./post-commit-automation');
 const { KnowledgePromotionService, hashBuffer } = require('./knowledge-promotion');
 const { resolveEffectiveAiProfile } = require('./ai-profile-resolver');
+const { ModuleBridge } = require('./module-bridge');
 const { IndexService } = require('./index-service');
 const { KnowledgeDatabase } = require('./knowledge-db');
 const { LocalEmbeddingService } = require('./embedding-service');
@@ -504,9 +505,10 @@ function createRuntime(options = {}) {
     bridgeAdapter,
   });
   const migrationService = options.migrationService || new MigrationService({ layout, legacyDataDir: dataPath, logger });
+  const moduleBridge = options.moduleBridge || new ModuleBridge({ registryStore, projectStore, logger });
   return {
     rootDir, dataPath, layout, settingsStore, registryStore, projectStore, logger, logRepository,
-    activeTasks, bridgeAdapter, bridgeConsumerService, conversationStore, conversationQuery, indexAdapter, indexService, promotionService, reconciler, lifecycleService, requirementRecorder, knowledgeRuntime, migrationService,
+    activeTasks, bridgeAdapter, bridgeConsumerService, conversationStore, conversationQuery, indexAdapter, indexService, promotionService, reconciler, lifecycleService, requirementRecorder, knowledgeRuntime, migrationService, moduleBridge,
   };
 }
 
@@ -885,6 +887,41 @@ function createRequestHandler(runtime, options = {}) {
       const method = req.method || 'GET';
       const pathname = url.pathname;
 
+      // ===== module bridge：壳 ↔ 模块（同源代理 + 聚合 + 登记/移除） =====
+      if (pathname.startsWith('/api/terminal/') || pathname === '/api/terminal') {
+        return runtime.moduleBridge.proxyTerminal(req, res, pathname, url.search);
+      }
+      if (pathname.startsWith('/api/vectorhub/') || pathname === '/api/vectorhub') {
+        return runtime.moduleBridge.proxyVectorHub(req, res, pathname, url.search);
+      }
+      if (method === 'GET' && pathname === '/api/modules/health') {
+        return send(res, 200, await runtime.moduleBridge.modulesHealth());
+      }
+      if (method === 'GET' && pathname === '/api/projects/aggregated') {
+        return send(res, 200, { ok: true, ...(await runtime.moduleBridge.aggregatedProjects()) });
+      }
+      const moduleRegisterMatch = pathname.match(/^\/api\/projects\/([^/]+)\/module-register$/);
+      if (moduleRegisterMatch && method === 'POST') {
+        const projectId = validateProjectId(decodeURIComponent(moduleRegisterMatch[1]));
+        if (!runtime.registryStore.readDisplaySnapshot(projectId)) throw new DomainError('PROJECT_NOT_FOUND', 'Project was not found.', { status: 404 });
+        const config = runtime.projectStore.readConfig(projectId) || {};
+        const body = await readJsonBody(req).catch(() => ({}));
+        const result = await runtime.moduleBridge.registerProjectLinks({
+          projectId,
+          name: config.displayName || projectId,
+          workspacePath: String(body.workspacePath || config.repoPath || ''),
+          knowledgePath: String(body.knowledgePath || config.knowledgePath || ''),
+        });
+        return send(res, 200, { ok: true, projectId, modules: result });
+      }
+      const moduleRemoveMatch = pathname.match(/^\/api\/projects\/([^/]+)\/module-remove$/);
+      if (moduleRemoveMatch && method === 'POST') {
+        const projectId = validateProjectId(decodeURIComponent(moduleRemoveMatch[1]));
+        if (!runtime.registryStore.readDisplaySnapshot(projectId)) throw new DomainError('PROJECT_NOT_FOUND', 'Project was not found.', { status: 404 });
+        const result = await runtime.moduleBridge.removeProjectLinks({ projectId });
+        return send(res, 200, { ok: true, projectId, modules: result });
+      }
+
       if (method === 'GET' && pathname === '/api/health') {
         return send(res, 200, { ok: true, schema: 'server-health/v2', logger: runtime.logger.getHealth(), projects: runtime.registryStore.listIds().length });
       }
@@ -920,7 +957,15 @@ function createRequestHandler(runtime, options = {}) {
           state.hook.migrationVersion = 2;
           state.hook.lastVerifiedAt = new Date().toISOString();
         });
-        return send(res, 201, { ...result, project: projectPublicView(result.projectId, runtime.projectStore) });
+        // T3.2 导入联动：双地址登记到两模块（尽力而为，模块未启动记 pending）
+        const config = runtime.projectStore.readConfig(result.projectId) || {};
+        const moduleResult = await runtime.moduleBridge.registerProjectLinks({
+          projectId: result.projectId,
+          name: config.displayName || result.projectId,
+          workspacePath: String(config.repoPath || body.path || ''),
+          knowledgePath: String(body.knowledgePath || config.knowledgePath || ''),
+        });
+        return send(res, 201, { ...result, modules: moduleResult, project: projectPublicView(result.projectId, runtime.projectStore) });
       }
       const projectMatch = pathname.match(/^\/api\/projects\/([^/]+)$/);
       if (projectMatch && method === 'GET') {
@@ -1392,6 +1437,11 @@ async function startServer(options = {}) {
   }, Number(process.env.KB_MAINTENANCE_INTERVAL_MS || 60 * 60 * 1000));
   maintenanceTimer.unref?.();
 
+  // T3.5 进程编排：按 KB_MODULES_AUTOSTART=1 拉起模块服务并守护（默认关闭）
+  try { runtime.moduleBridge.startSupervised(); } catch (error) {
+    runtime.logger.warn('modules.supervisor_failed', 'Module supervisor failed to start.', { error });
+  }
+
   let stopping = null;
   const stop = async reason => {
     if (stopping) return stopping;
@@ -1412,6 +1462,7 @@ async function startServer(options = {}) {
       await runtime.knowledgeRuntime.close();
       await runtime.indexAdapter.close();
       if (runtime.bridgeConsumerService) await runtime.bridgeConsumerService.stop().catch(() => {});
+      runtime.moduleBridge.stopSupervised();
       await runtime.logger.close();
       runtimeEndpoint.clearEndpoint(runtime.dataPath, { pid: process.pid });
     })();

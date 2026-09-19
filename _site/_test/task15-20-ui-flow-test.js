@@ -29,25 +29,19 @@ async function capture(browser, name) {
 
     await browser.setViewport(1920, 1080);
     await capture(browser, '01-main-shell-1920-light');
-    await browser.evaluate(`(() => {
-      window.__PK_APP__.renderWorkbenchEvent({ type: 'claude/user-prompt', text: '检查知识索引并解释当前状态。' });
-      window.__PK_APP__.renderWorkbenchEvent({ type: 'claude/message-start', role: 'assistant' });
-      window.__PK_APP__.renderWorkbenchEvent({ type: 'claude/text-delta', text: '索引已经准备好，可以继续检索。' });
-      window.__PK_APP__.renderWorkbenchEvent({ type: 'claude/tool-use', id: 'tool-visual', name: 'Read', input: { path: 'README.md' } });
-    })()`);
-    assert.strictEqual(await browser.evaluate("document.querySelectorAll('#chat .msg-row').length"), 3);
-    await capture(browser, '02-workbench-cards-1920-light');
+    // T2: 聊天由内嵌终端提供 —— 壳断言嵌入视图与 iframe 挂载
+    assert.strictEqual(await browser.evaluate("document.getElementById('view-terminal').classList.contains('active')"), true);
+    assert.strictEqual(await browser.evaluate("document.getElementById('fr-5760').src.includes('/agent-terminal/')"), true);
+    await capture(browser, '02-terminal-embed-1920-light');
 
     await browser.evaluate("document.querySelector('[data-go=\"import\"]').click()");
     assert.strictEqual(await browser.evaluate("document.getElementById('import-path').required"), true);
-    assert.strictEqual(await browser.evaluate("document.querySelectorAll('#import-form [name=knowledgePath]').length"), 0, 'Import must consume the global knowledge root');
+    assert.strictEqual(await browser.evaluate("document.querySelectorAll('#import-knowledge-path').length"), 1, 'Import takes an explicit knowledge address (T3.2)');
     await capture(browser, '03-import-1920-light');
 
-    await browser.evaluate("window.__PK_APP__.openSettings('ai')");
-    await waitFor(() => browser.evaluate("document.getElementById('settings-ai').classList.contains('active')"), 'AI settings');
-    await capture(browser, '04-settings-ai-1920-light');
-    await browser.evaluate("window.__PK_APP__.showSettings('knowledge')");
-    await capture(browser, '05-settings-knowledge-1920-light');
+    await browser.evaluate("window.__PK_APP__.openSettings('conversation')");
+    await waitFor(() => browser.evaluate("document.getElementById('settings-conversation').classList.contains('active')"), 'conversation settings');
+    await capture(browser, '04-settings-conversation-1920-light');
 
     await browser.evaluate("window.__PK_APP__.showSettings('conversation')");
     await waitFor(() => browser.evaluate('window.__PK_APP__.getState().conversationTurns === 3'), 'conversation rows', 20000);
@@ -168,7 +162,13 @@ async function capture(browser, name) {
     assert.strictEqual(await browser.evaluate("document.body.scrollWidth <= document.documentElement.clientWidth + 1"), true);
     await capture(browser, '12-mobile-conversation-390x844-dark');
 
-    await browser.evaluate("window.__PK_APP__.showSettings('knowledge'); document.getElementById('open-delete').click()");
+    await browser.evaluate(`(() => {
+      window.__PK_APP__.showSettings('conversation');
+      const card = document.querySelector('#project-list .project-card');
+      card.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 100, clientY: 300 }));
+    })()`);
+    await waitFor(() => browser.evaluate("document.getElementById('context-menu').classList.contains('show')"), 'mobile context menu');
+    await browser.evaluate("document.getElementById('remove-project').click()");
     await waitFor(() => browser.evaluate("document.getElementById('delete-dialog').open"), 'project delete modal');
     await capture(browser, '13-mobile-delete-modal-dark');
     assert.strictEqual(browser.exceptions.length, 0, 'browser runtime exceptions: ' + JSON.stringify(browser.exceptions));

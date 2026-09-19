@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Project Knowledge · 集成预览（原版模块 UI 嵌入）</title>
+<style>
+:root{--page:#eef2f6;--panel:#fff;--panel2:#f7f9fc;--line:#d8e1ea;--text:#142033;--muted:#64748b;--side:#f1f5f9;--sideText:#1e293b;--sideMuted:#64748b;--sideBorder:#cbd5e1;--sideHover:rgba(15,23,42,.05);--sideActive:rgba(15,23,42,.08);--accent:#4f6f8f;--accent2:#3e5e75;--good:#2f7d64;--bad:#af4b4b;--badText:#c33b3b;--idle:#8794a6;--zcode:#7c3aed;--vh:#0e7490;--shadow:0 18px 50px rgba(15,23,42,.13)}
+html[data-theme="dark"]{--page:#0c1118;--panel:#141c26;--panel2:#192331;--line:#2a3849;--text:#e3ebf5;--muted:#94a3b8;--side:#080c11;--sideText:#d7e0ea;--sideMuted:#94a3b8;--sideBorder:rgba(255,255,255,.1);--sideHover:rgba(255,255,255,.05);--sideActive:rgba(255,255,255,.08);--accent:#7492a5;--accent2:#8da9ba;--good:#75b798;--bad:#d36d6d;--badText:#ff7474;--zcode:#a78bfa;--vh:#22d3ee}
+*{box-sizing:border-box}button,input,select,textarea{font:inherit}button{color:inherit}[hidden]{display:none!important}
+body{overflow:hidden;background:var(--page);color:var(--text);margin:0;font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif}
+.shell{height:100vh;display:grid;grid-template-columns:280px minmax(0,1fr)}
+.sidebar{height:100%;overflow:hidden;display:flex;flex-direction:column;background:var(--side);color:var(--sideText);border-right:1px solid var(--sideBorder)}
+.brand{padding:18px 20px;border-bottom:1px solid var(--sideBorder)}
+.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.18em;color:var(--sideMuted)}
+.brand h1{font-size:19px;margin:4px 0 0}
+.root{font:11px ui-monospace,Consolas,monospace;color:var(--sideMuted);margin-top:6px}
+.project-area{min-height:0;flex:1;display:flex;flex-direction:column;padding:12px}
+.project-head{display:flex;align-items:center;justify-content:space-between;padding:0 4px 8px}
+.project-head span{font-size:11px;font-weight:650;text-transform:uppercase;letter-spacing:.14em;color:var(--sideMuted)}
+.small-btn{border:1px solid var(--sideBorder);background:var(--sideHover);color:var(--sideText);border-radius:8px;padding:5px 8px;font-size:11px;cursor:pointer}
+.project-list{min-height:0;overflow:auto}
+.project-card{width:100%;border:1px solid var(--sideBorder);background:var(--sideHover);color:var(--sideText);border-radius:12px;padding:10px 12px;margin-bottom:8px;text-align:left;cursor:pointer}
+.project-card.active{background:var(--sideActive);border-color:var(--accent)}
+.project-name{font-size:13px;font-weight:650}
+.project-path{font:10px ui-monospace,Consolas,monospace;margin-top:5px;color:var(--sideMuted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.proj-caret{flex:none;font-size:10px;color:var(--sideMuted);border:1px solid var(--sideBorder);border-radius:5px;padding:1px 5px;transition:transform .15s}
+.proj-caret.open{transform:rotate(90deg)}
+.proj-sessions{margin:-2px 4px 8px;border-left:2px solid var(--sideBorder);padding-left:8px;display:grid;gap:3px}
+.sess-row{display:flex;align-items:center;gap:6px;text-align:left;border:0;background:transparent;color:var(--sideMuted);border-radius:6px;padding:4px 7px;font-size:11px;cursor:pointer}
+.sess-title{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sess-arch{display:none;font-size:11px;cursor:pointer}
+.sess-row:hover{background:var(--sideActive);color:var(--sideText)}
+.sess-row:hover .sess-arch{display:inline}
+.ctx-menu{position:fixed;z-index:70;width:264px;border:1px solid var(--line);border-radius:10px;background:var(--panel);box-shadow:var(--shadow);padding:5px;display:grid;gap:2px}
+.ctx-menu .ctx-title{font-size:10px;color:var(--muted);padding:4px 8px;font-family:ui-monospace,Consolas,monospace}
+.ctx-menu button{border:0;background:transparent;text-align:left;padding:8px 9px;border-radius:7px;font-size:12px;cursor:pointer;color:var(--text)}
+.ctx-menu button:hover{background:var(--panel2)}
+.ctx-menu button.danger{color:var(--badText)}
+.gear-hint{position:absolute;top:8px;right:12px;z-index:2;pointer-events:none;font-size:10px;color:var(--muted);border:1px dashed color-mix(in srgb,var(--accent) 55%,transparent);border-radius:8px;padding:3px 9px;background:color-mix(in srgb,var(--panel) 82%,transparent)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:999px}.good{background:var(--good)}.idle{background:var(--idle)}
+.sidebar-nav{border-top:1px solid var(--sideBorder);padding:10px}
+.nav-btn{display:flex;width:100%;align-items:center;gap:9px;border:0;background:transparent;color:var(--sideMuted);border-radius:9px;padding:9px 10px;text-align:left;font-size:13px;cursor:pointer}
+.nav-btn:hover,.nav-btn.active{background:var(--sideActive);color:var(--sideText)}
+.nav-badge{margin-left:auto;font-size:10px;padding:2px 6px;border-radius:999px;background:var(--sideHover)}
+.nav-fold{flex:none;width:22px;height:22px;border:1px solid var(--sideBorder);border-radius:6px;background:var(--sideHover);color:var(--sideMuted);font-size:11px;line-height:1;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;user-select:none}
+.nav-fold:hover{color:var(--sideText);border-color:var(--accent)}
+.nav-fold.on{background:var(--sideActive);border-color:var(--accent);color:var(--sideText)}
+.main{min-width:0;height:100%;overflow:hidden;padding:16px 22px 18px;display:flex;flex-direction:column}
+.main-header{flex:none;display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px}
+.subtitle{font-size:12px;color:var(--muted)}
+.page-title{font-size:22px;font-weight:650;margin-top:2px}
+.header-actions{display:flex;align-items:center;gap:8px}
+.btn,.btn-primary{border-radius:9px;padding:8px 11px;font-size:12px;cursor:pointer}
+.btn{border:1px solid var(--line);background:var(--panel2);color:var(--text)}
+.btn:hover{filter:brightness(.97)}
+.btn-primary{border:1px solid transparent;background:var(--accent);color:#fff}
+.view{min-height:0;flex:1;display:none}.view.active{display:flex;flex-direction:column}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px}
+.panel2{background:var(--panel2);border:1px solid var(--line);border-radius:10px}
+.muted{color:var(--muted)}
+.chip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:999px;padding:2px 8px;font-size:10px;color:var(--muted);background:var(--panel2)}
+.code{font-family:ui-monospace,Consolas,monospace}
+/* 来源标注 */
+.src-note{display:none}
+body.show-src .src-note{display:inline-flex}
+.src-note span{font:10px ui-monospace,Consolas,monospace;border:1px dashed color-mix(in srgb,var(--accent) 55%,transparent);color:var(--muted);border-radius:7px;padding:3px 8px;background:color-mix(in srgb,var(--accent) 6%,transparent)}
+/* 嵌入区 */
+.embed-head{flex:none;display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.embed-status{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:11px;background:var(--panel)}
+.embed-status .st-dot{width:8px;height:8px;border-radius:99px;background:var(--idle)}
+.embed-status.ok .st-dot{background:var(--good)}
+.embed-status.down{border-color:color-mix(in srgb,var(--bad) 40%,var(--line));color:var(--badText)}
+.embed{flex:1;min-height:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel);position:relative}
+.embed iframe{width:100%;height:100%;border:0;display:block;background:#fff}
+/* 折叠由模块自身布局实现（body.embed-collapse .sidebar{display:none}），壳经 kb:sidebar 控制 */
+/* 导入 */
+.split{width:100%;min-height:0;display:grid;grid-template-columns:minmax(400px,1.2fr) minmax(280px,.8fr);gap:10px}
+.form-panel,.preview-panel{padding:20px;overflow:auto}
+.section-title{font-size:16px;font-weight:650}
+.section-help{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.6}
+.form-grid{display:grid;gap:14px;margin-top:16px}
+.field{display:grid;gap:6px;font-size:12px}
+.field label{font-weight:600}
+.notice{border:1px solid var(--line);background:var(--panel2);border-radius:9px;padding:11px;font-size:12px;line-height:1.6}
+.notice.new-step{border-color:color-mix(in srgb,var(--zcode) 40%,var(--line));background:color-mix(in srgb,var(--zcode) 6%,var(--panel))}
+.preview-list{display:grid;gap:12px;margin-top:16px}
+.preview-item{padding:10px 12px}
+.preview-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.preview-value{font-size:12px;margin-top:4px;word-break:break-all}
+/* 设置抽屉 */
+.backdrop{position:fixed;inset:0;background:rgba(2,6,23,.42);z-index:40;display:none}.backdrop.show{display:block}
+.drawer{position:fixed;z-index:50;inset:0 0 0 auto;width:min(1080px,100vw);height:100vh;background:var(--panel);border-left:1px solid var(--line);box-shadow:-24px 0 64px rgba(2,6,23,.22);display:none;grid-template-columns:168px minmax(0,1fr)}
+.drawer.show{display:grid}
+.settings-nav{min-height:0;padding:20px 12px;background:var(--panel2);border-right:1px solid var(--line);overflow:auto;display:flex;flex-direction:column}
+.settings-nav h3{font-size:15px;margin:0 8px 13px}
+.settings-nav button{width:100%;border:0;background:transparent;color:var(--muted);border-radius:8px;padding:9px 10px;text-align:left;font-size:12px;margin-top:3px;cursor:pointer}
+.settings-nav button.active,.settings-nav button:hover{background:var(--panel);color:var(--text)}
+.settings-content{min-width:0;min-height:0;height:100%;overflow:hidden;padding:20px;display:flex;flex-direction:column}
+.drawer-head{flex:none;display:flex;justify-content:space-between;gap:12px;align-items:start;border-bottom:1px solid var(--line);padding-bottom:13px;margin-bottom:15px}
+.drawer-head h2{font-size:18px;margin:0}
+.settings-section{display:none;min-height:0}
+.settings-section.active{display:flex;flex:1;min-height:0;flex-direction:column}
+.settings-card{padding:15px;margin-bottom:12px}
+.profile-embed{flex:1;min-height:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
+.profile-embed iframe{width:100%;height:100%;border:0}
+/* 开发对话 */
+.conv-filters{display:flex;gap:10px;align-items:end;margin-bottom:12px;flex-wrap:wrap}
+.conv-stream{flex:1;min-height:0;overflow:auto;padding:4px 2px 20px}
+.turn{max-width:780px;margin:0 auto 14px}
+.turn-head{display:flex;justify-content:space-between;gap:10px;padding:0 2px 6px;color:var(--muted);font-size:10px}
+.turn-card{border:1px solid var(--line);border-radius:11px;background:var(--panel);overflow:hidden}
+.turn-message{display:grid;grid-template-columns:64px minmax(0,1fr);gap:12px;padding:12px 14px}
+.turn-message+.turn-message{border-top:1px solid var(--line)}
+.turn-role{font-size:11px;font-weight:650;color:var(--muted);padding-top:2px}
+.turn-message.user .turn-role{color:var(--accent)}
+.turn-text{min-width:0;font-size:12px;line-height:1.65;white-space:pre-wrap}
+.boundary{max-width:780px;margin:20px auto;display:flex;align-items:center;gap:12px;color:var(--muted);font:10px ui-monospace,Consolas,monospace}
+.boundary::before,.boundary::after{content:"";flex:1;border-top:1px dashed var(--line)}
+.log-row{display:grid;grid-template-columns:minmax(0,1fr) 86px;gap:12px;padding:8px 10px;border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent);font-size:12px}
+.log-row.warn{color:var(--warnText,#a66a00)}.log-row.error{color:var(--badText)}
+.log-time{text-align:right;font:10px ui-monospace,Consolas,monospace;color:var(--muted)}
+@media(max-width:1100px){.shell{grid-template-columns:240px minmax(0,1fr)}.split{grid-template-columns:1fr}.preview-panel{display:none}}
+@media(max-width:760px){body{overflow:auto}.shell{display:block;height:auto}.sidebar{display:none}.main{height:auto;min-height:100vh}}
+</style>
+</head>
+<body class="show-src">
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="eyebrow">AI Knowledge Base</div>
+      <h1>Control Center</h1>
+      <div class="root">~/.project-knowledge · v5.0.0-preview</div>
+    </div>
+    <div class="project-area">
+      <div class="project-head"><span>项目 · 右键管理</span><button class="small-btn" type="button" data-go="import">导入项目</button></div>
+      <div class="project-list">
+        <div class="project-item">
+          <button class="project-card active" type="button"><div style="display:flex;gap:8px;align-items:center"><span class="dot good"></span><span class="project-name" style="flex:1;min-width:0">project-knowledge-base</span><span class="proj-caret" title="历史会话">▸</span></div><div class="project-path">D:\SanQian.Xu\project-knowledge-base</div></button>
+          <div class="proj-sessions" hidden>
+            <button class="sess-row" type="button"><span class="sess-title">14:02 · 集成 vector-hub 适配层</span><span class="sess-arch" title="归档（规划：PUT /sessions/:id/archive）">🗄</span></button>
+            <button class="sess-row" type="button"><span class="sess-title">11:47 · 修复 ingestor 去重</span><span class="sess-arch" title="归档（规划：PUT /sessions/:id/archive）">🗄</span></button>
+            <button class="sess-row" type="button"><span class="sess-title">昨天 · zcode driver 调通</span><span class="sess-arch" title="归档（规划：PUT /sessions/:id/archive）">🗄</span></button>
+          </div>
+        </div>
+        <div class="project-item">
+          <button class="project-card" type="button"><div style="display:flex;gap:8px;align-items:center"><span class="dot good"></span><span class="project-name" style="flex:1;min-width:0">claude-ai-workbench</span><span class="proj-caret" title="历史会话">▸</span></div><div class="project-path">D:\SanQian.Xu\claude-ai-workbench</div></button>
+          <div class="proj-sessions" hidden>
+            <button class="sess-row" type="button">09:20 · profile 收敛改造</button>
+          </div>
+        </div>
+        <div class="project-item">
+          <button class="project-card" type="button"><div style="display:flex;gap:8px;align-items:center"><span class="dot good"></span><span class="project-name" style="flex:1;min-width:0">vector-hub</span><span class="proj-caret" title="历史会话">▸</span></div><div class="project-path">D:\SanQian.Xu\vector-hub</div></button>
+          <div class="proj-sessions" hidden></div>
+        </div>
+        <div class="muted" style="font-size:10px;padding:4px 6px">会话列表为演示数据 · 规划：点击将经 kb:open-session 在终端打开</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <button class="nav-btn active" type="button" data-go="terminal"><span>🤖</span><span>Agent 终端</span><span class="nav-badge">:5760</span><span class="nav-fold" data-fold="term" title="模块项目列表：已折叠，点击展开">▤</span></button>
+      <button class="nav-btn" type="button" data-go="search"><span>🔎</span><span>知识检索</span><span class="nav-badge">:8787</span><span class="nav-fold" data-fold="vh" title="模块项目列表：已折叠，点击展开">▤</span></button>
+      <div class="src-note" style="margin:8px 4px 0"><span>壳 = project-knowledge · 两个视图为原版模块 UI</span></div>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <header class="main-header">
+      <div><div class="subtitle">Project Knowledge</div><div class="page-title" id="page-title">Agent 终端</div></div>
+      <div class="header-actions">
+        <button class="btn" type="button" id="src-toggle">隐藏来源标注</button>
+        <button class="btn" type="button" id="theme-button">深色模式</button>
+        <button class="btn" type="button" id="open-settings">设置</button>
+      </div>
+    </header>
+
+    <!-- Agent 终端：原版 claude-ai-workbench UI（iframe :5760，嵌入模式） -->
+    <section class="view active" id="view-terminal">
+      <div class="embed-head">
+        <span class="embed-status" id="st-5760"><span class="st-dot"></span><span class="st-text">检测 127.0.0.1:5760 …</span></span>
+        <span class="chip" id="sync-5760">联动: —</span>
+        <a class="btn compact" href="http://127.0.0.1:5760/agent-terminal/" target="_blank" style="text-decoration:none">独立打开 ↗</a>
+        <span class="src-note"><span>claude-ai-workbench · agent-terminal（原版 UI，嵌入模式）</span></span>
+      </div>
+      <div class="embed"><iframe id="fr-5760" src="http://127.0.0.1:5760/agent-terminal/?embed=1" title="Agent Terminal"></iframe><div class="gear-hint">⚙ 规划：terminal 设置入口移至此处右上角</div></div>
+    </section>
+
+    <!-- 知识检索：原版 vector-hub 控制台 UI（iframe :8787，嵌入模式） -->
+    <section class="view" id="view-search">
+      <div class="embed-head">
+        <span class="embed-status" id="st-8787"><span class="st-dot"></span><span class="st-text">检测 127.0.0.1:8787 …</span></span>
+        <span class="chip" id="sync-8787">联动: —</span>
+        <a class="btn compact" href="http://127.0.0.1:8787/" target="_blank" style="text-decoration:none">独立打开 ↗</a>
+        <span class="src-note"><span>vector-hub 控制台（原版 UI，嵌入模式）</span></span>
+      </div>
+      <div class="embed"><iframe id="fr-8787" src="http://127.0.0.1:8787/?embed=1" title="vector-hub 控制台"></iframe><div class="gear-hint">⚙ 规划：vector-hub 齿轮移至此处右上角</div></div>
+    </section>
+
+    <!-- 导入项目：pkb 原生 -->
+    <section class="view" id="view-import">
+      <div class="split">
+        <section class="panel form-panel">
+          <div class="section-title">导入项目</div>
+          <div class="section-help">导入只建立项目登记、Git 跟踪基线和托管 Hook，不运行初始化分析。</div>
+          <form class="form-grid" onsubmit="return false">
+            <div class="field"><label>① 开发项目地址 · 登记到 Agent 终端</label>
+              <div style="display:flex;gap:8px"><input class="code" style="flex:1;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:9px;padding:8px 10px" value="D:\SanQian.Xu\vector-hub"><button class="btn" type="button">选择目录…</button></div>
+              <span class="muted" style="font-size:10px">触发 terminal「添加项目」背后的 API：POST /projects {name, rootPath}；终端会话按此路径映射回本项目</span></div>
+            <div class="field"><label>② 知识库地址 · 登记到 vector-hub</label>
+              <div style="display:flex;gap:8px"><input class="code" style="flex:1;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:9px;padding:8px 10px" value="D:\SanQian.Xu\knowledge\vector-hub"><button class="btn" type="button">选择目录…</button></div>
+              <span class="muted" style="font-size:10px">触发控制台「导入本地文件夹」背后的 API：POST /api/import {sourceDir, projectName, watch: true}，并持续监控</span></div>
+            <div class="field"><label>知识输出语言</label><select class="input" style="border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:9px;padding:8px 10px"><option>中文（zh-CN）</option><option>English (en-US)</option></select></div>
+            <div class="field"><label>AI 配置（来自 Agent 终端 · 唯一源）</label><select class="input" style="border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:9px;padding:8px 10px"><option>glm-4.7（默认）</option></select></div>
+            <div class="notice new-step"><strong>映射即登记</strong><div class="muted" style="margin-top:4px">两个地址在导入时由人选定，项目一一对应在登记那一刻确定，之后无需模糊匹配。模块服务未启动时导入不失败，稍后自动补登记（状态显示"待登记"）。</div>
+              <label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:12px"><input type="checkbox" checked> 安装被动采集 hooks（Claude Code / Codex / OpenCode · ai-coding-event-bridge）</label></div>
+            <div style="display:flex;gap:8px"><button class="btn-primary" type="button">导入</button><button class="btn" type="button">重置</button></div>
+          </form>
+        </section>
+        <aside class="panel preview-panel">
+          <div class="section-title">导入目标</div>
+          <div class="preview-list">
+            <div class="panel2 preview-item"><div class="preview-label">Git 状态</div><div class="preview-value" style="color:var(--good)">✓ 干净 · 12 commits</div></div>
+            <div class="panel2 preview-item"><div class="preview-label">知识根目录</div><div class="preview-value code">D:\SanQian.Xu\knowledge\vector-hub</div></div>
+            <div class="panel2 preview-item"><div class="preview-label">Terminal 项目</div><div class="preview-value code" style="color:var(--zcode)">vector-hub（待登记 :5760）</div></div>
+            <div class="panel2 preview-item"><div class="preview-label">向量索引</div><div class="preview-value code" style="color:var(--vh)">vector-hub（待登记 :8787）</div></div>
+            <div class="panel2 preview-item"><div class="preview-label">Hook 状态</div><div class="preview-value">等待 preflight</div></div>
+          </div>
+        </aside>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="backdrop" id="settings-backdrop"></div>
+<aside class="drawer" id="settings-drawer">
+  <nav class="settings-nav"><h3>设置</h3>
+    <button class="active" type="button" data-settings="conversation">开发对话</button>
+    <button type="button" data-settings="logs">日志</button>
+  </nav>
+  <div class="settings-content">
+    <div class="drawer-head"><div><h2 id="settings-title">开发对话</h2><div class="section-help" id="settings-help">按项目与日期回看开发对话（bridge + 终端摄取器）。</div></div><button class="btn" type="button" id="close-settings">×</button></div>
+
+    <!-- 开发对话：pkb 原生（数据源 = bridge + 摄取器） -->
+    <section class="settings-section active" id="settings-conversation">
+      <div class="conv-filters">
+        <div class="field" style="min-width:200px"><label>项目</label><select class="input" style="border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:9px;padding:8px 10px"><option>project-knowledge-base</option></select></div>
+        <div class="field" style="min-width:150px"><label>日期</label><input class="input" type="date" value="2026-09-18" style="border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:9px;padding:8px 10px"></div>
+        <span class="src-note" style="align-self:end;margin:0 0 8px"><span>ConversationStore ← bridge + 终端摄取器</span></span>
+      </div>
+      <div class="conv-stream">
+        <div class="turn"><div class="turn-head"><span class="chip">claude-code · bridge 被动采集</span><span>10:12</span></div>
+          <div class="turn-card">
+            <div class="turn-message user"><div class="turn-role">用户</div><div class="turn-text">Codex Desktop 的 notify wrapper 识别还是有问题，会话断了之后 continuation 没接上。</div></div>
+            <div class="turn-message"><div class="turn-role">助手</div><div class="turn-text">看了 journal，notify wrapper 的 payload 结构在 Desktop 版本里多了两层包装。修复方案：在 fanout 脚本里做归一化，并给 continuation 加 journalSequence 对齐……</div></div>
+          </div></div>
+        <div class="boundary">commit 441ab51 · fix: recognize Codex Desktop notify wrappers · 边界快照已冻结</div>
+        <div class="turn"><div class="turn-head"><span class="chip" style="color:var(--zcode)">zcode · 终端会话（摄取器）</span><span>14:02</span></div>
+          <div class="turn-card">
+            <div class="turn-message user"><div class="turn-role">用户</div><div class="turn-text">把知识检索从 LanceDB 切到 vector-hub，先做 RuntimeIndexAdapter 适配层。</div></div>
+            <div class="turn-message"><div class="turn-role">助手</div><div class="turn-text">接口形状确认，适配层需要三件事：settings 映射、mock embeddings 测试路径、projectId 合法性校验……</div></div>
+            <div style="padding:7px 14px;border-top:1px solid var(--line);background:var(--panel2);font-size:10px;color:var(--muted)">会话 s-2026-09-18-1402 · 12 events · ingestor 已去重（bridge hooks 未双写）</div>
+          </div></div>
+        <div class="boundary">commit（待下一次提交）· 摄取器将在 post-commit drain 时同步收齐</div>
+        <div class="turn"><div class="turn-head"><span class="chip">知识分析 · 自动会话</span><span>14:40</span></div>
+          <div class="turn-card" style="opacity:.55"><div class="turn-message"><div class="turn-role">系统</div><div class="turn-text">知识库再分析会话：按决策不采集用户输入与 LLM 回复，仅记录分析结论到知识库。</div></div></div></div>
+      </div>
+    </section>
+
+    <section class="settings-section" id="settings-logs">
+      <div class="panel2 settings-card" style="flex:1">
+        <div class="log-row"><span>index.applied · project-knowledge-base 全量重建完成（vector-hub · 1,204 chunks）</span><span class="log-time">14:41:02</span></div>
+        <div class="log-row"><span>conversation.boundary · commit 441ab51 快照冻结（ingestor drain 12 events）</span><span class="log-time">13:58:44</span></div>
+        <div class="log-row warn"><span>ingestor.dedup · bridge 与终端重复事件 3 条已跳过</span><span class="log-time">13:58:44</span></div>
+        <div class="log-row"><span>bridge.drain · journal ack 至 #8,214（startup）</span><span class="log-time">09:00:11</span></div>
+        <div class="log-row error"><span>vector-hub.search · minimax 限流，本查询已降级纯语义召回</span><span class="log-time">08:47:36</span></div>
+        <div class="log-row"><span>server.start · v5.0.0-preview · 壳 :37420 · terminal :5760 · vector-hub :8787</span><span class="log-time">08:47:02</span></div>
+      </div>
+    </section>
+  </div>
+</aside>
+
+<script>
+const TITLES={terminal:'Agent 终端',search:'知识检索',import:'导入项目'};
+document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{
+ const v=b.dataset.go;
+ document.querySelectorAll('.nav-btn').forEach(x=>x.classList.toggle('active',x.dataset.go===v));
+ document.querySelectorAll('.view').forEach(x=>x.classList.toggle('active',x.id==='view-'+v));
+ document.getElementById('page-title').textContent=TITLES[v];
+ if(document.getElementById('settings-drawer').classList.contains('show'))
+   {document.getElementById('close-settings').click();}});
+document.querySelectorAll('.project-card').forEach(b=>b.onclick=()=>{
+ document.querySelectorAll('.project-card').forEach(x=>x.classList.remove('active'));b.classList.add('active');
+ const name=shellActiveProject();
+ postTo('term',{type:'kb:select-project',project:name});
+ postTo('vh',{type:'kb:select-project',project:name});});
+document.getElementById('theme-button').onclick=e=>{
+ const d=document.documentElement.dataset.theme==='dark';
+ document.documentElement.dataset.theme=d?'light':'dark';e.target.textContent=d?'深色模式':'浅色模式';};
+document.getElementById('src-toggle').onclick=e=>{
+ const on=document.body.classList.toggle('show-src');e.target.textContent=on?'隐藏来源标注':'显示来源标注';};
+const drawer=document.getElementById('settings-drawer'),bd=document.getElementById('settings-backdrop');
+document.getElementById('open-settings').onclick=()=>{drawer.classList.add('show');bd.classList.add('show');};
+document.getElementById('close-settings').onclick=bd.onclick=()=>{drawer.classList.remove('show');bd.classList.remove('show');};
+const HELP={conversation:'按项目与日期回看开发对话（bridge + 终端摄取器）。',logs:'连接层运行记录（壳的本职）。'};
+document.querySelectorAll('[data-settings]').forEach(b=>b.onclick=()=>{
+ document.querySelectorAll('[data-settings]').forEach(x=>x.classList.toggle('active',x===b));
+ document.querySelectorAll('.settings-section').forEach(x=>x.classList.toggle('active',x.id==='settings-'+b.dataset.settings));
+ document.getElementById('settings-title').textContent=b.textContent;
+ document.getElementById('settings-help').textContent=HELP[b.dataset.settings];});
+/* 服务探测：no-cors fetch 能连通即视为在线；iframe 始终渲染（探测只影响状态提示） */
+async function probe(port,stId){
+ const el=document.getElementById(stId);const txt=el.querySelector('.st-text');
+ try{await fetch('http://127.0.0.1:'+port+'/',{mode:'no-cors',cache:'no-store'});
+  el.classList.add('ok');txt.textContent='已连接 127.0.0.1:'+port;}
+ catch(e){el.classList.add('down');txt.textContent='未检测到 127.0.0.1:'+port+' — 界面将显示为空白';}}
+probe(5760,'st-5760');probe(8787,'st-8787');
+
+/* ===== 规划中：嵌入协议（壳 ↔ 模块）——协议定稿并实现后生效 =====
+ * 计划：按钮控制模块项目列表折叠（kb:sidebar）；壳项目点击联动模块项目（kb:select-project）。
+ * 协议设计见方案文档 §9.1；实现补丁暂存 docs/embed-protocol-plan/（未应用）。 */
+/* ===== 嵌入协议（真实实现）：▤ = kb:sidebar；壳项目点击 = kb:select-project ===== */
+const FOLD_STATE={term:false,vh:false};   // false = 该模块项目列表折叠（默认，与 ?embed=1 一致）
+const FRAME_OF={term:'fr-5760',vh:'fr-8787'};
+function shellActiveProject(){return (document.querySelector('.project-card.active .project-name')||{}).textContent||'';}
+function postTo(key,msg){const f=document.getElementById(FRAME_OF[key]);
+ if(f&&f.contentWindow)f.contentWindow.postMessage(msg,'*');}
+function syncFold(key){postTo(key,{type:'kb:sidebar',visible:FOLD_STATE[key]});}
+function renderFoldIcons(){document.querySelectorAll('.nav-fold').forEach(f=>{
+ const on=FOLD_STATE[f.dataset.fold];
+ f.classList.toggle('on',on);
+ f.title='模块项目列表：'+(on?'已展开，点击折叠':'已折叠，点击展开');});}
+document.querySelectorAll('.nav-fold').forEach(f=>f.addEventListener('click',ev=>{
+ ev.stopPropagation();
+ const key=f.dataset.fold;
+ FOLD_STATE[key]=!FOLD_STATE[key];renderFoldIcons();syncFold(key);
+ if(FOLD_STATE[key]){
+  const chip=document.getElementById(key==='term'?'sync-5760':'sync-8787');
+  if(chip){chip.textContent='已展开：点壳项目看联动';chip.style.color='var(--warnText,#a66a00)';}}}));
+renderFoldIcons();
+window.addEventListener('message',ev=>{
+ const d=ev.data;if(!d||typeof d!=='object')return;
+ if(d.type==='kb:ready'){                       // 模块加载完成：补发当前折叠状态 + 项目联动
+  const key=d.app==='vector-hub'?'vh':'term';
+  setTimeout(()=>{syncFold(key);
+   postTo(key,{type:'kb:select-project',project:shellActiveProject()});},150);}
+ else if(d.type==='kb:projects'){               // 联动结果反馈
+  const chip=document.getElementById(d.app==='vector-hub'?'sync-8787':'sync-5760');if(!chip)return;
+  if(d.ok){chip.textContent='联动: '+(d.app==='vector-hub'?(d.selected&&d.selected[0]):d.activeProjectId);
+   chip.style.color='var(--good)';chip.style.borderColor='color-mix(in srgb,var(--good) 45%,var(--line))';chip.title='';}
+  else{chip.textContent='未登记: '+shellActiveProject();
+   chip.style.color='var(--warnText,#a66a00)';chip.style.borderColor='';
+   chip.title='该模块还没有这个项目——导入项目时登记即可建立联动';}}});
+/* 壳项目栏：历史会话折叠（决策2）——默认收起，点击项目条目右侧 ▸ 展开 */
+document.querySelectorAll('.proj-caret').forEach(c=>c.onclick=ev=>{
+ ev.stopPropagation();
+ const box=c.closest('.project-item').querySelector('.proj-sessions');
+ box.hidden=!box.hidden;c.classList.toggle('open',!box.hidden);});
+document.querySelectorAll('.sess-row').forEach(s=>s.onclick=()=>{
+ const chip=document.getElementById('sync-5760');
+ if(chip){chip.textContent='规划：kb:open-session 打开会话';chip.style.color='var(--warnText,#a66a00)';
+  chip.title='定稿后：在壳的历史会话里点击，嵌入的终端会直接打开该会话并切换到对应项目';}});
+document.querySelectorAll('.sess-arch').forEach(a=>a.onclick=ev=>{
+ ev.stopPropagation();
+ const chip=document.getElementById('sync-5760');
+ if(chip){chip.textContent='规划：归档会话（archiveSession）';chip.style.color='var(--warnText,#a66a00)';
+  chip.title='定稿后：调 terminal PUT /sessions/:id/archive；归档后从壳列表消失（不展示归档区）';}});
+/* 右键项目卡：壳侧管理菜单（归档全部 / 移除项目·默认不清理本地数据） */
+const ctxMenu=document.createElement('div');
+ctxMenu.className='ctx-menu';ctxMenu.hidden=true;
+ctxMenu.innerHTML='<div class="ctx-title"></div><button type="button" data-act="archive">归档全部会话…</button><button type="button" data-act="remove" class="danger">移除项目…（保留本地知识库与会话记录）</button>';
+document.body.appendChild(ctxMenu);
+document.querySelectorAll('.project-card').forEach(card=>card.addEventListener('contextmenu',ev=>{
+ ev.preventDefault();
+ ctxMenu.querySelector('.ctx-title').textContent=card.querySelector('.project-name').textContent;
+ ctxMenu.hidden=false;
+ ctxMenu.style.left=Math.min(ev.clientX,window.innerWidth-280)+'px';
+ ctxMenu.style.top=Math.min(ev.clientY,window.innerHeight-140)+'px';}));
+document.addEventListener('click',()=>{ctxMenu.hidden=true;});
+ctxMenu.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+ const chip=document.getElementById('sync-5760');
+ if(chip){chip.textContent=b.dataset.act==='remove'?'规划：移除项目（keepSessions）':'规划：批量归档会话';
+  chip.style.color='var(--warnText,#a66a00)';
+  chip.title=b.dataset.act==='remove'
+   ?'定稿后：pkb 解除登记（保留知识目录）+ vector-hub 删索引（不动源文件）+ terminal 仅解除登记（需新增 keepSessions 选项，会话记录保留）'
+   :'定稿后：逐会话调 terminal 归档 API';}});
+</script>
+</body>
+</html>
