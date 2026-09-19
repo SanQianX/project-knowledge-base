@@ -109,51 +109,27 @@ function git(repo, args) {
       const state = await browser.evaluate(`(() => ({
         disabled: document.getElementById('import-submit').disabled,
         git: document.getElementById('pv-git-status').textContent,
-        ai: document.getElementById('pv-ai-profile').textContent,
         root: document.getElementById('pv-knowledge-root').textContent,
-        hook: document.getElementById('pv-hook').textContent,
         preflightHidden: document.getElementById('import-preflight').hidden,
         errHidden: document.getElementById('import-errors').hidden,
       }))()`);
       return state.disabled === false && state.errHidden ? { ok: true, state } : null;
     }, 'preflight ready for valid path', 20000);
 
-    // Case 3: invalid knowledgeLanguage -> problem visible, button disabled.
-    // Add a temporary option that isn't in {zh-CN,en-US} so the select accepts
-    // it, then verify the preflight surfaces KNOWLEDGE_LANGUAGE_INVALID.
+    // Case 3: ② 知识库地址 → 预览回显该地址，导入按钮保持可用（两地址即登记映射）
     await browser.evaluate(`(() => {
-      const sel = document.getElementById('import-language');
-      const opt = document.createElement('option');
-      opt.value = 'xx-INVALID';
-      opt.textContent = 'invalid';
-      sel.appendChild(opt);
-      sel.value = 'xx-INVALID';
-      sel.dispatchEvent(new Event('input', { bubbles: true }));
-      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      const input = document.getElementById('import-knowledge-path');
+      input.value = 'D:\\\\Knowledge\\\\spaces-demo';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
     })()`);
     await waitFor(async () => {
       const state = await browser.evaluate(`(() => ({
         disabled: document.getElementById('import-submit').disabled,
-        errHidden: document.getElementById('import-errors').hidden,
-        errText: document.getElementById('import-errors').textContent,
-        language: document.getElementById('import-language').value,
+        root: document.getElementById('pv-knowledge-root').textContent,
       }))()`);
-      return state.disabled === true && !state.errHidden && /KNOWLEDGE_LANGUAGE_INVALID/.test(state.errText)
-        ? { ok: true }
-        : null;
-    }, 'invalid language problem surfaces', 20000);
-
-    // Case 4: reset back to zh-CN -> preflight ready again
-    await browser.evaluate(`(() => {
-      const sel = document.getElementById('import-language');
-      sel.value = 'zh-CN';
-      sel.dispatchEvent(new Event('input', { bubbles: true }));
-      sel.dispatchEvent(new Event('change', { bubbles: true }));
-    })()`);
-    await waitFor(async () => {
-      const disabled = await browser.evaluate("document.getElementById('import-submit').disabled");
-      return disabled === false ? { ok: true } : null;
-    }, 'language reset restores ready', 20000);
+      return state.disabled === false && /spaces-demo/.test(state.root) ? { ok: true } : null;
+    }, 'knowledge address reflected in preview', 20000);
 
     // Case 5: submit form -> project imported; UI navigates to the terminal view.
     await browser.evaluate(`(() => {

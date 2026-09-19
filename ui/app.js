@@ -7,7 +7,7 @@
   const setLanguage = typeof i18nApi.setLanguage === 'function' ? i18nApi.setLanguage : () => {};
   const activeLanguage = typeof i18nApi.activeLanguage === 'function' ? i18nApi.activeLanguage : () => 'zh-CN';
   const state = {
-    projects: [], profiles: [], activeProjectId: '', view: 'terminal', settings: 'conversation', settingsOpen: false,
+    projects: [], activeProjectId: '', view: 'terminal', settings: 'conversation', settingsOpen: false,
     conversationCursor: null, conversationTurns: [], logs: [], logStream: null, logCursor: '', newLogs: 0,
     messageCount: 0, pendingDeleteId: '',
     modules: { terminal: { url: 'http://127.0.0.1:5760', up: false }, vectorHub: { url: 'http://127.0.0.1:8787', up: false } },
@@ -200,10 +200,7 @@
     hideContextmenu();
   }
   async function loadState() {
-    const [aggregate, profileBody] = await Promise.all([
-      api('/api/projects/aggregated'),
-      api('/api/ai-profiles').catch(() => ({ config: null })),
-    ]);
+    const aggregate = await api('/api/projects/aggregated');
     state.projects = (aggregate.projects || []).map(project => ({
       projectId: project.projectId,
       displayName: project.name || project.projectId,
@@ -211,9 +208,7 @@
       knowledgePath: project.knowledgePath || '',
       modules: project.modules || { terminal: {}, vectorHub: {} },
     }));
-    state.profiles = profileBody.config?.profiles || [];
     if (!state.activeProjectId || !state.projects.some(project => project.projectId === state.activeProjectId)) state.activeProjectId = state.projects[0]?.projectId || '';
-    fillImportProfiles();
     renderProjects();
     if (state.settings === 'conversation') loadConversationProjects();
   }
@@ -225,16 +220,7 @@
     } catch { /* server down; probes keep their state */ }
   }
 
-  /* ===================== 导入 ===================== */
-  function fillImportProfiles() {
-    const select = $('import-profile');
-    select.replaceChildren();
-    select.append(option('', i18n('app.import.profile.help')));
-    for (const profile of state.profiles) select.append(option(profile.id, profile.name ? `${profile.name} · ${profile.id}` : profile.id));
-    if (profileDefaultId()) select.value = profileDefaultId();
-  }
-  function profileDefaultId() { return null; }
-
+  /* ===================== 导入：只触发两个模块的登记（壳不自建设置面） ===================== */
   async function submitImport(event) {
     event.preventDefault();
     const notice = $('import-notice') || (() => { const n = document.createElement('div'); n.id = 'import-notice'; n.className = 'notice'; n.hidden = true; document.querySelector('#import-form').appendChild(n); return n; })();
@@ -242,11 +228,8 @@
     try {
       const body = await api('/api/projects/import', { method: 'POST', body: JSON.stringify(payload) });
       const projectId = body.projectId || body.project?.projectId || '';
-      const config = body.project?.config || body.config || {};
-      if ($('pv-repo')) setText($('pv-repo'), config.repoPath || payload.localPath);
-      if ($('pv-knowledge-root')) setText($('pv-knowledge-root'), config.knowledgePath || '');
       renderModuleRegistration(body.modules);
-      notice.hidden = false; notice.className = 'notice'; notice.textContent = '项目已导入。';
+      notice.hidden = false; notice.className = 'notice'; notice.textContent = '项目已导入并登记到模块。';
       await loadState(); selectProject(projectId); showView('terminal'); event.target.reset(); renderFoldIcons();
     } catch (error) { notice.hidden = false; notice.className = 'notice error'; notice.textContent = error.message; }
   }
@@ -258,19 +241,11 @@
     setText(node, `${term} · ${vh}`);
   }
   function buildImportPayload() {
-    const payload = {
+    // 语言/配置走后端默认（zh-CN / 终端 profile 唯一源）——壳上不再暴露
+    return {
       localPath: $('import-path').value,
-      aiProfileId: $('import-profile').value || null,
-      knowledgeLanguage: $('import-language').value || 'zh-CN',
       knowledgePath: $('import-knowledge-path').value.trim() || null,
     };
-    if ($('import-team-enabled').checked) {
-      const storePath = $('import-team-store').value.trim();
-      const kbSubdir = $('import-team-subdir').value.trim();
-      const provider = $('import-team-provider').value;
-      if (storePath && kbSubdir) payload.teamBinding = { provider, storePath, kbSubdir };
-    }
-    return payload;
   }
 
   let preflightSeq = 0;
@@ -286,8 +261,7 @@
     if (!path) {
       submit.disabled = true;
       setText($('pv-git-status'), '等待路径输入');
-      setText($('pv-hook'), '等待 preflight');
-      setText($('pv-ai-profile'), '—');
+      setText($('pv-knowledge-root'), $('import-knowledge-path').value.trim() || '—');
       setText($('pv-modules'), '待登记');
       $('import-preflight').hidden = true;
       $('import-errors').hidden = true;
@@ -309,22 +283,16 @@
   function renderPreflight(result) {
     const submit = $('import-submit');
     submit.disabled = !result.ready;
-    setText($('pv-knowledge-root'), (result.effective && result.effective.knowledgeRoot) || ($('import-knowledge-path').value.trim() || '—'));
-    if (result.effective && result.effective.aiProfile) setText($('pv-ai-profile'), `${result.effective.aiProfile.id} (${result.effective.aiProfile.source})`);
-    else setText($('pv-ai-profile'), '—');
+    setText($('pv-knowledge-root'), $('import-knowledge-path').value.trim() || (result.effective && result.effective.knowledgeRoot) || '—');
     const gitCheck = result.checks && result.checks.git;
     if (gitCheck && gitCheck.ok) {
       const desc = gitCheck.emptyRepo ? 'Git 仓库（空仓库）' : gitCheck.headCommit ? `Git 仓库 @ ${gitCheck.headCommit.slice(0, 7)}` : 'Git 仓库';
       setText($('pv-git-status'), desc);
     } else if (gitCheck && gitCheck.plannedInit) setText($('pv-git-status'), '非 Git 目录（将自动初始化）');
     else setText($('pv-git-status'), '路径无效');
-    const hookCheck = result.checks && result.checks.hook;
-    if (hookCheck && hookCheck.ok) setText($('pv-hook'), hookCheck.reason === 'legacy-v1' ? '已检测到 v1 Hook，将升级到 v2' : '准备安装托管 Hook');
-    else if (hookCheck && hookCheck.reason === 'third-party') setText($('pv-hook'), '⚠ 第三方 Hook（不会覆盖）');
-    else setText($('pv-hook'), '—');
     $('import-auto-init').hidden = !result.plannedGitInit;
     const preNotice = $('import-preflight');
-    if (result.ready) { preNotice.hidden = false; preNotice.className = 'notice'; preNotice.textContent = '所有前置条件就绪，可以导入。'; }
+    if (result.ready) { preNotice.hidden = false; preNotice.className = 'notice'; preNotice.textContent = '前置条件就绪，可以导入。'; }
     else preNotice.hidden = true;
     const errNotice = $('import-errors');
     if (result.problems && result.problems.length) {
@@ -586,7 +554,7 @@
     if ($('import-path') && $('import-path').placeholder) $('import-path').placeholder = i18n('app.import.path.placeholder');
   }
   $('import-form').addEventListener('submit', submitImport);
-  for (const id of ['import-path', 'import-knowledge-path', 'import-language', 'import-profile', 'import-team-enabled', 'import-team-store', 'import-team-subdir', 'import-team-provider']) {
+  for (const id of ['import-path', 'import-knowledge-path']) {
     $(id).addEventListener('input', schedulePreflight);
     $(id).addEventListener('change', schedulePreflight);
   }

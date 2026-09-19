@@ -72,33 +72,14 @@
                 <input class="input code" id="import-path" required placeholder="D:\Projects\my-project" style="flex:1">
                 <button class="btn" type="button" id="import-pick-folder" hidden>选择目录…</button>
               </div>
-              <span class="muted import-field-help">终端会话将按此路径映射回本项目</span>
+              <span class="muted import-field-help">触发终端「添加项目」；终端会话按此路径映射回本项目</span>
             </div>
             <div class="field"><label for="import-knowledge-path">② 知识库地址 · 登记到 vector-hub</label>
               <div style="display:flex;gap:8px">
-                <input class="input code" id="import-knowledge-path" placeholder="留空使用默认知识根目录" style="flex:1">
+                <input class="input code" id="import-knowledge-path" placeholder="D:\Knowledge\my-project" style="flex:1">
                 <button class="btn" type="button" id="import-pick-knowledge" hidden>选择目录…</button>
               </div>
-              <span class="muted import-field-help">源 Markdown 为唯一真相，向量索引可随时重建</span>
-            </div>
-            <div class="field"><label for="import-language">知识输出语言</label>
-              <select class="input" id="import-language">
-                <option value="zh-CN">中文（zh-CN）</option>
-                <option value="en-US">English (en-US)</option>
-              </select>
-            </div>
-            <div class="field"><label for="import-profile">AI 配置（在 Agent 终端内设置）</label>
-              <select class="input" id="import-profile"></select>
-              <span class="muted">模型与凭据的唯一入口在终端界面（顶栏 ⚙）；此处仅选择本项目使用的配置。</span>
-            </div>
-            <div class="field"><label for="import-team-enabled"><input type="checkbox" id="import-team-enabled"> 使用 Team Knowledge（可选）</label>
-              <div id="import-team-fields" hidden style="margin-top:8px;display:grid;gap:8px">
-                <div class="field"><label for="import-team-store">Team Store 本地路径</label><input class="input code" id="import-team-store" placeholder="D:\TeamKBs\store"></div>
-                <div class="field"><label for="import-team-subdir">子目录</label><input class="input code" id="import-team-subdir" placeholder="team-a/project-x"></div>
-                <div class="field"><label for="import-team-provider">Provider</label>
-                  <select class="input" id="import-team-provider"><option value="github">GitHub</option><option value="gitea">Gitea</option></select>
-                </div>
-              </div>
+              <span class="muted import-field-help">触发检索控制台「导入本地文件夹」并持续监控；源 Markdown 为唯一真相</span>
             </div>
             <div class="notice" id="import-preflight" hidden></div>
             <div class="notice error" id="import-errors" hidden></div>
@@ -108,13 +89,10 @@
         </section>
         <aside class="panel preview-panel">
           <div class="section-title">导入目标</div>
-          <div class="section-help">导入完成后展示实际落位与模块登记结果。</div>
+          <div class="section-help">两个地址在导入时由人选定，项目与模块的一一对应在登记那一刻确定。</div>
           <div class="preview-list">
             <div class="panel2 preview-item"><div class="preview-label">Git 状态</div><div class="preview-value" id="pv-git-status">等待 preflight</div></div>
-            <div class="panel2 preview-item"><div class="preview-label">Repository</div><div class="preview-value code" id="pv-repo">导入后确定</div></div>
-            <div class="panel2 preview-item"><div class="preview-label">知识根目录</div><div class="preview-value code" id="pv-knowledge-root">—</div></div>
-            <div class="panel2 preview-item"><div class="preview-label">Effective AI Profile</div><div class="preview-value code" id="pv-ai-profile">—</div></div>
-            <div class="panel2 preview-item"><div class="preview-label">Hook 状态</div><div class="preview-value" id="pv-hook">等待 preflight</div></div>
+            <div class="panel2 preview-item"><div class="preview-label">知识库地址</div><div class="preview-value code" id="pv-knowledge-root">—</div></div>
             <div class="panel2 preview-item"><div class="preview-label">模块登记</div><div class="preview-value" id="pv-modules">待登记</div></div>
           </div>
         </aside>
