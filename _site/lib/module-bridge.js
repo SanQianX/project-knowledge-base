@@ -25,6 +25,8 @@ const PROXY_TIMEOUT_MS = 10000;
 // Registration drives a full embedding pass in vector-hub (remote API); a
 // fresh knowledge folder can easily exceed the interactive proxy budget.
 const REGISTER_TIMEOUT_MS = 60000;
+// Native folder dialogs wait for the user without a bound.
+const PICKER_TIMEOUT_MS = 10 * 60 * 1000;
 
 function defaultTerminalUrl() {
   return String(process.env.KB_TERMINAL_URL || 'http://127.0.0.1:5760').replace(/\/+$/, '');
@@ -71,10 +73,15 @@ class ModuleBridge {
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
     const body = chunks.length ? Buffer.concat(chunks) : undefined;
+    // The native folder pickers hold the request open until the user closes
+    // the dialog — they need a human-scale budget, not the API budget.
+    const isPicker = /\/(system\/)?pick-folder/.test(target);
+    const timeoutMs = isPicker ? PICKER_TIMEOUT_MS : PROXY_TIMEOUT_MS;
     let upstream;
     try {
       upstream = await this._fetch(target, {
         method: req.method,
+        timeoutMs,
         headers: body ? { 'Content-Type': req.headers['content-type'] || 'application/json' } : {},
         body: ['GET', 'HEAD'].includes(req.method) ? undefined : body,
       });

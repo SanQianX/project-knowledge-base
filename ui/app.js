@@ -558,23 +558,38 @@
     $(id).addEventListener('input', schedulePreflight);
     $(id).addEventListener('change', schedulePreflight);
   }
-  const desktop = typeof window !== 'undefined' ? window.projectKnowledgeDesktop : null;
-  if (desktop && typeof desktop.pickFolder === 'function') {
-    for (const [buttonId, inputId] of [['import-pick-folder', 'import-path'], ['import-pick-knowledge', 'import-knowledge-path']]) {
-      const picker = $(buttonId);
-      picker.hidden = false;
-      picker.addEventListener('click', async () => {
-        try {
-          const result = await desktop.pickFolder();
-          if (result && result.path) { $(inputId).value = result.path; schedulePreflight(); }
-        } catch (error) {
-          const err = $('import-errors');
-          err.hidden = false; err.className = 'notice error';
-          err.textContent = `目录选择器失败：${error.message}`;
-        }
-      });
+  // 目录选择：优先桌面端原生选择器；Web 模式经代理调用模块自带的原生选择器
+  //（① 用终端的 pick-folder，② 用 vector-hub 的）。两者都返回 {path}，取消为 path:null。
+  async function pickFolderVia(endpoint) {
+    if (window.screenX !== undefined) {
+      const win = `${Math.round(window.screenX)},${Math.round(window.screenY)},${Math.round(window.outerWidth)},${Math.round(window.outerHeight)}`;
+      endpoint += (endpoint.includes('?') ? '&' : '?') + 'win=' + encodeURIComponent(win);
     }
+    const response = await fetch(endpoint);
+    if (response.status === 501) throw new Error('此环境不支持目录选择，请手动输入路径。');
+    if (!response.ok) throw new Error(`目录选择失败 (${response.status})`);
+    return response.json();
   }
+  function bindFolderPicker(buttonId, inputId, endpoint) {
+    $(buttonId).addEventListener('click', async () => {
+      const err = $('import-errors');
+      try {
+        $(buttonId).disabled = true;
+        const desktop = window.projectKnowledgeDesktop;
+        const result = desktop && typeof desktop.pickFolder === 'function'
+          ? await desktop.pickFolder()
+          : await pickFolderVia(endpoint);
+        if (result && result.path) { $(inputId).value = result.path; schedulePreflight(); }
+      } catch (error) {
+        err.hidden = false; err.className = 'notice error';
+        err.textContent = error.message;
+      } finally {
+        $(buttonId).disabled = false;
+      }
+    });
+  }
+  bindFolderPicker('import-pick-folder', 'import-path', '/api/terminal/system/pick-folder');
+  bindFolderPicker('import-pick-knowledge', 'import-knowledge-path', '/api/vectorhub/system/pick-folder');
   const importReset = $('import-reset');
   if (importReset) importReset.addEventListener('click', () => setTimeout(schedulePreflight, 0));
   $('conversation-project').addEventListener('change', event => { state.activeProjectId = event.target.value; renderProjects(); loadConversations(true); });

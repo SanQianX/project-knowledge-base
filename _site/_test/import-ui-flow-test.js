@@ -142,10 +142,16 @@ function git(repo, args) {
       return visible ? { ok: true } : null;
     }, 'import navigates to terminal view', 30000);
 
-    // Case 6: folder picker button is hidden in Web mode (no projectKnowledgeDesktop).
+    // Case 6: folder picker buttons are visible in Web mode and wired to the
+    // proxied module pickers (never clicked here — that would open a real
+    // native dialog on the host machine).
     {
-      const pickerHidden = await browser.evaluate("document.getElementById('import-pick-folder').hidden");
-      assert.strictEqual(pickerHidden, true, 'Desktop folder picker must be hidden in Web mode');
+      const pickers = await browser.evaluate(`(() => ({
+        dev: !document.getElementById('import-pick-folder').hidden,
+        knowledge: !document.getElementById('import-pick-knowledge').hidden,
+      }))()`);
+      assert.strictEqual(pickers.dev, true, 'dev-address picker must be visible');
+      assert.strictEqual(pickers.knowledge, true, 'knowledge-address picker must be visible');
     }
   } catch (error) {
     console.error(error.stack || error.message);

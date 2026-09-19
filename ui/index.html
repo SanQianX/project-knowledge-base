@@ -69,17 +69,17 @@
           <form id="import-form" class="form-grid">
             <div class="field"><label for="import-path">① 开发项目地址 · 登记到 Agent 终端</label>
               <div style="display:flex;gap:8px">
-                <input class="input code" id="import-path" required placeholder="D:\Projects\my-project" style="flex:1">
-                <button class="btn" type="button" id="import-pick-folder" hidden>选择目录…</button>
+                <input class="input code" id="import-path" required placeholder="也可手动输入路径" style="flex:1">
+                <button class="btn" type="button" id="import-pick-folder">选择目录…</button>
               </div>
-              <span class="muted import-field-help">触发终端「添加项目」；终端会话按此路径映射回本项目</span>
+              <span class="muted import-field-help">打开本地目录选择框（终端原生选择器）；确认后登记为终端项目</span>
             </div>
             <div class="field"><label for="import-knowledge-path">② 知识库地址 · 登记到 vector-hub</label>
               <div style="display:flex;gap:8px">
-                <input class="input code" id="import-knowledge-path" placeholder="D:\Knowledge\my-project" style="flex:1">
-                <button class="btn" type="button" id="import-pick-knowledge" hidden>选择目录…</button>
+                <input class="input code" id="import-knowledge-path" placeholder="也可手动输入路径" style="flex:1">
+                <button class="btn" type="button" id="import-pick-knowledge">选择目录…</button>
               </div>
-              <span class="muted import-field-help">触发检索控制台「导入本地文件夹」并持续监控；源 Markdown 为唯一真相</span>
+              <span class="muted import-field-help">打开本地目录选择框（检索控制台原生选择器）；确认后建索引并监控</span>
             </div>
             <div class="notice" id="import-preflight" hidden></div>
             <div class="notice error" id="import-errors" hidden></div>
