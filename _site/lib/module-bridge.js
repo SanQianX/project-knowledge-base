@@ -180,16 +180,23 @@ class ModuleBridge {
       result.vectorHub = { ok: false, status: 'disabled' };
       return result;
     }
-    try {
-      const response = await this._fetch(`${this.terminalUrl}/api/claude-workbench/v1/projects`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name || projectId, rootPath: workspacePath }),
-      });
-      const payload = response.status === 201 || response.ok ? await response.json().catch(() => ({})) : {};
-      result.terminal = { ok: response.ok, projectId: payload.id || payload.projectId || null, status: response.ok ? 'registered' : 'error' };
-    } catch {
-      result.terminal = { ok: false, status: 'pending' };
+    // 幂等登记：终端已有同 rootPath 的项目时复用，绝不重复创建
+    const existingTerminal = (await this._listTerminalProjects())
+      .find(p => String(p.rootPath || '').toLowerCase() === String(workspacePath || '').toLowerCase());
+    if (existingTerminal) {
+      result.terminal = { ok: true, projectId: existingTerminal.id, status: 'registered', reused: true };
+    } else {
+      try {
+        const response = await this._fetch(`${this.terminalUrl}/api/claude-workbench/v1/projects`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name || projectId, rootPath: workspacePath }),
+        });
+        const payload = response.status === 201 || response.ok ? await response.json().catch(() => ({})) : {};
+        result.terminal = { ok: response.ok, projectId: payload.id || payload.projectId || null, status: response.ok ? 'registered' : 'error' };
+      } catch {
+        result.terminal = { ok: false, status: 'pending' };
+      }
     }
     try {
       const response = await this._fetch(`${this.vectorHubUrl}/api/import`, {
