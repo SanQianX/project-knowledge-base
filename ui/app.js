@@ -138,7 +138,15 @@
         caret.classList.toggle('open', !expanded);
         if (!expanded && !state.sessionsByProject.has(project.repoPath || project.projectId)) {
           sessions.replaceChildren(sessionPlaceholder('正在向终端拉取会话…'));
-          postTo('term', { type: 'kb:list-sessions', project: project.repoPath || project.projectId });
+          // 拉取超时兜底：终端未连接/未登记时不至于永远停在"正在拉取"
+          const key = project.repoPath || project.projectId;
+          setTimeout(() => {
+            if (!state.sessionsByProject.has(key)) {
+              const host = sessions.querySelector('.sess-empty');
+              if (host) host.textContent = '未能获取会话（终端未连接或该项目未登记到终端）';
+            }
+          }, 8000);
+          postTo('term', { type: 'kb:list-sessions', project: key });
         }
       });
       card.addEventListener('contextmenu', event => {
