@@ -40,6 +40,8 @@ function spawnServer({ root, port, host = '127.0.0.1', dataDir, extraEnv = {}, t
       KB_DATA_DIR: dir,
       KB_CLAUDE_RULES_DIR: dir,
       KB_SKIP_MIGRATION: '1',
+      // 测试隔离：禁止测试服务器向真实模块（terminal/vector-hub）登记项目
+      KB_MODULES_REGISTER: '0',
       AI_CODING_EVENT_BRIDGE_HOME: bridgeHome,
       ...extraEnv,
     },

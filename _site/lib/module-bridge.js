@@ -164,9 +164,15 @@ class ModuleBridge {
    * Register one pkb project into both modules and persist the wiring table.
    * Best-effort per module: a module that is down is recorded as 'pending'
    * (retry on the next register call or health-check pass), never a hard error.
+   * KB_MODULES_REGISTER=0 disables fan-out entirely (test isolation).
    */
   async registerProjectLinks({ projectId, name, workspacePath, knowledgePath }) {
     const result = { terminal: { ok: false }, vectorHub: { ok: false } };
+    if (String(process.env.KB_MODULES_REGISTER || '') === '0') {
+      result.terminal = { ok: false, status: 'disabled' };
+      result.vectorHub = { ok: false, status: 'disabled' };
+      return result;
+    }
     try {
       const response = await this._fetch(`${this.terminalUrl}/api/claude-workbench/v1/projects`, {
         method: 'POST',
