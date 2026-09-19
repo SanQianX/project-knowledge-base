@@ -102,9 +102,15 @@ function installHook(options = {}) {
     const existing = fs.readFileSync(hookPath, 'utf8');
     const marker = parseManagedMarker(existing);
     if (!marker) {
-      throw new DomainError('HOOK_CONFLICT', 'A non-managed post-commit hook already exists.', { status: 409 });
+      if (!isLegacyManagedHook(existing)) {
+        throw new DomainError('HOOK_CONFLICT', 'A non-managed post-commit hook already exists.', { status: 409 });
+      }
+      // Legacy v1 managed hook: preflight already classifies it as an
+      // in-place upgrade target ("legacy-v1"), so overwrite below instead of
+      // refusing — otherwise import promises a migration the installer
+      // rejects for every repo hooked by an older KB generation.
     }
-    if (marker.projectId !== projectId) {
+    if (marker && marker.projectId !== projectId) {
       throw new DomainError('HOOK_CONFLICT', 'The managed hook belongs to another project.', { status: 409 });
     }
     if (existing === body) return { ok: true, installed: true, updated: false, hookPath, projectId, managedVersion: MANAGED_VERSION };
