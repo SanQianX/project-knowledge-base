@@ -141,7 +141,10 @@ class MigrationService {
         validateProjectConfig(this.atomic.readJsonStrict(this.layout.getProjectConfigPath(projectId), { category: 'project-config' }), projectId);
         validateProjectState(this.atomic.readJsonStrict(this.layout.getProjectStatePath(projectId), { category: 'project-state' }));
       }
-      if (Number.isInteger(marker.projectCount) && marker.projectCount !== registry.projectOrder.length) return { ok: false, reason: 'completion-project-count-mismatch' };
+      // marker.projectCount is a migration-time snapshot only. Imports and
+      // deletions legitimately change the live registry count afterwards;
+      // comparing them here rejected every restart after the first legal
+      // project removal (completion-project-count-mismatch false positive).
       return { ok: true, registry, settings };
     } catch (error) { return { ok: false, reason: 'completion-state-invalid', error }; }
   }
