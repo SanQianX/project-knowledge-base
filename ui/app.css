@@ -58,3 +58,5 @@ dialog{width:min(620px,calc(100% - 32px));border:1px solid var(--line);border-ra
 .mbadge{font-size:9px;border:1px solid var(--sideBorder);border-radius:4px;padding:0 4px;color:var(--sideMuted)}
 .mbadge.on{color:var(--good);border-color:color-mix(in srgb,var(--good) 40%,var(--sideBorder))}
 .import-field-help{font-size:10px}
+.sess-row.undoing{opacity:.6}
+.sess-restore{cursor:pointer;color:var(--good);font-size:10px;white-space:nowrap}
