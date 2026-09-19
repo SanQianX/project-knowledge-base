@@ -71,20 +71,10 @@
       }
     } else if (data.type === 'kb:sessions') {
       if (!data.ok) return;
-      if (data.includeArchived) {
-        // 恢复请求的回执：逐条恢复已归档会话，不渲染列表
-        const archived = (data.sessions || []).filter(s => s.archived);
-        for (const s of archived) postTo('term', { type: 'kb:restore-session', sessionId: s.sessionId });
-        return;
-      }
       state.sessionsByProject.set(data.project, data.sessions || []);
       renderProjectSessions(data.project);
     } else if (data.type === 'kb:session' && data.ok) {
       showView('terminal');
-    } else if (data.type === 'kb:archived' && data.ok) {
-      markSessionUndo(data.sessionId);
-    } else if (data.type === 'kb:restored' && data.ok) {
-      refreshActiveSessions();
     }
   });
 
@@ -172,27 +162,6 @@
     updateProjectContext();
   }
   function sessionPlaceholder(text) { const div = document.createElement('div'); div.className = 'sess-empty'; div.textContent = text; return div; }
-  function refreshActiveSessions() {
-    const project = activeProject();
-    if (project) postTo('term', { type: 'kb:list-sessions', project: project.repoPath || project.projectId });
-  }
-  // 归档撤销：归档后行不消失，转为"已归档 · 点击撤销"状态，15 秒内可一键恢复
-  function markSessionUndo(sessionId) {
-    const row = document.querySelector(`.sess-row[data-session-id="${CSS.escape(sessionId)}"]`);
-    if (!row) { refreshActiveSessions(); return; }
-    row.classList.add('undoing');
-    const title = row.querySelector('.sess-title');
-    if (title) title.textContent = `已归档 · ${title.textContent}`;
-    const oldIcon = row.querySelector('.sess-arch, .sess-restore');
-    if (oldIcon) oldIcon.remove();
-    const undo = document.createElement('span'); undo.className = 'sess-restore'; undo.title = '撤销归档（恢复会话）'; undo.textContent = '↺ 撤销';
-    undo.addEventListener('click', event => {
-      event.stopPropagation();
-      postTo('term', { type: 'kb:restore-session', sessionId });
-    });
-    row.append(undo);
-    setTimeout(() => { if (row.isConnected && row.classList.contains('undoing')) refreshActiveSessions(); }, 15000);
-  }
   function renderProjectSessions(projectKey) {
     const wrap = [...document.querySelectorAll('.project-item')].find(node => {
       const project = state.projects.find(item => item.projectId === node.dataset.projectId);
@@ -208,9 +177,7 @@
       row.dataset.sessionId = session.sessionId;
       const title = document.createElement('span'); title.className = 'sess-title'; title.textContent = session.title || session.sessionId;
       const agent = document.createElement('span'); agent.className = 'sess-agent'; agent.textContent = session.agentId || '';
-      const archive = document.createElement('span'); archive.className = 'sess-arch'; archive.title = '归档'; archive.textContent = '🗄';
-      archive.addEventListener('click', event => { event.stopPropagation(); postTo('term', { type: 'kb:archive-session', sessionId: session.sessionId }); });
-      row.append(title, agent, archive);
+      row.append(title, agent);
       row.addEventListener('click', () => {
         postTo('term', { type: 'kb:open-session', sessionId: session.sessionId });
         showView('terminal');
@@ -635,23 +602,6 @@
   $('logs-search').addEventListener('input', () => { clearTimeout(logTimer); logTimer = setTimeout(loadLogs, 250); });
   $('logs-export').addEventListener('click', () => exportLogs().catch(error => { const warning = $('logs-connection'); warning.classList.add('show'); warning.textContent = error.message; }));
   $('new-records').addEventListener('click', () => { state.newLogs = 0; updateNewLogButton(); const list = $('record-list'); list.scrollTop = list.scrollHeight; });
-  $('archive-all-projects').addEventListener('click', async () => {
-    const projectId = state.pendingDeleteId; hideContextmenu();
-    const project = state.projects.find(item => item.projectId === projectId);
-    if (!project) return;
-    const key = project.repoPath || projectId;
-    const sessions = state.sessionsByProject.get(key);
-    if (!sessions) { postTo('term', { type: 'kb:list-sessions', project: key }); alert('正在拉取会话列表，稍后再次点击归档。'); return; }
-    if (!sessions.length) return alert('该项目没有可归档的会话。');
-    if (!confirm(`归档“${project.displayName}”的 ${sessions.length} 个会话？（误归档可在 15 秒内逐条撤销，或右键“恢复已归档会话”）`)) return;
-    for (const session of sessions) postTo('term', { type: 'kb:archive-session', sessionId: session.sessionId });
-  });
-  $('restore-archived-projects').addEventListener('click', () => {
-    const projectId = state.pendingDeleteId; hideContextmenu();
-    const project = state.projects.find(item => item.projectId === projectId);
-    if (!project) return;
-    postTo('term', { type: 'kb:list-sessions', project: project.repoPath || projectId, includeArchived: true });
-  });
   $('remove-project').addEventListener('click', () => { hideContextmenu(); openDeleteDialog(state.pendingDeleteId); });
   document.addEventListener('click', event => { if (!event.target.closest('.context-menu') && !event.target.closest('.project-card')) hideContextmenu(); });
   $('delete-knowledge').addEventListener('change', event => { $('delete-confirm-field').hidden = !event.target.checked; });

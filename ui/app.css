@@ -50,7 +50,6 @@ dialog{width:min(620px,calc(100% - 32px));border:1px solid var(--line);border-ra
 .sess-row{display:flex;align-items:center;gap:6px;text-align:left;border:0;background:transparent;color:var(--sideMuted);border-radius:6px;padding:4px 7px;font-size:11px;cursor:pointer}
 .sess-title{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sess-agent{flex:none;font-size:10px;opacity:.7}
-.sess-arch{display:none;font-size:11px;cursor:pointer}
 .sess-row:hover{background:var(--sideActive);color:var(--sideText)}
 .sess-row:hover .sess-arch{display:inline}
 .sess-empty{font-size:10px;color:var(--sideMuted);padding:4px 7px}
@@ -58,5 +57,3 @@ dialog{width:min(620px,calc(100% - 32px));border:1px solid var(--line);border-ra
 .mbadge{font-size:9px;border:1px solid var(--sideBorder);border-radius:4px;padding:0 4px;color:var(--sideMuted)}
 .mbadge.on{color:var(--good);border-color:color-mix(in srgb,var(--good) 40%,var(--sideBorder))}
 .import-field-help{font-size:10px}
-.sess-row.undoing{opacity:.6}
-.sess-restore{cursor:pointer;color:var(--good);font-size:10px;white-space:nowrap}
