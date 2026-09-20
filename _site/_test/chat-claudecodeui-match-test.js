@@ -77,7 +77,9 @@ const runner = require('../lib/claude-cli-runner');
     assert(html.includes('id="view-terminal"') && html.includes('id="fr-5760"'));
     assert(html.includes('id="view-search"') && html.includes('id="fr-8787"'));
     assert(app.includes("'kb:select-project'") && app.includes("'kb:list-sessions'") && app.includes("'kb:open-session'"));
-    assert(app.includes("'kb:archive-session'") && app.includes("'kb:sidebar'"), 'embed protocol wiring must cover sessions and fold');
+    assert(app.includes("'kb:sidebar'"), 'embed protocol wiring must cover fold');
+    // 会话生命周期（archive/restore）只属于 terminal 模块，壳保持只读投影
+    assert(!app.includes("'kb:archive-session'") && !app.includes("'kb:restore-session'"), 'session lifecycle wiring must stay terminal-module-only');
 
     runner.deleteSession(started.sessionId);
     console.log('chat runner contract test PASS');

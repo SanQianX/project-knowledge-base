@@ -1,15 +1,17 @@
 # Changelog
 
-## [Unreleased] - 2026-09-19
+## [4.2.18] - 2026-09-20
 
 - Module-embed shell (T0-T4 of docs/ui-integration-repair-plan.md): the Control
   Center UI now embeds the Agent Terminal (:5760) and vector-hub console
   (:8787) as original UIs behind a same-origin proxy (`/api/terminal/*`,
   `/api/vectorhub/*`). Project import registers both modules (wiring table in
   project state); the sidebar aggregates module registrations with per-project
-  session history (kb:list-sessions / kb:open-session / kb:archive-session);
-  per-module sidebar fold toggles on the nav buttons (kb:sidebar); project
-  selection drives both modules (kb:select-project) with live linkage chips.
+  session history (kb:list-sessions / kb:open-session) — session lifecycle
+  (archive/restore) belongs to the terminal module only, the shell keeps a
+  read-only projection; per-module sidebar fold toggles on the nav buttons
+  (kb:sidebar); project selection drives both modules (kb:select-project)
+  with live linkage chips.
   Settings drawer is now 开发对话/日志 only (model settings live in the
   terminal UI). Module removal keeps local knowledge and terminal session
   records (upstream `removeProject?keepSessions=1`). Optional module service
