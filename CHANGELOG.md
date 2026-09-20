@@ -1,5 +1,32 @@
 # Changelog
 
+## [4.4.0] - 2026-09-21
+
+- The ai-coding-event-bridge conversation console joins the Agent Terminal and
+  vector-hub as the third embedded Control Center module. The vendored runtime
+  (console 0.4.0 + its core) ships inside the npm package and starts with the
+  shell on 127.0.0.1:8790; the console's dependency on
+  `@sanqianx/ai-coding-event-bridge` resolves from a node_modules directory
+  vendored inside the console package, so the host package's own older npm
+  dependency can never shadow it. The global `node_modules/` gitignore rule
+  carries a negation for that directory, and `vendor:modules --check` now
+  verifies the runtime is present and git-tracked — the 4.3.0 "runtime missing
+  from the tarball" incident class cannot recur for this module either.
+- Module integration follows the established contract: same-origin reverse
+  proxy under `/api/eventbridge/`, supervised spawn with reuse of an already
+  listening standalone console (`KB_EVENTBRIDGE_COMMAND` override,
+  `AI_CODING_EVENT_BRIDGE_HOME` passthrough so the explorer shows the same
+  journal the in-process BridgeAdapter writes), idempotent import-time
+  registration keyed by Git work tree path using the recommended
+  `<knowledge>/dev-conversations` store, removal that keeps journals and sealed
+  commit documents, aggregated sidebar projection and module health.
+- The shell UI gains the 会话浏览 view (connect probe, 独立打开 link, per-project
+  桥 badge, import/remove copy) — and the conversation explorer itself learned
+  the `kb:sidebar` embed protocol (`?embed=1`, `kb:ready` announcement,
+  loopback-only origins), so its project sidebar folds via the ▤ control exactly
+  like the terminal and vector-hub embeds. Standalone console opens are
+  unaffected.
+
 ## [4.3.1] - 2026-09-20
 
 - The 4.3.0 npm package could never start the vector-hub module: the global
