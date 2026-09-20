@@ -637,8 +637,10 @@ async function reconcileLegacyHookMigration(runtime, projectId, config, state) {
 }
 
 async function initializeRuntime(runtime) {
-  const legacyMove = dataDir.migrateFromLegacy({ legacyRoot: runtime.rootDir });
-  if (!legacyMove.ok) throw new DomainError('MIGRATION_FAILED', 'Legacy runtime relocation failed.', { status: 500, details: { reason: legacyMove.error || '' } });
+  // Legacy v4.1.x package-root data is intentionally NOT relocated: this is a
+  // fresh knowledge-base system and old runtime data is not migrated. The
+  // relocation previously aborted startup on conflict, bricking fresh
+  // machines whose npm package dir carried stale v4.1.x-era files.
   await runtime.logger.info('server.startup_started', 'Server startup began.', { phase: 'migration' });
   const migration = await runtime.migrationService.migrateIfNeeded();
   if (!migration.ok || migration.requiresManualRecovery) {

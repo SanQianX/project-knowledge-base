@@ -1,5 +1,14 @@
 # Changelog
 
+## [4.2.20] - 2026-09-20
+
+- Startup no longer relocates legacy v4.1.x package-root runtime data. This is
+  a fresh knowledge-base system by decision: old data under the npm package
+  dir is ignored, not migrated. Previously a conflict between stale
+  package-root files and the user data dir aborted startup with "Legacy
+  runtime relocation failed", bricking machines whose install carried
+  v4.1.x-era files.
+
 ## [4.2.19] - 2026-09-20
 
 - Background launch is diagnosable and no longer lies about the URL. The
