@@ -13,6 +13,7 @@
     modules: { terminal: { url: 'http://127.0.0.1:5760', up: false }, vectorHub: { url: 'http://127.0.0.1:8787', up: false } },
     sessionsByProject: new Map(),   // projectId -> [{sessionId,title,agentId,updatedAt}]
     fold: { term: false, vh: false }, // false = 该模块项目列表折叠（默认）
+    linkRetries: { term: 0, vh: 0 }, // kb:select-project 竞态假阴性的有界重试计数
   };
   const today = () => { const d = new Date(), pad = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
   const api = async (url, options = {}) => {
@@ -58,16 +59,25 @@
       const key = data.app === 'vector-hub' ? 'vh' : 'term';
       setTimeout(() => { syncFold(key); linkProjectToModules(activeProject()); }, 150);
     } else if (data.type === 'kb:projects') {
+      const key = data.app === 'vector-hub' ? 'vh' : 'term';
       const chip = $(data.app === 'vector-hub' ? 'sync-8787' : 'sync-5760');
       const project = activeProject();
       if (!chip || !project) return;
       if (data.ok) {
+        state.linkRetries[key] = 0;
         chip.textContent = `联动: ${project.displayName}`;
         chip.style.color = 'var(--good)'; chip.title = '';
       } else {
         chip.textContent = `未登记: ${project.displayName}`;
         chip.style.color = 'var(--warnText)';
         chip.title = '该模块还没有这个项目——在导入项目时勾选登记即可建立联动';
+        // 模块项目清单未就绪时 kb:ready 触发的首轮选中会扑空（假阴性）：
+        // 有界重试补发，真未登记则几次后停下，chip 保持如实提示
+        if ((state.linkRetries[key] || 0) < 4) {
+          state.linkRetries[key] = (state.linkRetries[key] || 0) + 1;
+          const delay = [800, 2500, 6000, 10000][state.linkRetries[key] - 1] || 10000;
+          setTimeout(() => { if (activeProject()) linkProjectToModules(activeProject()); }, delay);
+        }
       }
     } else if (data.type === 'kb:sessions') {
       if (!data.ok) return;
@@ -78,13 +88,38 @@
     }
   });
 
+  function renderBrandStatus() {
+    setText($('brand-root'), state.projects.length ? `${state.projects.length} 个项目 · 终端${state.modules.terminal.up ? '✓' : '×'} 检索${state.modules.vectorHub.up ? '✓' : '×'}` : '暂无项目');
+  }
   function probeModules() {
     for (const [key, id] of [['term', 'st-5760'], ['vh', 'st-8787']]) {
       const status = $(id);
       const info = key === 'term' ? state.modules.terminal : state.modules.vectorHub;
-      fetch(info.url + '/', { mode: 'no-cors', cache: 'no-store' })
-        .then(() => { info.up = true; status.classList.add('ok'); status.querySelector('.st-text').textContent = `已连接 ${info.url.replace(/^https?:\/\//, '')}`; })
-        .catch(() => { info.up = false; status.classList.add('down'); status.querySelector('.st-text').textContent = `未检测到 ${info.url.replace(/^https?:\/\//, '')} — 界面将显示为空白`; });
+      let attempts = 0;
+      const attempt = () => {
+        fetch(info.url + '/', { mode: 'no-cors', cache: 'no-store' })
+          .then(() => {
+            info.up = true;
+            status.classList.remove('down'); status.classList.add('ok');
+            status.querySelector('.st-text').textContent = `已连接 ${info.url.replace(/^https?:\/\//, '')}`;
+            renderBrandStatus();
+          })
+          .catch(() => {
+            info.up = false;
+            // 模块服务随壳自启，冷启动（node 起进程 + 服务监听）可能慢于首轮
+            // 探测：有界退避重试，避免一次性误报"未检测到"并停在那直到手动刷新
+            attempts += 1;
+            if (attempts <= 10) {
+              status.querySelector('.st-text').textContent = `连接中 ${info.url.replace(/^https?:\/\//, '')}…`;
+              setTimeout(attempt, [500, 1000, 2000, 3000][Math.min(attempts - 1, 3)]);
+              return;
+            }
+            status.classList.add('down');
+            status.querySelector('.st-text').textContent = `未检测到 ${info.url.replace(/^https?:\/\//, '')} — 界面将显示为空白`;
+            renderBrandStatus();
+          });
+      };
+      attempt();
     }
   }
   function mountEmbeds() {
@@ -628,6 +663,6 @@
     mountEmbeds();
     probeModules();
     await loadState().catch(error => setText($('brand-root'), error.message));
-    setText($('brand-root'), state.projects.length ? `${state.projects.length} 个项目 · 终端${state.modules.terminal.up ? '✓' : '×'} 检索${state.modules.vectorHub.up ? '✓' : '×'}` : '暂无项目');
+    renderBrandStatus();
   })();
 })();

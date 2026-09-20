@@ -9,6 +9,11 @@ Thumbs.db
 __pycache__/
 *.pyc
 dist/
+# 4.3.0 shipped without a vector-hub runtime: the global dist/ rule above
+# silently kept _modules/vectorhub/dist out of git, so the CI publish packed
+# a package that could never spawn the module. Vendored runtimes are package
+# content, not build output — re-include them.
+!_modules/vectorhub/dist/
 desktop/out/
 desktop/.core-package/
 .venv/

@@ -66,6 +66,10 @@ async function init() {
   } catch { /* server unreachable is surfaced by the panels themselves */ }
   await Promise.all([refreshAgents(), refreshProfiles()]);
   await refreshProjects();
+  // 首个 kb:ready 在项目清单就绪前就已发出（上方 health/agents/profiles 都要
+  // 先跑完），壳届时下发的 kb:select-project 会扑空。清单就绪后再广播一次，
+  // 让壳重新选中项目，避免嵌入态卡在"未登记/无项目可选"。
+  if (window.parent !== window) window.parent.postMessage({ type: 'kb:ready', app: 'agent-terminal' }, '*');
   wireChrome();
   wireComposer();
   wireSettings();

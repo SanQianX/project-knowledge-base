@@ -99,6 +99,17 @@ function vendor() {
   console.log(`vendored modules into ${MODULES_ROOT}:`, JSON.stringify(manifest));
 }
 
+function gitTracksFile(relPath) {
+  // CI publishes from the git checkout: a vendored file that exists on the
+  // dev disk but was never committed (e.g. swallowed by a gitignore rule)
+  // silently drops out of the tarball. `--error-unmatch` exits nonzero when
+  // nothing under the path is tracked.
+  try {
+    require('child_process').execFileSync('git', ['ls-files', '--error-unmatch', '--', relPath], { cwd: ROOT, stdio: 'ignore' });
+    return true;
+  } catch { return false; }
+}
+
 function check() {
   const required = [
     'vendor-manifest.json',
@@ -114,6 +125,10 @@ function check() {
   const missing = required.filter(rel => !fs.existsSync(path.join(MODULES_ROOT, rel)));
   if (missing.length) {
     throw new Error(`vendored modules incomplete, missing: ${missing.join(', ')} — run "npm run vendor:modules"`);
+  }
+  const uncommitted = required.filter(rel => !gitTracksFile(`_modules/${rel}`));
+  if (uncommitted.length) {
+    throw new Error(`vendored modules not tracked by git: ${uncommitted.join(', ')} — fix .gitignore and commit them (files on disk but outside git never reach the published tarball)`);
   }
   console.log(`vendored modules present (${fs.readFileSync(path.join(MODULES_ROOT, 'vendor-manifest.json'), 'utf8').trim().split('\n')[0]})`);
 }
