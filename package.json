@@ -1,6 +1,6 @@
 {
   "name": "project-knowledge",
-  "version": "4.2.20",
+  "version": "4.3.0",
   "description": "Knowledge base manager with Git integration, AI-driven analysis, and bilingual (zh-CN/en-US) knowledge output",
   "main": "_site/server.js",
   "scripts": {
@@ -10,7 +10,8 @@
     "release:verify": "node _site/scripts/sync-release-version.js --check && node _site/_test/integration-adapters-test.js",
     "preversion": "npm run release:verify",
     "version": "node _site/scripts/sync-release-version.js --stage",
-    "postversion": "npm run release:verify"
+    "postversion": "npm run release:verify",
+    "vendor:modules": "node _site/scripts/vendor-modules.js"
   },
   "bin": {
     "project-knowledge": "bin/project-knowledge.js",
@@ -47,7 +48,8 @@
     "docs/testing-strategy.md",
     "README.md",
     "NOTICE",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "_modules/"
   ],
   "repository": {
     "type": "git",
@@ -70,15 +72,28 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.141",
+    "@grpc/grpc-js": "^1.14.5",
+    "@grpc/proto-loader": "^0.8.1",
     "@huggingface/transformers": "3.8.1",
     "@lancedb/lancedb": "0.31.0",
     "@modelcontextprotocol/sdk": "1.29.0",
     "@sanqianx/ai-coding-event-bridge": "^0.1.2",
+    "buffer": "^6.0.3",
+    "cheerio": "^1.2.0",
     "cross-spawn": "7.0.6",
+    "dotenv": "^17.4.2",
+    "gpt-tokenizer": "^3.4.0",
     "http-proxy-agent": "7.0.2",
     "https-proxy-agent": "7.0.6",
+    "json-colorizer": "^3.0.1",
     "jsonc-parser": "3.3.1",
+    "openai": "^6.49.0",
     "socks-proxy-agent": "8.0.5",
-    "ws": "^8.21.0"
+    "turndown": "^7.2.4",
+    "uuid": "^13.0.2",
+    "wink-bm25-text-search": "^3.1.2",
+    "wink-nlp": "^2.4.0",
+    "ws": "^8.21.0",
+    "yargs": "^18.1.0"
   }
 }

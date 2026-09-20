@@ -13,13 +13,15 @@
  * Configuration (env, loopback defaults):
  *   KB_TERMINAL_URL     default http://127.0.0.1:5760
  *   KB_VECTORHUB_URL    default http://127.0.0.1:8787
- *   KB_MODULES_AUTOSTART  '1' to spawn module services at server start
- *   KB_TERMINAL_COMMAND  node command line for the terminal service
- *   KB_VECTORHUB_COMMAND node command line for the vector-hub service
+ *   KB_MODULES_AUTOSTART  '0' to stop spawning the vendored module services
+ *                         (they start with the shell by default)
+ *   KB_TERMINAL_COMMAND  explicit node command line for the terminal service
+ *   KB_VECTORHUB_COMMAND explicit node command line for the vector-hub service
  */
 
 const { spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 
 const PROXY_TIMEOUT_MS = 10000;
 // Registration drives a full embedding pass in vector-hub (remote API); a
@@ -27,6 +29,20 @@ const PROXY_TIMEOUT_MS = 10000;
 const REGISTER_TIMEOUT_MS = 60000;
 // Native folder dialogs wait for the user without a bound.
 const PICKER_TIMEOUT_MS = 10 * 60 * 1000;
+
+// Vendored module runtimes shipped inside the npm package. Sibling-checkout
+// spawning is gone: the services are bundled, spawned from here, and resolved
+// through NODE_PATH so their cross-package requires work without a workspace
+// node_modules.
+const MODULES_ROOT = path.resolve(__dirname, '..', '..', '_modules');
+
+function urlPort(baseUrl, fallback) {
+  try { return new URL(baseUrl).port || String(fallback); } catch { return String(fallback); }
+}
+
+function urlHost(baseUrl) {
+  try { return new URL(baseUrl).hostname || '127.0.0.1'; } catch { return '127.0.0.1'; }
+}
 
 function defaultTerminalUrl() {
   return String(process.env.KB_TERMINAL_URL || 'http://127.0.0.1:5760').replace(/\/+$/, '');
@@ -43,6 +59,7 @@ class ModuleBridge {
     this.vectorHubUrl = options.vectorHubUrl || defaultVectorHubUrl();
     this.registryStore = options.registryStore || null;
     this.projectStore = options.projectStore || null;
+    this.dataDir = options.dataDir || null;
     this.supervised = [];
   }
 
@@ -260,30 +277,74 @@ class ModuleBridge {
   }
 
   /**
-   * T3.5 process orchestration: optionally spawn module services as supervised
-   * child processes. Off by default; enabled with KB_MODULES_AUTOSTART=1.
+   * T3.5 process orchestration: spawn the vendored module services as
+   * supervised child processes. ON by default now that the services ship in
+   * the package — opt out with KB_MODULES_AUTOSTART=0. A service that is
+   * already listening on its URL is never spawned twice.
    */
-  startSupervised() {
-    if (String(process.env.KB_MODULES_AUTOSTART || '') !== '1') return;
-    const cwd = process.cwd();
-    const specs = [
-      {
+  async startSupervised() {
+    if (String(process.env.KB_MODULES_AUTOSTART || '') === '0') return;
+    for (const spec of this._supervisedSpecs()) {
+      if (await this._probe(spec.url)) {
+        this.logger.info('modules.supervisor', 'Module service already up; not spawning.', { context: { name: spec.name, url: spec.url } });
+        continue;
+      }
+      this._spawnSupervised(spec);
+    }
+  }
+
+  _supervisedSpecs() {
+    const specs = [];
+    if (process.env.KB_TERMINAL_COMMAND) {
+      specs.push({ name: 'terminal', command: process.env.KB_TERMINAL_COMMAND, url: this.terminalUrl, env: {} });
+    } else if (fs.existsSync(path.join(MODULES_ROOT, 'claude-ai-workbench', 'packages', 'server', 'bin', 'agent-terminal-server.js'))) {
+      specs.push({
         name: 'terminal',
-        command: process.env.KB_TERMINAL_COMMAND
-          || `node ${JSON.stringify(path.resolve(cwd, '..', 'claude-ai-workbench', 'packages', 'server', 'bin', 'agent-terminal-server.js'))}`,
-      },
-      {
+        command: `node ${JSON.stringify(path.join(MODULES_ROOT, 'claude-ai-workbench', 'packages', 'server', 'bin', 'agent-terminal-server.js'))}`,
+        url: this.terminalUrl,
+        env: { AGENT_TERMINAL_PORT: urlPort(this.terminalUrl, 5760), AGENT_TERMINAL_HOST: urlHost(this.terminalUrl) },
+      });
+    } else {
+      this.logger.warn('modules.supervisor', 'Vendored terminal runtime not present; expecting an external service.', {});
+    }
+    // vector-hub declares engines >= 22; spawning it on older runtimes would
+    // crash-loop the supervisor for nothing.
+    if (process.env.KB_VECTORHUB_COMMAND) {
+      specs.push({ name: 'vector-hub', command: process.env.KB_VECTORHUB_COMMAND, url: this.vectorHubUrl, env: {} });
+    } else if (parseInt(process.versions.node, 10) < 22) {
+      this.logger.warn('modules.supervisor', 'vector-hub needs Node >= 22; not spawning the vendored runtime.', { context: { node: process.versions.node } });
+    } else if (fs.existsSync(path.join(MODULES_ROOT, 'vectorhub', 'dist', 'cjs', 'bin.js'))) {
+      const dataDir = this.dataDir || require('./data-dir').getDataDir();
+      const root = path.join(dataDir, 'vectorhub');
+      specs.push({
         name: 'vector-hub',
-        command: process.env.KB_VECTORHUB_COMMAND
-          || `node ${JSON.stringify(path.resolve(cwd, '..', 'vector-hub', 'node_modules', 'tsx', 'dist', 'cli.mjs'))} ${JSON.stringify(path.resolve(cwd, '..', 'vector-hub', 'src', 'bin.ts'))} serve`,
-      },
-    ];
-    for (const spec of specs) this._spawnSupervised(spec);
+        command: `node ${JSON.stringify(path.join(MODULES_ROOT, 'vectorhub', 'dist', 'cjs', 'bin.js'))} serve --port ${urlPort(this.vectorHubUrl, 8787)} --root ${JSON.stringify(root)}`,
+        url: this.vectorHubUrl,
+        env: { VECTOR_HUB_ROOT: root },
+      });
+    } else {
+      this.logger.warn('modules.supervisor', 'Vendored vector-hub runtime not present; expecting an external service.', {});
+    }
+    return specs;
   }
 
   _spawnSupervised(spec) {
-    const parts = spec.command.match(/"[^"]+"|\S+/g) || [];
-    const child = spawn(parts[0], parts.slice(1), { stdio: ['ignore', 'ignore', 'inherit'], windowsHide: true });
+    // Strip the quoting: spawn takes argv, not a shell line — a literal
+    // `"path"` argument makes node load a file whose name contains quotes.
+    const parts = (spec.command.match(/"[^"]+"|\S+/g) || [])
+      .map(part => (part.startsWith('"') && part.endsWith('"') ? part.slice(1, -1) : part));
+    // NODE_PATH lets the vendored runtimes resolve each other (_modules/
+    // holds claude-ai-workbench, vectorhub, vectra) while their own
+    // dependencies resolve from the host package's node_modules.
+    const nodePath = [MODULES_ROOT, process.env.NODE_PATH].filter(Boolean).join(path.delimiter);
+    const child = spawn(parts[0], parts.slice(1), {
+      // Module banners (ports, data roots) are diagnostics — inherit stdout
+      // so they land on the console in --fg mode and in launcher.log when the
+      // shell itself runs detached.
+      stdio: ['ignore', 'inherit', 'inherit'],
+      windowsHide: true,
+      env: { ...process.env, ...(spec.env || {}), NODE_PATH: nodePath },
+    });
     let attempts = 0;
     child.on('exit', code => {
       attempts += 1;

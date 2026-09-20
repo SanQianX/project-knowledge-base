@@ -505,7 +505,7 @@ function createRuntime(options = {}) {
     bridgeAdapter,
   });
   const migrationService = options.migrationService || new MigrationService({ layout, legacyDataDir: dataPath, logger });
-  const moduleBridge = options.moduleBridge || new ModuleBridge({ registryStore, projectStore, logger });
+  const moduleBridge = options.moduleBridge || new ModuleBridge({ registryStore, projectStore, logger, dataDir: dataPath });
   return {
     rootDir, dataPath, layout, settingsStore, registryStore, projectStore, logger, logRepository,
     activeTasks, bridgeAdapter, bridgeConsumerService, conversationStore, conversationQuery, indexAdapter, indexService, promotionService, reconciler, lifecycleService, requirementRecorder, knowledgeRuntime, migrationService, moduleBridge,
@@ -1439,8 +1439,12 @@ async function startServer(options = {}) {
   }, Number(process.env.KB_MAINTENANCE_INTERVAL_MS || 60 * 60 * 1000));
   maintenanceTimer.unref?.();
 
-  // T3.5 进程编排：按 KB_MODULES_AUTOSTART=1 拉起模块服务并守护（默认关闭）
-  try { runtime.moduleBridge.startSupervised(); } catch (error) {
+  // T3.5 进程编排：拉起包内自带的模块服务并守护（默认开启，KB_MODULES_AUTOSTART=0 关闭）
+  try {
+    runtime.moduleBridge.startSupervised().catch(error => {
+      runtime.logger.warn('modules.supervisor_failed', 'Module supervisor failed to start.', { error });
+    });
+  } catch (error) {
     runtime.logger.warn('modules.supervisor_failed', 'Module supervisor failed to start.', { error });
   }
 

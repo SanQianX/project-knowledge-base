@@ -1,5 +1,19 @@
 # Changelog
 
+## [4.3.0] - 2026-09-20
+
+- The Agent Terminal and vector-hub module services now ship inside the npm
+  package and start with the shell. `npm install -g project-knowledge` is
+  self-contained: the Control Center, the embedded terminal (:5760) and the
+  vector-hub console (:8787) all come up together on a fresh machine — no
+  sibling checkouts required. KB_MODULES_AUTOSTART=0 disables spawning;
+  a service already listening on its URL is never double-spawned, so dev
+  machines running standalone module instances are unaffected. vector-hub
+  needs Node >= 22 — on older runtimes the shell skips spawning it and logs
+  a warning. Also fixed a latent spawn bug: quoted paths in module commands
+  reached node with the quotes embedded, which crash-looped the (previously
+  default-off) autostart path.
+
 ## [4.2.20] - 2026-09-20
 
 - Startup no longer relocates legacy v4.1.x package-root runtime data. This is

@@ -1,0 +1,21 @@
+{
+  "name": "@claude-ai-workbench/client",
+  "version": "0.3.0",
+  "type": "commonjs",
+  "main": "index.js",
+  "browser": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "browser": "./index.js",
+      "require": "./index.js",
+      "default": "./index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["index.js", "index.d.ts", "README.md"],
+  "dependencies": { "@claude-ai-workbench/contracts": "0.3.0" },
+  "engines": { "node": ">=18" },
+  "license": "Apache-2.0"
+}
