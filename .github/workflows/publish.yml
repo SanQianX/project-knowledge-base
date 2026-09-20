@@ -26,3 +26,9 @@ jobs:
       # with a token present the CLI falls back to it and hits the 2FA wall.
       - run: npm install -g npm@latest
       - run: npm publish --provenance --access public
+        id: direct-publish
+        continue-on-error: true
+      # Staged publish is always allowed for trusted publishers; the version
+      # goes live once a maintainer approves it on npmjs.com (2FA).
+      - run: npm stage publish
+        if: steps.direct-publish.outcome == 'failure'
