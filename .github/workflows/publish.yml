@@ -15,7 +15,9 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24.x'
-          registry-url: 'https://registry.npmjs.org'
+          # No registry-url: it writes an empty _authToken placeholder to
+          # ~/.npmrc, which suppresses the CLI's OIDC auto-detection and sends
+          # an invalid token instead. The public npm registry is the default.
           package-manager-cache: false
       - run: npm ci
       - run: npm run release:verify
