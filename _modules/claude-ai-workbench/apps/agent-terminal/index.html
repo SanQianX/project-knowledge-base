@@ -90,6 +90,7 @@
       <strong>设置</strong>
       <button class="stab active" data-s="providers">模型供应商</button>
       <button class="stab" data-s="agents">Agent 发现</button>
+      <button class="stab" data-s="capture">会话捕获</button>
       <button class="stab" data-s="about">关于</button>
     </nav>
     <div class="settings-body">
@@ -110,6 +111,15 @@
         <p class="sub">自动扫描本机可用的 Agent 程序;不可用或未接入的会如实标注。</p>
         <div id="agent-cards"></div>
         <button class="ghost" id="btn-rescan"><svg class="ics" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg><span>重新扫描</span></button>
+      </div>
+      <div class="spanel" id="s-capture">
+        <h2>会话捕获</h2>
+        <p class="sub">默认关闭:终端是内部 AI 运行时,你在这里与 AI 的对话不会进入开发对话记录(知识库的会话浏览)。开启后,此后新建的终端对话会像 CLI 工具对话一样被留档;已存在的会话不受影响。</p>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+          <input type="checkbox" id="capture-toggle">
+          <span>记录终端对话到开发对话记录</span>
+        </label>
+        <p class="sub" id="capture-note" style="margin-top:10px"></p>
       </div>
       <div class="spanel" id="s-about">
         <h2>关于</h2>

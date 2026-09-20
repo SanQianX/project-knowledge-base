@@ -7,6 +7,7 @@ const { configureWorkbench } = loadLegacyRuntime('runtime-config');
 const { getDataDir } = loadLegacyRuntime('data-dir');
 const { DEFAULT_API_PREFIX } = require('../contracts');
 const { ProfileStore } = require('./lib/profile-store');
+const { CaptureSettingsStore } = require('./lib/capture-settings-store');
 const { ContextResolver } = require('./lib/context-resolver');
 const { WorkbenchService } = require('./lib/workbench-service');
 const { AttachmentStore } = require('./lib/attachment-store');
@@ -38,6 +39,16 @@ function createWorkbenchServer(options = {}) {
   const attachments = options.attachments || new AttachmentStore({ root: path.join(dataDir, 'attachments') });
   const contexts = options.contexts || new ContextResolver({ workspaces, createMissing: options.createMissingWorkspaces !== false });
   const claudeDriver = options.runner || loadLegacyRuntime('claude-cli-runner');
+  const captureSettings = options.captureSettings || new CaptureSettingsStore({ dataDir });
+  // Bridge capture scope: terminal sessions are exempt from Development
+  // Conversation capture unless the 会话捕获 setting says otherwise. Applied to
+  // the driver at boot and re-applied on every settings save.
+  const applyBridgeCapture = enabled => {
+    if (claudeDriver && typeof claudeDriver.setBridgeCaptureConversation === 'function') {
+      claudeDriver.setBridgeCaptureConversation(enabled);
+    }
+  };
+  applyBridgeCapture(captureSettings.read().terminalConversations);
   const registry = options.registry || new AgentRegistry({
     drivers: {
       'claude-code': claudeDriver,
@@ -64,6 +75,7 @@ function createWorkbenchServer(options = {}) {
   const service = options.service || new WorkbenchService({
     runner, profiles, contexts, attachments, apiPrefix,
     projects, sessionArchive, agentDiscovery, modelContextWindows, modelDetection,
+    captureSettings, onCaptureSettingsSaved: applyBridgeCapture,
     testWorkspace: path.join(testRoot, 'profile-test'), auditFile: path.join(dataDir, 'audit.jsonl'),
     version: options.version || '0.3.0', maxSessions: options.maxSessions, maxConcurrentRuns: options.maxConcurrentRuns,
   });
@@ -159,7 +171,7 @@ function serveAppStatic(req, res, urlPrefix, root) {
 }
 
 module.exports = {
-  createWorkbenchServer, ProfileStore, ContextResolver, AttachmentStore, WorkbenchService, createHttpHandler,
+  createWorkbenchServer, ProfileStore, CaptureSettingsStore, ContextResolver, AttachmentStore, WorkbenchService, createHttpHandler,
   ProjectStore, SessionArchiveStore, AgentRegistry, createAgentDiscovery,
   createCodexDriver, createOpenCodeDriver, createZCodeDriver,
 };

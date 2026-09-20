@@ -49,6 +49,8 @@ function createHttpHandler(service, options = {}) {
       if (req.method === 'POST' && path === '/profiles') return json(res, 201, service.saveProfile(await body(req)));
       if (req.method === 'POST' && path === '/profiles/test') return json(res, 200, await service.testProfileDraft(await body(req)));
       if (req.method === 'POST' && path === '/profiles/detect-models') return json(res, 200, await service.detectProfileModels(await body(req)));
+      if (req.method === 'GET' && path === '/capture-settings') return json(res, 200, service.getCaptureSettings());
+      if (req.method === 'PUT' && path === '/capture-settings') return json(res, 200, service.saveCaptureSettings(await body(req)));
 
       if (path === '/projects' && req.method === 'GET') return json(res, 200, service.listProjects());
       if (path === '/projects' && req.method === 'POST') return json(res, 201, service.createProject(await body(req)));

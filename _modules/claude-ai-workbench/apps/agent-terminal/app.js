@@ -1716,6 +1716,58 @@ function wireSettings() {
   });
   $('btn-rescan').addEventListener('click', async () => { await refreshAgents(); toast('已重新扫描', false, true); });
   $('mgmt-add').addEventListener('click', () => renderProviderDetail(null));
+  wireCaptureSetting();
+}
+
+/* ===================== 会话捕获（终端对话是否留档） ===================== */
+
+const CAPTURE_API = '/api/claude-workbench/v1/capture-settings';
+
+function renderCaptureNote(text, bad) {
+  const note = $('capture-note');
+  if (note) { note.textContent = text || ''; note.style.color = bad ? 'var(--red, #e5695e)' : ''; }
+}
+
+async function loadCaptureSetting() {
+  const toggle = $('capture-toggle');
+  if (!toggle) return;
+  try {
+    const response = await fetch(CAPTURE_API);
+    const body = await response.json();
+    toggle.checked = Boolean(body && body.terminalConversations);
+    renderCaptureNote(toggle.checked ? '当前开启:新建的终端对话会进入开发对话记录。' : '当前关闭:终端对话不留档。');
+  } catch (error) {
+    toggle.disabled = true;
+    renderCaptureNote(`读取捕获设置失败:${error.message}`, true);
+  }
+}
+
+async function onCaptureToggle(event) {
+  const toggle = event.target;
+  const enabled = toggle.checked;
+  toggle.disabled = true;
+  try {
+    const response = await fetch(CAPTURE_API, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ terminalConversations: enabled }),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    renderCaptureNote(enabled ? '当前开启:新建的终端对话会进入开发对话记录。' : '当前关闭:终端对话不留档。');
+    toast(enabled ? '已开启:此后新建的终端对话会留档' : '已关闭:此后新建的终端对话不留档', false, true);
+  } catch (error) {
+    toggle.checked = !enabled;
+    toast(`保存失败:${error.message}`, true);
+  } finally {
+    toggle.disabled = false;
+  }
+}
+
+function wireCaptureSetting() {
+  const toggle = $('capture-toggle');
+  if (!toggle) return;
+  toggle.addEventListener('change', onCaptureToggle);
+  loadCaptureSetting();
 }
 
 function renderProviderList() {

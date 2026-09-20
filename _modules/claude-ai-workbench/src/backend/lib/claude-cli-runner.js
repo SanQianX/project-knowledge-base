@@ -364,12 +364,21 @@ function restoreSessionFromDisk(sessionId) {
   return session;
 }
 
+// Terminal conversations are internal AI runtime by default: their hooks must
+// never be captured by the Bridge into Development Conversation. The 会话捕获
+// setting (terminal settings UI) flips this via setBridgeCaptureConversation —
+// new sessions then carry AI_CODING_EVENT_BRIDGE_CAPTURE=1 and reach the
+// Bridge journal like any CLI tool conversation.
+let bridgeCaptureConversations = false;
+
+function setBridgeCaptureConversation(enabled) {
+  bridgeCaptureConversations = enabled === true;
+}
+
 function buildClaudeEnvFromProfile(profile) {
   const env = {
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
-    // SDK sessions are internal AI runtime; their hooks must never be
-    // captured by the Bridge (same exemption Project-Knowledge applies).
-    AI_CODING_EVENT_BRIDGE_CAPTURE: '0',
+    AI_CODING_EVENT_BRIDGE_CAPTURE: bridgeCaptureConversations ? '1' : '0',
     AI_CODING_EVENT_BRIDGE_ORIGIN: 'claude-ai-workbench-internal',
   };
   if (!profile || typeof profile !== 'object') return env;
@@ -1613,6 +1622,7 @@ module.exports = {
   startChatSession,
   startAutomationSession,
   buildClaudeEnvFromProfile,
+  setBridgeCaptureConversation,
   applyAiProfileToSession,
   updateSelection,
   buildSdkOverridesFromProfile,

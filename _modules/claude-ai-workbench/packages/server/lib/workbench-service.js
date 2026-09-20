@@ -17,6 +17,8 @@ class WorkbenchService {
     this.attachments = options.attachments;
     this.projects = options.projects || null;
     this.sessionArchive = options.sessionArchive || null;
+    this.captureSettings = options.captureSettings || null;
+    this.onCaptureSettingsSaved = options.onCaptureSettingsSaved || null;
     this.agentDiscovery = options.agentDiscovery || null;
     this.modelContextWindows = options.modelContextWindows || null;
     this.modelDetection = options.modelDetection || null;
@@ -74,6 +76,22 @@ class WorkbenchService {
   saveProfile(input, id) { return this.profiles.save(input, id); }
   deleteProfile(id) { return this.profiles.delete(id); }
   setCredential(id, credential) { return this.profiles.setCredential(id, credential); }
+
+  getCaptureSettings() {
+    if (!this.captureSettings) return { schema: 'capture-settings/v1', terminalConversations: false };
+    return this.captureSettings.read();
+  }
+
+  saveCaptureSettings(input = {}) {
+    if (!this.captureSettings) {
+      throw Object.assign(new Error('capture settings are not wired into this service'), { status: 501 });
+    }
+    const saved = this.captureSettings.save(input);
+    // Push the new scope into the driver immediately: sessions started after
+    // this call carry the matching AI_CODING_EVENT_BRIDGE_CAPTURE env.
+    if (typeof this.onCaptureSettingsSaved === 'function') this.onCaptureSettingsSaved(saved.terminalConversations);
+    return saved;
+  }
 
   // ---- projects ----
   listProjects() {
