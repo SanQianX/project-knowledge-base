@@ -1,5 +1,27 @@
 # Changelog
 
+## [4.3.1] - 2026-09-20
+
+- The 4.3.0 npm package could never start the vector-hub module: the global
+  `dist/` gitignore rule kept the vendored runtime
+  (`_modules/vectorhub/dist/`, 25 files) out of git, so the CI-packed tarball
+  shipped without `bin.js` and every fresh install logged "Vendored vector-hub
+  runtime not present". The runtime is committed now, and `release:verify`
+  gained a vendored-modules gate that fails when a required runtime file is
+  missing from disk or not tracked by git — the check that was previously
+  wired into nothing.
+- The Control Center's embedded Agent Terminal linked to no project on first
+  load. The shell sends `kb:select-project` 150ms after `kb:ready`, but the
+  terminal loads its project list only after health + agent discovery, so the
+  one-shot selection landed on an empty list: the linkage chip stuck on
+  "未登记" and the embed had no project selected, making it impossible to open
+  a terminal from the shell. The terminal now re-announces `kb:ready` once its
+  projects are loaded, and the shell retries a failed linkage with backoff.
+- Module status probing no longer reports a false "未检测到 … 界面将显示为
+  空白" forever: cold-starting module services are re-probed with backoff
+  (up to 10 attempts) before the status is marked down, and the top bar
+  终端/检索 indicator updates when a late probe succeeds.
+
 ## [4.3.0] - 2026-09-20
 
 - The Agent Terminal and vector-hub module services now ship inside the npm
