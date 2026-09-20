@@ -24,9 +24,11 @@ jobs:
       - run: node _site/scripts/sync-release-version.js --check --tag "${GITHUB_REF_NAME}"
       - run: npm test
       - run: npm pack --dry-run
-      # Trusted publishing (OIDC) needs npm CLI >= 11.5.1; no NODE_AUTH_TOKEN —
-      # with a token present the CLI falls back to it and hits the 2FA wall.
-      - run: npm install -g npm@latest
+      # Trusted publishing (OIDC) needs npm 11.5+; npm 12 dropped
+      # --auth-type=oidc (falls back to interactive web login) and shows no
+      # auto-detection, so pin the 11 series. No NODE_AUTH_TOKEN — with a
+      # token present the CLI falls back to it and hits the 2FA wall.
+      - run: npm install -g npm@11
       # Exchange the GitHub OIDC identity for a short-lived npm session; this
       # is what actually matches the trusted publisher configured on npmjs.com.
       - run: npm --version && npm login --auth-type=oidc
