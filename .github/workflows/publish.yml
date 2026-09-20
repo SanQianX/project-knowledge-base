@@ -24,18 +24,9 @@ jobs:
       - run: node _site/scripts/sync-release-version.js --check --tag "${GITHUB_REF_NAME}"
       - run: npm test
       - run: npm pack --dry-run
-      # Trusted publishing (OIDC) needs npm 11.5+; npm 12 dropped
-      # --auth-type=oidc (falls back to interactive web login) and shows no
-      # auto-detection, so pin the 11 series. No NODE_AUTH_TOKEN — with a
-      # token present the CLI falls back to it and hits the 2FA wall.
+      # Trusted publishing (OIDC): npm's auto flow needs npm 11.5+ (npm 12
+      # dropped --auth-type=oidc and shows no working flow). All OIDC failures
+      # are swallowed silently by design — verbose logging surfaces the
+      # token-exchange error that names the actual mismatch.
       - run: npm install -g npm@11
-      # Exchange the GitHub OIDC identity for a short-lived npm session; this
-      # is what actually matches the trusted publisher configured on npmjs.com.
-      - run: npm --version && npm login --auth-type=oidc
-      - run: npm publish --provenance --access public
-        id: direct-publish
-        continue-on-error: true
-      # Staged publish is always allowed for trusted publishers; the version
-      # goes live once a maintainer approves it on npmjs.com (2FA).
-      - run: npm stage publish
-        if: steps.direct-publish.outcome == 'failure'
+      - run: npm publish --provenance --access public --loglevel verbose
