@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.5.0] - 2026-09-21
+
+- The embedded Agent Terminal's settings view gains a 会话捕获 (capture) tab.
+  Terminal conversations remain exempt from Development Conversation capture by
+  default — the terminal is internal AI runtime, not the developer's CLI
+  record. Flipping the toggle persists the scope, applies it to the runner
+  immediately, and marks only NEW terminal sessions with
+  `AI_CODING_EVENT_BRIDGE_CAPTURE=1`, so they reach the Bridge journal and the
+  会话浏览 explorer like any CLI tool conversation. Existing sessions are
+  unaffected, and nothing changes for standalone terminals that never touch
+  the toggle. Ships the updated vendored Agent Terminal runtime.
+
 ## [4.4.0] - 2026-09-21
 
 - The ai-coding-event-bridge conversation console joins the Agent Terminal and

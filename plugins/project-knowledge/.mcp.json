@@ -6,7 +6,7 @@
       "args": [
         "-y",
         "--package",
-        "project-knowledge@4.4.0",
+        "project-knowledge@4.5.0",
         "project-knowledge-mcp"
       ]
     }
