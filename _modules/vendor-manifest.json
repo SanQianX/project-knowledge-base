@@ -2,5 +2,6 @@
   "generatedAt": "2026-09-20T07:29:10.001Z",
   "claudeAiWorkbench": "0.3.0",
   "vectorHub": "0.1.0",
-  "vectra": "0.15.0"
+  "vectra": "0.15.0",
+  "eventBridge": "0.4.0"
 }

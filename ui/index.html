@@ -23,6 +23,7 @@
     <nav class="sidebar-nav">
       <button class="nav-btn active" type="button" data-go="terminal"><span>🤖 Agent 终端</span><span class="nav-badge">终端</span><span class="nav-fold" data-fold="term" title="模块项目列表：已折叠，点击展开">▤</span></button>
       <button class="nav-btn" type="button" data-go="search"><span>🔎 知识检索</span><span class="nav-badge">检索</span><span class="nav-fold" data-fold="vh" title="模块项目列表：已折叠，点击展开">▤</span></button>
+      <button class="nav-btn" type="button" data-go="bridge"><span>💬 会话浏览</span><span class="nav-badge">会话</span><span class="nav-fold" data-fold="eb" title="模块项目列表：已折叠，点击展开">▤</span></button>
     </nav>
   </aside>
 
@@ -59,6 +60,15 @@
         <a class="btn compact embed-open" id="open-8787" href="#" target="_blank" rel="noopener">独立打开 ↗</a>
       </div>
       <div class="embed"><iframe id="fr-8787" title="vector-hub 控制台"></iframe></div>
+    </section>
+
+    <!-- 会话浏览：原版 ai-coding-event-bridge 会话浏览器（嵌入模式） -->
+    <section class="view" id="view-bridge">
+      <div class="embed-head">
+        <span class="embed-status" id="st-8790"><span class="st-dot"></span><span class="st-text">检测 127.0.0.1:8790 …</span></span>
+        <a class="btn compact embed-open" id="open-8790" href="#" target="_blank" rel="noopener">独立打开 ↗</a>
+      </div>
+      <div class="embed"><iframe id="fr-8790" title="ai-coding-event-bridge 会话浏览器"></iframe></div>
     </section>
 
     <section class="view" id="view-import">
@@ -152,7 +162,7 @@
   <div class="dialog-head"><h3>移除项目</h3></div>
   <div class="dialog-body">
     <p class="muted" id="delete-copy" style="margin:0;font-size:12px">确认移除项目？默认保留知识目录。</p>
-    <p class="muted" style="margin:0;font-size:12px">同时解除模块登记：终端项目（保留会话记录）、vector-hub 索引（不动源文件）。</p>
+    <p class="muted" style="margin:0;font-size:12px">同时解除模块登记：终端项目（保留会话记录）、vector-hub 索引（不动源文件）、会话浏览登记（journal 与封存文档全部保留）。</p>
     <label class="check"><input type="checkbox" id="delete-knowledge"> 同时删除由本应用拥有的知识目录（危险）</label>
     <div class="field" id="delete-confirm-field" hidden><label for="delete-confirm">输入项目 ID 以确认删除知识</label><input class="input code" id="delete-confirm"></div>
     <div class="notice error" id="delete-error" hidden></div>

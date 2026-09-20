@@ -7,8 +7,9 @@
 //   npm run vendor:modules
 //
 // Sources are sibling checkouts (overridable for non-standard layouts):
-//   KB_VENDOR_WORKBENCH  default <repo>/../claude-ai-workbench
-//   KB_VENDOR_VECTORHUB  default <repo>/../vector-hub
+//   KB_VENDOR_WORKBENCH    default <repo>/../claude-ai-workbench
+//   KB_VENDOR_VECTORHUB    default <repo>/../vector-hub
+//   KB_VENDOR_EVENTBRIDGE  default <repo>/../ai-coding-event-bridge
 //
 // The npm package must stay installable without the siblings present, so the
 // vendored output is committed rather than built at publish time.
@@ -20,6 +21,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const MODULES_ROOT = path.join(ROOT, '_modules');
 const WORKBENCH_ROOT = path.resolve(process.env.KB_VENDOR_WORKBENCH || path.join(ROOT, '..', 'claude-ai-workbench'));
 const VECTORHUB_ROOT = path.resolve(process.env.KB_VENDOR_VECTORHUB || path.join(ROOT, '..', 'vector-hub'));
+const EVENTBRIDGE_ROOT = path.resolve(process.env.KB_VENDOR_EVENTBRIDGE || path.join(ROOT, '..', 'ai-coding-event-bridge'));
 
 const DEFAULT_IGNORES = new Set(['node_modules', '.git']);
 
@@ -52,12 +54,28 @@ function verifyVectorHubBuild(root) {
   }
 }
 
+function verifyEventBridgeSources(root) {
+  for (const file of [
+    'packages/core/package.json',
+    'packages/core/src/index.js',
+    'packages/console/package.json',
+    'packages/console/src/bin.js',
+    'packages/console/console/index.html',
+  ]) {
+    if (!fs.existsSync(path.join(root, file))) {
+      throw new Error(`ai-coding-event-bridge source missing: ${file} — check the ${root} checkout`);
+    }
+  }
+}
+
 function vendor() {
   mustExist(WORKBENCH_ROOT, 'claude-ai-workbench checkout');
   mustExist(path.join(WORKBENCH_ROOT, 'packages', 'server'), 'workbench server package');
   mustExist(path.join(WORKBENCH_ROOT, 'src', 'backend', 'lib'), 'workbench legacy runtime');
   mustExist(VECTORHUB_ROOT, 'vector-hub checkout');
   verifyVectorHubBuild(VECTORHUB_ROOT);
+  mustExist(EVENTBRIDGE_ROOT, 'ai-coding-event-bridge checkout');
+  verifyEventBridgeSources(EVENTBRIDGE_ROOT);
 
   fs.rmSync(MODULES_ROOT, { recursive: true, force: true });
 
@@ -89,11 +107,27 @@ function vendor() {
   copyTree(path.join(vectraSource, 'lib'), path.join(ve, 'lib'));
   copyTree(path.join(vectraSource, 'proto'), path.join(ve, 'proto'));
 
+  // ai-coding-event-bridge console: plain-JS CommonJS, no build step. The core
+  // package is vendored INSIDE the console's node_modules so the console's
+  // `require('@sanqianx/ai-coding-event-bridge')` resolves to the exact
+  // vendored copy — the walk-up would otherwise reach the host package's own
+  // (older) npm dependency first and silently mix two core versions.
+  const eb = path.join(MODULES_ROOT, 'event-bridge', 'packages', 'console');
+  fs.mkdirSync(eb, { recursive: true });
+  fs.copyFileSync(path.join(EVENTBRIDGE_ROOT, 'packages', 'console', 'package.json'), path.join(eb, 'package.json'));
+  copyTree(path.join(EVENTBRIDGE_ROOT, 'packages', 'console', 'src'), path.join(eb, 'src'));
+  copyTree(path.join(EVENTBRIDGE_ROOT, 'packages', 'console', 'console'), path.join(eb, 'console'));
+  const ebCore = path.join(eb, 'node_modules', '@sanqianx', 'ai-coding-event-bridge');
+  fs.mkdirSync(ebCore, { recursive: true });
+  fs.copyFileSync(path.join(EVENTBRIDGE_ROOT, 'packages', 'core', 'package.json'), path.join(ebCore, 'package.json'));
+  copyTree(path.join(EVENTBRIDGE_ROOT, 'packages', 'core', 'src'), path.join(ebCore, 'src'));
+
   const manifest = {
     generatedAt: new Date().toISOString(),
     claudeAiWorkbench: readVersion(path.join(WORKBENCH_ROOT, 'package.json')),
     vectorHub: readVersion(path.join(VECTORHUB_ROOT, 'package.json')),
     vectra: readVersion(path.join(vectraSource, 'package.json')),
+    eventBridge: readVersion(path.join(EVENTBRIDGE_ROOT, 'packages', 'console', 'package.json')),
   };
   fs.writeFileSync(path.join(MODULES_ROOT, 'vendor-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
   console.log(`vendored modules into ${MODULES_ROOT}:`, JSON.stringify(manifest));
@@ -121,6 +155,9 @@ function check() {
     'vectorhub/ui/index.html',
     'vectra/lib/index.js',
     'vectra/proto',
+    'event-bridge/packages/console/src/bin.js',
+    'event-bridge/packages/console/console/index.html',
+    'event-bridge/packages/console/node_modules/@sanqianx/ai-coding-event-bridge/src/index.js',
   ];
   const missing = required.filter(rel => !fs.existsSync(path.join(MODULES_ROOT, rel)));
   if (missing.length) {

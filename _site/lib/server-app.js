@@ -896,6 +896,9 @@ function createRequestHandler(runtime, options = {}) {
       if (pathname.startsWith('/api/vectorhub/') || pathname === '/api/vectorhub') {
         return runtime.moduleBridge.proxyVectorHub(req, res, pathname, url.search);
       }
+      if (pathname.startsWith('/api/eventbridge/') || pathname === '/api/eventbridge') {
+        return runtime.moduleBridge.proxyEventBridge(req, res, pathname, url.search);
+      }
       if (method === 'GET' && pathname === '/api/modules/health') {
         return send(res, 200, await runtime.moduleBridge.modulesHealth());
       }

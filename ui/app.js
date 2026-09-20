@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  // Control Center shell: 连接与投影 —— 功能本体在模块（terminal :5760 / vector-hub :8787）。
+  // Control Center shell: 连接与投影 —— 功能本体在模块（terminal :5760 / vector-hub :8787 / 会话浏览 :8790）。
   const $ = id => document.getElementById(id);
   const i18nApi = window.I18N || {};
   const i18n = typeof i18nApi.t === 'function' ? i18nApi.t : key => key;
@@ -10,9 +10,9 @@
     projects: [], activeProjectId: '', view: 'terminal', settings: 'conversation', settingsOpen: false,
     conversationCursor: null, conversationTurns: [], logs: [], logStream: null, logCursor: '', newLogs: 0,
     messageCount: 0, pendingDeleteId: '',
-    modules: { terminal: { url: 'http://127.0.0.1:5760', up: false }, vectorHub: { url: 'http://127.0.0.1:8787', up: false } },
+    modules: { terminal: { url: 'http://127.0.0.1:5760', up: false }, vectorHub: { url: 'http://127.0.0.1:8787', up: false }, eventBridge: { url: 'http://127.0.0.1:8790', up: false } },
     sessionsByProject: new Map(),   // projectId -> [{sessionId,title,agentId,updatedAt}]
-    fold: { term: false, vh: false }, // false = 该模块项目列表折叠（默认）
+    fold: { term: false, vh: false, eb: false }, // false = 该模块项目列表折叠（默认）
     linkRetries: { term: 0, vh: 0 }, // kb:select-project 竞态假阴性的有界重试计数
   };
   const today = () => { const d = new Date(), pad = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
@@ -34,7 +34,11 @@
   }
 
   /* ===================== 嵌入协议（壳 ↔ 模块） ===================== */
-  const FRAME_OF = { term: 'fr-5760', vh: 'fr-8787' };
+  const FRAME_OF = { term: 'fr-5760', vh: 'fr-8787', eb: 'fr-8790' };
+  // 模块 kb:ready/kb:projects 消息里的 app 标识 → 壳侧的模块键
+  const APP_KEY_OF = { 'agent-terminal': 'term', 'vector-hub': 'vh', 'event-bridge': 'eb' };
+  // 每个模块的联动状态 chip（会话浏览暂无联动协议，chip 缺省）
+  const CHIP_OF = { term: 'sync-5760', vh: 'sync-8787', eb: null };
   function postTo(key, msg) {
     const frame = $(FRAME_OF[key]);
     if (frame && frame.contentWindow) frame.contentWindow.postMessage(msg, '*');
@@ -55,16 +59,16 @@
   window.addEventListener('message', ev => {
     const data = ev.data;
     if (!data || typeof data !== 'object') return;
+    const moduleKey = APP_KEY_OF[data.app] || (data.app ? null : 'term');
     if (data.type === 'kb:ready') {
-      const key = data.app === 'vector-hub' ? 'vh' : 'term';
-      setTimeout(() => { syncFold(key); linkProjectToModules(activeProject()); }, 150);
+      if (!moduleKey) return;
+      setTimeout(() => { syncFold(moduleKey); linkProjectToModules(activeProject()); }, 150);
     } else if (data.type === 'kb:projects') {
-      const key = data.app === 'vector-hub' ? 'vh' : 'term';
-      const chip = $(data.app === 'vector-hub' ? 'sync-8787' : 'sync-5760');
+      const chip = moduleKey ? $(CHIP_OF[moduleKey]) : null;
       const project = activeProject();
       if (!chip || !project) return;
       if (data.ok) {
-        state.linkRetries[key] = 0;
+        state.linkRetries[moduleKey] = 0;
         chip.textContent = `联动: ${project.displayName}`;
         chip.style.color = 'var(--good)'; chip.title = '';
       } else {
@@ -73,9 +77,9 @@
         chip.title = '该模块还没有这个项目——在导入项目时勾选登记即可建立联动';
         // 模块项目清单未就绪时 kb:ready 触发的首轮选中会扑空（假阴性）：
         // 有界重试补发，真未登记则几次后停下，chip 保持如实提示
-        if ((state.linkRetries[key] || 0) < 4) {
-          state.linkRetries[key] = (state.linkRetries[key] || 0) + 1;
-          const delay = [800, 2500, 6000, 10000][state.linkRetries[key] - 1] || 10000;
+        if ((state.linkRetries[moduleKey] || 0) < 4) {
+          state.linkRetries[moduleKey] = (state.linkRetries[moduleKey] || 0) + 1;
+          const delay = [800, 2500, 6000, 10000][state.linkRetries[moduleKey] - 1] || 10000;
           setTimeout(() => { if (activeProject()) linkProjectToModules(activeProject()); }, delay);
         }
       }
@@ -89,12 +93,13 @@
   });
 
   function renderBrandStatus() {
-    setText($('brand-root'), state.projects.length ? `${state.projects.length} 个项目 · 终端${state.modules.terminal.up ? '✓' : '×'} 检索${state.modules.vectorHub.up ? '✓' : '×'}` : '暂无项目');
+    setText($('brand-root'), state.projects.length ? `${state.projects.length} 个项目 · 终端${state.modules.terminal.up ? '✓' : '×'} 检索${state.modules.vectorHub.up ? '✓' : '×'} 会话${state.modules.eventBridge.up ? '✓' : '×'}` : '暂无项目');
   }
   function probeModules() {
-    for (const [key, id] of [['term', 'st-5760'], ['vh', 'st-8787']]) {
+    for (const [key, id] of [['term', 'st-5760'], ['vh', 'st-8787'], ['bridge', 'st-8790']]) {
       const status = $(id);
-      const info = key === 'term' ? state.modules.terminal : state.modules.vectorHub;
+      if (!status) continue;
+      const info = key === 'term' ? state.modules.terminal : key === 'vh' ? state.modules.vectorHub : state.modules.eventBridge;
       let attempts = 0;
       const attempt = () => {
         fetch(info.url + '/', { mode: 'no-cors', cache: 'no-store' })
@@ -123,17 +128,19 @@
     }
   }
   function mountEmbeds() {
-    const termUrl = state.modules.terminal.url, vhUrl = state.modules.vectorHub.url;
+    const termUrl = state.modules.terminal.url, vhUrl = state.modules.vectorHub.url, ebUrl = state.modules.eventBridge.url;
     $('fr-5760').src = `${termUrl}/agent-terminal/?embed=1`;
     $('fr-8787').src = `${vhUrl}/?embed=1`;
+    $('fr-8790').src = `${ebUrl}/?embed=1`;
     $('open-5760').href = `${termUrl}/agent-terminal/`;
     $('open-8787').href = `${vhUrl}/`;
+    $('open-8790').href = `${ebUrl}/`;
   }
 
   /* ===================== 项目栏（聚合投影） ===================== */
   function projectDotClass(project) {
     if (project.projectId === state.activeProjectId) return 'dot claude';
-    if (!project.modules.terminal.registered && !project.modules.vectorHub.registered) return 'dot idle';
+    if (!project.modules.terminal.registered && !project.modules.vectorHub.registered && !project.modules.eventBridge.registered) return 'dot idle';
     return 'dot good';
   }
   function renderProjects() {
@@ -154,7 +161,8 @@
       const badges = document.createElement('div'); badges.className = 'module-badges';
       const termBadge = document.createElement('span'); termBadge.className = `mbadge${project.modules.terminal.registered ? ' on' : ''}`; termBadge.textContent = '端'; termBadge.title = project.modules.terminal.registered ? '已登记到 Agent 终端' : '未登记到 Agent 终端';
       const vhBadge = document.createElement('span'); vhBadge.className = `mbadge${project.modules.vectorHub.registered ? ' on' : ''}`; vhBadge.textContent = '检'; vhBadge.title = project.modules.vectorHub.registered ? '已登记到 vector-hub' : '未登记到 vector-hub';
-      badges.append(termBadge, vhBadge);
+      const ebBadge = document.createElement('span'); ebBadge.className = `mbadge${project.modules.eventBridge && project.modules.eventBridge.registered ? ' on' : ''}`; ebBadge.textContent = '桥'; ebBadge.title = project.modules.eventBridge && project.modules.eventBridge.registered ? '已登记到会话浏览（ai-coding-event-bridge）' : '未登记到会话浏览（ai-coding-event-bridge）';
+      badges.append(termBadge, vhBadge, ebBadge);
       main.append(name, badges);
       const caret = document.createElement('span'); caret.className = 'proj-caret'; caret.textContent = '▸'; caret.title = '历史会话';
       const dot = document.createElement('span'); dot.className = projectDotClass(project);
@@ -222,7 +230,7 @@
   }
   function updateProjectContext() {
     const project = activeProject();
-    setText($('page-title'), ({ terminal: 'Agent 终端', search: '知识检索', import: '导入项目' })[state.view] || 'Agent 终端');
+    setText($('page-title'), ({ terminal: 'Agent 终端', search: '知识检索', bridge: '会话浏览', import: '导入项目' })[state.view] || 'Agent 终端');
     linkProjectToModules(project);
   }
   function selectProject(projectId) {
@@ -230,7 +238,7 @@
     renderProjects();
     if (state.settings === 'conversation') loadConversations(true);
   }
-  const viewTitles = { terminal: 'Agent 终端', search: '知识检索', import: '导入项目' };
+  const viewTitles = { terminal: 'Agent 终端', search: '知识检索', bridge: '会话浏览', import: '导入项目' };
   function showView(view) {
     state.view = view;
     document.querySelectorAll('.view').forEach(node => node.classList.toggle('active', node.id === `view-${view}`));
@@ -245,7 +253,7 @@
       displayName: project.name || project.projectId,
       repoPath: project.workspacePath || '',
       knowledgePath: project.knowledgePath || '',
-      modules: project.modules || { terminal: {}, vectorHub: {} },
+      modules: project.modules || { terminal: {}, vectorHub: {}, eventBridge: {} },
     }));
     if (!state.activeProjectId || !state.projects.some(project => project.projectId === state.activeProjectId)) state.activeProjectId = state.projects[0]?.projectId || '';
     renderProjects();
@@ -256,6 +264,7 @@
       const body = await api('/api/modules/health');
       state.modules.terminal = { ...state.modules.terminal, ...body.modules.terminal };
       state.modules.vectorHub = { ...state.modules.vectorHub, ...body.modules.vectorHub };
+      state.modules.eventBridge = { ...state.modules.eventBridge, ...body.modules.eventBridge };
     } catch { /* server down; probes keep their state */ }
   }
 
@@ -277,7 +286,8 @@
     if (!modules) { setText(node, '待登记'); return; }
     const term = modules.terminal && modules.terminal.ok ? '终端 ✓' : modules.terminal && modules.terminal.status === 'pending' ? '终端 待登记' : '终端 ✗';
     const vh = modules.vectorHub && modules.vectorHub.ok ? '检索 ✓' : modules.vectorHub && modules.vectorHub.status === 'pending' ? '检索 待登记' : '检索 ✗';
-    setText(node, `${term} · ${vh}`);
+    const eb = modules.eventBridge && modules.eventBridge.ok ? '会话 ✓' : modules.eventBridge && modules.eventBridge.status === 'pending' ? '会话 待登记' : '会话 ✗';
+    setText(node, `${term} · ${vh} · ${eb}`);
   }
   function buildImportPayload() {
     // 语言/配置走后端默认（zh-CN / 终端 profile 唯一源）——壳上不再暴露

@@ -32,7 +32,8 @@ const profileDir = path.join(os.tmpdir(), 'pk-project-status-profile-' + process
     assert.strictEqual(shell.projectButtons, 1);
     assert.strictEqual(shell.selected, fixture.projectId);
     assert.strictEqual(shell.name, '视觉检测知识库');
-    assert.strictEqual(shell.badges, 2);
+    // 三个模块徽章：端（Agent 终端）、检（vector-hub）、桥（会话浏览）
+    assert.strictEqual(shell.badges, 3);
     assert(shell.path.includes(fixture.repo.path));
     assert.strictEqual(shell.terminalView, true);
     assert.strictEqual(shell.manualControls, 0);
