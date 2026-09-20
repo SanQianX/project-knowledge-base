@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.2.19] - 2026-09-20
+
+- Background launch is diagnosable and no longer lies about the URL. The
+  detached child's stdout/stderr now append to `<data-dir>/launcher.log`, so
+  port fallbacks ("Port 5757 was busy, using 5758 instead") and startup
+  failures are visible after the fact instead of being silently discarded
+  (`stdio: 'ignore'`). The parent no longer prints a guessed URL or races a
+  browser open 1.2s after spawn — the child opens the browser itself once it
+  is actually listening, with the real port. The free-port probe timeout went
+  1s → 3s to survive slow listen() under antivirus/cold-cache load (a false
+  "busy" previously cascaded into "No free port found").
+
 ## [4.2.18] - 2026-09-20
 
 - Module-embed shell (T0-T4 of docs/ui-integration-repair-plan.md): the Control

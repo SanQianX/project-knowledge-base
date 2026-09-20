@@ -6,7 +6,7 @@
 
 const path = require('path');
 const { spawn, spawnSync, exec, execSync } = require('child_process');
-const { existsSync, readFileSync, writeFileSync, unlinkSync } = require('fs');
+const { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync, openSync } = require('fs');
 const net = require('net');
 const os = require('os');
 const { getDataDir } = require('../_site/lib/data-dir');
@@ -84,7 +84,10 @@ function isPortFree(port, host = '127.0.0.1') {
     tester.once('error', () => finish(false));
     tester.once('listening', () => finish(true));
     tester.listen(port, host);
-    setTimeout(() => finish(false), 1000);
+    // Under AV scan / cold cache a listen() can be slower than the probe
+    // timeout; a false "busy" cascades into "No free port found". 3s is slow
+    // enough for one probe while still bounding the 20-port scan.
+    setTimeout(() => finish(false), 3000);
   });
 }
 
@@ -343,18 +346,29 @@ if (!foreground) {
   if (hostExplicit) forwarded.push('--host', host);
   if (!shouldOpen) forwarded.push('--no-open');
 
+  // The parent doesn't know the final port (the child may fall back when the
+  // default is busy), so it must not print a URL or open the browser — the
+  // child does both once it is actually listening. The child's output goes to
+  // a log file: a detached child with stdio:'ignore' is undiagnosable when
+  // startup fails or the port falls back.
+  const LAUNCH_LOG = path.join(DATA_DIR, 'launcher.log');
+  let logFd;
+  try {
+    mkdirSync(path.dirname(LAUNCH_LOG), { recursive: true });
+    logFd = openSync(LAUNCH_LOG, 'a');
+  } catch { /* best-effort: fall back to discarding output */ }
+  const stdio = logFd == null ? 'ignore' : ['ignore', logFd, logFd];
+
   const child = spawn(
     process.execPath,
     [...process.argv.slice(1), '--fg', ...forwarded],
-    { detached: true, stdio: 'ignore', windowsHide: true }
+    { detached: true, stdio, windowsHide: true }
   );
   child.unref();
 
-  // Parent exits immediately; child writes its own PID + port asynchronously
-  const url = `http://localhost:${port}`;
-  console.log(`project-knowledge starting in background at ${url}`);
+  console.log('project-knowledge starting in background');
+  console.log(`Diagnostics: ${LAUNCH_LOG}`);
   console.log(`Use "project-knowledge status" to check, "project-knowledge stop" to stop.`);
-  if (shouldOpen) setTimeout(() => openBrowser(url), 1200);
   process.exit(0);
 }
 
