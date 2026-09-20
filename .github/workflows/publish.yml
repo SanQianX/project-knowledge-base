@@ -16,12 +16,13 @@ jobs:
         with:
           node-version: '24.x'
           registry-url: 'https://registry.npmjs.org'
-          cache: npm
+          package-manager-cache: false
       - run: npm ci
       - run: npm run release:verify
       - run: node _site/scripts/sync-release-version.js --check --tag "${GITHUB_REF_NAME}"
       - run: npm test
       - run: npm pack --dry-run
+      # Trusted publishing (OIDC) needs npm CLI >= 11.5.1; no NODE_AUTH_TOKEN —
+      # with a token present the CLI falls back to it and hits the 2FA wall.
+      - run: npm install -g npm@latest
       - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
