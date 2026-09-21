@@ -1,0 +1,645 @@
+<div id="log-ui-comparison" class="log-compare">
+  <style>
+    #log-ui-comparison {
+      display: grid;
+      gap: 22px;
+      color: var(--foreground);
+    }
+    #log-ui-comparison * {
+      box-sizing: border-box;
+    }
+    #log-ui-comparison .mock-page {
+      display: grid;
+      gap: 0;
+      overflow: hidden;
+    }
+    #log-ui-comparison .mock-topbar,
+    #log-ui-comparison .section-head,
+    #log-ui-comparison .toolbar,
+    #log-ui-comparison .level-strip,
+    #log-ui-comparison .detail-head,
+    #log-ui-comparison .detail-grid,
+    #log-ui-comparison .page-footer {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    #log-ui-comparison .mock-topbar {
+      justify-content: space-between;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    #log-ui-comparison .brand,
+    #log-ui-comparison .section-title,
+    #log-ui-comparison .detail-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 500;
+    }
+    #log-ui-comparison .page-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #log-ui-comparison .page-content {
+      display: grid;
+      gap: 16px;
+      padding-top: 16px;
+    }
+    #log-ui-comparison .section-head {
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+    #log-ui-comparison .path-line,
+    #log-ui-comparison .secondary-line {
+      color: var(--muted-foreground);
+    }
+    #log-ui-comparison .toolbar {
+      align-items: flex-end;
+    }
+    #log-ui-comparison .toolbar .form-label {
+      min-width: 118px;
+      flex: 1 1 118px;
+    }
+    #log-ui-comparison .toolbar .wide-field {
+      flex-basis: 190px;
+    }
+    #log-ui-comparison .toolbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    #log-ui-comparison .table-responsive {
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    #log-ui-comparison .table {
+      width: 100%;
+    }
+    #log-ui-comparison .table th,
+    #log-ui-comparison .table td {
+      vertical-align: top;
+    }
+    #log-ui-comparison .table th {
+      color: var(--muted-foreground);
+      font-weight: 500;
+    }
+    #log-ui-comparison .log-message {
+      min-width: 220px;
+    }
+    #log-ui-comparison .current-info {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--muted);
+      color: var(--foreground);
+    }
+    #log-ui-comparison .level-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      color: var(--foreground);
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+    #log-ui-comparison .level-badge[data-level="trace"] {
+      background: color-mix(in srgb, var(--muted) 78%, transparent);
+      border-color: var(--border);
+    }
+    #log-ui-comparison .level-badge[data-level="debug"] {
+      background: color-mix(in srgb, var(--viz-series-2) 16%, transparent);
+      border-color: color-mix(in srgb, var(--viz-series-2) 42%, var(--border));
+    }
+    #log-ui-comparison .level-badge[data-level="info"] {
+      background: color-mix(in srgb, var(--viz-series-1) 16%, transparent);
+      border-color: color-mix(in srgb, var(--viz-series-1) 42%, var(--border));
+    }
+    #log-ui-comparison .level-badge[data-level="warn"] {
+      background: color-mix(in srgb, var(--viz-series-4) 18%, transparent);
+      border-color: color-mix(in srgb, var(--viz-series-4) 48%, var(--border));
+    }
+    #log-ui-comparison .level-badge[data-level="error"] {
+      background: color-mix(in srgb, var(--destructive) 15%, transparent);
+      border-color: color-mix(in srgb, var(--destructive) 48%, var(--border));
+    }
+    #log-ui-comparison .level-badge[data-level="fatal"] {
+      background: color-mix(in srgb, var(--red) 28%, transparent);
+      border-color: color-mix(in srgb, var(--red) 68%, var(--border));
+      font-weight: 500;
+    }
+    #log-ui-comparison .level-filter {
+      border: 0;
+      background: transparent;
+      padding: 0;
+      cursor: pointer;
+    }
+    #log-ui-comparison .level-filter[aria-pressed="false"] {
+      opacity: 0.42;
+    }
+    #log-ui-comparison .proposed-row {
+      border-left: 3px solid transparent;
+    }
+    #log-ui-comparison .proposed-row[data-level="debug"] {
+      border-left-color: var(--viz-series-2);
+    }
+    #log-ui-comparison .proposed-row[data-level="info"] {
+      border-left-color: var(--viz-series-1);
+    }
+    #log-ui-comparison .proposed-row[data-level="warn"] {
+      border-left-color: var(--viz-series-4);
+      background: color-mix(in srgb, var(--viz-series-4) 5%, transparent);
+    }
+    #log-ui-comparison .proposed-row[data-level="error"],
+    #log-ui-comparison .proposed-row[data-level="fatal"] {
+      border-left-color: var(--destructive);
+      background: color-mix(in srgb, var(--destructive) 6%, transparent);
+    }
+    #log-ui-comparison .detail-panel {
+      display: grid;
+      gap: 12px;
+      padding-top: 4px;
+    }
+    #log-ui-comparison .detail-head {
+      justify-content: space-between;
+    }
+    #log-ui-comparison .detail-grid {
+      align-items: flex-start;
+    }
+    #log-ui-comparison .detail-item {
+      display: grid;
+      gap: 3px;
+      min-width: 126px;
+      flex: 1 1 126px;
+    }
+    #log-ui-comparison .detail-item span:first-child {
+      color: var(--muted-foreground);
+    }
+    #log-ui-comparison .raw-json {
+      margin: 0;
+      max-height: 240px;
+      overflow: auto;
+      padding: 12px;
+      border-radius: 8px;
+      background: var(--muted);
+      color: var(--foreground);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    #log-ui-comparison .operation-flow {
+      display: grid;
+      gap: 8px;
+      padding-left: 4px;
+    }
+    #log-ui-comparison .flow-step {
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+    }
+    #log-ui-comparison .flow-mark {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--viz-series-1);
+    }
+    #log-ui-comparison .flow-step[data-state="warn"] .flow-mark {
+      background: var(--viz-series-4);
+    }
+    #log-ui-comparison .flow-step[data-state="error"] .flow-mark {
+      background: var(--destructive);
+    }
+    #log-ui-comparison .page-footer {
+      justify-content: space-between;
+      color: var(--muted-foreground);
+    }
+    #log-ui-comparison .empty-row {
+      text-align: center;
+      color: var(--muted-foreground);
+    }
+    @media (max-width: 620px) {
+      #log-ui-comparison .section-head {
+        align-items: flex-start;
+      }
+      #log-ui-comparison .toolbar .form-label,
+      #log-ui-comparison .toolbar .wide-field {
+        flex-basis: 100%;
+      }
+      #log-ui-comparison .toolbar-actions {
+        width: 100%;
+      }
+    }
+  </style>
+
+  <article class="card mock-page" aria-labelledby="current-log-page-label">
+    <div class="mock-topbar">
+      <div class="brand"><i data-lucide="database" aria-hidden="true"></i><span>AI 知识库</span></div>
+      <div class="page-label" id="current-log-page-label">
+        <span class="viz-badge">GitHub 当前实现</span>
+        <span class="text-small text-muted">v4.1.22 · 当前源码还未应用新 Plan</span>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <div class="section-head">
+        <div>
+          <div class="section-title"><i data-lucide="scroll-text" aria-hidden="true"></i><span>日志</span></div>
+          <div class="path-line text-small"><code>C:\Users\SanQian\.project-knowledge\logs</code></div>
+        </div>
+      </div>
+
+      <div class="toolbar" aria-label="当前日志筛选器">
+        <label class="form-label">日期
+          <input class="form-control" type="date" value="2026-08-16" />
+        </label>
+        <label class="form-label">等级
+          <select class="form-select">
+            <option>全部级别</option>
+            <option>info</option>
+            <option>warn</option>
+            <option>error</option>
+          </select>
+        </label>
+        <label class="form-label">项目
+          <select class="form-select"><option>全部项目</option></select>
+        </label>
+        <label class="form-label wide-field">搜索
+          <input class="form-control" type="search" placeholder="搜索日志" />
+        </label>
+        <button type="button" class="btn"><i data-lucide="search" aria-hidden="true"></i>搜索</button>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-sm" aria-label="GitHub 当前日志列表">
+          <thead>
+            <tr><th>时间</th><th>Level</th><th>项目</th><th>Source</th><th>消息</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="text-nowrap"><button type="button" class="btn btn-ghost text-small current-row" data-current-index="0">02:12:58</button></td>
+              <td><span class="current-info text-small">info</span></td>
+              <td>—</td>
+              <td><code>startup-recovery</code></td>
+              <td class="log-message">startup pending commit recovery completed</td>
+            </tr>
+            <tr>
+              <td class="text-nowrap"><button type="button" class="btn btn-ghost text-small current-row" data-current-index="1">02:09:31</button></td>
+              <td><span class="current-info text-small">info</span></td>
+              <td>—</td>
+              <td><code>logging</code></td>
+              <td class="log-message">Logging configuration updated.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <section class="detail-panel" aria-live="polite">
+        <div class="detail-title"><i data-lucide="braces" aria-hidden="true"></i><span>日志详情</span></div>
+        <pre class="raw-json text-small" id="current-log-detail"></pre>
+      </section>
+    </div>
+  </article>
+
+  <article class="card mock-page" aria-labelledby="proposed-log-page-label">
+    <div class="mock-topbar">
+      <div class="brand"><i data-lucide="database" aria-hidden="true"></i><span>AI 知识库</span></div>
+      <div class="page-label" id="proposed-log-page-label">
+        <span class="viz-badge">按 Plan 改造后</span>
+        <span class="text-small text-muted">长期诊断日志 · 最近 7 天</span>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <div class="section-head">
+        <div>
+          <div class="section-title"><i data-lucide="activity" aria-hidden="true"></i><span>系统日志</span></div>
+          <div class="path-line text-small"><code>C:\Users\SanQian\.project-knowledge\logs</code> · 保留 365 天 · 26.4 MiB / 2 GiB</div>
+        </div>
+        <div class="toolbar-actions">
+          <button type="button" class="btn" id="pause-logs"><i data-lucide="pause" aria-hidden="true"></i><span>暂停刷新</span></button>
+          <button type="button" class="btn"><i data-lucide="download" aria-hidden="true"></i>导出诊断日志</button>
+        </div>
+      </div>
+
+      <div class="level-strip" aria-label="日志等级筛选">
+        <button type="button" class="level-filter" data-filter-level="trace" aria-pressed="true"><span class="level-badge text-small" data-level="trace"><i data-lucide="minus" aria-hidden="true"></i>TRACE 0</span></button>
+        <button type="button" class="level-filter" data-filter-level="debug" aria-pressed="true"><span class="level-badge text-small" data-level="debug"><i data-lucide="bug" aria-hidden="true"></i>DEBUG 3</span></button>
+        <button type="button" class="level-filter" data-filter-level="info" aria-pressed="true"><span class="level-badge text-small" data-level="info"><i data-lucide="info" aria-hidden="true"></i>INFO 18</span></button>
+        <button type="button" class="level-filter" data-filter-level="warn" aria-pressed="true"><span class="level-badge text-small" data-level="warn"><i data-lucide="triangle-alert" aria-hidden="true"></i>WARN 2</span></button>
+        <button type="button" class="level-filter" data-filter-level="error" aria-pressed="true"><span class="level-badge text-small" data-level="error"><i data-lucide="circle-x" aria-hidden="true"></i>ERROR 1</span></button>
+        <button type="button" class="level-filter" data-filter-level="fatal" aria-pressed="true"><span class="level-badge text-small" data-level="fatal"><i data-lucide="octagon-x" aria-hidden="true"></i>FATAL 0</span></button>
+      </div>
+
+      <div class="toolbar" aria-label="改造后日志筛选器">
+        <label class="form-label">开始日期
+          <input class="form-control" type="date" value="2026-08-10" />
+        </label>
+        <label class="form-label">结束日期
+          <input class="form-control" type="date" value="2026-08-17" />
+        </label>
+        <label class="form-label">项目
+          <select class="form-select"><option>vision-inspection</option><option>全部项目</option></select>
+        </label>
+        <label class="form-label">组件
+          <select class="form-select"><option>全部组件</option><option>commit-reconciler</option><option>ai-runner</option><option>knowledge-writer</option></select>
+        </label>
+        <label class="form-label wide-field">事件、Commit 或 Operation ID
+          <input class="form-control" id="proposed-search" type="search" placeholder="搜索消息、a83bd21、op-7f29…" />
+        </label>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-sm" aria-label="改造后日志列表">
+          <thead>
+            <tr><th>时间</th><th>等级</th><th>项目</th><th>组件 / 事件</th><th>阶段</th><th>消息</th><th class="text-end">耗时</th></tr>
+          </thead>
+          <tbody id="proposed-log-rows"></tbody>
+        </table>
+      </div>
+
+      <section class="detail-panel" id="proposed-detail" aria-live="polite">
+        <div class="detail-head">
+          <div class="detail-title"><i data-lucide="route" aria-hidden="true"></i><span>操作链路</span></div>
+          <button type="button" class="btn btn-ghost" id="copy-operation"><i data-lucide="copy" aria-hidden="true"></i>复制 Operation ID</button>
+        </div>
+        <div class="detail-grid" id="proposed-detail-grid"></div>
+        <div class="operation-flow" id="operation-flow" aria-label="所选日志所属操作的执行阶段"></div>
+        <details>
+          <summary>查看结构化错误与完整 JSON</summary>
+          <pre class="raw-json text-small" id="proposed-log-detail"></pre>
+        </details>
+      </section>
+
+      <div class="page-footer text-small">
+        <span id="visible-log-count">显示 7 条 · 第 1 页</span>
+        <div class="toolbar-actions"><button type="button" class="btn" disabled>上一页</button><button type="button" class="btn">下一页</button></div>
+      </div>
+    </div>
+  </article>
+
+  <script>
+    (() => {
+      const root = document.getElementById("log-ui-comparison");
+      if (!root) return;
+
+      const currentLogs = [
+        {
+          ts: "2026-08-16T18:12:58.009Z",
+          level: "info",
+          projectSlug: "",
+          source: "startup-recovery",
+          event: "startup_commit_recovery",
+          message: "startup pending commit recovery completed",
+          jobId: "",
+          runId: "",
+          meta: { source: "startup-recovery", dispatched: 0, resumedFinalizations: 0 },
+          file: "2026-08-16.log"
+        },
+        {
+          ts: "2026-08-16T18:09:31.422Z",
+          level: "info",
+          projectSlug: "",
+          source: "logging",
+          event: "logging_config_updated",
+          message: "Logging configuration updated.",
+          jobId: "",
+          runId: "",
+          meta: { rootPath: "C:\\Users\\SanQian\\.project-knowledge\\logs" },
+          file: "2026-08-16.log"
+        }
+      ];
+
+      const proposedLogs = [
+        {
+          ts: "10:22:30.481",
+          level: "error",
+          project: "vision-inspection",
+          component: "commit-reconciler",
+          event: "commit.analysis.failed",
+          phase: "ai-request",
+          message: "Commit 分析失败：AI 请求超时，状态未推进",
+          duration: "30.2 s",
+          operationId: "op-7f29b8",
+          runId: "run-20260817-102200-a83bd21",
+          commitSha: "a83bd21",
+          attempt: 2,
+          error: { name: "TimeoutError", code: "ETIMEDOUT", message: "request timed out after 30000 ms", stack: "TimeoutError: request timed out\n  at ClaudeRunner.request (claude-runner.js:218:17)\n  at CommitReconciler.analyze (commit-reconciler.js:164:11)" }
+        },
+        {
+          ts: "10:22:15.170",
+          level: "warn",
+          project: "vision-inspection",
+          component: "ai-runner",
+          event: "ai.request.retrying",
+          phase: "ai-request",
+          message: "AI 请求超时，1.5 秒后进行第 2 次尝试",
+          duration: "15.0 s",
+          operationId: "op-7f29b8",
+          runId: "run-20260817-102200-a83bd21",
+          commitSha: "a83bd21",
+          attempt: 2
+        },
+        {
+          ts: "10:22:00.241",
+          level: "info",
+          project: "vision-inspection",
+          component: "commit-reconciler",
+          event: "commit.analysis.started",
+          phase: "prepare",
+          message: "开始分析 Commit a83bd21，共 8 个变更文件",
+          duration: "—",
+          operationId: "op-7f29b8",
+          runId: "run-20260817-102200-a83bd21",
+          commitSha: "a83bd21"
+        },
+        {
+          ts: "10:20:14.028",
+          level: "info",
+          project: "vision-inspection",
+          component: "project-import",
+          event: "project.import.completed",
+          phase: "registry",
+          message: "项目导入完成，Hook 已验证，开始跟踪后续 Commit",
+          duration: "1.8 s",
+          operationId: "op-51dc20",
+          runId: "",
+          commitSha: "0c27e45"
+        },
+        {
+          ts: "10:20:13.712",
+          level: "info",
+          project: "vision-inspection",
+          component: "hook-manager",
+          event: "hook.install.completed",
+          phase: "hook",
+          message: "post-commit Hook 安装并验证成功",
+          duration: "146 ms",
+          operationId: "op-51dc20",
+          runId: "",
+          commitSha: "0c27e45"
+        },
+        {
+          ts: "10:20:12.914",
+          level: "debug",
+          project: "vision-inspection",
+          component: "storage-layout",
+          event: "storage.project-path.resolved",
+          phase: "storage",
+          message: "已解析并固定项目知识库目录",
+          duration: "4 ms",
+          operationId: "op-51dc20",
+          runId: "",
+          commitSha: ""
+        },
+        {
+          ts: "10:20:12.207",
+          level: "info",
+          project: "vision-inspection",
+          component: "project-import",
+          event: "project.import.started",
+          phase: "validate",
+          message: "开始导入本地项目并校验知识库根目录",
+          duration: "—",
+          operationId: "op-51dc20",
+          runId: "",
+          commitSha: ""
+        }
+      ];
+
+      const levelIcons = {
+        trace: "minus",
+        debug: "bug",
+        info: "info",
+        warn: "triangle-alert",
+        error: "circle-x",
+        fatal: "octagon-x"
+      };
+      const activeLevels = new Set(["trace", "debug", "info", "warn", "error", "fatal"]);
+      let selectedIndex = 0;
+
+      function escapeHtml(value) {
+        return String(value == null ? "" : value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      function renderCurrent(index) {
+        const detail = root.querySelector("#current-log-detail");
+        if (detail) detail.textContent = JSON.stringify(currentLogs[index] || currentLogs[0], null, 2);
+      }
+
+      function matchesSearch(log, query) {
+        if (!query) return true;
+        const haystack = [log.level, log.project, log.component, log.event, log.phase, log.message, log.operationId, log.runId, log.commitSha].join(" ").toLowerCase();
+        return haystack.includes(query.toLowerCase());
+      }
+
+      function renderRows() {
+        const tbody = root.querySelector("#proposed-log-rows");
+        const search = root.querySelector("#proposed-search");
+        const query = search ? search.value.trim() : "";
+        const visible = proposedLogs.map((log, index) => ({ log, index })).filter(item => activeLevels.has(item.log.level) && matchesSearch(item.log, query));
+        if (!tbody) return;
+        if (!visible.length) {
+          tbody.innerHTML = '<tr><td class="empty-row" colspan="7">没有匹配的日志</td></tr>';
+        } else {
+          tbody.innerHTML = visible.map(item => {
+            const log = item.log;
+            return '<tr class="proposed-row" data-level="' + escapeHtml(log.level) + '">' +
+              '<td class="text-nowrap"><button type="button" class="btn btn-ghost text-small proposed-select" data-index="' + item.index + '">' + escapeHtml(log.ts) + '</button></td>' +
+              '<td><span class="level-badge text-small" data-level="' + escapeHtml(log.level) + '"><i data-lucide="' + levelIcons[log.level] + '" aria-hidden="true"></i>' + escapeHtml(log.level.toUpperCase()) + '</span></td>' +
+              '<td>' + escapeHtml(log.project) + '</td>' +
+              '<td><code>' + escapeHtml(log.component) + '</code><div class="text-small text-muted">' + escapeHtml(log.event) + '</div></td>' +
+              '<td><span class="viz-badge">' + escapeHtml(log.phase) + '</span></td>' +
+              '<td class="log-message">' + escapeHtml(log.message) + '<div class="text-small text-muted">op ' + escapeHtml(log.operationId) + (log.commitSha ? ' · commit ' + escapeHtml(log.commitSha) : '') + '</div></td>' +
+              '<td class="text-end text-nowrap">' + escapeHtml(log.duration) + '</td>' +
+              '</tr>';
+          }).join("");
+        }
+        const count = root.querySelector("#visible-log-count");
+        if (count) count.textContent = "显示 " + visible.length + " 条 · 第 1 页";
+        root.querySelectorAll(".proposed-select").forEach(button => {
+          button.addEventListener("click", () => {
+            selectedIndex = Number(button.dataset.index || 0);
+            renderProposedDetail(selectedIndex);
+          });
+        });
+        if (window.lucide) window.lucide.createIcons({ attrs: { width: 16, height: 16 } });
+      }
+
+      function renderProposedDetail(index) {
+        const log = proposedLogs[index] || proposedLogs[0];
+        const grid = root.querySelector("#proposed-detail-grid");
+        const raw = root.querySelector("#proposed-log-detail");
+        const flow = root.querySelector("#operation-flow");
+        if (grid) {
+          const items = [
+            ["等级", log.level.toUpperCase()],
+            ["项目", log.project],
+            ["Operation ID", log.operationId],
+            ["Run ID", log.runId || "—"],
+            ["Commit", log.commitSha || "—"],
+            ["阶段 / 尝试", log.phase + (log.attempt ? " / " + log.attempt : "")],
+            ["耗时", log.duration]
+          ];
+          grid.innerHTML = items.map(item => '<div class="detail-item"><span class="text-small">' + escapeHtml(item[0]) + '</span><code>' + escapeHtml(item[1]) + '</code></div>').join("");
+        }
+        if (flow) {
+          const related = proposedLogs.filter(item => item.operationId === log.operationId).slice().reverse();
+          flow.innerHTML = related.map(item => '<div class="flow-step" data-state="' + escapeHtml(item.level) + '"><span class="flow-mark" aria-hidden="true"></span><span><code>' + escapeHtml(item.event) + '</code> · ' + escapeHtml(item.message) + '</span><span class="text-small text-muted">' + escapeHtml(item.ts) + '</span></div>').join("");
+        }
+        if (raw) raw.textContent = JSON.stringify(log, null, 2);
+      }
+
+      root.querySelectorAll(".current-row").forEach(button => {
+        button.addEventListener("click", () => renderCurrent(Number(button.dataset.currentIndex || 0)));
+      });
+      root.querySelectorAll(".level-filter").forEach(button => {
+        button.addEventListener("click", () => {
+          const level = button.dataset.filterLevel;
+          if (activeLevels.has(level)) activeLevels.delete(level); else activeLevels.add(level);
+          button.setAttribute("aria-pressed", activeLevels.has(level) ? "true" : "false");
+          renderRows();
+        });
+      });
+      const search = root.querySelector("#proposed-search");
+      if (search) search.addEventListener("input", renderRows);
+
+      const pause = root.querySelector("#pause-logs");
+      if (pause) {
+        pause.addEventListener("click", () => {
+          const paused = pause.getAttribute("aria-pressed") === "true";
+          pause.setAttribute("aria-pressed", paused ? "false" : "true");
+          pause.innerHTML = paused ? '<i data-lucide="pause" aria-hidden="true"></i><span>暂停刷新</span>' : '<i data-lucide="play" aria-hidden="true"></i><span>继续刷新</span>';
+          if (window.lucide) window.lucide.createIcons({ attrs: { width: 16, height: 16 } });
+        });
+      }
+
+      const copyButton = root.querySelector("#copy-operation");
+      if (copyButton) {
+        copyButton.addEventListener("click", async () => {
+          const value = (proposedLogs[selectedIndex] || proposedLogs[0]).operationId;
+          try {
+            await navigator.clipboard.writeText(value);
+            copyButton.textContent = "已复制 " + value;
+          } catch {
+            copyButton.textContent = value;
+          }
+        });
+      }
+
+      renderCurrent(0);
+      renderRows();
+      renderProposedDetail(0);
+      if (window.lucide) window.lucide.createIcons({ attrs: { width: 16, height: 16 } });
+    })();
+  </script>
+</div>

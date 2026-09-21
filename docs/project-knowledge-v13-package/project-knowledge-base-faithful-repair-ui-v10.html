@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Project Knowledge · Control Center · UI Repair Preview v10</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}button,input,select,textarea{font:inherit}button{cursor:pointer}
+:root{--page:#eef2f6;--panel:#fff;--panel2:#f7f9fc;--line:#d8e1ea;--text:#142033;--muted:#64748b;--side:#f1f5f9;--side2:#e2e8f0;--sideText:#1e293b;--sideMuted:#64748b;--sideBorder:#cbd5e1;--sideHover:rgba(15,23,42,.05);--sideActive:rgba(15,23,42,.08);--accent:#4f6f8f;--accent2:#3e5e75;--good:#2f7d64;--warn:#9a7428;--bad:#af4b4b;--warnText:#a66a00;--badText:#c33b3b;--idle:#8794a6;--claude:#2563eb;--shadow:0 18px 50px rgba(15,23,42,.13)}
+html[data-theme="dark"]{--page:#0c1118;--panel:#141c26;--panel2:#192331;--line:#2a3849;--text:#e3ebf5;--muted:#94a3b8;--side:#080c11;--side2:#111923;--sideText:#d7e0ea;--sideMuted:#94a3b8;--sideBorder:rgba(255,255,255,.1);--sideHover:rgba(255,255,255,.05);--sideActive:rgba(255,255,255,.08);--accent:#7492a5;--accent2:#8da9ba;--good:#75b798;--warn:#c5a15d;--bad:#d36d6d;--warnText:#f2c75c;--badText:#ff7474;--idle:#8794a6;--claude:#60a5fa;--shadow:0 24px 60px rgba(0,0,0,.32)}
+body{overflow:hidden;background:var(--page);color:var(--text)}.shell{height:100vh;display:grid;grid-template-columns:310px minmax(0,1fr);background:var(--page)}
+.sidebar{height:100%;overflow:hidden;display:flex;flex-direction:column;background:var(--side);color:var(--sideText);border-right:1px solid var(--sideBorder)}
+.brand{padding:20px;border-bottom:1px solid var(--sideBorder)}.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.18em;color:var(--sideMuted)}.brand h1{font-size:20px;margin:4px 0 0}.root{font:11px ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--sideMuted);margin-top:8px;word-break:break-all}
+.project-area{min-height:0;flex:1;display:flex;flex-direction:column;padding:12px}.project-head{display:flex;align-items:center;justify-content:space-between;padding:0 4px 8px}.project-head span{font-size:11px;font-weight:650;text-transform:uppercase;letter-spacing:.14em;color:var(--sideMuted)}
+.small-btn{border:1px solid var(--sideBorder);background:var(--sideHover);color:var(--sideText);border-radius:8px;padding:5px 8px;font-size:11px}.project-list{min-height:0;overflow:auto}.project-card{width:100%;border:1px solid var(--sideBorder);background:var(--sideHover);color:var(--sideText);border-radius:12px;padding:11px 12px;margin-bottom:8px;text-align:left}.project-card.active{background:var(--sideActive);border-color:var(--accent)}.project-line{display:flex;gap:8px;justify-content:space-between}.project-name{font-size:13px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.project-id{font-size:11px;margin-top:3px;color:var(--sideMuted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.project-path{font:10px ui-monospace,SFMono-Regular,Consolas,monospace;margin-top:6px;color:var(--sideMuted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dot{display:inline-block;width:8px;height:8px;border-radius:999px}.good{background:var(--good)}.idle{background:var(--idle)}.warn{background:var(--warn)}.claude{background:var(--claude);box-shadow:0 0 0 4px color-mix(in srgb,var(--claude) 12%,transparent)}
+.sidebar-nav{border-top:1px solid var(--sideBorder);padding:10px}.nav-btn{display:flex;width:100%;align-items:center;justify-content:space-between;border:0;background:transparent;color:var(--sideMuted);border-radius:9px;padding:9px 10px;text-align:left;font-size:13px}.nav-btn:hover,.nav-btn.active{background:var(--sideActive);color:var(--sideText)}.nav-badge{font-size:10px;padding:2px 6px;border-radius:999px;background:var(--sideHover)}
+.main{min-width:0;height:100%;overflow:hidden;padding:20px 26px 24px;display:flex;flex-direction:column}.main-header{flex:none;display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}.subtitle{font-size:12px;color:var(--muted)}.page-title{font-size:24px;font-weight:650;margin-top:3px}.header-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.btn,.btn-primary,.btn-danger{border-radius:9px;padding:8px 11px;font-size:12px}.btn{border:1px solid var(--line);background:var(--panel2);color:var(--text)}.btn:hover{filter:brightness(.98)}.btn-primary{border:1px solid transparent;background:var(--accent);color:#fff}.btn-primary:hover{background:var(--accent2)}.btn-danger{border:1px solid color-mix(in srgb,var(--bad) 35%,transparent);background:color-mix(in srgb,var(--bad) 9%,transparent);color:var(--bad)}.input{border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:9px;padding:8px 10px;min-width:0}.view{min-height:0;flex:1;display:none}.view.active{display:flex}.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px}.panel2{background:var(--panel2);border:1px solid var(--line);border-radius:10px}.muted{color:var(--muted)}.chip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:999px;padding:3px 8px;font-size:10px;color:var(--muted);background:var(--panel2)}
+/* Workbench */
+.workbench{width:100%;min-height:0;display:flex;flex-direction:column;overflow:hidden}.workbench-head{display:flex;align-items:center;gap:8px;padding:10px 13px;border-bottom:1px solid var(--line)}.workbench-title{font-size:13px;font-weight:650}.chat{min-height:0;flex:1;overflow:auto;background:var(--panel2);padding:14px}.empty-chat{margin:auto;max-width:580px;padding:48px 24px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:12px;background:var(--panel)}.msg-row{display:flex;margin:0 0 12px}.msg-row.user{justify-content:flex-end}.bubble{max-width:88%;border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.55;background:var(--panel)}.user .bubble{background:color-mix(in srgb,var(--accent) 12%,var(--panel));border-color:color-mix(in srgb,var(--accent) 30%,var(--line))}.tool-card{max-width:92%;font-size:11px}.tool-title{color:var(--warn);font-weight:650}.tool-code{margin-top:7px;background:#020617;color:#e2e8f0;border-radius:7px;padding:8px;font:10px ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap}.composer{flex:none;border-top:1px solid var(--line);background:var(--panel2)}.composer-row{padding:9px;display:flex;gap:8px;align-items:flex-end}.composer textarea{resize:none;flex:1;max-height:120px;min-height:36px}.send{width:36px;height:36px;padding:0}.toolbar{display:flex;align-items:center;gap:6px;padding:0 9px 9px;font-size:10px;color:var(--muted)}.toolbtn{height:28px;border:0;background:transparent;color:var(--muted);border-radius:6px;padding:0 8px}.toolbtn:hover{background:var(--sideHover)}.token{border:1px solid var(--line);background:var(--panel);border-radius:7px;height:28px;display:flex;align-items:center;gap:6px;padding:0 8px}.mini-circle{width:14px;height:14px;border:3px solid color-mix(in srgb,var(--accent) 35%,transparent);border-top-color:var(--accent);border-radius:50%}
+/* V10 Mature Development Conversations: shared bridge UI, product-facing surface. */
+.conversation-view{width:100%;min-height:0;display:flex;flex-direction:column;overflow:hidden;background:var(--panel)}.conversation-frame{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}.conversation-toolbar{flex:none;display:flex;gap:12px;align-items:flex-end;padding:2px 0 14px;border-bottom:1px solid var(--line);background:var(--panel)}.conversation-filter{display:flex;flex-direction:column;gap:6px;min-width:190px}.conversation-filter label{font-size:11px;color:var(--muted);font-weight:600}.conversation-filter.date{min-width:160px}.conversation-toolbar .input{font-size:12px;padding:8px 10px;background:var(--panel)}.conversation-content{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden}.conversation-stream{flex:1;min-height:0;overflow:auto;padding:18px 4px 30px;scroll-behavior:smooth}.turn{max-width:820px;margin:0 auto 18px}.turn-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 2px 7px;color:var(--muted);font-size:10px}.turn-source{white-space:nowrap}.turn-card{border:1px solid var(--line);border-radius:12px;background:var(--panel);overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,.03)}.turn-message{display:grid;grid-template-columns:70px minmax(0,1fr);gap:12px;padding:13px 15px}.turn-message+.turn-message{border-top:1px solid var(--line)}.turn-role{font-size:11px;font-weight:650;color:var(--muted);padding-top:2px}.turn-message.user .turn-role{color:var(--accent)}.turn-message.assistant .turn-role{color:var(--text)}.turn-text{min-width:0;font-size:12px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}.turn-foot{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);background:var(--panel2);padding:7px 12px;font-size:10px;color:var(--muted)}.commit-ref{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.conversation-empty{max-width:820px;margin:50px auto;padding:32px 20px;text-align:center;color:var(--muted);font-size:12px;border:1px dashed var(--line);border-radius:12px;background:var(--panel2)}
+/* Import */
+.split{width:100%;min-height:0;display:grid;grid-template-columns:minmax(520px,1.25fr) minmax(300px,.75fr);gap:10px}.form-panel,.preview-panel{padding:20px;overflow:auto}.section-title{font-size:17px;font-weight:650}.section-help{font-size:12px;color:var(--muted);margin-top:4px}.form-grid{display:grid;gap:14px;margin-top:18px}.field{display:grid;gap:6px;font-size:12px}.field label{font-weight:600}.notice{border:1px solid var(--line);background:var(--panel2);border-radius:9px;padding:12px;font-size:12px}.notice strong{display:block;margin-bottom:6px}.preview-list{display:grid;gap:12px;margin-top:18px}.preview-item{padding:11px 12px}.preview-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.preview-value{font-size:12px;margin-top:5px;word-break:break-all}.code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+/* V7 Logs: full-height mature run records. Severity uses row text color only; no dots/icons/left accents. */
+.record-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;flex:none}.record-toolbar .input{padding:8px 10px;font-size:11px}.record-toolbar .record-search{flex:1;min-width:190px}.record-shell{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;border:1px solid var(--line);border-radius:11px;background:var(--panel);overflow:hidden}.record-list{flex:1;min-height:0;max-height:none;overflow-y:auto;overflow-x:hidden;scroll-behavior:smooth}.record-entry{border-bottom:1px solid color-mix(in srgb,var(--line) 72%,transparent)}.record-entry:last-child{border-bottom:0}.record-row{display:grid;grid-template-columns:minmax(0,1fr) 88px;column-gap:18px;align-items:start;width:100%;min-width:0;overflow:hidden;border:0;background:transparent;color:var(--text);padding:9px 12px;text-align:left}.record-row:hover{background:color-mix(in srgb,var(--panel2) 70%,transparent)}.record-main{min-width:0;overflow:hidden}.record-title{display:block;min-width:0;font-size:12px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.record-meta{display:flex;min-width:0;max-width:100%;gap:7px;align-items:center;margin-top:3px;font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden}.record-project,.record-category{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.record-project{max-width:210px;flex:0 1 auto}.record-category{max-width:180px;flex:0 1 auto}.record-duration{flex:none}.record-meta-sep{flex:none;opacity:.45}.record-time{display:block;width:88px;min-width:88px;justify-self:end;text-align:right;white-space:nowrap;overflow:hidden;font:10px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--muted)}.record-entry[data-level="trace"] .record-title,.record-entry[data-level="debug"] .record-title{color:color-mix(in srgb,var(--text) 76%,var(--muted))}.record-entry[data-level="warn"] .record-row,.record-entry[data-level="warn"] .record-title,.record-entry[data-level="warn"] .record-meta,.record-entry[data-level="warn"] .record-time{color:var(--warnText)}.record-entry[data-level="error"] .record-row,.record-entry[data-level="fatal"] .record-row,.record-entry[data-level="error"] .record-title,.record-entry[data-level="fatal"] .record-title,.record-entry[data-level="error"] .record-meta,.record-entry[data-level="fatal"] .record-meta,.record-entry[data-level="error"] .record-time,.record-entry[data-level="fatal"] .record-time{color:var(--badText)}.record-entry[data-level="error"] .record-title,.record-entry[data-level="fatal"] .record-title{font-weight:680}.record-entry[data-level="warn"] .record-title{font-weight:620}.record-detail{display:none;padding:10px 12px 12px;border-top:1px dashed var(--line);background:color-mix(in srgb,var(--panel2) 75%,transparent)}.record-entry.open .record-detail{display:block}.record-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 18px;font:10px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--muted)}.record-detail-grid span{min-width:0;overflow-wrap:anywhere}.record-detail-grid b{color:var(--text);font-weight:650}.record-detail-message{margin-top:9px;padding-top:9px;border-top:1px solid var(--line);font-size:11px;line-height:1.55;color:var(--text);overflow-wrap:anywhere}.record-detail-actions{display:flex;gap:6px;margin-top:9px}.record-footer{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid var(--line);background:var(--panel2);font-size:10px;color:var(--muted)}.record-empty{display:none;padding:32px 16px;text-align:center;color:var(--muted);font-size:12px}.new-records{display:none;position:absolute;right:18px;bottom:44px;z-index:4;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--text);box-shadow:0 8px 24px rgba(2,6,23,.18);padding:7px 11px;font-size:11px;cursor:pointer}.new-records.show{display:block}.record-note{color:var(--muted);font-size:10px}.record-sync-warning{display:none;margin-bottom:10px;border:1px solid color-mix(in srgb,var(--warn) 35%,var(--line));border-radius:8px;padding:8px 10px;color:var(--warnText);font-size:11px;background:color-mix(in srgb,var(--warn) 7%,transparent)}
+.settings-error-count,.header-error-dot{display:none}
+/* Drawers/modal */
+.backdrop{position:fixed;inset:0;background:rgba(2,6,23,.42);z-index:40;display:none}.backdrop.show{display:block}.drawer{position:fixed;z-index:50;inset:0 0 0 auto;width:min(920px,100vw);height:100vh;min-height:0;background:var(--panel);border-left:1px solid var(--line);box-shadow:-24px 0 64px rgba(2,6,23,.22);display:none;grid-template-columns:170px minmax(0,1fr)}.drawer.show{display:grid}.settings-nav{min-height:0;padding:20px 12px;background:var(--panel2);border-right:1px solid var(--line);overflow:auto}.settings-nav h3{font-size:16px;margin:0 8px 13px}.settings-nav button{width:100%;border:0;background:transparent;color:var(--muted);border-radius:8px;padding:9px 10px;text-align:left;font-size:12px;margin-top:3px}.settings-nav button.active,.settings-nav button:hover{background:var(--panel);color:var(--text)}.settings-content{min-width:0;min-height:0;height:100%;overflow:hidden;padding:22px;display:flex;flex-direction:column}.drawer-head{flex:none;display:flex;justify-content:space-between;gap:12px;align-items:start;border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:18px}.drawer-head h2{font-size:18px;margin:0}.settings-section{display:none;min-height:0}.settings-section.active{display:block;flex:1;min-height:0;overflow:auto}.settings-card{padding:15px;margin-bottom:12px}#settings-conversations.active,#settings-logs.active{display:flex;flex:1;min-height:0;overflow:hidden}#settings-conversations>.conversation-view{flex:1;min-height:0;margin-bottom:0;display:flex;flex-direction:column;overflow:hidden}#settings-logs>.settings-card{flex:1;min-height:0;margin-bottom:0;display:flex;flex-direction:column;overflow:hidden}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}.project-assign{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:10px;margin-top:8px}.danger-zone{border-color:color-mix(in srgb,var(--bad) 30%,var(--line))}
+.context-menu{position:fixed;z-index:70;width:190px;padding:5px;border:1px solid var(--line);border-radius:9px;background:var(--panel);box-shadow:var(--shadow);display:none}.context-menu.show{display:block}.context-menu button{width:100%;border:0;background:transparent;color:var(--bad);padding:9px;border-radius:7px;text-align:left}.context-menu button:hover{background:color-mix(in srgb,var(--bad) 9%,transparent)}
+.modal-wrap{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;padding:20px}.modal-wrap.show{display:flex}.modal{width:min(620px,100%);padding:20px;box-shadow:var(--shadow)}.modal h2{margin:0;font-size:17px}.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+.mobile-strip{display:none}
+@media(max-width:1180px){.shell{grid-template-columns:260px minmax(0,1fr)}.split{grid-template-columns:1fr}.preview-panel{display:none}.health-stats{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:760px){body{overflow:auto}.shell{display:block;height:auto;min-height:100vh}.sidebar{display:none}.main{height:auto;min-height:100vh;padding:15px}.main-header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--page) 94%,transparent);backdrop-filter:blur(12px);padding:12px 0}.mobile-strip{display:flex;gap:7px;overflow:auto;margin-bottom:12px}.mobile-strip button{flex:none}.conversation-toolbar{align-items:stretch}.conversation-filter,.conversation-filter.date{min-width:0;flex:1}.conversation-stream{padding:14px 0 24px}.turn-message{grid-template-columns:54px minmax(0,1fr);gap:8px;padding:11px 10px}.drawer{height:100dvh;grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}.settings-nav{display:flex;padding:8px;overflow:auto;border-right:0;border-bottom:1px solid var(--line)}.settings-nav h3{display:none}.settings-nav button{width:auto;white-space:nowrap;margin:0}.grid2{grid-template-columns:1fr}}
+
+</style>
+<style id="v6-record-responsive">
+@media(max-width:760px){.record-row{grid-template-columns:minmax(0,1fr) 76px;column-gap:12px;padding:9px 10px}.record-time{width:76px;min-width:76px}.record-project{max-width:130px}.record-category{max-width:100px}.record-meta{gap:5px}.record-detail{padding:9px 10px}.record-detail-grid{grid-template-columns:1fr}.record-toolbar .record-search{min-width:100%;order:4}.record-footer{align-items:flex-start;flex-direction:column}.record-title{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="eyebrow">AI Knowledge Base</div>
+      <h1>Control Center</h1>
+      <div class="root">D:\Knowledge\Project-Knowledge</div>
+    </div>
+    <div class="project-area">
+      <div class="project-head"><span>项目 · 右键管理</span><button class="small-btn" data-go="import">导入项目</button></div>
+      <div class="project-list" id="project-list">
+        <button class="project-card active" data-project="vision-inspection">
+          <div class="project-line"><div><div class="project-name">视觉检测平台</div><div class="project-id">vision-inspection</div></div><span class="dot claude"></span></div>
+          <div class="project-path">D:\Code\VisionInspection</div>
+        </button>
+        <button class="project-card" data-project="project-knowledge">
+          <div class="project-line"><div><div class="project-name">Project Knowledge</div><div class="project-id">project-knowledge</div></div><span class="dot good"></span></div>
+          <div class="project-path">D:\Code\project-knowledge-base</div>
+        </button>
+        <button class="project-card" data-project="focusmap-tools">
+          <div class="project-line"><div><div class="project-name">FocusMap Tools</div><div class="project-id">focusmap-tools</div></div><span class="dot idle"></span></div>
+          <div class="project-path">D:\Code\FocusMapTools</div>
+        </button>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <button class="nav-btn active" data-go="dashboard"><span>Claude Code</span><span class="nav-badge">项目</span></button>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <header class="main-header">
+      <div><div class="subtitle">Backend-driven project supervision console</div><div class="page-title" id="page-title">Claude Code</div></div>
+      <div class="header-actions">
+        <select class="input" aria-label="界面语言"><option>中文</option><option>English</option></select>
+        <button class="btn" id="theme-btn">深色模式</button>
+        <button class="btn" id="settings-btn">设置</button>
+        <button class="btn" id="git-btn">GitHub · 已连接</button>
+      </div>
+    </header>
+
+    <div class="mobile-strip"><button class="btn" data-go="dashboard">Claude Code</button><button class="btn" data-go="import">导入项目</button><button class="btn" id="mobile-settings">设置</button></div>
+
+    <section class="view active" id="view-dashboard">
+      <section class="panel workbench">
+        <div class="workbench-head"><span class="dot claude"></span><span class="workbench-title">Claude Code</span><span class="chip" id="wb-project">视觉检测平台</span><span class="chip">glm · glm-5.2</span><span style="margin-left:auto" class="muted" id="wb-state">idle</span></div>
+        <div class="chat" id="chat">
+          <div class="msg-row user"><div class="bubble">检查当前 FocusMap 数据处理逻辑，并把重复性分析中的真实 Z 热漂移保留下来。</div></div>
+          <div class="msg-row"><div class="bubble"><strong>Claude</strong><br><br>我会先读取相关模块和现有测试，确认 FocusMap 的行列语义与当前统计流程，然后再修改实现。</div></div>
+          <div class="msg-row"><div class="bubble tool-card"><div class="tool-title">Read · src/focusmap/FocusMapAnalyzer.cpp</div><div class="tool-code">{"path":"src/focusmap/FocusMapAnalyzer.cpp","line_start":1,"line_end":220}</div></div></div>
+          <div class="msg-row"><div class="bubble"><strong>Claude</strong><br><br>当前实现确实在计算重复性前做了整体 Z offset 扣除，这会把设备热漂移一起抹掉。我会保留原始 offset，并把漂移量作为单独诊断指标输出。</div></div>
+        </div>
+        <div class="composer">
+          <div class="composer-row"><textarea class="input" id="chat-input" placeholder="向 Claude 发送消息…"></textarea><button class="btn-primary send" id="send-btn">↑</button></div>
+          <div class="toolbar"><button class="toolbtn" title="附加图片">▣</button><div class="token"><span class="dot good"></span><span>默认模式</span></div><div class="token"><span class="mini-circle"></span><span>18.4%</span></div><button class="toolbtn">💬 <span class="nav-badge">8</span></button><span style="margin-left:auto">Workbench 输入与外部 Claude/Codex/OpenCode 一样进入统一对话事件流</span></div>
+        </div>
+      </section>
+    </section>
+
+    <section class="view" id="view-import">
+      <div class="split">
+        <section class="panel form-panel">
+          <div class="section-title">导入项目</div><div class="section-help">保持旧版交互结构，但按 v4.1.23 生命周期：导入只建立项目、Git tracking baseline 和托管 Hook，不运行初始化分析。</div>
+          <div class="form-grid">
+            <div class="field"><label>本地路径</label><div style="display:flex;gap:7px"><input class="input code" style="flex:1" value="D:\Code\NewInspectionTool"><button class="btn">选择目录</button></div><span class="muted">只需要本地路径，其余信息由后端推断。</span></div>
+            <div class="notice"><strong>导入时自动完成</strong><div class="muted">• 验证/初始化 Git 仓库<br>• 记录当前 HEAD 为 tracking baseline<br>• 在全局知识库根目录下确定并固化 knowledgePath<br>• 安装并验证 managed post-commit Hook<br>• 不运行 AI，不生成推测式初始化知识</div></div>
+            <div class="notice"><strong>知识库根目录</strong><div class="code">D:\Knowledge\Project-Knowledge</div><div class="muted" style="margin-top:5px">根目录必须先在“设置 → 知识库存储”保存成功；导入页不再重复选择。</div></div>
+            <div style="display:flex;gap:8px"><button class="btn-primary" id="fake-import">导入</button><button class="btn">重置</button></div>
+          </div>
+        </section>
+        <aside class="panel preview-panel">
+          <div class="section-title">导入目标</div><div class="section-help">结构沿用原 UI 的右侧预览区。</div>
+          <div class="preview-list">
+            <div class="panel2 preview-item"><div class="preview-label">Project ID</div><div class="preview-value code">project-8b0e…</div></div>
+            <div class="panel2 preview-item"><div class="preview-label">Repository</div><div class="preview-value code">D:\Code\NewInspectionTool</div></div>
+            <div class="panel2 preview-item"><div class="preview-label">Knowledge Path</div><div class="preview-value code">D:\Knowledge\Project-Knowledge\newinspectiontool-8b0e2f</div></div>
+            <div class="panel2 preview-item"><div class="preview-label">Managed Hook</div><div class="preview-value">导入事务内自动安装并验证 · 无手动按钮</div></div>
+            <div class="panel2 preview-item"><div class="preview-label">First Knowledge</div><div class="preview-value">等待导入后的第一个新 Commit</div></div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="backdrop" id="backdrop"></div>
+<aside class="drawer" id="settings-drawer">
+  <nav class="settings-nav"><h3>设置</h3><button class="active" data-settings="ai">AI 模型</button><button data-settings="knowledge">知识库存储</button><button data-settings="relations">知识关联</button><button data-settings="conversations">开发对话</button><button data-settings="logs">日志</button><button data-settings="client">桌面客户端</button></nav>
+  <div class="settings-content"><div class="drawer-head"><div><h2 id="settings-title">AI 模型</h2><div class="section-help" id="settings-help">配置模型并为项目分配 Profile。</div></div><button class="btn" id="close-settings">×</button></div>
+    <section class="settings-section active" id="settings-ai"><div class="panel2 settings-card"><div style="display:flex;justify-content:space-between;align-items:center"><strong>AI Profiles</strong><div><button class="btn">新增配置</button> <button class="btn-primary">保存模型配置</button></div></div><div class="grid2" style="margin-top:12px"><div class="field"><label>配置项</label><select class="input"><option>glm</option><option>minimax-m3</option></select></div><div class="field"><label>供应商名称</label><input class="input" value="GLM"></div><div class="field" style="grid-column:1/-1"><label>API Key</label><input class="input code" type="password" value="sk-hidden-value"></div><div class="field" style="grid-column:1/-1"><label>请求地址</label><input class="input code" value="https://api.example.com/anthropic"></div><div class="field" style="grid-column:1/-1"><label>当前使用模型</label><input class="input code" value="glm-5.2"></div></div></div><div class="panel2 settings-card"><strong>项目模型分配</strong><div class="panel project-assign"><span>视觉检测平台</span><select class="input"><option>glm · glm-5.2</option><option>minimax-m3</option></select></div><div class="panel project-assign"><span>Project Knowledge</span><select class="input"><option>glm · glm-5.2</option></select></div></div></section>
+    <section class="settings-section" id="settings-knowledge"><div class="panel2 settings-card"><strong>知识库存储</strong><p class="section-help">全局根目录只决定以后导入的项目；已有项目继续使用各自 config.json 中固化的 knowledgePath。</p><div class="field" style="margin-top:14px"><label>知识库根目录</label><input class="input code" value="D:\Knowledge\Project-Knowledge"></div><div class="notice" style="margin-top:12px"><strong>内部数据目录</strong><span class="code">C:\Users\SanQian\.project-knowledge</span><br><span class="muted">settings / projects / index / cache / runtime / logs / recovery</span></div><button class="btn-primary" style="margin-top:12px">保存</button></div></section>
+    <section class="settings-section" id="settings-relations"><div class="panel2 settings-card"><strong>Related Project Knowledge</strong><p class="section-help">显式选择允许联合检索的项目；写入仍只进入当前项目。</p><label class="panel project-assign"><span>Project Knowledge</span><input type="checkbox" checked></label><label class="panel project-assign"><span>FocusMap Tools</span><input type="checkbox"></label><button class="btn-primary" style="margin-top:12px">保存关系</button></div></section>
+    <section class="settings-section" id="settings-conversations" data-layout-contract="fill-settings-available-height">
+      <div class="conversation-view">
+        <div class="conversation-frame">
+          <div class="conversation-toolbar">
+            <div class="conversation-filter"><label for="conv-project-filter">项目</label><select class="input" id="conv-project-filter"><option value="vision-inspection">视觉检测平台</option><option value="project-knowledge" selected>Project Knowledge</option><option value="focusmap-tools">FocusMap Tools</option></select></div>
+            <div class="conversation-filter date"><label for="conv-date-filter">日期</label><input class="input" id="conv-date-filter" type="date" value="2026-08-18"></div>
+          </div>
+          <div class="conversation-content">
+            <div class="conversation-stream" id="conversation-stream"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="settings-section" id="settings-logs" data-layout-contract="fill-settings-available-height">
+      <div class="panel2 settings-card">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px">
+          <div><strong>运行记录</strong><p class="section-help">查看系统和项目的运行过程。正常记录保持安静，警告和错误会自动突出；点击记录可查看完整工程上下文。</p></div>
+          <button class="btn" id="record-export">导出</button>
+        </div>
+        <div class="record-sync-warning" id="record-sync-warning">新记录同步暂时中断，正在自动恢复。</div>
+        <div class="record-toolbar">
+          <input class="input" id="record-date-filter" type="date" value="2026-08-18" aria-label="记录日期">
+          <select class="input" id="record-project-filter"><option value="all">全部项目</option><option value="system">系统</option><option value="vision-inspection">视觉检测平台</option><option value="project-knowledge">Project Knowledge</option><option value="focusmap-tools">FocusMap Tools</option></select>
+          <select class="input" id="record-scope-filter"><option value="all">全部记录</option><option value="important">重要记录</option><option value="issues">仅异常</option></select>
+          <select class="input" id="record-limit-filter" aria-label="显示记录数量"><option value="500" selected>500 条</option><option value="1000">1000 条</option><option value="2000">2000 条</option><option value="5000">5000 条</option></select>
+          <input class="input record-search" id="record-search" placeholder="搜索运行记录…">
+        </div>
+        <div class="record-shell">
+          <div class="record-list" id="record-list"></div>
+          <div class="record-empty" id="record-empty">这个筛选条件下没有运行记录。</div>
+          <button class="new-records" id="new-records">有新记录</button>
+          <div class="record-footer"><span id="record-count-label">正在加载模拟记录…</span><span class="record-note">点击任意记录查看 Level、阶段和 Operation 详情</span></div>
+        </div>
+      </div>
+    </section>
+    <section class="settings-section" id="settings-client"><div class="panel2 settings-card"><div style="display:flex;justify-content:space-between"><strong>桌面客户端</strong><span class="chip">v4.1.23</span></div><p class="section-help">Windows Desktop 与浏览器共享同一个本地后端和应用 Shell。</p><button class="btn" style="margin-top:10px">检查更新</button></div></section>
+  </div>
+</aside>
+
+<div class="modal-wrap" id="git-modal"><div class="panel modal"><div style="display:flex;justify-content:space-between"><div><h2>Git account</h2><div class="section-help">保留原 UI 的右侧 Git 账户入口；这里仅做视觉/导航预览。</div></div><button class="btn" data-close-modal>×</button></div><div class="panel2 settings-card" style="margin-top:15px"><div style="display:flex;justify-content:space-between"><strong>GitHub</strong><span class="dot good"></span></div><p class="muted" style="font-size:12px">已连接 · SanQianX</p><button class="btn">刷新团队知识库</button> <button class="btn">退出登录</button></div></div></div>
+<div class="context-menu" id="context-menu"><div class="muted" style="padding:5px 8px;font-size:10px" id="context-id">project</div><button id="remove-project">移除项目…</button></div>
+<div class="modal-wrap" id="delete-modal"><div class="panel modal"><h2>移除项目</h2><p class="muted" style="font-size:12px">默认只移除项目登记并卸载托管 Hook，保留外部知识文件。</p><div class="notice"><strong>Knowledge Path</strong><span class="code">D:\Knowledge\Project-Knowledge\vision-inspection</span></div><label style="display:flex;gap:8px;margin-top:12px;font-size:12px"><input type="checkbox">同时删除由本应用拥有的知识目录（危险）</label><div class="modal-actions"><button class="btn" data-close-modal>取消</button><button class="btn-danger">移除项目</button></div></div></div>
+
+<script>
+const state={view:'dashboard',project:'vision-inspection'};
+const titles={dashboard:'Claude Code',import:'导入项目'};
+function setView(view){state.view=view;document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.getElementById('view-'+view).classList.add('active');document.getElementById('page-title').textContent=titles[view]||view;document.querySelectorAll('[data-go]').forEach(b=>b.classList.toggle('active',b.dataset.go===view));document.getElementById('context-menu').classList.remove('show')}
+document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.go)));
+const projects={
+ 'vision-inspection':{name:'视觉检测平台',status:'idle'},
+ 'project-knowledge':{name:'Project Knowledge',status:'idle'},
+ 'focusmap-tools':{name:'FocusMap Tools',status:'idle'}
+};
+document.querySelectorAll('.project-card').forEach(card=>{card.addEventListener('click',()=>{state.project=card.dataset.project;document.querySelectorAll('.project-card').forEach(c=>c.classList.toggle('active',c===card));document.getElementById('wb-project').textContent=projects[state.project].name;setView('dashboard')});card.addEventListener('contextmenu',e=>{e.preventDefault();const menu=document.getElementById('context-menu');document.getElementById('context-id').textContent=card.dataset.project;menu.style.left=Math.min(e.clientX,innerWidth-210)+'px';menu.style.top=Math.min(e.clientY,innerHeight-90)+'px';menu.classList.add('show')})});
+document.addEventListener('click',e=>{if(!e.target.closest('.context-menu')&&!e.target.closest('.project-card'))document.getElementById('context-menu').classList.remove('show')});
+function openSettings(section='ai'){document.getElementById('backdrop').classList.add('show');document.getElementById('settings-drawer').classList.add('show');selectSettings(section)}
+function closeSettings(){document.getElementById('backdrop').classList.remove('show');document.getElementById('settings-drawer').classList.remove('show')}
+document.getElementById('settings-btn').onclick=()=>openSettings('ai');document.getElementById('mobile-settings').onclick=()=>openSettings('ai');document.getElementById('close-settings').onclick=closeSettings;document.getElementById('backdrop').onclick=closeSettings;document.querySelectorAll('[data-open-settings]').forEach(b=>b.onclick=()=>openSettings(b.dataset.openSettings));
+const settingTitles={ai:['AI 模型','配置模型并为项目分配 Profile。'],knowledge:['知识库存储','设置未来新导入项目使用的全局知识库根目录。'],relations:['知识关联','管理显式的跨项目知识检索关系。'],conversations:['开发对话','查看项目开发过程中的需求与 AI 回复。'],logs:['日志','查看系统和项目的运行记录；默认最新 500 条，异常会自动突出显示。'],client:['桌面客户端','桌面版本与更新状态。']};
+function selectSettings(key){document.querySelectorAll('[data-settings]').forEach(b=>b.classList.toggle('active',b.dataset.settings===key));document.querySelectorAll('.settings-section').forEach(s=>s.classList.remove('active'));document.getElementById('settings-'+key).classList.add('active');document.getElementById('settings-title').textContent=settingTitles[key][0];document.getElementById('settings-help').textContent=settingTitles[key][1];if(key==='conversations'&&typeof convProject!=='undefined'){convProject.value=state.project;renderConversationExplorer()}}
+document.querySelectorAll('[data-settings]').forEach(b=>b.onclick=()=>selectSettings(b.dataset.settings));
+document.getElementById('theme-btn').onclick=()=>{const dark=document.documentElement.dataset.theme==='dark';document.documentElement.dataset.theme=dark?'light':'dark';document.getElementById('theme-btn').textContent=dark?'深色模式':'浅色模式'};
+document.getElementById('git-btn').onclick=()=>document.getElementById('git-modal').classList.add('show');document.querySelectorAll('[data-close-modal]').forEach(b=>b.onclick=()=>b.closest('.modal-wrap').classList.remove('show'));
+document.getElementById('remove-project').onclick=()=>{document.getElementById('context-menu').classList.remove('show');document.getElementById('delete-modal').classList.add('show')};
+
+// V10 Development Conversations preview. UI only exposes project + date; source/session identity remains internal evidence.
+const conversationData=[
+  {turnId:'turn-vi-001',sessionId:'claude-vision-01',source:'claude-code',project:'vision-inspection',date:'2026-08-18',time:'09:12',user:'检查当前 FocusMap 数据处理逻辑，并把重复性分析中的真实 Z 热漂移保留下来，不要默认扣除。',assistant:'确认现有流程在重复性统计前做了整体 Z offset 扣除。我会保留原始漂移，并把热漂移量作为独立诊断指标。',commitRefs:[{sha:'3a61d8f',message:'preserve focus map thermal drift'}]},
+  {turnId:'turn-vi-002',sessionId:'claude-vision-01',source:'claude-code',project:'vision-inspection',date:'2026-08-18',time:'09:38',user:'继续把异常情况下的自动对焦诊断日志补详细，尤其要能看出 rowIdx 和 Z 变化。',assistant:'会增加 FocusMap 扫描阶段、rowIdx 切换、Z 采样统计和失败阶段日志，并保持正常路径不过度打扰。',commitRefs:[{sha:'51d28b4',message:'add focus map autofocus diagnostics'}]},
+  {turnId:'turn-pk-101',sessionId:'codex-pk-88',source:'codex',project:'project-knowledge',date:'2026-08-18',time:'10:06',user:'把 DevTask-Radar 里面 Claude Code、Codex、OpenCode 的提示词和回答钩子抽成公共 @sanqianx/ai-coding-event-bridge，不要复制代码。',assistant:'我会把 connector、installer、normalizer、durable journal 与 consumer cursor 提炼成独立公共边界，让两个宿主只通过标准事件接口消费。',commitRefs:[{sha:'8f41c2a',message:'extract reusable AI coding event bridge'}]},
+  {turnId:'turn-pk-102',sessionId:'codex-pk-88',source:'codex',project:'project-knowledge',date:'2026-08-18',time:'10:31',user:'Commit 绑定不能把我下一次提问算到前一个 Commit，必须能看出这次 Commit 对应哪些提示词和 AI 回答。',assistant:'采用 Commit 创建时冻结 event cursor/openTurnIds 的方案，并生成 CommitConversationSnapshot。未来事件不会回流到旧 Commit。',commitRefs:[{sha:'a1c6e30',message:'freeze commit conversation boundary'},{sha:'b79d40e',message:'persist commit conversation snapshot'}]},
+  {turnId:'turn-fm-501',sessionId:'opencode-fm-11',source:'opencode',project:'focusmap-tools',date:'2026-08-18',time:'11:18',user:'把 rowIdx 变化当成 X 方向位置变化来做重复性统计，不要求日志里一定有 xUm。',assistant:'会使用 rowIdx 作为 X 位置分组键，并保留原始 Z offset 变化作为真实测试结果。',commitRefs:[{sha:'c60477d',message:'group focus map repeatability by row index'}]},
+  {turnId:'turn-pk-103',sessionId:'claude-pk-19',source:'claude-code',project:'project-knowledge',date:'2026-08-18',time:'12:04',user:'两个项目都要能看不同项目的用户提示词和 AI 回答，把这个可视化也做成共享 Conversation Explorer。',assistant:'可以。Bridge Core 保持 headless，再提供独立可选 UI 层；Project Knowledge 通过 CommitAnnotationProvider 保证对话与真实 Commit 归属一致。',commitRefs:[]}
+];
+const sourceLabels={'claude-code':'Claude Code',codex:'Codex',opencode:'OpenCode'};
+const convProject=document.getElementById('conv-project-filter'),convDate=document.getElementById('conv-date-filter'),convStream=document.getElementById('conversation-stream');
+function conversationMatches(turn){return turn.project===convProject.value&&(!convDate.value||turn.date===convDate.value)}
+function makeTurn(turn){
+  const wrap=document.createElement('article');wrap.className='turn';
+  const head=document.createElement('div');head.className='turn-head';
+  const source=document.createElement('span');source.className='turn-source';source.textContent=sourceLabels[turn.source]||'AI';
+  const at=document.createElement('span');at.textContent=turn.time;head.append(source,at);
+  const card=document.createElement('div');card.className='turn-card';
+  const user=document.createElement('div');user.className='turn-message user';
+  const userRole=document.createElement('div');userRole.className='turn-role';userRole.textContent='你';
+  const userText=document.createElement('div');userText.className='turn-text';userText.textContent=turn.user;user.append(userRole,userText);
+  const assistant=document.createElement('div');assistant.className='turn-message assistant';
+  const assistantRole=document.createElement('div');assistantRole.className='turn-role';assistantRole.textContent='AI';
+  const aiText=document.createElement('div');aiText.className='turn-text';aiText.textContent=turn.assistant;assistant.append(assistantRole,aiText);
+  card.append(user,assistant);
+  const foot=document.createElement('div');foot.className='turn-foot';
+  if(turn.commitRefs.length){
+    const label=document.createElement('span');label.textContent=turn.commitRefs.length>1?'关联提交':'已提交';foot.appendChild(label);
+    turn.commitRefs.forEach(ref=>{const item=document.createElement('span');item.className='commit-ref';item.textContent=ref.sha;item.title=ref.message;foot.appendChild(item)});
+  }else{
+    const pending=document.createElement('span');pending.textContent='未提交';foot.appendChild(pending);
+  }
+  card.appendChild(foot);wrap.append(head,card);return wrap;
+}
+function renderConversationExplorer(){
+  const turns=conversationData.filter(conversationMatches).sort((a,b)=>`${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
+  convStream.replaceChildren();
+  if(!turns.length){const empty=document.createElement('div');empty.className='conversation-empty';empty.textContent='这一天还没有开发对话。';convStream.appendChild(empty);return;}
+  turns.forEach(turn=>convStream.appendChild(makeTurn(turn)));
+}
+[convProject,convDate].forEach(el=>el.addEventListener('change',renderConversationExplorer));renderConversationExplorer();
+
+// V10 mature activity records. Production uses one historical GET + SSE push for today; no polling and no visible live/debug status.
+const recordList=document.getElementById('record-list');
+const recordProjectFilter=document.getElementById('record-project-filter');
+const recordDateFilter=document.getElementById('record-date-filter');
+const recordScopeFilter=document.getElementById('record-scope-filter');
+const recordLimitFilter=document.getElementById('record-limit-filter');
+const recordSearch=document.getElementById('record-search');
+const recordCountLabel=document.getElementById('record-count-label');
+const newRecordsButton=document.getElementById('new-records');
+let followRecords=true;
+let pendingRecordCount=0;
+
+const recordProjects={
+  system:{name:'系统'},
+  'vision-inspection':{name:'视觉检测平台'},
+  'project-knowledge':{name:'Project Knowledge'},
+  'focusmap-tools':{name:'FocusMap Tools'}
+};
+const baseMessages=[
+  ['server','server.startup.phase','Startup recovery phase completed; project registry and settings are ready.','startup'],
+  ['hook-manager','hook.verify.completed','Managed post-commit hook verified against the current trigger script.','hook.verify'],
+  ['commit-reconciler','reconcile.scan.completed','Repository scan completed; pending commit set and branch head were resolved.','scan'],
+  ['commit-reconciler','reconcile.claim.prepared','Commit evidence prepared; patch hash, requirement binding and claim snapshot were persisted.','evidence.prepare'],
+  ['requirement-recorder','requirement.recorded','Requirement context recorded with project/session identity and Git HEAD metadata.','requirement.append'],
+  ['claude-runner','claude.request.started','Claude analysis request started with the selected AI profile and safety policy.','ai.request'],
+  ['claude-runner','claude.request.completed','Claude analysis completed and returned a staging manifest for validation.','ai.response'],
+  ['knowledge-promotion','knowledge.manifest.validated','Staging manifest validated; file operations are canonical and hashes match.','manifest.validate'],
+  ['knowledge-promotion','knowledge.backup.completed','Existing knowledge files were backed up and hash verification succeeded.','promotion.backup'],
+  ['knowledge-promotion','knowledge.operation.applied','Knowledge file operation applied and journal progress persisted.','promotion.apply'],
+  ['knowledge-promotion','knowledge.verify.completed','Promoted Markdown verification completed; authoritative knowledge is consistent.','promotion.verify'],
+  ['project-store','project.state.advanced','Project analysis state advanced to the processed commit and active claim cleared.','state.advance'],
+  ['index-service','index.enqueue','Derived index refresh queued for the project generation.','index.queue'],
+  ['index-service','index.project.completed','Derived knowledge index updated and dirty state cleared.','index.apply'],
+  ['knowledge-runtime','knowledge.search.completed','Knowledge search completed with scoped project spaces and ranked results.','knowledge.search'],
+  ['knowledge-runtime','knowledge.ask.completed','Knowledge answer assembled from scoped Markdown/index evidence.','knowledge.ask'],
+  ['project-lifecycle','project.import.stage','Project import transaction advanced after validating repository and knowledge paths.','project.import'],
+  ['migration-service','migration.stage.completed','Layout migration stage validated its staged files and source snapshot.','migration.validate'],
+  ['integration-manager','integration.status.completed','AI client integration status check completed for installed command-line tools.','integration.status'],
+  ['atomic-file','atomic.write.completed','Atomic metadata write completed after lock acquisition and durable rename.','storage.write']
+];
+const warnMessages=[
+  ['index-service','index.retry.scheduled','Derived index update will be retried because the current generation is still dirty.','index.retry'],
+  ['knowledge-runtime','knowledge.search.degraded','Derived index is unavailable; search safely fell back to project Markdown.','knowledge.fallback'],
+  ['claude-runner','claude.request.retry','AI request hit a transient upstream error; a bounded retry was scheduled.','ai.retry'],
+  ['hook-manager','hook.repair.required','Managed hook version is outdated and will be repaired before the next event.','hook.repair'],
+  ['atomic-file','lock.wait.slow','Project lock acquisition exceeded the normal threshold but eventually succeeded.','lock.wait']
+];
+const errorMessages=[
+  ['index-service','index.project.failed','Derived index update failed because the database is locked; Markdown remains authoritative.','index.apply'],
+  ['claude-runner','claude.request.failed','Claude analysis failed after the final retry because the upstream request timed out.','ai.request'],
+  ['hook-manager','hook.verify.failed','Managed hook verification failed because the trigger script could not be resolved.','hook.verify'],
+  ['requirement-recorder','requirement.append.failed','Requirement context could not be persisted because the project metadata directory is not writable.','requirement.append'],
+  ['integration-manager','integration.command.failed','Codex integration command exited with a non-zero status during plugin installation.','integration.install']
+];
+
+function pad2(n){return String(n).padStart(2,'0')}
+function demoTime(index){const seconds=55+index*17;const h=Math.floor(seconds/3600)%24,m=Math.floor(seconds/60)%60,s=seconds%60;return `${pad2(h)}:${pad2(m)}:${pad2(s)}`}
+function fakeSha(index){return ((0x9e3779b1*(index+3))>>>0).toString(16).padStart(8,'0').slice(0,8)}
+function makeDemoRecords(){
+  const ids=['system','vision-inspection','project-knowledge','focusmap-tools'];
+  const errors=new Set([43,87,132,169,194]);
+  const fatalIndex=176;
+  const records=[];
+  for(let i=0;i<200;i++){
+    const project=ids[i%ids.length];
+    let level='info';
+    if(errors.has(i)) level='error';
+    else if(i===fatalIndex) level='fatal';
+    else if(i%17===0||i%23===0) level='warn';
+    else if(i%5===0) level='debug';
+    else if(i%11===0) level='trace';
+    let tpl=baseMessages[i%baseMessages.length];
+    if(level==='warn') tpl=warnMessages[i%warnMessages.length];
+    if(level==='error') tpl=errorMessages[[...errors].indexOf(i)%errorMessages.length];
+    if(level==='fatal') tpl=['server','server.startup.fatal','Server startup cannot continue because the active settings file is structurally corrupt.','startup.validate'];
+    const [component,event,message,phase]=tpl;
+    const commit=(project==='system'||i%3===0)?'':fakeSha(i);
+    const suffix=level==='info'||level==='debug'||level==='trace'
+      ? `  [stage ${i%7+1}, ${12+(i*37)%980} ms${commit?`, commit ${commit}`:''}]`
+      : '';
+    records.push({
+      id:`demo-log-${String(i+1).padStart(3,'0')}`,date:'2026-08-18',time:demoTime(i),level,project,projectName:recordProjects[project].name,
+      message:message+suffix,component,event,phase,operationId:`op-${fakeSha(i+300)}`,runId:commit?`run-${fakeSha(i+600)}`:'',commitSha:commit,
+      attempt:level==='warn'||level==='error'?((i%3)+1):1,durationMs:12+(i*37)%9800
+    });
+  }
+  return records;
+}
+let recordData=makeDemoRecords();
+
+function createRecordEntry(record){
+  const entry=document.createElement('div');
+  entry.className='record-entry';entry.dataset.logId=record.id;entry.dataset.date=record.date;entry.dataset.level=record.level;entry.dataset.project=record.project;
+  const row=document.createElement('button');row.className='record-row';
+  const main=document.createElement('span');main.className='record-main';
+  const title=document.createElement('span');title.className='record-title';title.textContent=record.message;
+  const meta=document.createElement('span');meta.className='record-meta';
+  const project=document.createElement('span');project.className='record-project';project.textContent=record.projectName;
+  const sep=document.createElement('span');sep.className='record-meta-sep';sep.textContent='·';
+  const category=document.createElement('span');category.className='record-category';category.textContent=record.component.replace(/-/g,' ');
+  const sep2=document.createElement('span');sep2.className='record-meta-sep';sep2.textContent='·';
+  const duration=document.createElement('span');duration.className='record-duration';duration.textContent=`${record.durationMs.toLocaleString()} ms`;
+  meta.append(project,sep,category,sep2,duration);main.append(title,meta);
+  const time=document.createElement('span');time.className='record-time';time.textContent=record.time;
+  row.append(main,time);
+  const detail=document.createElement('div');detail.className='record-detail';
+  const grid=document.createElement('div');grid.className='record-detail-grid';
+  const fields=[['level',record.level.toUpperCase()],['component',record.component],['event',record.event],['operationId',record.operationId],['runId',record.runId||'-'],['commit',record.commitSha||'-'],['phase',record.phase],['attempt',String(record.attempt)],['durationMs',String(record.durationMs)]];
+  fields.forEach(([key,value])=>{const span=document.createElement('span');const b=document.createElement('b');b.textContent=`${key}:`;span.append(b,document.createTextNode(` ${value}`));grid.appendChild(span)});
+  const msg=document.createElement('div');msg.className='record-detail-message';msg.textContent=record.message;
+  const actions=document.createElement('div');actions.className='record-detail-actions';actions.innerHTML='<button class="btn" type="button">复制</button><button class="btn" type="button">原始 JSON</button>';
+  detail.append(grid,msg,actions);entry.append(row,detail);
+  row.addEventListener('click',()=>entry.classList.toggle('open'));
+  return entry;
+}
+function scopeMatches(level,scope){if(scope==='issues')return ['warn','error','fatal'].includes(level);if(scope==='important')return ['info','warn','error','fatal'].includes(level);return true}
+function filteredRecords(){
+  const project=recordProjectFilter.value,date=recordDateFilter.value,scope=recordScopeFilter.value,q=recordSearch.value.trim().toLowerCase();
+  return recordData.filter(record=>(!date||record.date===date)&&(project==='all'||record.project===project)&&scopeMatches(record.level,scope)&&(!q||`${record.message} ${record.projectName} ${record.component} ${record.event}`.toLowerCase().includes(q)));
+}
+function renderRecords({preserveScroll=false}={}){
+  const oldDistance=recordList.scrollHeight-recordList.scrollTop-recordList.clientHeight;
+  const limit=Number(recordLimitFilter.value||500);
+  const matches=filteredRecords().slice(-limit);
+  const frag=document.createDocumentFragment();matches.forEach(record=>frag.appendChild(createRecordEntry(record)));
+  recordList.replaceChildren(frag);
+  document.getElementById('record-empty').style.display=matches.length?'none':'block';
+  recordCountLabel.textContent=`已加载 ${matches.length.toLocaleString()} 条${recordData.length===200?'模拟记录':''} · 正式环境默认上限 ${limit.toLocaleString()} 条`;
+  if(!preserveScroll||followRecords) requestAnimationFrame(()=>{recordList.scrollTop=recordList.scrollHeight});
+  else recordList.scrollTop=Math.max(0,recordList.scrollHeight-recordList.clientHeight-oldDistance);
+}
+function resetRecordView(){pendingRecordCount=0;newRecordsButton.classList.remove('show');followRecords=true;renderRecords()}
+[recordProjectFilter,recordDateFilter,recordScopeFilter,recordLimitFilter].forEach(el=>el.addEventListener('change',resetRecordView));
+recordSearch.addEventListener('input',resetRecordView);
+recordList.addEventListener('scroll',()=>{const distance=recordList.scrollHeight-recordList.scrollTop-recordList.clientHeight;followRecords=distance<48;if(followRecords){pendingRecordCount=0;newRecordsButton.classList.remove('show')}});
+newRecordsButton.addEventListener('click',()=>{followRecords=true;pendingRecordCount=0;newRecordsButton.classList.remove('show');recordList.scrollTop=recordList.scrollHeight});
+document.getElementById('record-export').onclick=()=>alert(`预览：导出 ${recordDateFilter.value} / ${recordProjectFilter.options[recordProjectFilter.selectedIndex].text} 的当前运行记录。`);
+
+function appendPushedRecord(record){
+  // Demo event only. Production receives the same public record after durable JSONL append via SSE/fetch streaming.
+  if(recordDateFilter.value!=='2026-08-18')return;
+  if(recordData.some(item=>item.id===record.id))return;
+  recordData.push(record);
+  const atBottom=followRecords;
+  renderRecords({preserveScroll:!atBottom});
+  if(atBottom){recordList.scrollTop=recordList.scrollHeight}
+  else{pendingRecordCount+=1;newRecordsButton.textContent=`有 ${pendingRecordCount} 条新记录`;newRecordsButton.classList.add('show')}
+}
+window.addEventListener('project-knowledge:log-appended',e=>appendPushedRecord(e.detail));
+
+// A real UI action can add one demo record; there is intentionally no timer/polling loop.
+document.getElementById('send-btn').addEventListener('click',()=>{
+  const input=document.getElementById('chat-input');if(!input.value.trim())return;
+  const project=state.project,d=new Date();
+  window.dispatchEvent(new CustomEvent('project-knowledge:log-appended',{detail:{
+    id:'demo-'+Date.now(),date:'2026-08-18',time:d.toLocaleTimeString('zh-CN',{hour12:false}).slice(0,8),level:'info',project,
+    projectName:projects[project]?.name||project,message:'Claude input accepted; requirement context hash was persisted before the turn was sent.',
+    component:'claude-runner',event:'claude.input.accepted',operationId:'op-live-demo',runId:'',commitSha:'',phase:'input.accepted',attempt:1,durationMs:18
+  }}));input.value='';
+});
+renderRecords();
+
+
+</script>
+</body>
+</html>

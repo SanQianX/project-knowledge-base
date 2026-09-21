@@ -1,0 +1,48 @@
+{
+  "schema": "project-knowledge/overnight-agent-state/v1",
+  "planVersion": "v13",
+  "currentSequenceId": "PK01",
+  "status": "READY",
+  "repositories": {
+    "project-knowledge-base": {
+      "expectedRemoteHead": "88e795df55eca26ce301e0e3c7615e894e7d0de8",
+      "actualRemoteHead": "",
+      "branch": "",
+      "dirtyProtectedFiles": []
+    },
+    "DevTask-Radar": {
+      "expectedRemoteHead": "33ab03a1de4fccb9b1b27610e6ff9e32d9b5e0d4",
+      "actualRemoteHead": "",
+      "branch": "",
+      "dirtyProtectedFiles": []
+    },
+    "ai-coding-event-bridge": {
+      "expectedRemoteHead": "",
+      "actualRemoteHead": "",
+      "branch": "",
+      "created": false
+    }
+  },
+  "completedCommits": [],
+  "lastPushed": {
+    "repo": "",
+    "sequenceId": "",
+    "sha": "",
+    "remoteChecks": "NOT_RUN"
+  },
+  "testsPassed": [],
+  "pendingTests": [],
+  "knownIssues": [],
+  "nextFiles": [],
+  "dependencyVersions": {
+    "bridgeCore": "UNPUBLISHED",
+    "bridgeUi": "UNPUBLISHED"
+  },
+  "release": {
+    "taggingAllowed": false,
+    "bridgePublished": false,
+    "projectKnowledgeTag": "",
+    "blockedReason": ""
+  },
+  "updatedAt": ""
+}

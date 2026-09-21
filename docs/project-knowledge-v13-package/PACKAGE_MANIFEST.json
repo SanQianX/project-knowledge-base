@@ -1,0 +1,73 @@
+{
+  "schema": "project-knowledge/v13-development-package/v1",
+  "auditBaselines": {
+    "project-knowledge-base": "88e795df55eca26ce301e0e3c7615e894e7d0de8",
+    "DevTask-Radar": "33ab03a1de4fccb9b1b27610e6ff9e32d9b5e0d4"
+  },
+  "canonicalTests": {
+    "count": 52,
+    "range": "TS-01..TS-52"
+  },
+  "files": [
+    {
+      "file": "AGENT_CHECKPOINT_TEMPLATE.json",
+      "bytes": 1144,
+      "sha256": "98dfa234c2c2bd9a9f23d53cc2c3241ea240505d573343ac18c2c4009eaf87fd"
+    },
+    {
+      "file": "BRIDGE_EXTRACTION_AND_INTEGRATION.md",
+      "bytes": 8775,
+      "sha256": "4419d702e0e5cd26afcbbf2a58164f357060872e5c501aec86d0da1ae1b8255c"
+    },
+    {
+      "file": "CODEX_OVERNIGHT_MASTER_PROMPT.md",
+      "bytes": 3357,
+      "sha256": "8427771f360b679be43c797ce53fc6d851c5eb7b969e8aaaf02468ce16b50cbc"
+    },
+    {
+      "file": "COMMIT_SEQUENCE.md",
+      "bytes": 87954,
+      "sha256": "22c1e86d8b97a96cea2bc71d87f74433d6744b38692db7a349ba444a10aa4455"
+    },
+    {
+      "file": "DEVELOPMENT_PACKAGE_INDEX.md",
+      "bytes": 822,
+      "sha256": "e30a1cacc016e338b6248b174d037931eaa9de03113cfca0bf83f5ea93b79c50"
+    },
+    {
+      "file": "OVERNIGHT_AGENT_RUNBOOK.md",
+      "bytes": 5161,
+      "sha256": "9c89346a1f06027dd765509459e9a8debf53a2b16d4df03de089d09722910606"
+    },
+    {
+      "file": "PROJECT_KNOWLEDGE_REFACTOR_PLAN-v13.md",
+      "bytes": 207262,
+      "sha256": "4ea904f347c86f7fa88876c9b6ecf4aeff81e8c0bd0e474fa36e1f2df7a3c104"
+    },
+    {
+      "file": "PRO_REVIEW_AUDIT.md",
+      "bytes": 13081,
+      "sha256": "fbee6d19ee85db2b435eacd36efc4c3f50365ba828786e43df40dba4cda64033"
+    },
+    {
+      "file": "RELEASE_RUNBOOK.md",
+      "bytes": 5271,
+      "sha256": "7f43d18e87697e7fce7d94065c9fc05f4d0d0106b36160b2848f216016c433c7"
+    },
+    {
+      "file": "TEST_GATE_MATRIX.md",
+      "bytes": 7405,
+      "sha256": "7171be68f7fd25afa929807292d70390dcffb16d1d838b0ceafd61aa6154a3f3"
+    },
+    {
+      "file": "UI_VISUAL_ACCEPTANCE.md",
+      "bytes": 4800,
+      "sha256": "e258f39778002f2f79ab6092265002c60e9f91433dc8ecdfdcbc1ec62b632b78"
+    },
+    {
+      "file": "project-knowledge-base-faithful-repair-ui-v10.html",
+      "bytes": 58604,
+      "sha256": "fb926ef9f983a0272491cd89449f81fc207c078cfe979bbc30230ac9b450d50f"
+    }
+  ]
+}

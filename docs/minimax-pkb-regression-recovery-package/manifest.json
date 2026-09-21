@@ -1,0 +1,21 @@
+{
+  "package": "project-knowledge-regression-recovery-minimax",
+  "baseline": {
+    "tag": "v4.1.22",
+    "commit": "ba505bb2ae031e8d06ec3032657482f40d57ecf8"
+  },
+  "implementationBaseAtPlanCreation": {
+    "branch": "main",
+    "packageVersion": "4.2.4",
+    "aheadOfBaselineCommits": 44
+  },
+  "taskRange": "T00-T24",
+  "finalGates": "G00-G08",
+  "primaryPriorities": [
+    "existing-project commit update",
+    "hook runtime and migration",
+    "effective AI profile",
+    "project import",
+    "UI/product feature restoration"
+  ]
+}

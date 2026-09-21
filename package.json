@@ -1,6 +1,6 @@
 {
   "name": "project-knowledge",
-  "version": "4.6.0",
+  "version": "4.6.1",
   "description": "Knowledge base manager with Git integration, AI-driven analysis, and bilingual (zh-CN/en-US) knowledge output",
   "main": "_site/server.js",
   "scripts": {
@@ -77,7 +77,7 @@
     "@modelcontextprotocol/sdk": "1.29.0",
     "@sanqianx/ai-coding-event-bridge": "^0.1.2",
     "@sanqianx/ai-coding-event-bridge-console": "0.4.0",
-    "@sanqianx/vector-hub": "^1.0.1",
+    "@sanqianx/vector-hub": "^1.0.2",
     "buffer": "^6.0.3",
     "cheerio": "^1.2.0",
     "claude-ai-workbench": "0.4.1",
