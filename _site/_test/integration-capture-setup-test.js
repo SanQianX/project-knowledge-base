@@ -11,7 +11,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { IntegrationManager } = require('../lib/integration-installer');
-const { createBridge } = require('@sanqianx/ai-coding-event-bridge');
+const { createBridge } = require('@sanqianx/ai-coding-event-bridge-console/src/bridge');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const TEMP = fs.mkdtempSync(path.join(os.tmpdir(), `pk-integration-capture-${process.pid}-`));

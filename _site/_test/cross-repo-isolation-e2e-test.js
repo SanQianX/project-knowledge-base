@@ -18,8 +18,8 @@ const { ConversationStore } = require('../lib/conversation-store');
 const { BridgeAdapter } = require('../lib/bridge-adapter');
 const { BridgeConsumerService } = require('../lib/bridge-consumer-service');
 const { CommitConversationBinder } = require('../lib/commit-conversation-binder');
-const claudeConnector = require('@sanqianx/ai-coding-event-bridge').claudeHookEntry;
-const bridgeModule = require('@sanqianx/ai-coding-event-bridge');
+const claudeConnector = require('@sanqianx/ai-coding-event-bridge-console/src/bridge').claudeHookEntry;
+const bridgeModule = require('@sanqianx/ai-coding-event-bridge-console/src/bridge');
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), `kb-cross-repo-e2e-${process.pid}-`));
 const layout = new StorageLayout({ dataDir: path.join(temp, 'data') });

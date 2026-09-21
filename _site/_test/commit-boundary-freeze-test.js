@@ -14,7 +14,7 @@ const { ProjectRegistryStore } = require('../lib/project-registry-store');
 const { ProjectStore } = require('../lib/project-store');
 const { ConversationStore } = require('../lib/conversation-store');
 const { CommitConversationBinder } = require('../lib/commit-conversation-binder');
-const bridgeModule = require('@sanqianx/ai-coding-event-bridge');
+const bridgeModule = require('@sanqianx/ai-coding-event-bridge-console/src/bridge');
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), `kb-boundary-freeze-${process.pid}-`));
 const layout = new StorageLayout({ dataDir: path.join(temp, 'data') });

@@ -1,5 +1,24 @@
 # Changelog
 
+## [4.7.0] - 2026-09-21
+
+- All four embedded module dependencies (`claude-ai-workbench`,
+  `@sanqianx/vector-hub`, `@sanqianx/ai-coding-event-bridge-console`, plus the
+  `@sanqianx/ai-coding-event-bridge` consumer inside the shell) are now pinned
+  to `latest`, so a fresh `npm install` pulls whatever the upstream modules
+  ship instead of lagging behind the project's npm releases. The legacy
+  `@sanqianx/ai-coding-event-bridge` package — which used to be the engine
+  library — is deprecated on npm and removed from this project's dependencies;
+  its capture engine now ships inside `@sanqianx/ai-coding-event-bridge-console`
+  at `src/bridge`, and the four production call sites (hook capture, requirement
+  recorder, integration installer, bridge adapter) plus six tests were rewritten
+  to import from there. The legacy package's every version carries a deprecation
+  message pointing to the new entry.
+- The package is published as `@sanqianx/project-knowledge` (moved from the
+  unscoped `project-knowledge`); the unscoped name still resolves to the old
+  versions for users who haven't migrated, but new installs land on the
+  scoped package.
+
 ## [4.6.0] - 2026-09-21
 
 - The three embedded module runtimes now ship as real npm dependencies instead

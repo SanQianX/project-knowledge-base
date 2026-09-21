@@ -3,7 +3,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { BridgeAdapter } = require('../lib/bridge-adapter');
-const bridgeModule = require('@sanqianx/ai-coding-event-bridge');
+const bridgeModule = require('@sanqianx/ai-coding-event-bridge-console/src/bridge');
 
 (async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-bridge-adapter-'));

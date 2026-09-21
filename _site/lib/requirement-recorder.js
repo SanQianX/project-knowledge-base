@@ -60,7 +60,7 @@ function requirementHash(text) {
 // helpers only). Missing module degrades to null identity, never a guess.
 let bridgeIdentityModule = null;
 try {
-  const bridgeModule = require('@sanqianx/ai-coding-event-bridge');
+  const bridgeModule = require('@sanqianx/ai-coding-event-bridge-console/src/bridge');
   if (bridgeModule && typeof bridgeModule.buildRepoIdentityV1 === 'function') bridgeIdentityModule = bridgeModule;
 } catch (_) {
   bridgeIdentityModule = null;

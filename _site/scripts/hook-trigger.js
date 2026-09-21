@@ -11,7 +11,7 @@ const { BridgeAdapter } = require('../lib/bridge-adapter');
 
 let bridgeIdentityModule = null;
 try {
-  const bridgePackage = require('@sanqianx/ai-coding-event-bridge');
+  const bridgePackage = require('@sanqianx/ai-coding-event-bridge-console/src/bridge');
   if (bridgePackage && typeof bridgePackage.buildRepoIdentityV1 === 'function') bridgeIdentityModule = bridgePackage;
 } catch (_) {
   bridgeIdentityModule = null;

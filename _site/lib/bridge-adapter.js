@@ -3,7 +3,10 @@ const { SCHEMAS, createId } = require('./contracts');
 const AtomicFile = require('./atomic-file');
 
 function loadBridgeModule(explicitPath = '') {
-  const candidates = [explicitPath, process.env.AI_CODING_EVENT_BRIDGE_MODULE, '@sanqianx/ai-coding-event-bridge'].filter(Boolean);
+  // The bridge engine lives inside the consolidated console package
+  // (@sanqianx/ai-coding-event-bridge-console/src/bridge) — one package for
+  // both the capture library and the 会话浏览 service.
+  const candidates = [explicitPath, process.env.AI_CODING_EVENT_BRIDGE_MODULE, '@sanqianx/ai-coding-event-bridge-console/src/bridge'].filter(Boolean);
   for (const candidate of candidates) {
     try {
       const target = candidate.startsWith('.') || path.isAbsolute(candidate) ? path.resolve(candidate) : candidate;

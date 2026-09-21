@@ -11,7 +11,7 @@ const packageInfo = require('../../package.json');
 // degrade Development Capture status, never crash server startup.
 let bridgeModule = null;
 try {
-  bridgeModule = require('@sanqianx/ai-coding-event-bridge');
+  bridgeModule = require('@sanqianx/ai-coding-event-bridge-console/src/bridge');
 } catch (_) {
   bridgeModule = null;
 }

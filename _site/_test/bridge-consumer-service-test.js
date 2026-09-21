@@ -15,7 +15,7 @@ const { ProjectStore } = require('../lib/project-store');
 const { ConversationStore } = require('../lib/conversation-store');
 const { BridgeAdapter } = require('../lib/bridge-adapter');
 const { BridgeConsumerService } = require('../lib/bridge-consumer-service');
-const bridgeModule = require('@sanqianx/ai-coding-event-bridge');
+const bridgeModule = require('@sanqianx/ai-coding-event-bridge-console/src/bridge');
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), `kb-bridge-consumer-${process.pid}-`));
 const layout = new StorageLayout({ dataDir: path.join(temp, 'data') });

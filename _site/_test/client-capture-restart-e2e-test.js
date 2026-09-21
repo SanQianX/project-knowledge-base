@@ -17,10 +17,10 @@ const { ConversationStore } = require('../lib/conversation-store');
 const { BridgeAdapter } = require('../lib/bridge-adapter');
 const { BridgeConsumerService } = require('../lib/bridge-consumer-service');
 const { readDevelopmentEvents } = require('../lib/conversation-exclusions');
-const bridgePackage = require('@sanqianx/ai-coding-event-bridge');
-const opencodeEntry = require('@sanqianx/ai-coding-event-bridge/src/connectors/opencode/hook-entry');
-const claudeEntry = require('@sanqianx/ai-coding-event-bridge/src/connectors/claude-code/hook-entry');
-const codexEntry = require('@sanqianx/ai-coding-event-bridge/src/connectors/codex/hook-entry');
+const bridgePackage = require('@sanqianx/ai-coding-event-bridge-console/src/bridge');
+const opencodeEntry = require('@sanqianx/ai-coding-event-bridge-console/src/bridge/connectors/opencode/hook-entry');
+const claudeEntry = require('@sanqianx/ai-coding-event-bridge-console/src/bridge/connectors/claude-code/hook-entry');
+const codexEntry = require('@sanqianx/ai-coding-event-bridge-console/src/bridge/connectors/codex/hook-entry');
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), `kb-client-e2e-${process.pid}-`));
 const layout = new StorageLayout({ dataDir: path.join(temp, 'data') });
