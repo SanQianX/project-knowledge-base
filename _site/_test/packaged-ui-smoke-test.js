@@ -38,7 +38,14 @@ function buildAndInstallPackage() {
     windowsHide: true,
   });
   assert.strictEqual(installed.status, 0, installed.stderr || installed.stdout);
-  return path.join(installDir, 'node_modules', 'project-knowledge');
+  // Resolve the install path from the package's actual name (moved to
+  // @sanqianx/project-knowledge in 4.7.0; prior releases used the unscoped
+  // 'project-knowledge' which would live at node_modules/project-knowledge).
+  const pkg = require(path.join(ROOT, 'package.json'));
+  const installPath = pkg.name.startsWith('@')
+    ? path.join(installDir, 'node_modules', pkg.name.split('/')[0], pkg.name.split('/')[1])
+    : path.join(installDir, 'node_modules', pkg.name);
+  return installPath;
 }
 
 (async () => {
