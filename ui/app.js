@@ -7,8 +7,8 @@
   const setLanguage = typeof i18nApi.setLanguage === 'function' ? i18nApi.setLanguage : () => {};
   const activeLanguage = typeof i18nApi.activeLanguage === 'function' ? i18nApi.activeLanguage : () => 'zh-CN';
   const state = {
-    projects: [], activeProjectId: '', view: 'terminal', settings: 'conversation', settingsOpen: false,
-    conversationCursor: null, conversationTurns: [], logs: [], logStream: null, logCursor: '', newLogs: 0,
+    projects: [], activeProjectId: '', view: 'terminal', settings: 'logs', settingsOpen: false,
+    logs: [], logStream: null, logCursor: '', newLogs: 0,
     messageCount: 0, pendingDeleteId: '',
     modules: { terminal: { url: 'http://127.0.0.1:5760', up: false }, vectorHub: { url: 'http://127.0.0.1:8787', up: false }, eventBridge: { url: 'http://127.0.0.1:8790', up: false } },
     sessionsByProject: new Map(),   // projectId -> [{sessionId,title,agentId,updatedAt}]
@@ -147,7 +147,6 @@
     const list = $('project-list');
     list.replaceChildren();
     $('mobile-project').replaceChildren();
-    $('conversation-project').replaceChildren();
     $('logs-project').replaceChildren(option('', '全部项目'));
     for (const project of state.projects) {
       const wrap = document.createElement('div'); wrap.className = 'project-item'; wrap.dataset.projectId = project.projectId;
@@ -197,11 +196,9 @@
       wrap.append(card, sessions);
       list.append(wrap);
       $('mobile-project').append(option(project.projectId, project.displayName));
-      $('conversation-project').append(option(project.projectId, project.displayName));
       $('logs-project').append(option(project.projectId, project.displayName));
     }
     $('mobile-project').value = state.activeProjectId;
-    $('conversation-project').value = state.activeProjectId;
     updateProjectContext();
   }
   function sessionPlaceholder(text) { const div = document.createElement('div'); div.className = 'sess-empty'; div.textContent = text; return div; }
@@ -236,7 +233,6 @@
   function selectProject(projectId) {
     state.activeProjectId = projectId;
     renderProjects();
-    if (state.settings === 'conversation') loadConversations(true);
   }
   const viewTitles = { terminal: 'Agent 终端', search: '知识检索', bridge: '会话浏览', import: '导入项目' };
   function showView(view) {
@@ -257,7 +253,6 @@
     }));
     if (!state.activeProjectId || !state.projects.some(project => project.projectId === state.activeProjectId)) state.activeProjectId = state.projects[0]?.projectId || '';
     renderProjects();
-    if (state.settings === 'conversation') loadConversationProjects();
   }
   async function refreshModulesHealth() {
     try {
@@ -358,72 +353,6 @@
     } else { errNotice.hidden = true; errNotice.textContent = ''; }
   }
 
-  /* ===================== 开发对话（pkb 流水线域） ===================== */
-  async function loadConversationProjects() {
-    try {
-      const body = await api('/api/conversations/projects');
-      const allowed = new Set((body.projects || []).map(project => project.projectId));
-      if (!allowed.has(state.activeProjectId)) state.activeProjectId = body.projects?.[0]?.projectId || '';
-      $('conversation-project').value = state.activeProjectId;
-      $('conversation-date').value = $('conversation-date').value || today();
-      await loadConversations(true);
-    } catch (error) { renderConversationEmpty(error.message); }
-  }
-  async function loadConversations(reset = false) {
-    const projectId = $('conversation-project').value || state.activeProjectId;
-    const date = $('conversation-date').value || today();
-    if (!projectId) return renderConversationEmpty('暂无可用项目。');
-    if (reset) { state.conversationCursor = null; state.conversationTurns = []; }
-    const params = new URLSearchParams({ projectId, date, limit: '50' });
-    if (state.conversationCursor) params.set('cursor', state.conversationCursor);
-    try {
-      const body = await api(`/api/conversations/turns?${params}`);
-      state.conversationTurns.push(...body.turns); state.conversationCursor = body.nextCursor || null; renderConversations();
-    } catch (error) { renderConversationEmpty(error.message); }
-  }
-  function renderConversationEmpty(message) {
-    const stream = $('conversation-stream');
-    stream.replaceChildren();
-    const empty = document.createElement('div'); empty.className = 'conversation-empty'; empty.textContent = message || '这一天还没有开发对话。';
-    stream.append(empty);
-  }
-  function renderConversations() {
-    const stream = $('conversation-stream');
-    stream.replaceChildren();
-    if (!state.conversationTurns.length) return renderConversationEmpty('这一天还没有开发对话。');
-    const labels = { committed: '已提交', associated: '关联提交', uncommitted: '未提交' };
-    for (const turn of state.conversationTurns) {
-      const wrap = document.createElement('article'); wrap.className = 'turn'; wrap.dataset.turnId = turn.turnId;
-      const head = document.createElement('div'); head.className = 'turn-head';
-      const at = document.createElement('span'); at.textContent = formatTime(turn.startedAt);
-      head.append(at);
-      const card = document.createElement('div'); card.className = 'turn-card';
-      const makeMessage = (className, role, value) => {
-        const message = document.createElement('div'); message.className = `turn-message ${className}`;
-        const roleNode = document.createElement('div'); roleNode.className = 'turn-role'; roleNode.textContent = role;
-        const text = document.createElement('div'); text.className = 'turn-text'; text.textContent = value;
-        message.append(roleNode, text); return message;
-      };
-      if (turn.userPrompt) card.append(makeMessage('user', '你', turn.userPrompt));
-      if (turn.assistantReply) card.append(makeMessage('assistant', 'AI', turn.assistantReply));
-      const foot = document.createElement('div'); foot.className = 'turn-foot';
-      const label = document.createElement('span'); label.className = `commit-label ${turn.annotation.status}`;
-      label.textContent = labels[turn.annotation.status] || '未提交';
-      foot.append(label);
-      for (const commit of turn.annotation.commits || []) {
-        const ref = document.createElement('span'); ref.className = 'commit-ref'; ref.textContent = commit.shortSha;
-        if (commit.subject) ref.title = commit.subject;
-        foot.append(ref);
-      }
-      card.append(foot); wrap.append(head, card); stream.append(wrap);
-    }
-    if (state.conversationCursor) {
-      const more = document.createElement('button'); more.type = 'button'; more.className = 'btn'; more.style.display = 'block'; more.style.margin = '0 auto';
-      more.textContent = '加载更早对话'; more.addEventListener('click', () => loadConversations(false));
-      stream.append(more);
-    }
-  }
-
   /* ===================== 日志（连接层运行记录） ===================== */
   function logParams(includeCursor = false) {
     const params = new URLSearchParams(); const date = $('logs-date').value || today();
@@ -435,16 +364,20 @@
     if (includeCursor && state.logCursor) params.set('streamCursor', state.logCursor);
     return params;
   }
+  let loadLogsSeq = 0; // 连续触发加载时丢弃过期响应，避免清空后的列表被旧渲染覆盖或重复开流
   async function loadLogs() {
+    const seq = ++loadLogsSeq;
     stopLogStream(); $('logs-date').value = $('logs-date').value || today();
     $('record-list').replaceChildren(); $('record-empty').style.display = 'none';
     setText($('logs-summary'), '正在读取运行记录…');
     try {
       const body = await api(`/api/logs?${logParams()}`);
+      if (seq !== loadLogsSeq) return;
       state.logs = [...(body.entries || [])].reverse(); state.logCursor = body.streamCursor || ''; state.newLogs = 0; renderLogs();
       requestAnimationFrame(() => { const list = $('record-list'); list.scrollTop = list.scrollHeight; });
       if ($('logs-date').value === today()) startLogStream();
     } catch (error) {
+      if (seq !== loadLogsSeq) return;
       state.logs = []; renderLogs(); $('record-empty').style.display = 'block';
       $('record-empty').textContent = error.message; setText($('logs-summary'), '读取失败');
     }
@@ -540,12 +473,11 @@
     setText($('theme-button'), next === 'dark' ? '浅色模式' : '深色模式');
   }
 
-  /* ===================== 设置抽屉（开发对话 / 日志） ===================== */
+  /* ===================== 设置抽屉（日志） ===================== */
   const settingsTitles = {
-    conversation: ['开发对话', '查看项目开发过程中的需求与 AI 回复。'],
     logs: ['日志', '查看系统和项目的运行记录；异常会自动突出显示。'],
   };
-  function openSettings(section = 'conversation') { state.settingsOpen = true; $('settings-backdrop').classList.add('show'); $('settings-drawer').classList.add('show'); showSettings(section); }
+  function openSettings(section = 'logs') { state.settingsOpen = true; $('settings-backdrop').classList.add('show'); $('settings-drawer').classList.add('show'); showSettings(section); }
   function closeSettings() { state.settingsOpen = false; $('settings-backdrop').classList.remove('show'); $('settings-drawer').classList.remove('show'); stopLogStream(); }
   function showSettings(section) {
     state.settings = section;
@@ -553,7 +485,6 @@
     document.querySelectorAll('.settings-section').forEach(node => node.classList.toggle('active', node.id === `settings-${section}`));
     const [title, help] = settingsTitles[section] || ['', ''];
     setText($('settings-title'), title); setText($('settings-help'), help);
-    if (section === 'conversation') loadConversationProjects();
     if (section === 'logs') loadLogs(); else stopLogStream();
   }
 
@@ -579,7 +510,7 @@
   /* ===================== 事件绑定 ===================== */
   document.querySelectorAll('[data-go]').forEach(node => node.addEventListener('click', () => showView(node.dataset.go)));
   document.querySelectorAll('[data-settings]').forEach(node => node.addEventListener('click', () => showSettings(node.dataset.settings)));
-  for (const id of ['open-settings', 'mobile-settings']) $(id).addEventListener('click', () => openSettings('conversation'));
+  for (const id of ['open-settings', 'mobile-settings']) $(id).addEventListener('click', () => openSettings());
   $('close-settings').addEventListener('click', closeSettings); $('settings-backdrop').addEventListener('click', closeSettings);
   $('theme-button').addEventListener('click', toggleTheme);
   $('mobile-project').addEventListener('change', event => selectProject(event.target.value));
@@ -641,8 +572,6 @@
   bindFolderPicker('import-pick-knowledge', 'import-knowledge-path', '/api/vectorhub/system/pick-folder');
   const importReset = $('import-reset');
   if (importReset) importReset.addEventListener('click', () => setTimeout(schedulePreflight, 0));
-  $('conversation-project').addEventListener('change', event => { state.activeProjectId = event.target.value; renderProjects(); loadConversations(true); });
-  $('conversation-date').addEventListener('change', () => loadConversations(true));
   let logTimer; for (const id of ['logs-date', 'logs-project', 'logs-scope', 'logs-limit']) $(id).addEventListener('change', loadLogs);
   $('logs-search').addEventListener('input', () => { clearTimeout(logTimer); logTimer = setTimeout(loadLogs, 250); });
   $('logs-export').addEventListener('click', () => exportLogs().catch(error => { const warning = $('logs-connection'); warning.classList.add('show'); warning.textContent = error.message; }));
@@ -665,8 +594,8 @@
   const storedTheme = localStorage.getItem('pk-theme') || 'light';
   document.documentElement.dataset.theme = storedTheme;
   setText($('theme-button'), storedTheme === 'dark' ? '浅色模式' : '深色模式');
-  $('logs-date').value = today(); $('conversation-date').value = today();
-  window.__PK_APP__ = { getState: () => ({ projects: state.projects.length, activeProjectId: state.activeProjectId, view: state.view, settings: state.settings, settingsOpen: state.settingsOpen, conversationTurns: state.conversationTurns.length, logCount: state.logs.length, newLogs: state.newLogs, modules: state.modules, fold: state.fold }), openSettings, showSettings, loadLogs, selectProject, showView };
+  $('logs-date').value = today();
+  window.__PK_APP__ = { getState: () => ({ projects: state.projects.length, activeProjectId: state.activeProjectId, view: state.view, settings: state.settings, settingsOpen: state.settingsOpen, logCount: state.logs.length, newLogs: state.newLogs, modules: state.modules, fold: state.fold }), openSettings, showSettings, loadLogs, selectProject, showView };
   renderFoldIcons();
   (async () => {
     await refreshModulesHealth();

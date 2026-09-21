@@ -1,5 +1,23 @@
 # Changelog
 
+## [4.6.0] - 2026-09-21
+
+- The three embedded module runtimes now ship as real npm dependencies instead
+  of the `_modules/` committed snapshot: `claude-ai-workbench@0.4.1`,
+  `@sanqianx/vector-hub@1.0.1` and
+  `@sanqianx/ai-coding-event-bridge-console@0.4.0` (bringing
+  `@sanqianx/ai-coding-event-bridge@0.4.0` transitively). The `_modules/`
+  directory, its vendor script and the tarball entry are removed.
+- Why it matters: the snapshot lagged the source repo — npm consumers missed
+  the codex resident-bridge Windows fix (per-turn process respawns made every
+  turn 5-20s), claude failure-reason surfacing, `/system/doctor` diagnostics
+  and the folder-picker foreground/centering fixes. Module upgrades are now a
+  one-line version bump verified by `npm ci`, with no manual snapshot step.
+- `module-bridge` resolves each runtime entry through `require.resolve` from
+  the installed packages (same supervised spawn, reuse and env-override
+  contract as before); the `NODE_PATH` stitching is gone. `release:verify` no
+  longer gates on the vendored snapshot.
+
 ## [4.5.0] - 2026-09-21
 
 - The embedded Agent Terminal's settings view gains a 会话捕获 (capture) tab.

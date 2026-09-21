@@ -13,7 +13,6 @@ for (const contract of [
   'id="view-search"',
   'id="view-import"',
   'id="settings-drawer"',
-  'data-settings="conversation"',
   'data-settings="logs"',
   'id="delete-dialog"',
 ]) assert(html.includes(contract), 'missing v13 shell contract: ' + contract);
@@ -23,10 +22,8 @@ assert(desktopNav.includes('data-go="terminal"') && desktopNav.includes('data-go
 assert(!/开发对话|运行记录|系统日志/.test(desktopNav), 'conversation and logs must not be duplicated in main navigation');
 assert(!html.includes('data-install-hook') && !html.includes('data-analyze') && !html.includes('data-simulate'), 'manual Hook/analysis controls are forbidden');
 
-const conversation = html.slice(html.indexOf('id="settings-conversation"'), html.indexOf('id="settings-logs"'));
-assert.strictEqual((conversation.match(/class="conversation-filter[^"]*"/g) || []).length, 2, 'conversation toolbar must have exactly project and date controls');
-for (const required of ['id="conversation-project"', 'id="conversation-date"']) assert(conversation.includes(required), 'missing conversation control: ' + required);
-for (const forbidden of ['来源', 'Session', '搜索', '时间线', 'Commit 视角', 'Bridge', 'provider', 'schema']) assert(!conversation.includes(forbidden), 'forbidden visible conversation control/copy: ' + forbidden);
+// 开发对话已迁移到 ai-coding-event-bridge 模块，设置抽屉不再保留该入口
+assert(!html.includes('data-settings="conversation"') && !html.includes('settings-conversation') && !html.includes('conversation-project'), 'development-conversation settings entry must be absent (moved to event-bridge module)');
 
 for (const required of ['logs-date', 'logs-project', 'logs-scope', 'logs-limit', 'logs-search', 'logs-export']) assert(html.includes(`id="${required}"`), 'missing logs toolbar control: ' + required);
 for (const forbidden of ['pause-button', 'level-filter', 'setting-retention', 'setting-capacity', 'health-pill', 'data-log-table']) assert(!html.includes(forbidden), 'legacy logs-only control must be absent: ' + forbidden);
@@ -39,7 +36,7 @@ for (const level of ['warn', 'error', 'fatal']) assert(css.includes(`[data-level
 assert(css.includes('html[data-theme="dark"]') && css.includes('@media(max-width:760px)'), 'dark and responsive layouts are required');
 
 assert(!script.includes('.innerHTML') && !script.includes('insertAdjacentHTML'), 'business data must never render through an HTML sink');
-assert(script.includes('.textContent = record.message') && script.includes('.textContent = value'), 'logs and conversations must render as plain text');
+assert(script.includes('.textContent = record.message') && script.includes('.textContent = value'), 'logs must render as plain text');
 assert(script.includes("stream.addEventListener('logs/appended'") && script.includes('state.newLogs += 1'), 'SSE append/new-record behavior is required');
 assert(script.includes('window.__PK_APP__'), 'browser test surface is required');
 

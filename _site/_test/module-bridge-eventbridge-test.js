@@ -161,7 +161,8 @@ async function main() {
     const ebSpec = specs.find(s => s.name === 'event-bridge');
     assert.ok(ebSpec, 'supervisor specs include event-bridge');
     assert.ok(ebSpec.command.includes('serve'), 'spec serves the console');
-    assert.ok(ebSpec.command.includes('_modules'), 'spec spawns the vendored runtime');
+    // Windows 路径分隔符无关:命令里的绝对路径在 win32 上是反斜杠
+    assert.ok(ebSpec.command.replace(new RegExp("\\\\+", 'g'), '/').includes('@sanqianx/ai-coding-event-bridge-console'), 'spec spawns the packaged console runtime; actual=' + ebSpec.command);
     assert.ok(ebSpec.url === stubUrl, 'spec binds the configured URL');
 
     process.env.KB_EVENTBRIDGE_COMMAND = 'node C:/explicit/console-bin.js serve --port 9001';

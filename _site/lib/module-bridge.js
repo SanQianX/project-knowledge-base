@@ -35,9 +35,20 @@ const PICKER_TIMEOUT_MS = 10 * 60 * 1000;
 
 // Vendored module runtimes shipped inside the npm package. Sibling-checkout
 // spawning is gone: the services are bundled, spawned from here, and resolved
-// through NODE_PATH so their cross-package requires work without a workspace
+// through normal node_modules resolution
 // node_modules.
-const MODULES_ROOT = path.resolve(__dirname, '..', '..', '_modules');
+// Module entry scripts resolve through normal node_modules dependencies
+// (claude-ai-workbench, @sanqianx/vector-hub, @sanqianx/ai-coding-event-bridge-
+// console) — the npm packages are the single source of these runtimes.
+const MODULE_ENTRIES = {
+  terminal: 'claude-ai-workbench/packages/server/bin/agent-terminal-server.js',
+  'vector-hub': '@sanqianx/vector-hub/bin.js',
+  'event-bridge': '@sanqianx/ai-coding-event-bridge-console/src/bin.js',
+};
+
+function resolveModuleEntry(name) {
+  try { return require.resolve(MODULE_ENTRIES[name]); } catch { return null; }
+}
 
 function urlPort(baseUrl, fallback) {
   try { return new URL(baseUrl).port || String(fallback); } catch { return String(fallback); }
@@ -386,15 +397,18 @@ class ModuleBridge {
     const specs = [];
     if (process.env.KB_TERMINAL_COMMAND) {
       specs.push({ name: 'terminal', command: process.env.KB_TERMINAL_COMMAND, url: this.terminalUrl, env: {} });
-    } else if (fs.existsSync(path.join(MODULES_ROOT, 'claude-ai-workbench', 'packages', 'server', 'bin', 'agent-terminal-server.js'))) {
-      specs.push({
-        name: 'terminal',
-        command: `node ${JSON.stringify(path.join(MODULES_ROOT, 'claude-ai-workbench', 'packages', 'server', 'bin', 'agent-terminal-server.js'))}`,
-        url: this.terminalUrl,
-        env: { AGENT_TERMINAL_PORT: urlPort(this.terminalUrl, 5760), AGENT_TERMINAL_HOST: urlHost(this.terminalUrl) },
-      });
     } else {
-      this.logger.warn('modules.supervisor', 'Vendored terminal runtime not present; expecting an external service.', {});
+      const terminalEntry = resolveModuleEntry('terminal');
+      if (terminalEntry) {
+        specs.push({
+          name: 'terminal',
+          command: `node ${JSON.stringify(terminalEntry)}`,
+          url: this.terminalUrl,
+          env: { AGENT_TERMINAL_PORT: urlPort(this.terminalUrl, 5760), AGENT_TERMINAL_HOST: urlHost(this.terminalUrl) },
+        });
+      } else {
+        this.logger.warn('modules.supervisor', 'claude-ai-workbench runtime not installed; expecting an external service.', {});
+      }
     }
     // vector-hub declares engines >= 22; spawning it on older runtimes would
     // crash-loop the supervisor for nothing.
@@ -402,17 +416,20 @@ class ModuleBridge {
       specs.push({ name: 'vector-hub', command: process.env.KB_VECTORHUB_COMMAND, url: this.vectorHubUrl, env: {} });
     } else if (parseInt(process.versions.node, 10) < 22) {
       this.logger.warn('modules.supervisor', 'vector-hub needs Node >= 22; not spawning the vendored runtime.', { context: { node: process.versions.node } });
-    } else if (fs.existsSync(path.join(MODULES_ROOT, 'vectorhub', 'dist', 'cjs', 'bin.js'))) {
-      const dataDir = this.dataDir || require('./data-dir').getDataDir();
-      const root = path.join(dataDir, 'vectorhub');
-      specs.push({
-        name: 'vector-hub',
-        command: `node ${JSON.stringify(path.join(MODULES_ROOT, 'vectorhub', 'dist', 'cjs', 'bin.js'))} serve --port ${urlPort(this.vectorHubUrl, 8787)} --root ${JSON.stringify(root)}`,
-        url: this.vectorHubUrl,
-        env: { VECTOR_HUB_ROOT: root },
-      });
     } else {
-      this.logger.warn('modules.supervisor', 'Vendored vector-hub runtime not present; expecting an external service.', {});
+      const vectorHubEntry = resolveModuleEntry('vector-hub');
+      if (!vectorHubEntry) {
+        this.logger.warn('modules.supervisor', '@sanqianx/vector-hub runtime not installed; expecting an external service.', {});
+      } else {
+        const dataDir = this.dataDir || require('./data-dir').getDataDir();
+        const root = path.join(dataDir, 'vectorhub');
+        specs.push({
+          name: 'vector-hub',
+          command: `node ${JSON.stringify(vectorHubEntry)} serve --port ${urlPort(this.vectorHubUrl, 8787)} --root ${JSON.stringify(root)}`,
+          url: this.vectorHubUrl,
+          env: { VECTOR_HUB_ROOT: root },
+        });
+      }
     }
     // ai-coding-event-bridge console: plain-JS CommonJS on Node >= 18 — no
     // build gate, no runtime floor beyond the shell's own. The home flag keeps
@@ -422,18 +439,21 @@ class ModuleBridge {
     // routes here (import uses the terminal/vector-hub pickers) — skip it.
     if (process.env.KB_EVENTBRIDGE_COMMAND) {
       specs.push({ name: 'event-bridge', command: process.env.KB_EVENTBRIDGE_COMMAND, url: this.eventBridgeUrl, env: {} });
-    } else if (fs.existsSync(path.join(MODULES_ROOT, 'event-bridge', 'packages', 'console', 'src', 'bin.js'))) {
-      const homeArgs = process.env.AI_CODING_EVENT_BRIDGE_HOME
-        ? ` --home ${JSON.stringify(process.env.AI_CODING_EVENT_BRIDGE_HOME)}`
-        : '';
-      specs.push({
-        name: 'event-bridge',
-        command: `node ${JSON.stringify(path.join(MODULES_ROOT, 'event-bridge', 'packages', 'console', 'src', 'bin.js'))} serve --host ${urlHost(this.eventBridgeUrl)} --port ${urlPort(this.eventBridgeUrl, 8790)}${homeArgs}`,
-        url: this.eventBridgeUrl,
-        env: { BRIDGE_CONSOLE_PICK_FOLDER: '0' },
-      });
     } else {
-      this.logger.warn('modules.supervisor', 'Vendored event-bridge runtime not present; expecting an external service.', {});
+      const eventBridgeEntry = resolveModuleEntry('event-bridge');
+      if (!eventBridgeEntry) {
+        this.logger.warn('modules.supervisor', '@sanqianx/ai-coding-event-bridge-console runtime not installed; expecting an external service.', {});
+      } else {
+        const homeArgs = process.env.AI_CODING_EVENT_BRIDGE_HOME
+          ? ` --home ${JSON.stringify(process.env.AI_CODING_EVENT_BRIDGE_HOME)}`
+          : '';
+        specs.push({
+          name: 'event-bridge',
+          command: `node ${JSON.stringify(eventBridgeEntry)} serve --host ${urlHost(this.eventBridgeUrl)} --port ${urlPort(this.eventBridgeUrl, 8790)}${homeArgs}`,
+          url: this.eventBridgeUrl,
+          env: { BRIDGE_CONSOLE_PICK_FOLDER: '0' },
+        });
+      }
     }
     return specs;
   }
@@ -443,17 +463,13 @@ class ModuleBridge {
     // `"path"` argument makes node load a file whose name contains quotes.
     const parts = (spec.command.match(/"[^"]+"|\S+/g) || [])
       .map(part => (part.startsWith('"') && part.endsWith('"') ? part.slice(1, -1) : part));
-    // NODE_PATH lets the vendored runtimes resolve each other (_modules/
-    // holds claude-ai-workbench, vectorhub, vectra) while their own
-    // dependencies resolve from the host package's node_modules.
-    const nodePath = [MODULES_ROOT, process.env.NODE_PATH].filter(Boolean).join(path.delimiter);
     const child = spawn(parts[0], parts.slice(1), {
       // Module banners (ports, data roots) are diagnostics — inherit stdout
       // so they land on the console in --fg mode and in launcher.log when the
       // shell itself runs detached.
       stdio: ['ignore', 'inherit', 'inherit'],
       windowsHide: true,
-      env: { ...process.env, ...(spec.env || {}), NODE_PATH: nodePath },
+      env: { ...process.env, ...(spec.env || {}) },
     });
     let attempts = 0;
     child.on('exit', code => {

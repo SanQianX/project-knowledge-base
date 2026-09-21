@@ -19,7 +19,7 @@ async function capture(browser, name) {
 }
 
 (async () => {
-  const fixture = await createLoggingUiFixture({ totalLogs: 240, conversationTurns: 3 });
+  const fixture = await createLoggingUiFixture({ totalLogs: 240 });
   const server = spawnServer({ root: ROOT, port: sitePort, dataDir: fixture.dataDir, tag: 'ui-flow-v13', stdio: 'ignore' });
   let browser;
   try {
@@ -39,47 +39,16 @@ async function capture(browser, name) {
     assert.strictEqual(await browser.evaluate("document.querySelectorAll('#import-knowledge-path').length"), 1, 'Import takes an explicit knowledge address (T3.2)');
     await capture(browser, '03-import-1920-light');
 
-    await browser.evaluate("window.__PK_APP__.openSettings('conversation')");
-    await waitFor(() => browser.evaluate("document.getElementById('settings-conversation').classList.contains('active')"), 'conversation settings');
-    await capture(browser, '04-settings-conversation-1920-light');
-
-    await browser.evaluate("window.__PK_APP__.showSettings('conversation')");
-    await waitFor(() => browser.evaluate('window.__PK_APP__.getState().conversationTurns === 3'), 'conversation rows', 20000);
-    const conversation = await browser.evaluate(`(() => {
-      const section = document.getElementById('settings-conversation');
-      const content = document.querySelector('.settings-content').getBoundingClientRect();
-      const cards = [...section.querySelectorAll('.turn-card')];
-      const cardBounds = cards.map(card => card.getBoundingClientRect());
-      return {
-        controls: section.querySelectorAll('.conversation-toolbar .conversation-filter').length,
-        labels: [...section.querySelectorAll('.conversation-toolbar label')].map(node => node.textContent),
-        hasAllProject: [...document.getElementById('conversation-project').options].some(node => /全部/.test(node.textContent)),
-        forbidden: /来源|Session|搜索|时间线|Commit 视角|Bridge|provider|schema/.test(section.innerText),
-        turns: cards.length,
-        commits: [...section.querySelectorAll('.commit-label')].map(node => node.textContent),
-        refs: [...section.querySelectorAll('.commit-ref')].map(node => node.textContent),
-        inside: cardBounds.every(rect => rect.left >= content.left && rect.right <= content.right + 1),
-        pageOverflow: document.body.scrollWidth > document.documentElement.clientWidth + 1,
-        listScrolls: document.getElementById('conversation-stream').scrollHeight > document.getElementById('conversation-stream').clientHeight,
-      };
-    })()`);
-    assert.strictEqual(conversation.controls, 2);
-    assert.deepStrictEqual(conversation.labels, ['项目', '日期']);
-    assert.strictEqual(conversation.hasAllProject, false);
-    assert.strictEqual(conversation.forbidden, false);
-    assert.strictEqual(conversation.turns, 3);
-    assert(conversation.commits.includes('已提交'));
-    assert(conversation.commits.includes('关联提交'));
-    assert(conversation.commits.includes('未提交'));
-    assert(conversation.refs.includes('1111111'));
-    assert(conversation.refs.includes('2222222'));
-    assert.strictEqual(conversation.inside, true);
-    assert.strictEqual(conversation.pageOverflow, false);
-    await capture(browser, '06-conversation-long-1920-light');
+    // 开发对话已迁移到 ai-coding-event-bridge 模块：设置抽屉只有日志一节
+    await browser.evaluate("window.__PK_APP__.openSettings()");
+    await waitFor(() => browser.evaluate("document.getElementById('settings-logs').classList.contains('active')"), 'logs settings');
+    assert.strictEqual(await browser.evaluate("document.querySelectorAll('[data-settings]').length"), 1, 'settings drawer must only expose logs (conversation moved to event-bridge module)');
+    await capture(browser, '04-settings-logs-1920-light');
 
     await browser.setViewport(1366, 768);
     await browser.evaluate("window.__PK_APP__.showSettings('logs')");
-    await waitFor(() => browser.evaluate('window.__PK_APP__.getState().logCount >= 240'), '200+ log rows', 20000);
+    // 等 DOM 实际渲染出全部行（loadLogs 先清空再异步渲染，只看内存状态会撞上清空间隙）
+    await waitFor(() => browser.evaluate('window.__PK_APP__.getState().logCount >= 240 && document.querySelectorAll(".record-row").length >= 240'), '200+ log rows', 20000);
     const auditLogs = () => browser.evaluate(`(() => {
       const rows = [...document.querySelectorAll('.record-row')];
       const drawer = document.getElementById('settings-drawer');
@@ -156,14 +125,9 @@ async function capture(browser, name) {
     assert.strictEqual(mobileLogs.pageOverflow, false);
     assert.strictEqual(await browser.evaluate("getComputedStyle(document.querySelector('.settings-nav')).flexDirection"), 'row');
     await capture(browser, '11-mobile-logs-390x844-dark');
-    await browser.evaluate("window.__PK_APP__.showSettings('conversation')");
-    await waitFor(() => browser.evaluate('window.__PK_APP__.getState().conversationTurns === 3'), 'mobile conversations');
-    assert.strictEqual(await browser.evaluate("document.querySelectorAll('.conversation-toolbar .conversation-filter').length"), 2);
-    assert.strictEqual(await browser.evaluate("document.body.scrollWidth <= document.documentElement.clientWidth + 1"), true);
-    await capture(browser, '12-mobile-conversation-390x844-dark');
 
     await browser.evaluate(`(() => {
-      window.__PK_APP__.showSettings('conversation');
+      window.__PK_APP__.showSettings('logs');
       const card = document.querySelector('#project-list .project-card');
       card.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 100, clientY: 300 }));
     })()`);
