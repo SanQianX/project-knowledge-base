@@ -1,0 +1,24 @@
+'use strict';
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const assert = require('node:assert/strict');
+const { ModuleBridge } = require('../lib/module-bridge');
+(async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-supervisor-lifecycle-'));
+  const fixture = path.join(root, '中文 module.js'), result = path.join(root, 'stopped.json');
+  fs.writeFileSync(fixture, "const fs=require('fs');process.on('message',m=>{if(m.type==='kb:shutdown'){fs.writeFileSync(process.argv[2],JSON.stringify({arg:process.argv[3],stopped:true}));process.exit(0);}});process.send({ready:true});");
+  const bridge = new ModuleBridge();
+  bridge._spawnSupervised({ name: 'fixture', command: `node ${JSON.stringify(fixture)} ${JSON.stringify(result)} ${JSON.stringify('中文 argument with spaces')} ` });
+  const child = bridge.supervised[0];
+  await new Promise((resolve, reject) => { child.once('message', resolve); child.once('error', reject); });
+  await bridge.stopSupervised();
+  assert.equal(child.exitCode, 0, 'IPC shutdown must finish before the shell releases its process');
+  assert.deepEqual(JSON.parse(fs.readFileSync(result)), { arg: '中文 argument with spaces', stopped: true });
+  const missing = new ModuleBridge();
+  missing._spawnSupervised({ name: 'missing', command: 'kb-definitely-missing-executable' });
+  await new Promise(resolve => setTimeout(resolve, 100));
+  assert.equal(missing.supervised.length, 0, 'failed process start must not crash or leave a false running module');
+  await missing.stopSupervised();
+  console.log('module process lifecycle test PASS');
+})().catch(error => { console.error(error); process.exitCode = 1; });

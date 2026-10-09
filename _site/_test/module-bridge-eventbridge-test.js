@@ -50,6 +50,7 @@ async function main() {
   const stub = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
     hits.push(`${req.method} ${url.pathname}${url.search}`);
+    if (url.pathname === '/api/health') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true })); return; }
     if (url.pathname === '/api/echo') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ echo: `${req.method} ${url.pathname}`, query: Object.fromEntries(url.searchParams) }));
@@ -106,6 +107,7 @@ async function main() {
       terminalUrl: DEAD_URL,
       vectorHubUrl: DEAD_URL,
       eventBridgeUrl: stubUrl,
+      engineUrl: DEAD_URL,
       registryStore: { listIds: () => ['demo-proj'] },
       projectStore: makeStoreStub(),
     });
@@ -146,6 +148,11 @@ async function main() {
     assert.strictEqual(health.modules.eventBridge.up, true, 'health reports event-bridge up');
     assert.strictEqual(health.modules.terminal.up, false, 'health keeps terminal leg honest');
 
+    // An unreachable writer must block every subsequent removal.
+    const beforeRemoval = hits.length;
+    await assert.rejects(bridge.removeProjectLinks({ projectId: 'demo-proj' }), { code: 'PROJECT_BUSY' });
+    assert.strictEqual(hits.length, beforeRemoval, 'offline engine cannot remove other module bindings');
+    bridge.engineUrl = stubUrl; // This stub returns 404: the writer is already absent.
     // ---- removal: DELETE ?id=..., wiring cleared ----
     const removal = await bridge.removeProjectLinks({ projectId: 'demo-proj' });
     assert.strictEqual(removal.eventBridge.ok, true, 'removal succeeds');

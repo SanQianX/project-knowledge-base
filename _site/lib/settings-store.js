@@ -7,6 +7,7 @@ function defaultSettings() {
     schema: SCHEMAS.settings,
     schemaVersion: 2,
     knowledge: { rootPath: '' },
+    brain: { id: 'brain-default', name: '我的智脑', domains: [] },
     ai: { schema: 'ai-profiles/v1', profiles: [] },
     embedding: {},
     logging: {
@@ -39,6 +40,13 @@ function validateSettings(settings) {
   }
   if (!settings.knowledge || typeof settings.knowledge.rootPath !== 'string') {
     throw new DomainError('DATA_CORRUPT', 'Settings knowledge.rootPath is invalid.', { status: 500 });
+  }
+  settings.brain = settings.brain || { id: 'brain-default', name: '我的智脑', domains: [] };
+  if (settings.brain.id !== 'brain-default' || typeof settings.brain.name !== 'string' || !settings.brain.name.trim() || settings.brain.name.length > 100 || !Array.isArray(settings.brain.domains)) throw new DomainError('DATA_CORRUPT', 'Brain metadata is invalid.', { status: 500 });
+  const ids = new Set();
+  for (const domain of settings.brain.domains) {
+    if (!domain || !/^domain-[a-z0-9-]+$/.test(domain.id) || ids.has(domain.id) || typeof domain.name !== 'string' || !domain.name.trim() || domain.name.length > 100) throw new DomainError('DATA_CORRUPT', 'Domain metadata is invalid.', { status: 500 });
+    ids.add(domain.id);
   }
   const logging = settings.logging || {};
   if (!Array.isArray(logging.levels) || !logging.levels.length || logging.levels.some(level => !['trace', 'debug', 'info', 'warn', 'error', 'fatal'].includes(level))) {
@@ -97,6 +105,18 @@ class SettingsStore {
       if (next.knowledge.rootPath) this.layout.validateKnowledgeRoot(next.knowledge.rootPath);
       this.atomic.writeJsonAtomic(this.filePath, next);
       return next;
+    });
+  }
+
+  async addDomain(domain) {
+    return this.atomic.withFileLock(this.lockPath, async () => {
+      const settings = this.read();
+      if (settings.brain.domains.some(d => d.name === domain.name || d.id === domain.id)) throw new DomainError('INVALID_ARGUMENT', '领域已存在。', { status: 409 });
+      settings.brain.domains.push(domain);
+      settings.updatedAt = new Date().toISOString();
+      validateSettings(settings);
+      this.atomic.writeJsonAtomic(this.filePath, settings);
+      return domain;
     });
   }
 

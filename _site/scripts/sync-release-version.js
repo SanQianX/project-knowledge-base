@@ -62,9 +62,9 @@ function releaseVersionTargets(rootDir, version) {
       update(value) {
         const args = value && value.mcpServers && value.mcpServers['project-knowledge'] && value.mcpServers['project-knowledge'].args;
         if (!Array.isArray(args)) throw new Error('project-knowledge MCP server has no args array');
-        const index = args.findIndex(arg => /^project-knowledge@/.test(String(arg)));
+        const index = args.findIndex(arg => /^(?:@sanqianx\/)?project-knowledge@/.test(String(arg)));
         if (index < 0) throw new Error('project-knowledge MCP server has no pinned package argument');
-        args[index] = `project-knowledge@${version}`;
+        args[index] = `@sanqianx/project-knowledge@${version}`;
       },
     },
   ].map(target => ({ ...target, path: path.join(rootDir, target.file) }));

@@ -1,20 +1,20 @@
 # project-knowledge
 
-本地、由 Git Commit 驱动的项目知识服务。Markdown 是知识事实源；LanceDB
-只是位于内部数据目录、可随时重建的派生索引。
+本地、由 Git Commit 驱动的智脑知识服务。Markdown 是知识事实源；vector-hub
+提供可重建的派生索引。外壳只负责导航、归属、接线与状态投影。
 
 ## 安装与运行
 
 新机器完整安装只需三条命令：
 
 ```bash
-npm install -g project-knowledge
+npm install -g @sanqianx/project-knowledge@latest
 project-knowledge-integrations install
 project-knowledge
 ```
 
-1. `npm install -g project-knowledge` 安装知识库 CLI,内置
-   `ai-coding-event-bridge` 依赖,无需再装其它包。
+1. `npm install -g @sanqianx/project-knowledge@latest` 安装外壳、固定版本的
+   工作台、vector-hub、event-bridge，以及包内 knowledge-engine。
 2. `project-knowledge-integrations install` 是一次性的 Integration Setup,
    对检测到的每个客户端(Claude Code / Codex / OpenCode)同时安装两类
    相互独立、分别上报状态的能力:
@@ -44,26 +44,24 @@ project-knowledge status
 project-knowledge stop
 ```
 
-需要 Node.js 18+ 与 `PATH` 中的 Git。Windows 桌面安装包与 npm CLI 共享同一
-数据目录和 backend owner 记录，不会同时启动两个 LanceDB writer。
+需要 Node.js 22+ 与 `PATH` 中的 Git。4.8.0 仅交付 npm 网页版本，不提供新版
+Windows 安装包或桌面自动更新。
 
 ## 唯一分析流程
 
-公开分析入口只有两个：
+知识引擎是唯一分析执行者：
 
 ```text
-post-commit Hook ----+
-                     +--> reconcileProjectCommits(projectId, trigger)
-程序 startup --------+      trigger: git-hook | startup
+Git Hook → event-bridge journal → 引擎持久化认领 → 隔离 Agent 分析
+         → staging 校验 → 知识晋升 → vector-hub 索引 → 检索
 ```
 
 导入只建立 Git tracking baseline、创建项目元数据并安装/验证 Hook；不运行 AI、
 不扫描全仓推测需求、不生成 TODO 知识。空仓库导入后的第一个 Commit会被处理。
 
-Hook 只向本地主程序发送 `hook-event/v2` 通知。主程序离线时 Hook 仍返回成功，
-不阻塞 `git commit`，也不写离线任务 spool；下次启动从当前 Git 历史补查可达
-Commit。同项目严格串行、失败即停；不同项目可并行；Hook 与 startup 重叠时复用
-同一个 in-flight reconciliation。
+Hook 向 bridge journal 写入提交证据，通知只负责唤醒。通知丢失仍由 journal
+消费及启动对账恢复；Hook 故障不阻塞提交。同项目严格串行、失败即停；不同项目
+最多两个并发分析，重复事件不会重做已完成提交。关闭浏览器不停止后台维护。
 
 ## 知识与索引安全
 
@@ -76,8 +74,8 @@ Promotion 使用 backup、hash 与 durable journal。只有 Markdown promotion �
 成功后才推进 lastAnalyzedCommit 并把 index 标为 dirty。索引失败不会回滚真实
 Markdown，也不会重跑 AI；启动和维护流程会重试 dirty index。
 
-`IndexService` 是唯一生产 LanceDB writer。增量更新和 full rebuild 共用一个全局
-FIFO。完整重建先生成独立临时 DB，验证后原子替换，并在 recovery 中保留旧索引。
+vector-hub 是唯一派生索引服务，外壳不再执行第二套索引写入。索引失败独立显示
+“知识已更新，索引待修复”，修复索引不重跑模型、不撤销有效知识。
 
 应用不会创建、修改、刷新或删除 `CLAUDE.md`。
 
@@ -96,8 +94,8 @@ project-knowledge-kb get --project <projectId> --entry modules/auth.md --json
 project-knowledge-kb history --project <projectId> --json
 ```
 
-只读查询不会创建或修改配置。索引缺失、dirty 或不可用时，会明确回退到当前项目
-以及显式 related projects 的 Markdown。
+只读查询不会创建或修改配置。索引不可用时回退到真实 Markdown。项目、所属领域、
+整个智脑是包含范围；未确认记忆不能作为长期偏好注入任务。
 
 ## 存储合同
 
@@ -113,7 +111,7 @@ knowledgePath，修改 global root 不会移动已有项目。
 │   ├── config.json                       # 固定 repoPath/knowledgePath
 │   ├── state.json                        # tracking/claim/index/Hook 状态
 │   └── requirements.jsonl                # 按需创建
-├── index/knowledge.lancedb               # 唯一派生索引
+├── knowledge-engine/                    # 持久化 claim、run、journal 游标
 ├── cache/
 ├── runtime/
 ├── logs/{app,projects,hooks}/
@@ -138,15 +136,24 @@ settings、per-project config/state、最小 registry 与旧 index。验证路�
 Commit pointer、日志和索引后才激活，completion marker 最后写。任何阶段中断都
 保留旧 reader、用户知识、历史日志、配置与 backup，允许安全重试。
 
-## 日志 UI
+## 产品 UI
 
-生产 UI 只保留一套结构化日志控制台，支持：
+一级导航为智脑首页、开始工作、知识检索、长期记忆、领域与项目、活动记录。
+开始工作嵌入真实工作台，保留消息流、中止、权限和会话恢复，不重复实现聊天。
+在“领域与项目”点击“导入项目”，确认代码目录、知识目录及领域；部分接线失败
+保留项目，只重试失败模块。系统状态集中展示四模块健康、模型配置与诊断。
+
+加入智脑不会搬动已有项目知识。领域共享知识及已确认记忆与项目知识并存。
+凭据由 Workbench 统一管理；维护默认模型独立于聊天临时切换，运行凭据不进
+引擎状态、日志或浏览器消息。
+
+活动记录保留结构化日志能力：
 
 - trace/debug/info/warn/error/fatal 六级；
 - 本地日期、项目、component、event、operation、Commit、全文过滤；
 - newest-first cursor 分页、暂停/自动刷新、按当前条件导出；
 - operation flow、结构化 error/stack、logger degraded 状态；
-- Hook/index/项目只读状态、浅色/深色与窄屏布局。
+- Hook/索引/项目状态、统一的浅深主题。
 
 日志使用 `log/v2` JSONL，按天和 50 MiB segment 轮转；默认保留 365 天，`0`
 表示不按时间删除，并受总容量策略约束。写入、查询、error 与 export 全部递归脱敏。
@@ -167,8 +174,10 @@ npm test --prefix desktop
 npm pack --dry-run --json
 ```
 
-Windows E2E 覆盖真实 Git Hook、空格/非 ASCII 路径、在线 Commit、停服期间多个
-Commit、重启顺序补查、crash lock 恢复、promotion/index、查询与完整日志链路。
+自动回归覆盖真实 Git Hook、空格/中文路径、提交证据、promotion/index、查询、
+恢复与日志。产品浏览器验收只检查 1920×1080 桌面视口，模型和 embedding 为
+可控替身；真实模型与真实索引抽测分别报告。完整故障组合和用户已有数据的最终
+切换另行验收，不用可点击页面代替真实链路通过。
 
 ## 许可证
 

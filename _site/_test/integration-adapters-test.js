@@ -37,7 +37,7 @@ async function main() {
   assert(claudeMarketplace.plugins[0].version === packageInfo.version, 'Claude marketplace version should match the npm package');
   assert(codexMarketplace.name === 'project-knowledge', 'Codex marketplace should have a stable public name');
   assert(codexMarketplace.plugins[0].source.path === './plugins/project-knowledge', 'Codex marketplace should point at the shared plugin');
-  assert(mcpManifest.mcpServers['project-knowledge'].args.includes(`project-knowledge@${packageInfo.version}`), 'plugin MCP should pin the matching package version');
+  assert(mcpManifest.mcpServers['project-knowledge'].args.includes(`${packageInfo.name}@${packageInfo.version}`), 'plugin MCP should pin the matching package name and version');
   assert(!skill.includes('[TODO:'), 'bundled Skill should not contain scaffold placeholders');
   assert(skill.includes('project_knowledge_resolve'), 'bundled Skill should teach the resolve-first workflow');
   assert(skill.includes('project_knowledge_record_requirement'), 'bundled Skill should document the explicit supplemental adapter');
@@ -64,7 +64,7 @@ async function main() {
   const installedConfig = fs.readFileSync(path.join(homeDir, '.config', 'opencode', 'opencode.jsonc'), 'utf8');
   assert(installedConfig.includes(installedInstruction.replace(/\\/g, '\\\\')), 'OpenCode config should reference the installed Instructions file');
   const openCodeCall = calls.find(call => call.command === 'opencode');
-  assert(openCodeCall?.args.join(' ') === `mcp add project-knowledge -- npx -y --package project-knowledge@${packageInfo.version} project-knowledge-mcp`, 'OpenCode should receive the versioned MCP command');
+  assert(openCodeCall?.args.join(' ') === `mcp add project-knowledge -- npx -y --package ${packageInfo.name}@${packageInfo.version} project-knowledge-mcp`, 'OpenCode should receive the versioned MCP command');
 
   const configDir = path.join(TEMP, 'opencode-config');
   fs.mkdirSync(configDir, { recursive: true });

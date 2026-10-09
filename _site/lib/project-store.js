@@ -28,6 +28,8 @@ function defaultProjectConfig(projectId, input = {}) {
     teamBinding: input.teamBinding || null,
     aiProfileId: input.aiProfileId || null,
     knowledgeLanguage: input.knowledgeLanguage || 'zh-CN',
+    brainId: input.brainId || 'brain-default',
+    domainId: input.domainId || null,
     relatedProjectIds: Array.isArray(input.relatedProjectIds) ? [...new Set(input.relatedProjectIds)] : [],
     repoIdentity: input.repoIdentity || null,
     legacyExtensions: input.legacyExtensions || {},
@@ -79,6 +81,10 @@ function validateProjectConfig(config, expectedProjectId) {
   validateProjectId(config.projectId);
   if (expectedProjectId && config.projectId !== expectedProjectId) throw new DomainError('DATA_CORRUPT', 'Project config identity mismatch.', { status: 500 });
   if (!config.storageName || !config.repoPath || !config.knowledgePath || !config.createdAt) throw new DomainError('DATA_CORRUPT', 'Project config is incomplete.', { status: 500 });
+  config.brainId = config.brainId || 'brain-default';
+  config.domainId = config.domainId || null;
+  validateProjectId(config.brainId);
+  if (config.domainId) validateProjectId(config.domainId);
   return config;
 }
 

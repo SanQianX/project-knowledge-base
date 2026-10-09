@@ -87,7 +87,7 @@ function writeEndpoint(dataDir, value) {
     fs.renameSync(temp, target);
   } catch (error) {
     // Windows cannot always replace an existing file with renameSync.
-    try { fs.rmSync(target, { force: true }); } catch {
+    try { fs.unlinkSync(target); } catch {
       // The following rename is authoritative and reports endpoint replacement failure.
     }
     fs.renameSync(temp, target);
@@ -138,10 +138,10 @@ function clearEndpoint(dataDir, { pid } = {}) {
     if (current && current.pid !== Number(pid)) return false;
   }
   try {
-    fs.rmSync(target, { force: true });
+    fs.unlinkSync(target);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    return error.code === 'ENOENT';
   }
 }
 

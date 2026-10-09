@@ -25,6 +25,7 @@ const { handlePostCommitEvent, recoverOrphanedClaims } = require('./post-commit-
 const { KnowledgePromotionService, hashBuffer } = require('./knowledge-promotion');
 const { resolveEffectiveAiProfile } = require('./ai-profile-resolver');
 const { ModuleBridge } = require('./module-bridge');
+const { prepareEngineCutover, finishEngineCutover, forwardCommitToBridge } = require('./engine-cutover');
 const { IndexService } = require('./index-service');
 const { KnowledgeDatabase } = require('./knowledge-db');
 const { LocalEmbeddingService } = require('./embedding-service');
@@ -505,8 +506,9 @@ function createRuntime(options = {}) {
     bridgeAdapter,
   });
   const migrationService = options.migrationService || new MigrationService({ layout, legacyDataDir: dataPath, logger });
-  const moduleBridge = options.moduleBridge || new ModuleBridge({ registryStore, projectStore, logger, dataDir: dataPath });
+  const moduleBridge = options.moduleBridge || new ModuleBridge({ registryStore, projectStore, settingsStore, logger, dataDir: dataPath });
   return {
+    analysisOwner: options.analysisOwner || 'legacy', ownership: { owner: options.analysisOwner || 'legacy', ready: false },
     rootDir, dataPath, layout, settingsStore, registryStore, projectStore, logger, logRepository,
     activeTasks, bridgeAdapter, bridgeConsumerService, conversationStore, conversationQuery, indexAdapter, indexService, promotionService, reconciler, lifecycleService, requirementRecorder, knowledgeRuntime, migrationService, moduleBridge,
   };
@@ -518,6 +520,13 @@ async function migrateManagedHooks(runtime) {
     const config = runtime.projectStore.readConfig(projectId);
     const state = runtime.projectStore.readState(projectId);
     if (!fs.existsSync(config.repoPath)) continue;
+    if (runtime.analysisOwner !== 'legacy') {
+      const status = hookManager.readHookStatus({ repoPath: config.repoPath, projectId });
+      if (status.managedVersion === 2) {
+        const result = hookManager.installHook({ repoPath: config.repoPath, projectId, triggerScriptPath: TRIGGER_SCRIPT_PATH, ...runtime.bridgeAdapter.hookBinding() });
+        results.push({ projectId, ...result }); continue;
+      }
+    }
     if (state.hook.migrationVersion >= 2) {
       results.push({ projectId, ok: true, status: 'verified', reason: 'already-migrated', migrationVersion: state.hook.migrationVersion });
       continue;
@@ -594,6 +603,7 @@ async function reconcileLegacyHookMigration(runtime, projectId, config, state) {
   try {
     migrateOutcome = hookManager.migrateManagedHook({
       repoPath, projectId, triggerScriptPath: TRIGGER_SCRIPT_PATH,
+      ...runtime.bridgeAdapter.hookBinding(),
     });
   } catch (error) {
     if (error && error.code === 'HOOK_CONFLICT') {
@@ -622,6 +632,7 @@ async function reconcileLegacyHookMigration(runtime, projectId, config, state) {
     // Case 3: missing entirely. Install + verify.
     const installed = hookManager.installHook({
       repoPath, projectId, triggerScriptPath: TRIGGER_SCRIPT_PATH,
+      ...runtime.bridgeAdapter.hookBinding(),
     });
     if (!installed || installed.ok !== true) {
       throw new DomainError('HOOK_INVALID', 'Newly installed hook failed to install.', { status: 500 });
@@ -652,12 +663,13 @@ async function initializeRuntime(runtime) {
   dataDir.ensureDataDir(runtime.dataPath);
   await runtime.settingsStore.initialize();
   await runtime.registryStore.initialize();
-  const recoveredPromotions = await runtime.promotionService.recoverAll();
+  if (runtime.analysisOwner !== 'legacy') await prepareEngineCutover(runtime);
+  const recoveredPromotions = runtime.analysisOwner === 'legacy' ? await runtime.promotionService.recoverAll() : [];
   // Promotion recovery runs first because it can legitimately finish and clear
   // a claim. Any claim left after that belonged to the previous process. Make
   // it terminal without invoking Claude or selecting another Git commit; only
   // a future explicit Hook event may start fresh work.
-  const recoveredClaims = await recoverOrphanedClaims(runtime);
+  const recoveredClaims = runtime.analysisOwner === 'legacy' ? await recoverOrphanedClaims(runtime) : [];
   const recoveredIndexes = runtime.registryStore.listIds().filter(projectId => runtime.projectStore.readState(projectId).index.dirty);
   const orphanedOperations = runtime.logRepository.findOrphanedOperations();
   if (orphanedOperations.length) {
@@ -889,18 +901,52 @@ function createRequestHandler(runtime, options = {}) {
       const method = req.method || 'GET';
       const pathname = url.pathname;
 
+      const moduleUi = pathname.match(/^\/modules\/(terminal|vectorhub|eventbridge|engine)\/(.*)$/);
+      if (moduleUi && method === 'GET') return runtime.moduleBridge.proxyModuleUi(req, res, moduleUi[1], moduleUi[2], url.search);
+      if (pathname.startsWith('/api/engine/') || pathname === '/api/engine') {
+        if (['/api/engine/runtime-config', '/api/engine/scopes', '/api/engine/control', '/api/engine/migrate'].includes(pathname)) throw new DomainError('FORBIDDEN', 'Runtime configuration is not exposed to browsers.', { status: 403 });
+        return runtime.moduleBridge.proxyEngine(req, res, pathname, url.search);
+      }
+
       // ===== module bridge：壳 ↔ 模块（同源代理 + 聚合 + 登记/移除） =====
       if (pathname.startsWith('/api/terminal/') || pathname === '/api/terminal') {
+        if (pathname.startsWith('/api/terminal/internal/')) throw new DomainError('FORBIDDEN', 'Internal module endpoints are not exposed to browsers.', { status: 403 });
         return runtime.moduleBridge.proxyTerminal(req, res, pathname, url.search);
       }
       if (pathname.startsWith('/api/vectorhub/') || pathname === '/api/vectorhub') {
+        if (pathname.startsWith('/api/vectorhub/internal/')) throw new DomainError('FORBIDDEN', 'Internal module endpoints are not exposed to browsers.', { status: 403 });
         return runtime.moduleBridge.proxyVectorHub(req, res, pathname, url.search);
       }
       if (pathname.startsWith('/api/eventbridge/') || pathname === '/api/eventbridge') {
+        if (pathname.startsWith('/api/eventbridge/internal/')) throw new DomainError('FORBIDDEN', 'Internal module endpoints are not exposed to browsers.', { status: 403 });
         return runtime.moduleBridge.proxyEventBridge(req, res, pathname, url.search);
       }
       if (method === 'GET' && pathname === '/api/modules/health') {
-        return send(res, 200, await runtime.moduleBridge.modulesHealth());
+        return send(res, 200, { ...await runtime.moduleBridge.modulesHealth(), ownership: runtime.ownership });
+      }
+      if (method === 'POST' && pathname === '/api/modules/configure') {
+        await readJsonBody(req);
+        await finishEngineCutover(runtime);
+        return send(res, 200, { ok: true, configuration: await runtime.moduleBridge.syncEngineConfiguration() });
+      }
+      if (method === 'GET' && pathname === '/api/brain') {
+        const settings = runtime.settingsStore.read();
+        return send(res, 200, { ok: true, brain: settings.brain, knowledgeRoot: settings.knowledge.rootPath, configuration: runtime.moduleBridge.configStatus || null });
+      }
+      if (method === 'PATCH' && pathname === '/api/brain') {
+        const body = await readJsonBody(req);
+        if (typeof body.name !== 'string' || !body.name.trim() || body.name.length > 100) throw new DomainError('INVALID_ARGUMENT', '请输入 1–100 个字符的智脑名称。');
+        const settings = await runtime.settingsStore.updatePatch({ brain: { name: body.name.trim() } });
+        const configuration = await runtime.moduleBridge.syncEngineConfiguration();
+        return send(res, 200, { ok: true, brain: settings.brain, configuration });
+      }
+      if (method === 'POST' && pathname === '/api/domains') {
+        const body = await readJsonBody(req);
+        if (typeof body.name !== 'string' || !body.name.trim() || body.name.length > 100) throw new DomainError('INVALID_ARGUMENT', '请输入 1–100 个字符的领域名称。');
+        const domain = { id: `domain-${crypto.randomUUID()}`, name: body.name.trim(), createdAt: new Date().toISOString() };
+        await runtime.settingsStore.addDomain(domain);
+        const configuration = await runtime.moduleBridge.syncEngineConfiguration();
+        return send(res, 201, { ok: true, domain, configuration });
       }
       if (method === 'GET' && pathname === '/api/projects/aggregated') {
         return send(res, 200, { ok: true, ...(await runtime.moduleBridge.aggregatedProjects()) });
@@ -942,6 +988,7 @@ function createRequestHandler(runtime, options = {}) {
         if (body.logging) throw new DomainError('IMMUTABLE_FIELD', 'Logging storage and capture policy are not user settings.', { status: 409 });
         if (!Object.keys(patch).length) throw new DomainError('INVALID_ARGUMENT', 'Only the knowledge root is mutable on this route.');
         const settings = await runtime.settingsStore.updatePatch(patch);
+        await runtime.moduleBridge.syncEngineConfiguration();
         return send(res, 200, { ok: true, settings: { ...settings, ai: publicAiProfilesConfig(settings.ai) } });
       }
 
@@ -1003,8 +1050,12 @@ function createRequestHandler(runtime, options = {}) {
           const profile = profileById(runtime.settingsStore.read(), patch.aiProfileId);
           if (!profile || profile.enabled === false) throw new DomainError('INVALID_ARGUMENT', 'aiProfileId must reference an enabled profile.');
         }
+        if (patch.brainId && patch.brainId !== runtime.settingsStore.read().brain.id) throw new DomainError('INVALID_ARGUMENT', '智脑不存在。');
+        if (patch.domainId && !runtime.settingsStore.read().brain.domains.some(d => d.id === patch.domainId)) throw new DomainError('INVALID_ARGUMENT', '领域不存在。');
         const config = await runtime.projectStore.updateConfig(projectId, patch);
-        return send(res, 200, { ok: true, projectId, config });
+        let modules;
+        if (['domainId', 'knowledgeLanguage'].some(field => Object.prototype.hasOwnProperty.call(patch, field))) modules = await runtime.moduleBridge.registerProjectLinks({ projectId, name: config.displayName, workspacePath: config.repoPath, knowledgePath: config.knowledgePath });
+        return send(res, 200, { ok: true, projectId, config, modules });
       }
       if (projectMatch && method === 'DELETE') {
         const projectId = validateProjectId(decodeURIComponent(projectMatch[1]));
@@ -1012,6 +1063,7 @@ function createRequestHandler(runtime, options = {}) {
           throw new DomainError('PROJECT_NOT_FOUND', 'Project was not found.', { status: 404 });
         }
         const body = await readJsonBody(req);
+        if (runtime.registryStore.readDisplaySnapshot(projectId)) await runtime.moduleBridge.removeProjectLinks({ projectId, requireEngine: runtime.analysisOwner !== 'legacy' });
         const result = await runtime.lifecycleService.deleteProject(projectId, {
           deleteKnowledge: body.deleteKnowledge === true,
           confirmationToken: body.confirmationToken || '',
@@ -1081,6 +1133,7 @@ function createRequestHandler(runtime, options = {}) {
         }
         const installResult = hookManager.installHook({
           repoPath: config.repoPath, projectId, triggerScriptPath: TRIGGER_SCRIPT_PATH,
+          ...runtime.bridgeAdapter.hookBinding(),
         });
         const verify = hookManager.readHookStatus({ repoPath: config.repoPath, projectId });
         await runtime.projectStore.updateState(projectId, draft => {
@@ -1118,6 +1171,7 @@ function createRequestHandler(runtime, options = {}) {
           return send(res, 200, { ok: true, projectId, exists: true, content: fs.readFileSync(goalPath, 'utf8') });
         }
         if (method === 'PUT') {
+          if (runtime.analysisOwner !== 'legacy') throw new DomainError('KNOWLEDGE_WRITE_MOVED', '知识写入由引擎维护，外壳不再直接修改知识文件。', { status: 409 });
           const body = await readJsonBody(req);
           if (typeof body.content !== 'string') throw new DomainError('INVALID_ARGUMENT', 'content must be a string.');
           if (body.content.length > 256 * 1024) throw new DomainError('INVALID_ARGUMENT', 'content exceeds 256KB limit.', { status: 413 });
@@ -1152,12 +1206,14 @@ function createRequestHandler(runtime, options = {}) {
       }
 
       if (method === 'POST' && (pathname === '/api/knowledge/search' || pathname === '/api/knowledge/ask')) {
+        if (runtime.analysisOwner !== 'legacy') return runtime.moduleBridge.proxyEngine(req, res, pathname.replace('/api/knowledge/', '/api/engine/'), url.search);
         const body = await readJsonBody(req);
         const input = { projectId: body.projectId, projectSlug: body.projectSlug, repoPath: body.repoPath, query: body.query, limit: body.limit };
         const result = pathname.endsWith('/ask') ? await runtime.knowledgeRuntime.ask(input) : await runtime.knowledgeRuntime.search(input);
         return send(res, 200, result);
       }
       if (method === 'GET' && pathname === '/api/knowledge/entry') {
+        if (runtime.analysisOwner !== 'legacy') return runtime.moduleBridge.proxyEngine(req, res, '/api/engine/get', url.search);
         const result = await runtime.knowledgeRuntime.get({
           projectId: url.searchParams.get('projectId') || '',
           projectSlug: url.searchParams.get('projectSlug') || '',
@@ -1167,6 +1223,7 @@ function createRequestHandler(runtime, options = {}) {
         return send(res, 200, result);
       }
       if (method === 'GET' && pathname === '/api/knowledge/history') {
+        if (runtime.analysisOwner !== 'legacy') return runtime.moduleBridge.proxyEngine(req, res, '/api/engine/history', url.search);
         const result = await runtime.knowledgeRuntime.history({
           projectId: url.searchParams.get('projectId') || '',
           projectSlug: url.searchParams.get('projectSlug') || '',
@@ -1176,10 +1233,12 @@ function createRequestHandler(runtime, options = {}) {
         return send(res, 200, result);
       }
       if (method === 'GET' && pathname === '/api/knowledge/maintenance') {
+        if (runtime.analysisOwner !== 'legacy') return runtime.moduleBridge.proxyEngine(req, res, '/api/engine/health', url.search);
         const projects = runtime.registryStore.listIds().map(projectId => ({ projectId, index: runtime.projectStore.readState(projectId).index }));
         return send(res, 200, { ok: true, schema: 'index-maintenance/v2', indexPath: runtime.layout.getIndexPath(), projects, active: runtime.indexService.pending.size > 0 });
       }
       if (method === 'POST' && pathname === '/api/knowledge/maintenance/rebuild') {
+        if (runtime.analysisOwner !== 'legacy') throw new DomainError('INVALID_ARGUMENT', '索引由向量模块管理，请在系统状态中修复。', { status: 409 });
         const operationId = createId('op');
         await runtime.knowledgeRuntime.close();
         await runtime.indexAdapter.close();
@@ -1205,6 +1264,10 @@ function createRequestHandler(runtime, options = {}) {
         const operationId = /^op-[A-Za-z0-9-]{8,120}$/.test(String(event.operationId || ''))
           ? event.operationId
           : requestOperationId;
+        if (runtime.analysisOwner !== 'legacy') {
+          const journal = await forwardCommitToBridge(runtime, event);
+          return send(res, 202, { ok: true, accepted: true, projectId, operationId, ...journal });
+        }
         taskForProject(runtime, projectId, operationId, () => handlePostCommitEvent(event, {
           layout: runtime.layout,
           registryStore: runtime.registryStore,
@@ -1223,6 +1286,7 @@ function createRequestHandler(runtime, options = {}) {
       // Bridge consumer wake-up (I-16): the notification body carries no
       // conversation truth — the durable journal is drained regardless.
       if (method === 'POST' && pathname === '/api/bridge/notify') {
+        if (runtime.analysisOwner !== 'legacy') return runtime.moduleBridge.proxyEngine(req, res, '/api/engine/bridge/notify', url.search);
         if (runtime.bridgeConsumerService) {
           runtime.bridgeConsumerService.handleNotification().catch(() => {
             // Drain failures are logged by the service; wake-up stays 204.
@@ -1278,6 +1342,7 @@ function createRequestHandler(runtime, options = {}) {
         return send(res, 200, { ok: true, config: publicAiProfilesConfig(settings.ai) });
       }
       if (method === 'PUT' && pathname === '/api/ai-profiles') {
+        if (runtime.analysisOwner !== 'legacy') throw new DomainError('MODEL_CONFIG_MOVED', '请在工作台的模型设置中管理配置，外壳不再保存凭据。', { status: 409 });
         const body = await readJsonBody(req);
         const current = runtime.settingsStore.read();
         const ai = mergeAiProfiles(current.ai, body);
@@ -1399,7 +1464,7 @@ function createRequestHandler(runtime, options = {}) {
 }
 
 async function startServer(options = {}) {
-  const runtime = options.runtime || createRuntime(options);
+  const runtime = options.runtime || createRuntime({ ...options, analysisOwner: options.analysisOwner || 'engine' });
   const port = parsePort(options.port || process.env.KB_SITE_PORT);
   const host = String(options.host || process.env.KB_SITE_HOST || '127.0.0.1');
   let endpointClaimed = false;
@@ -1429,18 +1494,22 @@ async function startServer(options = {}) {
   // Startup drains durable conversation/boundary facts. It deliberately does
   // not infer or submit Git commits for knowledge analysis.
   const bridgeReady = Promise.resolve(
-    runtime.bridgeConsumerService ? runtime.bridgeConsumerService.start(`http://127.0.0.1:${port}/api/bridge/notify`) : null
+    runtime.analysisOwner === 'legacy' && runtime.bridgeConsumerService ? runtime.bridgeConsumerService.start(`http://127.0.0.1:${port}/api/bridge/notify`) : null
   ).catch(error => runtime.logger.error('bridge_consumer.startup_failed', 'Bridge consumer startup drain failed.', { error }));
 
   const startupPromise = Promise.all([
-    runtime.indexService.retryDirtyProjects(),
+    runtime.analysisOwner === 'legacy' ? runtime.indexService.retryDirtyProjects() : Promise.resolve(),
     bridgeReady,
   ]).catch(error => runtime.logger.error('startup.recovery_failed', 'Startup recovery failed.', { error }));
 
   const maintenanceTimer = setInterval(() => {
-    runtime.indexService.retryDirtyProjects().catch(error => runtime.logger.error('index.retry_failed', 'Index retry failed.', { error }));
+    if (runtime.analysisOwner === 'legacy') runtime.indexService.retryDirtyProjects().catch(error => runtime.logger.error('index.retry_failed', 'Index retry failed.', { error }));
   }, Number(process.env.KB_MAINTENANCE_INTERVAL_MS || 60 * 60 * 1000));
   maintenanceTimer.unref?.();
+  const configurationTimer = setInterval(() => { finishEngineCutover(runtime).then(() => runtime.moduleBridge.syncEngineConfiguration()).catch(() => {}); }, 30000);
+  configurationTimer.unref?.();
+  runtime.moduleBridge.syncEngineConfiguration().catch(() => {});
+  finishEngineCutover(runtime).catch(() => {});
 
   // T3.5 进程编排：拉起包内自带的模块服务并守护（默认开启，KB_MODULES_AUTOSTART=0 关闭）
   try {
@@ -1456,6 +1525,7 @@ async function startServer(options = {}) {
     if (stopping) return stopping;
     stopping = (async () => {
       clearInterval(maintenanceTimer);
+      clearInterval(configurationTimer);
       await runtime.logger.info('server.shutdown_started', 'Server shutdown started.', { phase: 'shutdown', context: { reason } });
       const forceConnections = setTimeout(() => server.closeAllConnections?.(), Number(process.env.KB_SERVER_CLOSE_GRACE_MS || 2000));
       await new Promise(resolve => server.close(resolve));
@@ -1471,7 +1541,7 @@ async function startServer(options = {}) {
       await runtime.knowledgeRuntime.close();
       await runtime.indexAdapter.close();
       if (runtime.bridgeConsumerService) await runtime.bridgeConsumerService.stop().catch(() => {});
-      runtime.moduleBridge.stopSupervised();
+      await runtime.moduleBridge.stopSupervised();
       await runtime.logger.close();
       runtimeEndpoint.clearEndpoint(runtime.dataPath, { pid: process.pid });
     })();

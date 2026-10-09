@@ -32,7 +32,7 @@ async function json(method, route, body) {
 
 (async () => {
   const repo = makeRepo({ kind: 'one-commit' });
-  const spawned = spawnServer({ root: ROOT, port: PORT, dataDir: DATA_DIR, tag: 'git-validation' });
+  const spawned = spawnServer({ root: ROOT, port: PORT, dataDir: DATA_DIR, tag: 'git-validation', extraEnv: { KB_AUTOMATION_FAKE_CLAUDE: '1' } });
   let output = '';
   spawned.child.stdout.on('data', chunk => { output += chunk; });
   spawned.child.stderr.on('data', chunk => { output += chunk; });
@@ -75,7 +75,7 @@ async function json(method, route, body) {
     if (output) process.stderr.write(output);
     throw error;
   } finally {
-    spawned.child.kill();
+    await spawned.cleanup();
     repo.cleanup();
   }
 })().catch(error => { console.error(error); process.exitCode = 1; });

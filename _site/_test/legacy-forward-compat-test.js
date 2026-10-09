@@ -171,7 +171,7 @@ async function run() {
     const registryStore = new ProjectRegistryStore({ layout });
     await registryStore.initialize();
     const logger = new Logger({ layout, settingsProvider: () => ({ levels: [] }), context: { component: 'fc' } });
-    const runtime = { registryStore, projectStore, logger, layout };
+    const runtime = { registryStore, projectStore, logger, layout, analysisOwner: 'legacy', bridgeAdapter: { hookBinding: () => ({ dataDir: layout.getDataDir() }) } };
     const hooks = await migrateManagedHooks(runtime);
     const entry = hooks.find(item => item.projectId === projectId);
     assert(entry, 'migrateManagedHooks must process the migrated project');

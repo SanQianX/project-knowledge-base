@@ -25,13 +25,18 @@ function defaultDataDir(tag) {
   return fs.mkdtempSync(path.join(os.tmpdir(), `kb-data-${tag || 'test'}-${process.pid}-`));
 }
 
-function spawnServer({ root, port, host = '127.0.0.1', dataDir, extraEnv = {}, tag, stdio = ['ignore', 'pipe', 'pipe'], cwd }) {
+function spawnServer({ root, port, host = '127.0.0.1', dataDir, extraEnv = {}, tag, analysisOwner = 'legacy', stdio = ['ignore', 'pipe', 'pipe'], cwd }) {
   const dir = dataDir || defaultDataDir(tag);
   // Isolate the Bridge journal home too: the runtime registers a
   // 'project-knowledge' consumer at startup, and without this the test
   // server would write into the developer's real ~/.ai-coding-event-bridge.
   const bridgeHome = fs.mkdtempSync(path.join(os.tmpdir(), `kb-bridge-${tag || 'test'}-${process.pid}-`));
-  const child = spawn(process.execPath, [path.join(root, '_site', 'server.js')], {
+  // Legacy behavior tests characterize the retired writer in isolation. The
+  // production entry point still defaults to engine ownership; product tests
+  // explicitly request it and run the real module services.
+  const entry = path.join(root, '_site', 'lib', 'server-app.js');
+  const bootstrap = `const {startServer,installProcessHandlers}=require(${JSON.stringify(entry)});const instance=startServer({analysisOwner:${JSON.stringify(analysisOwner)}});installProcessHandlers(instance);instance.then(s=>process.stdout.write('Project Knowledge listening on http://'+s.host+':'+s.port+'\\n')).catch(()=>{process.exitCode=1});`;
+  const child = spawn(process.execPath, ['-e', bootstrap], {
     cwd: cwd || root,
     env: {
       ...process.env,
@@ -42,6 +47,7 @@ function spawnServer({ root, port, host = '127.0.0.1', dataDir, extraEnv = {}, t
       KB_SKIP_MIGRATION: '1',
       // 测试隔离：禁止测试服务器向真实模块（terminal/vector-hub）登记项目
       KB_MODULES_REGISTER: '0',
+      KB_MODULES_AUTOSTART: '0',
       AI_CODING_EVENT_BRIDGE_HOME: bridgeHome,
       ...extraEnv,
     },

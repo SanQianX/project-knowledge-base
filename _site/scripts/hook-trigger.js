@@ -27,14 +27,15 @@ const projectId = arg('--project-id', '');
 const repoRoot = arg('--repo-root', arg('--repo', ''));
 const fallbackHost = arg('--host', '127.0.0.1');
 const fallbackPort = Number(arg('--port', process.env.KB_SITE_PORT || '5757'));
-const dataDir = getDataDir();
+const dataDir = path.resolve(arg('--data-dir', getDataDir()));
 const layout = new StorageLayout({ dataDir });
 const logger = new Logger({
   layout,
   settingsProvider: () => ({ levels: ['trace', 'debug', 'info', 'warn', 'error', 'fatal'] }),
   context: { component: 'git-hook', projectId },
 });
-const bridge = new BridgeAdapter({ dataDir, modulePath: arg('--bridge-module', '') });
+const bridge = new BridgeAdapter({ dataDir, modulePath: arg('--bridge-module', ''), bridgeHomeDir: arg('--bridge-home', '') });
+if (bridge.module && typeof bridge.module.buildRepoIdentityV1 === 'function') bridgeIdentityModule = bridge.module;
 const timeoutMs = 2000;
 
 function git(gitArgs, fallback = '') {

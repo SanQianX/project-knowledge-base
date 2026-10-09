@@ -52,7 +52,8 @@ assert.strictEqual(projected.find(item => item.eventId === 'next-user').developm
 assert.strictEqual(projected.find(item => item.eventId === 'orphan').turnId, null, 'never pair across Codex sessions');
 assert.strictEqual(JSON.stringify(raw), before, 'projection must not rewrite durable source events');
 
-const uiSource = fs.readFileSync(path.resolve(__dirname, '..', '..', 'ui', 'app.js'), 'utf8');
+const uiSource = fs.readFileSync(path.resolve(__dirname, '..', '..', 'ui', 'product.js'), 'utf8');
+assert(uiSource.includes('/modules/eventbridge/'), 'conversation rendering must remain in the native event-bridge UI');
 assert(!uiSource.includes('（无用户文本）'), 'UI must not invent a user message for an assistant-only record');
 assert(!uiSource.includes('（尚无回复）'), 'UI must not invent an assistant reply for an incomplete turn');
 

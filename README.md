@@ -11,16 +11,16 @@
 
 ### npm
 
-Complete new-machine setup is two commands:
+Install the web product and start the local service:
 
 ```bash
-npm install -g project-knowledge
+npm install -g @sanqianx/project-knowledge@latest
 project-knowledge-integrations install
 project-knowledge
 ```
 
-1. `npm install -g project-knowledge` installs the knowledge base CLI and its
-   bundled `ai-coding-event-bridge` dependency — nothing else to install.
+1. `npm install -g @sanqianx/project-knowledge@latest` installs the shell,
+   three pinned module dependencies and the bundled knowledge-engine.
 2. `project-knowledge-integrations install` is the one-time Integration Setup.
    For every detected client (Claude Code / Codex / OpenCode) it installs two
    independent capabilities, reported separately:
@@ -58,23 +58,20 @@ project-knowledge --port 9000
 project-knowledge --no-open
 ```
 
-Requires Node.js 18 or newer and Git on `PATH`.
+Requires Node.js 22 or newer and Git on `PATH`.
 
 ### Windows desktop
 
-Install `Project-Knowledge-<version>-Setup.exe` from a project release. The
-desktop app and npm CLI use the same data directory and endpoint-ownership
-record, so only one backend owns a data directory at a time. Git and Claude
-Code are not bundled.
+Version 4.8.0 delivers the web product through npm. A new Windows installer
+and desktop auto-update are not part of this release.
 
 ## Runtime model
 
-There are exactly two public analysis triggers:
+The shell connects and projects; knowledge-engine owns the analysis pipeline:
 
 ```text
-post-commit Hook ----+
-                     +--> reconcileProjectCommits(projectId, trigger)
-application startup -+      trigger: git-hook | startup
+Git Hook → event-bridge journal → durable engine claim → isolated Agent
+         → staging validation → Markdown promotion → vector-hub → retrieval
 ```
 
 Import establishes a Git tracking baseline, installs and verifies the managed
@@ -82,14 +79,14 @@ Hook, and creates project metadata. It does not run AI, infer requirements from
 the repository, or generate placeholder knowledge. For an empty repository,
 the first later Commit is eligible for analysis.
 
-The Hook only sends a small `hook-event/v2` notification to the local backend.
-It always exits successfully when the backend is unavailable; startup then
-discovers reachable pending Commits from Git history. There is no offline task
-spool and no manual Hook or manual analysis API.
+The Hook writes commit evidence to the bridge journal and only notifies the
+local service. Notifications may be lost; journal consumption and Git startup
+reconciliation recover eligible commits. A Hook failure never blocks a commit.
+Import does not trigger a costly historical analysis.
 
 Within a project, Commits run oldest-first and stop at the first failure.
-Different projects may reconcile concurrently. Hook/startup overlap for the
-same project shares one in-flight reconciliation.
+Different projects may analyze concurrently (maximum two). Duplicate events
+do not re-analyze completed commits. Closing the browser does not stop work.
 
 ## Knowledge safety
 
@@ -103,10 +100,8 @@ Markdown promotion succeeds does the analyzed-Commit pointer advance and mark
 the index dirty. Index failure never rolls back Markdown or reruns AI; it stays
 visible as dirty state and is retried.
 
-`IndexService` is the only production LanceDB writer. Incremental updates and
-full rebuilds share one process-wide FIFO. A full rebuild creates and validates
-a separate database, atomically swaps it into place, and retains the previous
-index under recovery.
+vector-hub owns the derived index; the shell no longer runs a second index
+writer. Failed indexing leaves promoted Markdown intact and repairable.
 
 The application does not create, edit, refresh, or delete `CLAUDE.md`.
 
@@ -122,10 +117,10 @@ The MCP server exposes:
 - one write-only `record_requirement` metadata tool.
 
 ```bash
-npx project-knowledge@latest install
-npx project-knowledge@latest install --ide claude
-npx project-knowledge@latest install --ide codex
-npx project-knowledge@latest install --ide opencode
+npx @sanqianx/project-knowledge@latest install
+npx @sanqianx/project-knowledge@latest install --ide claude
+npx @sanqianx/project-knowledge@latest install --ide codex
+npx @sanqianx/project-knowledge@latest install --ide opencode
 ```
 
 Read-only CLI examples:
@@ -138,8 +133,8 @@ project-knowledge-kb history --project <projectId> --json
 ```
 
 Queries never create or rewrite configuration. If the internal index is
-missing, dirty, or unavailable, search falls back to the project's Markdown
-and explicitly configured related projects.
+unavailable, search falls back to current Markdown. Project, domain and brain
+scopes are nested; unconfirmed memory candidates are not task preferences.
 
 ## Storage
 
@@ -169,7 +164,7 @@ remain in the internal data directory:
 │   ├── config.json                       # fixed repoPath/knowledgePath
 │   ├── state.json                        # tracking, claim, index, Hook state
 │   └── requirements.jsonl                # created only when used
-├── index/knowledge.lancedb               # one derived index
+├── knowledge-engine/                    # durable claims, runs and cursors
 ├── cache/                                # models, exports, context packs
 ├── runtime/                              # claims, staging, journals, locks
 ├── logs/
@@ -204,16 +199,27 @@ Interrupted or failed migration keeps the legacy reader path available and
 leaves source knowledge, old logs, configuration files, and backups intact for
 retry or diagnosis.
 
-## Logging UI
+## Product UI
 
-The production web UI is a focused structured-log console. It provides:
+The six primary pages are Brain, Start work, Knowledge search, Long-term
+memory, Domains/projects and Activity. Start work embeds the real Workbench,
+not a second chat implementation. Import projects from Domains/projects;
+confirm both code and knowledge directories and retry only failed wiring.
+
+Domain knowledge and confirmed brain memories live alongside existing project
+knowledge. Adding a brain does not move project Markdown. Model credentials
+are owned by Workbench; maintenance has a persisted default independent of
+temporary chat selection. Runtime credentials never enter engine state.
+
+System status groups four-module health, configuration and diagnostics.
+Activity retains the structured-log capabilities:
 
 - trace/debug/info/warn/error/fatal filtering;
 - local-date, project, component, event, operation, Commit, and text filters;
 - newest-first cursor pagination, pause/auto-refresh, and filtered export;
 - operation-flow and structured error/stack details;
 - logger health/degraded state and Hook/index/project read-only status;
-- light/dark themes and a responsive narrow-screen layout.
+- matching light/dark themes across the shell and native module frames.
 
 Logs use `log/v2` JSONL, daily files and bounded segments. Retention defaults to
 365 days; `0` disables time-based deletion. Capacity cleanup is deterministic.
@@ -242,7 +248,9 @@ _site/lib/index-service.js
 _site/lib/structured-logger.js
 _site/lib/knowledge-tool-runtime.js
 _site/scripts/hook-trigger.js
-ui/index.html                         # single production logging UI
+ui/index.html                         # unified production web UI
+ui/product.js, ui/product.css          # shell navigation and state projection
+_modules/knowledge-engine/            # verified dependency-free engine
 bin/project-knowledge*.js             # CLI and MCP entry points
 desktop/                              # Windows Electron package
 ```
@@ -256,10 +264,14 @@ npm test --prefix desktop
 npm pack --dry-run --json
 ```
 
-The Windows suite includes real Git Hooks, paths with spaces/non-ASCII text,
+The automated suite includes real Git Hooks, paths with spaces/non-ASCII text,
 online and offline Commit reconciliation, crash-lock recovery, atomic index
 replacement, migration fault injection, packaged-startup contracts, API
-security, log redaction/cursors, and browser-level UI flows.
+security and log redaction/cursors. Product browser acceptance uses one
+1920×1080 desktop viewport and controlled model/embedding doubles; real-model
+and real-index smoke tests are reported separately. No mobile matrix or new
+Windows installer is claimed. Full crash-stage combinations and the final
+switch of a user's existing data require separate acceptance.
 
 ## License
 

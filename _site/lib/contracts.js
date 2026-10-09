@@ -68,6 +68,9 @@ const ERROR_CODES = Object.freeze([
   'LOG_CURSOR_EXPIRED',
   'EVIDENCE_INTEGRITY_FAILED',
   'AI_PROFILE_REQUIRED',
+  'KNOWLEDGE_WRITE_MOVED',
+  'MODEL_CONFIG_MOVED',
+  'MODULE_UNREACHABLE',
 ]);
 
 const IMMUTABLE_PROJECT_FIELDS = Object.freeze([
@@ -84,6 +87,8 @@ const MUTABLE_PROJECT_FIELDS = Object.freeze([
   'aiProfileId',
   'knowledgeLanguage',
   'relatedProjectIds',
+  'brainId',
+  'domainId',
 ]);
 
 const REDACTED_VALUE = '[REDACTED]';

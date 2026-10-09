@@ -1,0 +1,46 @@
+{
+  "schema": "project-knowledge/vendor-runtime/v1",
+  "modules": {
+    "knowledge-engine": {
+      "name": "@sanqianx/ai-coding-knowledge-engine",
+      "version": "0.1.0",
+      "root": "_modules/knowledge-engine",
+      "files": {
+        "README.md": "27e06c47c58e75e3081296cbdb2885df2d346fbd87bd7e415254db501d8ef35d",
+        "package.json": "f6949c331796b8351e55293d2be5a18b4ac7a203b9270c564eeefd692a006daf",
+        "src/analysis-contract.js": "90354d1e9b4eff74fdd9d47e097cdb5d47944785c2be66811f64e5958c94d8e7",
+        "src/analysis-worker.js": "a105cabe6e1573b2d986b1e7a5aaf615e2fb53524156fc8e4e2c0a71f2c97e55",
+        "src/bin.js": "22208907431d0f3a971a669c7e5eb44b3b7af9bbb36fd7ba17c3b90c4288bd70",
+        "src/bridge-client.js": "ae0dba21e4286694bcd9e064ca36564ec997969ae1eb1ce4f8a6665e447cbffe",
+        "src/coordinator.js": "4e82cce47c8c16294ddc77eb946eb1c3a2f8bfd8918e05742c80845ed8ecf10c",
+        "src/headless-analyzer.js": "2473b28d4bf06088abbcafa21d491560a9ca0ab100024c912a36bc6f981d8576",
+        "src/memories.js": "0a8667e6daba99fa5022393951a28e96cdadf98af85b6af9a6be96c7f4e896fc",
+        "src/migration.js": "b018871727f3277e4a24350fef1911fbb89e2158578339210d88efc2e309be32",
+        "src/retrieval.js": "acbf76bb93fd13dac391c2e918891a56ace869db5583d2a5994641b6782496d6",
+        "src/runtime/README.md": "9be676eca76a7857b34d7357194e6f0ee733c22e61d962d53984715dbec7f673",
+        "src/runtime/atomic-file.js": "9846b4b69db5ded811acf19a1181ef93615d93efaa542b858e552a7f3124ad23",
+        "src/runtime/automation-config.js": "6498c5397be12b155829740595a1553d4dcd6eaa7db6ced3ef88fdc60218f00e",
+        "src/runtime/commit-conversation-binder.js": "4f5a7a13c3dfac3765ad70e54de351f5d81e0ed4b2b2d7ecb90ef77cb29e0c15",
+        "src/runtime/commit-processing-ledger.js": "455aa1ac4e212c0b63d9df99e49aa94703cd24145e41aa9794f16274b2ec2e18",
+        "src/runtime/commit-prompt.js": "11856175a405c00514add6a540324a0efe3d7e5dd872c9e8a0b77f9f40abc551",
+        "src/runtime/commit-reconciler.js": "27a894ac7588701fc56e19811cbf266664357e8ac9beb9ffc4eccfc1f8e75b46",
+        "src/runtime/content-hash.js": "201ee7dcc054310f14097a00058cf9b28fa913367eef616e0fdd8facbf3c6c41",
+        "src/runtime/contracts.js": "567fbace85ad0534fb0119f5c0e57d73acc0b76cc799af93d778c5ecbade53df",
+        "src/runtime/conversation-exclusions.js": "ef8545034b862d384fb460140490bb531b58d94992f5e2222ebaaa079b44fa63",
+        "src/runtime/conversation-store.js": "8ea0135588e40dfe0bab0288220a0fb481a470855558ae38b8274d57ce55fc39",
+        "src/runtime/evidence-bundle.js": "33d4614849d5e1d69aba8b75c3a43c18b7b6f94e5c78654c82ef631331cc94cc",
+        "src/runtime/git-runner.js": "b74fe197bd4dcf3e70635ef7b1f2615edf965c1d9a3ffe5406aabd41b76d74a9",
+        "src/runtime/knowledge-promotion.js": "c24aba505caf11cdc8faba763beffc65956c1330ef28ed5fbd6ae16eac640fa6",
+        "src/runtime/knowledge-retrieval-service.js": "75444f495a9ad0720af0e57b8d27d7ac1325c78a768f4f68ebd86ebc2524945e",
+        "src/runtime/layout.js": "c48fa1db62e5df1edefe13218e470c5ceea4ef2781293512c2c18e5c2ba0c7e9",
+        "src/runtime/markdown-knowledge-indexer.js": "44a76a9adefad07e78f77b1106b10d6c1cc7873d76362df4c546892b21f3939c",
+        "src/runtime/scanner.js": "d99fa8d74a6fbbaae75ca49f62127e14cf9e48b1404e4b4d597ef39df5441410",
+        "src/server.js": "e2d983eaa9f4ffc240caab467fad8e21c6124779ac3f27c9cec2c4f06827ef65",
+        "src/store.js": "b778d93b97cd6a1174fccd3a5de1f2b170934a262e11e4447e7fdc698ac386e0",
+        "ui/app.css": "7ad370c269e60a7b5ec907d81a607b2d16bd07b2d7c22a81f102dab51eeb2889",
+        "ui/app.js": "5f4f6fc6faeb951938a821e846e948de8859d7c908e04f6f93bf73208493993e",
+        "ui/index.html": "ce3565cfefd4838b11d37a91a906ef26ca5a1834844fe3f7c897b56851a3c418"
+      }
+    }
+  }
+}

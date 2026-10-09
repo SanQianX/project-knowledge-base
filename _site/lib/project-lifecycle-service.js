@@ -106,12 +106,14 @@ class ProjectLifecycleService {
       checks.knowledgeRoot = { ok: false, reason: 'unconfigured' };
     } else if (!fs.existsSync(knowledgeRoot)) {
       try {
-        fs.mkdirSync(knowledgeRoot, { recursive: true });
+        let parent = path.dirname(knowledgeRoot);
+        while (!fs.existsSync(parent) && path.dirname(parent) !== parent) parent = path.dirname(parent);
+        fs.accessSync(parent, fs.constants.W_OK);
       } catch (error) {
         problems.push({ code: 'KNOWLEDGE_ROOT_NOT_WRITABLE', message: `Knowledge root is not writable: ${error.message}`, action: 'CONFIGURE_KNOWLEDGE_ROOT' });
         checks.knowledgeRoot = { ok: false, reason: 'not-writable', path: knowledgeRoot };
       }
-      checks.knowledgeRoot = checks.knowledgeRoot || { ok: true, path: knowledgeRoot, created: true };
+      checks.knowledgeRoot = checks.knowledgeRoot || { ok: true, path: knowledgeRoot, plannedCreate: true };
     } else {
       try {
         fs.accessSync(knowledgeRoot, fs.constants.W_OK);
@@ -130,8 +132,7 @@ class ProjectLifecycleService {
       checks.aiProfile = { ok: true, ...aiProfile };
     } catch (error) {
       if (error && error.code === 'AI_PROFILE_REQUIRED') {
-        problems.push({ code: 'AI_PROFILE_REQUIRED', message: 'No usable AI profile is configured. Configure one before importing.', action: 'CONFIGURE_AI_PROFILE' });
-        checks.aiProfile = { ok: false };
+        checks.aiProfile = { ok: false, required: false, message: '后台模型尚未配置；项目仍可导入，不会自动分析历史。' };
       } else {
         throw error;
       }
@@ -197,9 +198,17 @@ class ProjectLifecycleService {
     }
 
     const ready = problems.length === 0;
+    if (input.domainId && !(settings.brain?.domains || []).some(d => d.id === input.domainId)) problems.push({ code: 'DOMAIN_MISSING', message: '所选领域不存在。' });
+    if (input.knowledgePath) {
+      const target = path.resolve(input.knowledgePath);
+      const overlap = (a, b) => this.layout.isPathInside(a, b, { realpath: true }) || this.layout.isPathInside(b, a, { realpath: true });
+      if (!path.isAbsolute(input.knowledgePath)) problems.push({ code: 'KNOWLEDGE_PATH_INVALID', message: '知识目录必须是绝对路径。' });
+      else if (overlap(target, localPath) || knowledgeRoot && overlap(target, path.join(knowledgeRoot, '_shared')) || this.listConfigs().some(c => overlap(c.knowledgePath, target))) problems.push({ code: 'KNOWLEDGE_PATH_CONFLICT', message: '知识目录与代码、共享目录或其他项目冲突。' });
+      else if (!input.teamBinding && fs.existsSync(target) && (!fs.statSync(target).isDirectory() || fs.readdirSync(target).length)) problems.push({ code: 'KNOWLEDGE_PATH_NOT_EMPTY', message: '新项目的知识目录必须为空；已有文件会保留。' });
+    }
     return {
-      ok: ready,
-      ready,
+      ok: problems.length === 0,
+      ready: problems.length === 0,
       plannedGitInit,
       problems,
       checks,
@@ -250,9 +259,11 @@ class ProjectLifecycleService {
     return configs;
   }
 
-  inspectOrInitializeGit(repoPath, journal) {
+  inspectOrInitializeGit(repoPath, journal, options = {}) {
     const inside = runGit(repoPath, ['rev-parse', '--is-inside-work-tree'], { allowFailure: true });
-    if (!inside.ok) {
+    const topBefore = inside.ok ? runGit(repoPath, ['rev-parse', '--show-toplevel']) : null;
+    if (!inside.ok || !this.layout.pathsEqual(topBefore.stdout, repoPath)) {
+      if (options.confirmGitInit !== true) throw new DomainError('INVALID_ARGUMENT', '请明确确认后再初始化非 Git 目录。');
       const initialized = runGit(repoPath, ['init']);
       journal.gitInitialized = initialized.ok;
     }
@@ -274,7 +285,10 @@ class ProjectLifecycleService {
       const settings = this.settingsStore.read();
       const knowledgeRoot = this.layout.getKnowledgeRootPath(settings);
       this.layout.validateKnowledgeRoot(knowledgeRoot);
-      const git = this.inspectOrInitializeGit(localPath, journal);
+      const brain = settings.brain || { id: 'brain-default', domains: [] };
+      if (input.brainId && input.brainId !== brain.id) throw new DomainError('INVALID_ARGUMENT', '智脑不存在。');
+      if (input.domainId && !brain.domains.some(domain => domain.id === input.domainId)) throw new DomainError('INVALID_ARGUMENT', '领域不存在。');
+      const git = this.inspectOrInitializeGit(localPath, journal, input);
       for (const config of this.listConfigs()) {
         if (this.layout.pathsEqual(config.repoPath, git.repoPath) || (config.repoIdentity && this.layout.pathsEqual(config.repoIdentity.commonDir, git.commonDir))) {
           throw new DomainError('INVALID_ARGUMENT', 'This Git repository is already imported.', { status: 409, operationId });
@@ -284,7 +298,14 @@ class ProjectLifecycleService {
       const displayName = String(input.displayName || path.basename(git.repoPath));
       const storageName = input.storageName || `${slugify(displayName)}-${projectId.replace(/[^a-z0-9]/gi, '').slice(-6).toLowerCase()}`;
       const team = this.normalizeTeamBinding(input.teamBinding || input.teamKnowledgeBase);
-      const knowledgePath = team ? team.knowledgePath : this.layout.resolveNewProjectKnowledgePath(storageName, settings);
+      const knowledgePath = team ? team.knowledgePath : input.knowledgePath ? path.resolve(input.knowledgePath) : this.layout.resolveNewProjectKnowledgePath(storageName, settings);
+      if (input.knowledgePath && !path.isAbsolute(input.knowledgePath)) throw new DomainError('INVALID_ARGUMENT', '知识目录必须是绝对路径。');
+      if (this.layout.isPathInside(git.repoPath, knowledgePath, { realpath: true }) || this.layout.isPathInside(knowledgePath, git.repoPath, { realpath: true })) throw new DomainError('PATH_OUTSIDE_ROOT', '代码目录和知识目录不能相互嵌套。', { status: 409 });
+      const sharedRoot = path.join(knowledgeRoot, '_shared');
+      if (this.layout.isPathInside(sharedRoot, knowledgePath, { realpath: true }) || this.layout.isPathInside(knowledgePath, sharedRoot, { realpath: true })) throw new DomainError('PATH_OUTSIDE_ROOT', '项目知识目录不能占用智脑共享目录。', { status: 409 });
+      for (const config of this.listConfigs()) {
+        if (this.layout.isPathInside(config.knowledgePath, knowledgePath, { realpath: true }) || this.layout.isPathInside(knowledgePath, config.knowledgePath, { realpath: true })) throw new DomainError('MIGRATION_TARGET_CONFLICT', '知识目录与已登记项目冲突。', { status: 409 });
+      }
       if (team) {
         if (!fs.existsSync(knowledgePath) || !fs.statSync(knowledgePath).isDirectory()) {
           throw new DomainError('INVALID_ARGUMENT', 'The selected team knowledge directory does not exist.', { status: 400, operationId });
@@ -326,13 +347,14 @@ class ProjectLifecycleService {
         displayName, storageName, repoPath: git.repoPath, knowledgePath,
         enabled: true, aiProfileId: input.aiProfileId || null,
         knowledgeLanguage: input.knowledgeLanguage || 'zh-CN',
+        brainId: brain.id, domainId: input.domainId || null,
         teamBinding: team ? team.binding : null,
         repoIdentity: repoIdentityV1 || null,
       }, stateInput);
       journal.created.metadata = this.layout.getProjectMetadataDir(projectId);
       journal.phase = 'metadata-created';
       this.writeJournal(journal);
-      const hook = this.hookManager.installHook({ repoPath: git.repoPath, projectId, triggerScriptPath: this.triggerScriptPath });
+      const hook = this.hookManager.installHook({ repoPath: git.repoPath, projectId, triggerScriptPath: this.triggerScriptPath, dataDir: this.layout.getDataDir(), ...this.bridgeAdapter?.hookBinding?.() });
       journal.created.hookPath = hook.hookPath;
       journal.phase = 'hook-verified';
       this.writeJournal(journal);

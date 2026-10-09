@@ -72,11 +72,11 @@ const runner = require('../lib/claude-cli-runner');
     assert(server.includes('body.permissionMode'));
 
     const html = fs.readFileSync(path.join(ROOT, 'ui', 'index.html'), 'utf8');
-    const app = fs.readFileSync(path.join(ROOT, 'ui', 'app.js'), 'utf8');
+    const app = fs.readFileSync(path.join(ROOT, 'ui', 'product.js'), 'utf8');
     // T2: 内嵌终端取代旧 workbench 聊天面板 —— 壳经 kb:* 协议与会话/事件交互
-    assert(html.includes('id="view-terminal"') && html.includes('id="fr-5760"'));
-    assert(html.includes('id="view-search"') && html.includes('id="fr-8787"'));
-    assert(app.includes("'kb:select-project'") && app.includes("'kb:list-sessions'") && app.includes("'kb:open-session'"));
+    assert(html.includes('id="view-work"') && html.includes('id="workFrame"'));
+    assert(html.includes('id="view-search"') && html.includes('id="vectorFrame"'));
+    assert(app.includes("'kb:select-project'") && app.includes("'kb:knowledge'") && app.includes('initializeFrame'));
     assert(app.includes("'kb:sidebar'"), 'embed protocol wiring must cover fold');
     // 会话生命周期（archive/restore）只属于 terminal 模块，壳保持只读投影
     assert(!app.includes("'kb:archive-session'") && !app.includes("'kb:restore-session'"), 'session lifecycle wiring must stay terminal-module-only');

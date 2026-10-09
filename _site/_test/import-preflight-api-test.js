@@ -160,7 +160,7 @@ async function waitForServer() {
       assert.strictEqual(r.body.ready, true);
       assert.strictEqual(r.body.checks.git.ok, true);
 
-      // Case 6: no AI profile configured -> ready=false with AI_PROFILE_REQUIRED
+      // Import establishes a baseline only; a missing model must not prevent registration.
       const noProfileSpawned = spawnServer({
         root: ROOT, port: PORT + 2, dataDir: fs.mkdtempSync(path.join(os.tmpdir(), `pk-preflight-noprofile-${process.pid}-`)),
         tag: 'preflight-noprofile', extraEnv: { KB_SKIP_MIGRATION: '1' },
@@ -181,8 +181,9 @@ async function waitForServer() {
           body: JSON.stringify({ localPath: repoOk }),
         }).then(async response => ({ status: response.status, body: await response.json() }));
         assert.strictEqual(r2.status, 200);
-        assert.strictEqual(r2.body.ready, false);
-        assert(r2.body.problems.some(p => p.code === 'AI_PROFILE_REQUIRED'));
+        assert.strictEqual(r2.body.ready, true);
+        assert.strictEqual(r2.body.checks.aiProfile.ok, false);
+        assert.strictEqual(r2.body.checks.aiProfile.required, false);
       } finally {
         noProfileSpawned.child.kill();
         await new Promise(resolve => noProfileSpawned.child.once('exit', resolve));

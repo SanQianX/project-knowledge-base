@@ -1,5 +1,23 @@
 # Changelog
 
+## [4.8.0] - 2026-10-10
+
+- Unified brain web product: six real pages for work, retrieval, memories,
+  domains/projects and activity. Existing module UIs retain their streaming
+  and recovery behavior with one embedded theme and project context.
+- Project import wires all four modules and preserves code/knowledge paths;
+  domains and confirmed memories add shared scopes without moving knowledge.
+- The vendored knowledge-engine owns journal consumption, isolated analysis,
+  staging promotion and retrieval. Per-project FIFO and two concurrent projects
+  persist across recovery; promotion and indexing have separate failure states.
+- Pin the validated module releases: Workbench 0.13.0, vector-hub 1.0.7,
+  event-bridge console 0.7.0 and vendored knowledge-engine 0.1.0.
+  Runtime file hashes are verified before release, not resolved from `latest`.
+- Web-only release. No new Windows installer or desktop auto-update delivery.
+  Regression uses controlled model/embedding doubles; real-model and real-index
+  smoke tests are reported separately. Remaining fault combinations are not
+  represented as a completed stability certification.
+
 ## [4.7.0] - 2026-09-21
 
 - All four embedded module dependencies (`claude-ai-workbench`,

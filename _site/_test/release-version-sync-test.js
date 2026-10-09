@@ -74,7 +74,7 @@ try {
   assert.strictEqual(claude.version, '9.8.7');
   assert.strictEqual(codex.version, '9.8.7');
   assert.strictEqual(marketplace.plugins[0].version, '9.8.7');
-  assert(mcp.mcpServers['project-knowledge'].args.includes('project-knowledge@9.8.7'));
+  assert(mcp.mcpServers['project-knowledge'].args.includes('@sanqianx/project-knowledge@9.8.7'));
   assert.strictEqual(desktopLock.version, '9.8.7');
   assert.strictEqual(desktopLock.packages[''].version, '9.8.7');
   const staged = git(['diff', '--cached', '--name-only']);

@@ -53,26 +53,28 @@ function buildAndInstallPackage() {
   let browser;
   try {
     const packagedRoot = buildAndInstallPackage();
-    assert(fs.existsSync(path.join(packagedRoot, 'ui', 'i18n.js')), 'packed UI must include ui/i18n.js');
+    for (const file of ['index.html', 'product.js', 'product.css']) assert(fs.existsSync(path.join(packagedRoot, 'ui', file)), `packed UI must include ${file}`);
+    for (const file of ['app.js', 'app.css', 'i18n.js']) assert(!fs.existsSync(path.join(packagedRoot, 'ui', file)), `obsolete shell resource must not be shipped: ${file}`);
 
-    server = spawnServer({ root: packagedRoot, port: PORT, tag: 'packaged-ui', stdio: 'ignore' });
+    server = spawnServer({ root: packagedRoot, port: PORT, dataDir: path.join(tempRoot, 'data'), tag: 'packaged-ui', analysisOwner: 'engine', stdio: 'ignore' });
     await waitFor(async () => {
       try { return (await fetch(`${BASE}/api/health`)).ok ? { ok: true } : null; }
       catch { return null; }
     }, 'packaged server', 20000);
 
-    const i18nResponse = await fetch(`${BASE}/i18n.js`);
-    assert.strictEqual(i18nResponse.status, 200, 'packaged server must serve /i18n.js');
-    assert.match(String(i18nResponse.headers.get('content-type') || ''), /javascript/i);
+    const productResponse = await fetch(`${BASE}/product.js`);
+    assert.strictEqual(productResponse.status, 200, 'packaged server must serve /product.js');
+    assert.match(String(productResponse.headers.get('content-type') || ''), /javascript/i);
 
-    browser = await launchCdpBrowser({ chrome: findChrome(), profileDir, url: `${BASE}/`, width: 1440, height: 900 });
+    browser = await launchCdpBrowser({ chrome: findChrome(), profileDir, url: `${BASE}/`, width: 1920, height: 1080 });
+    await browser.setViewport(1920, 1080);
     await waitFor(async () => {
-      const ready = await browser.evaluate('Boolean(window.I18N && window.__PK_APP__)');
+      const ready = await browser.evaluate("document.getElementById('homeContent').textContent.includes('第一个项目')");
       return ready ? { ok: true } : null;
     }, 'packaged UI bootstrap', 20000);
 
-    const state = await browser.evaluate('window.__PK_APP__.getState()');
-    assert.strictEqual(state.projects, 0);
+    assert.strictEqual(await browser.evaluate("document.getElementById('projectSelect').disabled"), true);
+    assert.strictEqual(await browser.evaluate("document.querySelectorAll('nav [data-view]').length"), 6);
     assert.strictEqual(browser.exceptions.length, 0, `packaged UI runtime exceptions: ${JSON.stringify(browser.exceptions)}`);
     console.log('packaged-ui-smoke-test PASS');
   } finally {

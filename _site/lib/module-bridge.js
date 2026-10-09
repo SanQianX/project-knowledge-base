@@ -22,9 +22,12 @@
  *   KB_EVENTBRIDGE_COMMAND explicit node command line for the event-bridge console
  */
 
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
+const { once } = require('events');
+const { DomainError } = require('./contracts');
 
 const PROXY_TIMEOUT_MS = 10000;
 // Registration drives a full embedding pass in vector-hub (remote API); a
@@ -47,6 +50,10 @@ const MODULE_ENTRIES = {
 };
 
 function resolveModuleEntry(name) {
+  if (name === 'knowledge-engine') {
+    const runtime = path.resolve(__dirname, '..', '..', '_modules', 'knowledge-engine', 'src', 'bin.js');
+    return fs.existsSync(runtime) ? runtime : null;
+  }
   try { return require.resolve(MODULE_ENTRIES[name]); } catch { return null; }
 }
 
@@ -70,14 +77,19 @@ function defaultEventBridgeUrl() {
   return String(process.env.KB_EVENTBRIDGE_URL || 'http://127.0.0.1:8790').replace(/\/+$/, '');
 }
 
+function defaultEngineUrl() { return String(process.env.KB_KNOWLEDGE_ENGINE_URL || 'http://127.0.0.1:5790').replace(/\/+$/, ''); }
+
 class ModuleBridge {
   constructor(options = {}) {
     this.logger = options.logger || { info: () => {}, warn: () => {}, error: () => {} };
     this.terminalUrl = options.terminalUrl || defaultTerminalUrl();
     this.vectorHubUrl = options.vectorHubUrl || defaultVectorHubUrl();
     this.eventBridgeUrl = options.eventBridgeUrl || defaultEventBridgeUrl();
+    this.engineUrl = options.engineUrl || defaultEngineUrl();
+    this.runtimeToken = options.runtimeToken || crypto.randomBytes(32).toString('hex');
     this.registryStore = options.registryStore || null;
     this.projectStore = options.projectStore || null;
+    this.settingsStore = options.settingsStore || null;
     this.dataDir = options.dataDir || null;
     this.supervised = [];
   }
@@ -110,7 +122,7 @@ class ModuleBridge {
     }
   }
 
-  /** Same-origin reverse proxy for one browser request. Streams JSON bodies buffered. */
+  /** Same-origin proxy. SSE has a headers deadline, never a whole-turn deadline. */
   async proxy(req, res, target) {
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
@@ -120,23 +132,45 @@ class ModuleBridge {
     const isPicker = /\/(system\/)?pick-folder/.test(target);
     const timeoutMs = isPicker ? PICKER_TIMEOUT_MS : PROXY_TIMEOUT_MS;
     let upstream;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const disconnected = () => { if (!res.writableEnded) controller.abort(); };
+    res.once?.('close', disconnected);
     try {
-      upstream = await this._fetch(target, {
+      upstream = await fetch(target, {
         method: req.method,
-        timeoutMs,
-        headers: body ? { 'Content-Type': req.headers['content-type'] || 'application/json' } : {},
+        signal: controller.signal,
+        headers: { ...(body ? { 'Content-Type': req.headers['content-type'] || 'application/json' } : {}), ...(req.headers['last-event-id'] ? { 'Last-Event-ID': req.headers['last-event-id'] } : {}) },
         body: ['GET', 'HEAD'].includes(req.method) ? undefined : body,
       });
     } catch (error) {
+      clearTimeout(timer);
+      res.off?.('close', disconnected);
+      if (res.destroyed) return;
       res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify({ ok: false, error: 'MODULE_UNREACHABLE', target }));
       return;
     }
-    const buf = Buffer.from(await upstream.arrayBuffer());
-    res.writeHead(upstream.status, {
-      'Content-Type': upstream.headers.get('content-type') || 'application/json; charset=utf-8',
-    });
-    res.end(buf);
+    const contentType = upstream.headers.get('content-type') || 'application/json; charset=utf-8';
+    if (contentType.includes('text/event-stream')) {
+      clearTimeout(timer);
+      res.writeHead(upstream.status, { 'Content-Type': contentType, 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+      res.flushHeaders?.();
+      try {
+        for await (const chunk of upstream.body) {
+          if (res.destroyed) break;
+          if (!res.write(Buffer.from(chunk))) await once(res, 'drain', { signal: controller.signal });
+        }
+        if (!res.destroyed) res.end();
+      } catch { if (!res.destroyed) res.destroy(); }
+      finally { controller.abort(); res.off?.('close', disconnected); }
+    } else {
+      try {
+        const buf = Buffer.from(await upstream.arrayBuffer());
+        res.writeHead(upstream.status, { 'Content-Type': contentType });
+        res.end(buf);
+      } finally { clearTimeout(timer); res.off?.('close', disconnected); }
+    }
   }
 
   proxyTerminal(req, res, pathname, search) {
@@ -149,6 +183,22 @@ class ModuleBridge {
 
   proxyEventBridge(req, res, pathname, search) {
     return this.proxy(req, res, this._eventBridgeApi(pathname) + (search || ''));
+  }
+
+  proxyEngine(req, res, pathname, search) {
+    return this.proxy(req, res, `${this.engineUrl}/api/${pathname.replace(/^\/api\/engine\/?/, '')}${search || ''}`);
+  }
+
+  proxyModuleUi(req, res, module, rest, search) {
+    const base = { terminal: this.terminalUrl, vectorhub: this.vectorHubUrl, eventbridge: this.eventBridgeUrl, engine: this.engineUrl }[module];
+    let decoded;
+    try { decoded = decodeURIComponent(rest); } catch { decoded = null; }
+    // Reject encoded separators/dot segments before URL normalization. Static
+    // mounts must never become a second route to a module's private API.
+    if (!base || req.method !== 'GET' || decoded === null || /[\\\x00-\x1f]/.test(decoded) || decoded.split('/').some(part => ['.', '..', 'api', 'internal'].includes(part.toLowerCase())) || /%[0-9a-f]{2}/i.test(decoded)) { res.statusCode = 404; res.end('Not found'); return; }
+    const target = new URL(`${base}/${rest}${search || ''}`);
+    if (target.origin !== new URL(base).origin) { res.statusCode = 404; res.end('Not found'); return; }
+    return this.proxy(req, res, target.href);
   }
 
   async _listTerminalProjects() {
@@ -179,12 +229,22 @@ class ModuleBridge {
     } catch { return []; }
   }
 
+  async _listEngineProjects() {
+    try {
+      const response = await this._fetch(`${this.engineUrl}/api/projects`);
+      if (!response.ok) return [];
+      const payload = await response.json();
+      return Array.isArray(payload.projects) ? payload.projects : [];
+    } catch { return []; }
+  }
+
   /** Aggregated projection for the shell sidebar: pkb registry is the spine. */
   async aggregatedProjects() {
-    const [terminalProjects, vectorHubProjects, eventBridgeProjects] = await Promise.all([
+    const [terminalProjects, vectorHubProjects, eventBridgeProjects, engineProjects] = await Promise.all([
       this._listTerminalProjects(),
       this._listVectorHubProjects(),
       this._listEventBridgeProjects(),
+      this._listEngineProjects(),
     ]);
     const ids = this.registryStore ? this.registryStore.listIds() : [];
     const byWorkspace = new Map(terminalProjects.map(p => [String(p.rootPath || '').toLowerCase(), p]));
@@ -209,10 +269,13 @@ class ModuleBridge {
         name: config.displayName || projectId,
         workspacePath,
         knowledgePath,
+        brainId: config.brainId || 'brain-default',
+        domainId: config.domainId || null,
         modules: {
           terminal: terminal ? { registered: true, projectId: terminal.id, name: terminal.name } : { registered: false, status: wiring.terminal && wiring.terminal.status },
           vectorHub: vectorHub ? { registered: true, projectName: vectorHub.name, docCount: vectorHub.docCount, chunkCount: vectorHub.chunkCount, watching: !!vectorHub.watching } : { registered: false, status: wiring.vectorHub && wiring.vectorHub.status },
           eventBridge: eventBridge ? { registered: true, projectId: eventBridge.id, turns: eventBridge.turns, auto: !!eventBridge.auto } : { registered: false, status: wiring.eventBridge && wiring.eventBridge.status },
+          engine: engineProjects.some(p => p.projectId === projectId) ? { registered: true, projectId } : { registered: false, status: wiring.engine && wiring.engine.status },
         },
       };
     });
@@ -221,24 +284,76 @@ class ModuleBridge {
       terminalAvailable: terminalProjects.length > 0 || await this._probe(this.terminalUrl),
       vectorHubAvailable: vectorHubProjects.length > 0 || await this._probe(this.vectorHubUrl),
       eventBridgeAvailable: eventBridgeProjects.length > 0 || await this._probe(this.eventBridgeUrl),
+      engineAvailable: engineProjects.length > 0 || await this._probe(this.engineUrl),
     };
   }
 
   async _probe(base) {
-    try { await this._fetch(base, { timeoutMs: 2000 }); return true; } catch { return false; }
+    const route = base === this.terminalUrl ? '/api/claude-workbench/v1/health' : '/api/health';
+    try { const response = await this._fetch(`${base}${route}`, { timeoutMs: 2000 }); return response.ok; } catch { return false; }
   }
 
   async modulesHealth() {
-    const [terminal, vectorHub, eventBridge] = await Promise.all([
+    const [terminal, vectorHub, eventBridge, engine] = await Promise.all([
       this._probe(this.terminalUrl),
       this._probe(this.vectorHubUrl),
       this._probe(this.eventBridgeUrl),
+      this._probe(this.engineUrl),
     ]);
     return { ok: true, modules: {
       terminal: { url: this.terminalUrl, up: terminal },
       vectorHub: { url: this.vectorHubUrl, up: vectorHub },
       eventBridge: { url: this.eventBridgeUrl, up: eventBridge },
+      engine: { url: this.engineUrl, up: engine },
     } };
+  }
+
+  async syncEngineConfiguration() {
+    if (this.syncingConfig) return this.configStatus || { scopes: false, model: false };
+    this.syncingConfig = true;
+    const status = { scopes: false, model: false, embedding: false };
+    const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${this.runtimeToken}` };
+    try {
+      if (this.settingsStore) {
+        const settings = this.settingsStore.read();
+        if (settings.knowledge.rootPath) {
+          const brain = settings.brain;
+          const root = path.join(settings.knowledge.rootPath, '_shared');
+          const scopes = [{ id: brain.id, kind: 'brain', brainId: brain.id, name: brain.name, knowledgePath: path.join(root, brain.id) }, ...brain.domains.map(d => ({ id: d.id, kind: 'domain', brainId: brain.id, domainId: d.id, name: d.name, knowledgePath: path.join(root, d.id) }))];
+          status.scopes = (await this._fetch(`${this.engineUrl}/api/scopes`, { method: 'POST', headers, body: JSON.stringify({ scopes }) })).ok;
+        }
+      }
+    } catch { /* A scope failure must not prevent revoking a stale model key. */ }
+    try {
+      let profile = null;
+      try {
+        const response = await this._fetch(`${this.terminalUrl}/api/claude-workbench/v1/internal/maintenance-config`, { method: 'POST', headers, body: '{}' });
+        if (response.ok) profile = await response.json();
+      } catch { /* Missing configuration must clear a previously resolved key. */ }
+      const response = await this._fetch(`${this.engineUrl}/api/runtime-config`, { method: 'POST', headers, body: JSON.stringify({ projectId: 'default', profile }) });
+      status.model = response.ok && !!profile;
+    } catch { /* Status projection only: never log resolved profiles or raw errors. */ }
+    try {
+      const legacyResponse = await this._fetch(`${this.vectorHubUrl}/api/internal/embedding-config`, { method: 'POST', headers, body: '{}' });
+      if (legacyResponse.ok) {
+        const legacy = await legacyResponse.json();
+        if (legacy.settings && /^embedding-[a-f0-9]{64}$/.test(legacy.migrationId || '')) {
+          const imported = await this._fetch(`${this.terminalUrl}/api/claude-workbench/v1/internal/import-embedding`, { method: 'POST', headers, body: JSON.stringify(legacy) });
+          if (imported.ok) await this._fetch(`${this.vectorHubUrl}/api/internal/retire-embedding`, { method: 'POST', headers, body: JSON.stringify({ migrationId: legacy.migrationId }) });
+        }
+      }
+    } catch { /* Failed migration retains the module's protected configuration. */ }
+    try {
+      let settings = null;
+      try {
+        const resolved = await this._fetch(`${this.terminalUrl}/api/claude-workbench/v1/internal/embedding-config`, { method: 'POST', headers, body: '{}' });
+        if (resolved.ok) settings = await resolved.json();
+      } catch { /* Revocation wins over a previously cached runtime key. */ }
+      const applied = await this._fetch(`${this.vectorHubUrl}/api/internal/runtime-config`, { method: 'POST', headers, body: JSON.stringify({ settings }) });
+      status.embedding = applied.ok && !!settings;
+    } catch { /* Public status contains no resolved configuration. */ }
+    this.syncingConfig = false; this.configStatus = status;
+    return status;
   }
 
   /**
@@ -248,11 +363,12 @@ class ModuleBridge {
    * KB_MODULES_REGISTER=0 disables fan-out entirely (test isolation).
    */
   async registerProjectLinks({ projectId, name, workspacePath, knowledgePath }) {
-    const result = { terminal: { ok: false }, vectorHub: { ok: false }, eventBridge: { ok: false } };
+    const result = { terminal: { ok: false }, vectorHub: { ok: false }, eventBridge: { ok: false }, engine: { ok: false } };
     if (String(process.env.KB_MODULES_REGISTER || '') === '0') {
       result.terminal = { ok: false, status: 'disabled' };
       result.vectorHub = { ok: false, status: 'disabled' };
       result.eventBridge = { ok: false, status: 'disabled' };
+      result.engine = { ok: false, status: 'disabled' };
       return result;
     }
     // 幂等登记：终端已有同 rootPath 的项目时复用，绝不重复创建
@@ -273,12 +389,14 @@ class ModuleBridge {
         result.terminal = { ok: false, status: 'pending' };
       }
     }
-    try {
+    const existingVector = (await this._listVectorHubProjects()).find(p => p.name === projectId && String(p.sourceDir || '').toLowerCase() === String(knowledgePath || '').toLowerCase());
+    if (existingVector) result.vectorHub = { ok: true, projectName: projectId, status: 'registered', reused: true };
+    else try {
       const response = await this._fetch(`${this.vectorHubUrl}/api/import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         timeoutMs: REGISTER_TIMEOUT_MS,
-        body: JSON.stringify({ sourceDir: knowledgePath, projectName: projectId, watch: true }),
+        body: JSON.stringify({ sourceDir: knowledgePath, projectName: projectId, watch: false }),
       });
       result.vectorHub = { ok: response.ok, projectName: projectId, status: response.ok ? 'registered' : 'error' };
     } catch {
@@ -307,10 +425,26 @@ class ModuleBridge {
         result.eventBridge = { ok: false, status: 'pending' };
       }
     }
+    const config = this.projectStore ? this.projectStore.readConfig(projectId) : {};
+    const state = this.projectStore ? this.projectStore.readState(projectId) : {};
+    try {
+      const baselines = { ...(state.conversationBaselineCursors || {}), global: state.conversationBaselineCursor ?? 0 };
+      const journalId = result.eventBridge.projectId || state.modules?.eventBridge?.projectId;
+      if (journalId && baselines[journalId] === undefined) {
+        const watermark = result.eventBridge.reused && await this._fetch(`${this.eventBridgeUrl}/api/journal/high-watermark?journalId=${encodeURIComponent(journalId)}`);
+        const current = result.eventBridge.reused ? watermark.ok && await watermark.json() : { sequence: 0 };
+        if (!current || !Number.isSafeInteger(current.sequence)) throw new Error('JOURNAL_BASELINE_UNAVAILABLE');
+        baselines[journalId] = current.sequence;
+        if (this.projectStore) await this.projectStore.updateState(projectId, draft => { draft.conversationBaselineCursors = baselines; });
+      }
+      const response = await this._fetch(`${this.engineUrl}/api/projects`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId, name: name || projectId, repoPath: workspacePath, knowledgePath, knowledgeLanguage: config.knowledgeLanguage || 'zh-CN', brainId: config.brainId || 'brain-default', domainId: config.domainId || null, repoIdentity: config.repoIdentity, journalId: journalId || null, vectorProjectId: projectId, trackingStartCommit: state.trackingStartCommit || state.lastAnalyzedCommit || null, conversationBaselineCursor: state.conversationBaselineCursor ?? 0, conversationBaselineCursors: baselines, profileId: config.aiProfileId || null }) });
+      result.engine = { ok: response.ok, projectId, status: response.ok ? 'registered' : 'error' };
+    } catch { result.engine = { ok: false, status: 'pending' }; }
     await this._writeWiring(projectId, wiring => {
       wiring.terminal = { ...wiring.terminal, ...result.terminal, name: name || projectId, rootPath: workspacePath, updatedAt: new Date().toISOString() };
       wiring.vectorHub = { ...wiring.vectorHub, ...result.vectorHub, sourceDir: knowledgePath, updatedAt: new Date().toISOString() };
       wiring.eventBridge = { ...wiring.eventBridge, ...result.eventBridge, path: workspacePath, store: knowledgePath ? path.join(knowledgePath, 'dev-conversations') : '', updatedAt: new Date().toISOString() };
+      wiring.engine = { ...wiring.engine, ...result.engine, updatedAt: new Date().toISOString() };
     });
     this.logger.info('modules.register', 'Module registration finished.', { context: { projectId, terminal: result.terminal.status, vectorHub: result.vectorHub.status, eventBridge: result.eventBridge.status } });
     return result;
@@ -320,9 +454,19 @@ class ModuleBridge {
    * only drops its derived index (source untouched); terminal removes the project
    * with keepSessions=1 so session records survive; the event-bridge console only
    * unregisters the project — journals and sealed commit documents stay on disk. */
-  async removeProjectLinks({ projectId }) {
+  async removeProjectLinks({ projectId, requireEngine = true }) {
     const wiring = (this.projectStore ? this.projectStore.readState(projectId).modules : null) || {};
-    const result = { terminal: { ok: false }, vectorHub: { ok: false }, eventBridge: { ok: false } };
+    const result = { terminal: { ok: false }, vectorHub: { ok: false }, eventBridge: { ok: false }, engine: { ok: false } };
+    // Stop the writer first, before removing hooks/index registrations.
+    try {
+      if (!requireEngine) result.engine = { ok: true, status: 'not-owner' };
+      else {
+      const response = await this._fetch(`${this.engineUrl}/api/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' });
+      if (response.status === 409) throw new DomainError('PROJECT_BUSY', '知识维护仍在运行，不能解绑。', { status: 409, retryable: true });
+      result.engine = { ok: response.ok || response.status === 404, status: response.ok || response.status === 404 ? 'removed' : 'pending' };
+      }
+    } catch (error) { if (error.code === 'PROJECT_BUSY') throw error; result.engine = { ok: false, status: 'pending' }; }
+    if (!result.engine.ok) throw new DomainError('PROJECT_BUSY', '知识引擎暂时不可用，无法安全停止写入；请恢复后再解绑。', { status: 409, retryable: true });
     let terminalId = wiring.terminal && wiring.terminal.projectId;
     if (!terminalId) {
       const workspacePath = wiring.terminal && wiring.terminal.rootPath;
@@ -363,6 +507,7 @@ class ModuleBridge {
       if (result.terminal.ok) wiring.terminal = { status: 'removed', updatedAt: new Date().toISOString() };
       if (result.vectorHub.ok) wiring.vectorHub = { status: 'removed', updatedAt: new Date().toISOString() };
       if (result.eventBridge.ok) wiring.eventBridge = { status: 'removed', updatedAt: new Date().toISOString() };
+      if (result.engine.ok) wiring.engine = { status: 'removed', updatedAt: new Date().toISOString() };
     });
     this.logger.info('modules.remove', 'Module de-registration finished.', { context: { projectId, terminal: result.terminal, vectorHub: result.vectorHub, eventBridge: result.eventBridge } });
     return result;
@@ -396,7 +541,7 @@ class ModuleBridge {
   _supervisedSpecs() {
     const specs = [];
     if (process.env.KB_TERMINAL_COMMAND) {
-      specs.push({ name: 'terminal', command: process.env.KB_TERMINAL_COMMAND, url: this.terminalUrl, env: {} });
+      specs.push({ name: 'terminal', command: process.env.KB_TERMINAL_COMMAND, url: this.terminalUrl, env: { KB_WORKBENCH_RUNTIME_TOKEN: this.runtimeToken, KB_KNOWLEDGE_ENGINE_URL: this.engineUrl, KB_EVENT_BRIDGE_URL: this.eventBridgeUrl } });
     } else {
       const terminalEntry = resolveModuleEntry('terminal');
       if (terminalEntry) {
@@ -404,7 +549,7 @@ class ModuleBridge {
           name: 'terminal',
           command: `node ${JSON.stringify(terminalEntry)}`,
           url: this.terminalUrl,
-          env: { AGENT_TERMINAL_PORT: urlPort(this.terminalUrl, 5760), AGENT_TERMINAL_HOST: urlHost(this.terminalUrl) },
+          env: { AGENT_TERMINAL_PORT: urlPort(this.terminalUrl, 5760), AGENT_TERMINAL_HOST: urlHost(this.terminalUrl), KB_WORKBENCH_RUNTIME_TOKEN: this.runtimeToken, KB_KNOWLEDGE_ENGINE_URL: this.engineUrl, KB_EVENT_BRIDGE_URL: this.eventBridgeUrl },
         });
       } else {
         this.logger.warn('modules.supervisor', 'claude-ai-workbench runtime not installed; expecting an external service.', {});
@@ -413,7 +558,7 @@ class ModuleBridge {
     // vector-hub declares engines >= 22; spawning it on older runtimes would
     // crash-loop the supervisor for nothing.
     if (process.env.KB_VECTORHUB_COMMAND) {
-      specs.push({ name: 'vector-hub', command: process.env.KB_VECTORHUB_COMMAND, url: this.vectorHubUrl, env: {} });
+      specs.push({ name: 'vector-hub', command: process.env.KB_VECTORHUB_COMMAND, url: this.vectorHubUrl, env: { KB_VECTOR_MANAGED: '1', KB_VECTOR_RUNTIME_TOKEN: this.runtimeToken } });
     } else if (parseInt(process.versions.node, 10) < 22) {
       this.logger.warn('modules.supervisor', 'vector-hub needs Node >= 22; not spawning the vendored runtime.', { context: { node: process.versions.node } });
     } else {
@@ -425,9 +570,9 @@ class ModuleBridge {
         const root = path.join(dataDir, 'vectorhub');
         specs.push({
           name: 'vector-hub',
-          command: `node ${JSON.stringify(vectorHubEntry)} serve --port ${urlPort(this.vectorHubUrl, 8787)} --root ${JSON.stringify(root)}`,
+          command: `node ${JSON.stringify(vectorHubEntry)} serve --host ${urlHost(this.vectorHubUrl)} --port ${urlPort(this.vectorHubUrl, 8787)} --root ${JSON.stringify(root)}`,
           url: this.vectorHubUrl,
-          env: { VECTOR_HUB_ROOT: root },
+          env: { VECTOR_HUB_ROOT: root, VECTOR_HUB_CONFIG: process.env.VECTOR_HUB_CONFIG || path.join(root, 'config.json'), VECTOR_HUB_LEGACY_CONFIG: process.env.VECTOR_HUB_LEGACY_CONFIG || path.join(require('os').homedir(), '.vector-hub', 'config.json'), KB_VECTOR_MANAGED: '1', KB_VECTOR_RUNTIME_TOKEN: this.runtimeToken },
         });
       }
     }
@@ -438,7 +583,7 @@ class ModuleBridge {
     // folder-picker warm-up is an interactive-only feature the shell never
     // routes here (import uses the terminal/vector-hub pickers) — skip it.
     if (process.env.KB_EVENTBRIDGE_COMMAND) {
-      specs.push({ name: 'event-bridge', command: process.env.KB_EVENTBRIDGE_COMMAND, url: this.eventBridgeUrl, env: {} });
+      specs.push({ name: 'event-bridge', command: process.env.KB_EVENTBRIDGE_COMMAND, url: this.eventBridgeUrl, env: { KB_EVENT_BRIDGE_RUNTIME_TOKEN: this.runtimeToken } });
     } else {
       const eventBridgeEntry = resolveModuleEntry('event-bridge');
       if (!eventBridgeEntry) {
@@ -451,28 +596,37 @@ class ModuleBridge {
           name: 'event-bridge',
           command: `node ${JSON.stringify(eventBridgeEntry)} serve --host ${urlHost(this.eventBridgeUrl)} --port ${urlPort(this.eventBridgeUrl, 8790)}${homeArgs}`,
           url: this.eventBridgeUrl,
-          env: { BRIDGE_CONSOLE_PICK_FOLDER: '0' },
+          env: { BRIDGE_CONSOLE_PICK_FOLDER: '0', KB_EVENT_BRIDGE_RUNTIME_TOKEN: this.runtimeToken },
         });
       }
     }
+    const engineEntry = resolveModuleEntry('knowledge-engine');
+    if (process.env.KB_KNOWLEDGE_ENGINE_COMMAND || engineEntry) specs.push({ name: 'knowledge-engine', command: process.env.KB_KNOWLEDGE_ENGINE_COMMAND || `node ${JSON.stringify(engineEntry)} serve --port ${urlPort(this.engineUrl, 5790)} --host ${urlHost(this.engineUrl)}`, url: this.engineUrl, env: { KNOWLEDGE_ENGINE_DATA: path.join(this.dataDir || require('./data-dir').getDataDir(), 'knowledge-engine'), KB_ENGINE_MANAGED: '1', KNOWLEDGE_ENGINE_CONSUME: '0', KB_ENGINE_RUNTIME_TOKEN: this.runtimeToken, KB_EVENT_BRIDGE_URL: this.eventBridgeUrl, KB_VECTOR_HUB_URL: this.vectorHubUrl, NODE_PATH: path.resolve(__dirname, '..', '..', 'node_modules') } });
     return specs;
   }
 
   _spawnSupervised(spec) {
+    if (this.stopped) return;
     // Strip the quoting: spawn takes argv, not a shell line — a literal
     // `"path"` argument makes node load a file whose name contains quotes.
     const parts = (spec.command.match(/"[^"]+"|\S+/g) || [])
-      .map(part => (part.startsWith('"') && part.endsWith('"') ? part.slice(1, -1) : part));
-    const child = spawn(parts[0], parts.slice(1), {
+      .map(part => { if (!part.startsWith('"') || !part.endsWith('"')) return part; try { return JSON.parse(part); } catch { return part.slice(1, -1); } });
+    const nodeProcess = parts[0] === 'node' || parts[0] === process.execPath;
+    const child = spawn(nodeProcess ? process.execPath : parts[0], parts.slice(1), {
       // Module banners (ports, data roots) are diagnostics — inherit stdout
       // so they land on the console in --fg mode and in launcher.log when the
       // shell itself runs detached.
-      stdio: ['ignore', 'inherit', 'inherit'],
+      stdio: nodeProcess ? ['ignore', 'inherit', 'inherit', 'ipc'] : ['ignore', 'inherit', 'inherit'],
       windowsHide: true,
       env: { ...process.env, ...(spec.env || {}) },
     });
-    let attempts = 0;
+    let attempts = spec._attempts || 0;
+    child.on('error', error => {
+      this.supervised = this.supervised.filter(existing => existing !== child);
+      this.logger.warn('modules.supervisor', 'Module process could not start.', { context: { name: spec.name, code: error.code || 'SPAWN_FAILED' } });
+    });
     child.on('exit', code => {
+      this.supervised = this.supervised.filter(existing => existing !== child);
       attempts += 1;
       if (attempts > 5 || this.stopped) {
         this.logger.warn('modules.supervisor', 'Module service stopped.', { context: { name: spec.name, code, attempts } });
@@ -480,17 +634,28 @@ class ModuleBridge {
       }
       const delay = Math.min(1000 * 2 ** attempts, 15000);
       this.logger.warn('modules.supervisor', 'Module service exited; restarting.', { context: { name: spec.name, code, retryInMs: delay } });
-      setTimeout(() => this._spawnSupervised({ ...spec, _attempts: attempts }), delay);
+      const timer = setTimeout(() => { this.restartTimers.delete(timer); this._spawnSupervised({ ...spec, _attempts: attempts }); }, delay);
+      this.restartTimers = this.restartTimers || new Set(); this.restartTimers.add(timer);
     });
     this.supervised.push(child);
     this.logger.info('modules.supervisor', 'Module service spawned.', { context: { name: spec.name, pid: child.pid } });
   }
 
-  stopSupervised() {
+  async stopSupervised() {
     this.stopped = true;
-    for (const child of this.supervised) { try { child.kill(); } catch { /* already gone */ } }
+    for (const timer of this.restartTimers || []) clearTimeout(timer);
+    await Promise.all(this.supervised.map(child => new Promise(resolve => {
+      if (child.exitCode !== null || !child.pid) return resolve();
+      const timer = setTimeout(() => {
+        if (process.platform === 'win32') spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+        else try { child.kill('SIGKILL'); } catch {}
+        resolve();
+      }, 5000);
+      child.once('exit', () => { clearTimeout(timer); resolve(); });
+      try { if (child.connected) child.send({ type: 'kb:shutdown' }, error => { if (error) try { child.kill(); } catch {} }); else child.kill(); } catch { try { child.kill(); } catch {} }
+    })));
     this.supervised = [];
   }
 }
 
-module.exports = { ModuleBridge, defaultTerminalUrl, defaultVectorHubUrl, defaultEventBridgeUrl };
+module.exports = { ModuleBridge, defaultTerminalUrl, defaultVectorHubUrl, defaultEventBridgeUrl, defaultEngineUrl };

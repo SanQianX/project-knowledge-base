@@ -1,162 +1,64 @@
 <!doctype html>
 <html lang="zh-CN" data-theme="light">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light dark">
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/app.css">
-  <title>Project Knowledge</title>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark">
+  <title>Project Knowledge · 我的智脑</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/product.css">
 </head>
 <body>
-<div class="shell">
+<div class="app">
   <aside class="sidebar">
-    <div class="brand">
-      <div class="eyebrow">AI Knowledge Base</div>
-      <h1>Control Center</h1>
-      <div class="root" id="brand-root"></div>
-    </div>
-    <div class="project-area">
-      <div class="project-head"><span>项目 · 右键管理</span><button class="small-btn" type="button" data-go="import">导入项目</button></div>
-      <div class="project-list" id="project-list"></div>
-    </div>
-    <nav class="sidebar-nav">
-      <button class="nav-btn active" type="button" data-go="terminal"><span>🤖 Agent 终端</span><span class="nav-badge">终端</span><span class="nav-fold" data-fold="term" title="模块项目列表：已折叠，点击展开">▤</span></button>
-      <button class="nav-btn" type="button" data-go="search"><span>🔎 知识检索</span><span class="nav-badge">检索</span><span class="nav-fold" data-fold="vh" title="模块项目列表：已折叠，点击展开">▤</span></button>
-      <button class="nav-btn" type="button" data-go="bridge"><span>💬 会话浏览</span><span class="nav-badge">会话</span><span class="nav-fold" data-fold="eb" title="模块项目列表：已折叠，点击展开">▤</span></button>
+    <div class="brand"><span class="brand-mark">知</span><div><strong>Project Knowledge</strong><small>个人工程智脑</small></div></div>
+    <div id="brainLabel" class="brain-label">我的智脑</div>
+    <nav aria-label="主要导航">
+      <button data-view="home"><svg viewBox="0 0 24 24"><path d="m3 11 9-7 9 7M5 10v10h14V10"/></svg>智脑首页</button>
+      <button data-view="work"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg>开始工作</button>
+      <button data-view="search"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>知识检索</button>
+      <button data-view="memory"><svg viewBox="0 0 24 24"><path d="M6 4h12v16H6zM9 8h6M9 12h6"/></svg>长期记忆<span class="count" id="memoryCount" hidden></span></button>
+      <button data-view="projects"><svg viewBox="0 0 24 24"><path d="M4 7h6l2 2h8v11H4z"/></svg>领域与项目</button>
+      <button data-view="activity"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>活动记录</button>
     </nav>
+    <button id="openSystem" class="system-button"><span class="dot" id="systemDot"></span><span><b id="systemTitle">正在检查系统</b><small id="systemDetail">本机知识服务</small></span><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></button>
   </aside>
-
-  <main class="main">
-    <header class="main-header">
-      <div><div class="subtitle">Project Knowledge</div><div class="page-title" id="page-title">Agent 终端</div></div>
-      <div class="header-actions">
-        <button class="btn" type="button" id="theme-button">深色模式</button>
-        <button class="btn" type="button" id="open-settings">设置</button>
-      </div>
-    </header>
-
-    <div class="mobile-strip">
-      <select class="input" id="mobile-project" aria-label="选择项目"></select>
-      <button class="btn" type="button" data-go="import">导入项目</button>
-      <button class="btn" type="button" id="mobile-settings">设置</button>
+  <main>
+    <header class="topbar"><div><small id="breadcrumb">我的智脑</small><h1 id="pageTitle">智脑首页</h1></div><div class="spacer"></div><select id="projectSelect" aria-label="当前项目"><option value="">尚未导入项目</option></select><button id="themeToggle" class="icon-button" title="切换浅色或深色主题" aria-label="切换主题"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button></header>
+    <div class="content">
+      <section class="view" id="view-home"><div class="welcome"><div><small>工作概览</small><h2 id="homeTitle">我的智脑</h2><p>保存项目事实，连接相关经验。你的长期偏好，只在确认后使用。</p></div><div class="actions"><button class="primary" data-go="work">开始工作</button><button data-action="import">导入项目</button></div></div><div id="homeContent"></div></section>
+      <section class="view module-view" id="view-work"><div id="workEmpty" class="empty" hidden>导入项目后，就可以在这里开始工作。<button data-action="import">导入项目</button></div><div class="work-layout" id="workLayout"><div class="frame-container"><iframe id="workFrame" title="Agent 工作台" referrerpolicy="same-origin"></iframe></div><aside class="knowledge-context"><header><h2>本次知识引用</h2><small id="contextScope">任务发送前自动检索</small></header><div id="contextContent" class="empty small-empty">发送任务后显示实际检索到的项目事实、领域经验和已确认记忆。</div></aside></div></section>
+      <section class="view module-view" id="view-search"><div class="module-toolbar"><span>查找知识</span><div class="segmented" id="searchScope"><button data-scope="project">当前项目</button><button data-scope="domain">所属领域</button><button data-scope="brain">整个智脑</button></div></div><div id="searchEmpty" class="empty" hidden>尚未导入项目。<button data-action="import">导入项目</button></div><div class="frame-container"><iframe id="vectorFrame" title="知识检索" referrerpolicy="same-origin"></iframe></div></section>
+      <section class="view" id="view-memory"><div class="section-heading"><div><h2>长期记忆</h2><p>候选不会自动成为你的偏好。每条记忆都保留来源。</p></div></div><div class="segmented" id="memoryTabs"><button data-memory-tab="confirmed">已确认</button><button data-memory-tab="candidate">候选箱 <span id="candidateCount"></span></button></div><div id="memoryContent"></div></section>
+      <section class="view" id="view-projects"><div class="section-heading"><div><h2>领域与项目</h2><p>统一管理归属，项目知识仍保存在原来的目录。</p></div><div class="actions"><button id="createDomain">创建领域</button><button class="primary" data-action="import">导入项目</button></div></div><div class="hierarchy"><div class="panel tree" id="projectTree"></div><div class="panel" id="projectDetail"></div></div></section>
+      <section class="view module-view" id="view-activity"><div class="module-toolbar"><div class="segmented" id="activityTabs"><button data-activity-tab="updates">知识更新</button><button data-activity-tab="sessions">开发会话与提交</button></div><span id="activityConnection" class="muted">正在连接更新</span></div><div class="activity-updates" id="activityUpdates"></div><div class="frame-container" id="activitySessions" hidden><iframe id="bridgeFrame" title="开发会话与提交" referrerpolicy="same-origin"></iframe></div></section>
     </div>
-
-    <!-- Agent 终端：原版 claude-ai-workbench UI（嵌入模式） -->
-    <section class="view active" id="view-terminal">
-      <div class="embed-head">
-        <span class="embed-status" id="st-5760"><span class="st-dot"></span><span class="st-text">检测 127.0.0.1:5760 …</span></span>
-        <span class="chip" id="sync-5760">联动: —</span>
-        <a class="btn compact embed-open" id="open-5760" href="#" target="_blank" rel="noopener">独立打开 ↗</a>
-      </div>
-      <div class="embed"><iframe id="fr-5760" title="Agent Terminal"></iframe></div>
-    </section>
-
-    <!-- 知识检索：原版 vector-hub 控制台（嵌入模式） -->
-    <section class="view" id="view-search">
-      <div class="embed-head">
-        <span class="embed-status" id="st-8787"><span class="st-dot"></span><span class="st-text">检测 127.0.0.1:8787 …</span></span>
-        <span class="chip" id="sync-8787">联动: —</span>
-        <a class="btn compact embed-open" id="open-8787" href="#" target="_blank" rel="noopener">独立打开 ↗</a>
-      </div>
-      <div class="embed"><iframe id="fr-8787" title="vector-hub 控制台"></iframe></div>
-    </section>
-
-    <!-- 会话浏览：原版 ai-coding-event-bridge 会话浏览器（嵌入模式） -->
-    <section class="view" id="view-bridge">
-      <div class="embed-head">
-        <span class="embed-status" id="st-8790"><span class="st-dot"></span><span class="st-text">检测 127.0.0.1:8790 …</span></span>
-        <a class="btn compact embed-open" id="open-8790" href="#" target="_blank" rel="noopener">独立打开 ↗</a>
-      </div>
-      <div class="embed"><iframe id="fr-8790" title="ai-coding-event-bridge 会话浏览器"></iframe></div>
-    </section>
-
-    <section class="view" id="view-import">
-      <div class="split">
-        <section class="panel form-panel">
-          <div class="section-title">导入项目</div>
-          <div class="section-help">导入只建立项目登记、Git 跟踪基线和托管 Hook，不运行初始化分析。两个地址在导入时由人选定，项目与模块的一一对应在登记那一刻确定。</div>
-          <form id="import-form" class="form-grid">
-            <div class="field"><label for="import-path">① 开发项目地址 · 登记到 Agent 终端</label>
-              <div style="display:flex;gap:8px">
-                <input class="input code" id="import-path" required placeholder="也可手动输入路径" style="flex:1">
-                <button class="btn" type="button" id="import-pick-folder">选择目录…</button>
-              </div>
-              <span class="muted import-field-help">打开本地目录选择框（终端原生选择器）；确认后登记为终端项目</span>
-            </div>
-            <div class="field"><label for="import-knowledge-path">② 知识库地址 · 登记到 vector-hub</label>
-              <div style="display:flex;gap:8px">
-                <input class="input code" id="import-knowledge-path" placeholder="也可手动输入路径" style="flex:1">
-                <button class="btn" type="button" id="import-pick-knowledge">选择目录…</button>
-              </div>
-              <span class="muted import-field-help">打开本地目录选择框（检索控制台原生选择器）；确认后建索引并监控</span>
-            </div>
-            <div class="notice" id="import-preflight" hidden></div>
-            <div class="notice error" id="import-errors" hidden></div>
-            <div class="notice" id="import-auto-init" hidden><strong>该目录不是 Git 仓库</strong><div class="muted">导入事务会自动执行 <code>git init</code>，并将当前目录加入跟踪基线。</div></div>
-            <div style="display:flex;gap:8px"><button class="btn-primary" type="submit" id="import-submit" disabled>导入</button><button class="btn" type="reset" id="import-reset">重置</button></div>
-          </form>
-        </section>
-        <aside class="panel preview-panel">
-          <div class="section-title">导入目标</div>
-          <div class="section-help">两个地址在导入时由人选定，项目与模块的一一对应在登记那一刻确定。</div>
-          <div class="preview-list">
-            <div class="panel2 preview-item"><div class="preview-label">Git 状态</div><div class="preview-value" id="pv-git-status">等待 preflight</div></div>
-            <div class="panel2 preview-item"><div class="preview-label">知识库地址</div><div class="preview-value code" id="pv-knowledge-root">—</div></div>
-            <div class="panel2 preview-item"><div class="preview-label">模块登记</div><div class="preview-value" id="pv-modules">待登记</div></div>
-          </div>
-        </aside>
-      </div>
-    </section>
   </main>
 </div>
-
-<div class="backdrop" id="settings-backdrop"></div>
-<aside class="drawer" id="settings-drawer" aria-label="设置">
-  <nav class="settings-nav"><h3>设置</h3><button class="active" type="button" data-settings="logs">日志</button></nav>
-  <div class="settings-content">
-    <div class="drawer-head"><div><h2 id="settings-title">日志</h2><div class="section-help" id="settings-help">查看系统和项目的运行记录；异常会自动突出显示。</div></div><div style="display:flex;gap:8px;align-items:center"><label for="ui-language" data-i18n="app.language.toggle" style="font-size:12px;color:var(--muted)">界面语言</label><select class="input" id="ui-language" style="width:auto"><option value="zh-CN">中文</option><option value="en-US">English</option></select><button class="btn" type="button" id="close-settings">×</button></div></div>
-
-    <section class="settings-section active" id="settings-logs" data-layout-contract="fill-settings-available-height">
-      <div class="panel2 settings-card logs-card">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px">
-          <div><strong>运行记录</strong><p class="section-help">查看系统和项目的运行过程。正常记录保持安静，警告和错误会自动突出；点击记录可查看完整上下文。</p></div>
-          <button class="btn" type="button" id="logs-export">导出</button>
-        </div>
-        <div class="record-sync-warning" id="logs-connection">新记录同步暂时中断，正在自动恢复。</div>
-        <div class="record-toolbar">
-          <input class="input" id="logs-date" type="date" aria-label="记录日期">
-          <select class="input" id="logs-project" aria-label="项目筛选"><option value="">全部项目</option></select>
-          <select class="input" id="logs-scope" aria-label="记录范围"><option value="all">全部记录</option><option value="important">重要记录</option><option value="errors">仅异常</option></select>
-          <select class="input" id="logs-limit" aria-label="显示记录数量"><option value="500" selected>500 条</option><option value="1000">1000 条</option><option value="2000">2000 条</option><option value="5000">5000 条</option></select>
-          <input class="input record-search" id="logs-search" placeholder="搜索运行记录…">
-        </div>
-        <div class="record-shell">
-          <div class="record-list" id="record-list"></div>
-          <div class="record-empty" id="record-empty">这个筛选条件下没有运行记录。</div>
-          <button class="new-records" type="button" id="new-records" hidden>有新记录</button>
-          <div class="record-footer"><span id="logs-summary">正在读取运行记录…</span><span class="record-note">点击任意记录查看级别、阶段和操作详情</span></div>
-        </div>
-      </div>
-    </section>
+<div id="drawerBackdrop" class="drawer-backdrop" hidden></div>
+<dialog id="logsDialog" class="reference-dialog"><div class="dialog-heading"><h2>系统诊断记录</h2><button data-close="logsDialog" aria-label="关闭">×</button></div><div class="actions"><input id="logsSearch" placeholder="查找失败原因或提交 SHA" aria-label="筛选诊断记录"><button id="loadLogs">查询</button><button id="exportLogs">导出诊断记录</button></div><div id="logsStatus" class="muted"></div><div id="logsContent"></div></dialog>
+<aside class="drawer" id="systemDrawer" hidden aria-label="系统状态">
+  <header><h2>系统状态</h2><button id="closeSystem" class="icon-button" aria-label="关闭系统状态">×</button></header>
+  <div class="drawer-content">
+    <section><h3>模块连接</h3><div id="moduleHealth"></div><button id="repairWiring">修复当前项目接线</button><p class="muted" id="wiringFeedback"></p><p class="muted" id="captureStatus"></p></section>
+    <section><h3>后台维护模型</h3><p class="muted">使用持久化默认模型，不跟随聊天中的临时切换。</p><select id="maintenanceModel" aria-label="后台维护默认模型"></select><div class="actions"><button id="saveMaintenance">保存默认模型</button><button id="configureProviders">管理模型供应商</button></div><p id="configurationStatus" class="muted"></p></section>
+    <section><h3>向量检索模型</h3><p id="embeddingStatus" class="muted">正在读取配置。</p><button id="openEmbedding">配置向量模型</button><p class="muted">凭据由工作台统一保存。未配置时仍可使用文本检索。</p></section>
+    <section><h3>智脑设置</h3><label>名称<input id="brainName" maxlength="100"></label><label>知识根目录<div class="input-with-action"><input id="knowledgeRoot"><button id="pickRoot">选择</button></div></label><p class="muted">修改根目录不会移动已有项目知识或共享知识。</p><button id="saveBrainSettings">保存设置</button></section>
+    <section><div class="actions"><button id="openEngine">知识引擎诊断</button><button id="openLogs">系统诊断记录</button></div><p class="muted">诊断不影响正在进行的会话与维护。</p></section>
   </div>
 </aside>
-
-<div class="context-menu" id="context-menu"><div class="muted" style="padding:5px 8px;font-size:10px" id="context-id">project</div><button type="button" id="remove-project">移除项目…</button></div>
-
-<dialog id="delete-dialog">
-  <div class="dialog-head"><h3>移除项目</h3></div>
-  <div class="dialog-body">
-    <p class="muted" id="delete-copy" style="margin:0;font-size:12px">确认移除项目？默认保留知识目录。</p>
-    <p class="muted" style="margin:0;font-size:12px">同时解除模块登记：终端项目（保留会话记录）、vector-hub 索引（不动源文件）、会话浏览登记（journal 与封存文档全部保留）。</p>
-    <label class="check"><input type="checkbox" id="delete-knowledge"> 同时删除由本应用拥有的知识目录（危险）</label>
-    <div class="field" id="delete-confirm-field" hidden><label for="delete-confirm">输入项目 ID 以确认删除知识</label><input class="input code" id="delete-confirm"></div>
-    <div class="notice error" id="delete-error" hidden></div>
-  </div>
-  <div class="dialog-foot"><button class="btn" type="button" id="delete-cancel">取消</button><button class="btn-danger" type="button" id="delete-submit">移除项目</button></div>
-</dialog>
-
-<script src="/i18n.js"></script>
-<script src="/app.js"></script>
-</body>
-</html>
+<dialog id="embeddingDialog"><form id="embeddingForm">
+  <div class="dialog-heading"><h2>向量检索模型</h2><button type="button" data-close="embeddingDialog" aria-label="关闭">×</button></div>
+  <p class="muted">可复用模型供应商的凭据，也可在同一配置库保存独立凭据。模型变更会重建派生索引，不会改动知识文件。</p>
+  <label>凭据来源<select id="embeddingProfile"><option value="">独立凭据</option></select></label>
+  <label>接口协议<select id="embeddingProvider"><option value="minimax">MiniMax</option><option value="openai">OpenAI 兼容</option></select></label>
+  <label>向量模型<input id="embeddingModel" required maxlength="200" placeholder="embo-01"></label>
+  <label>接口地址<input id="embeddingEndpoint" placeholder="留空使用协议默认地址" autocomplete="off"></label>
+  <label id="embeddingSecretLabel">独立凭据<input id="embeddingSecret" type="password" placeholder="已配置时留空保持不变" autocomplete="new-password"></label>
+  <p id="embeddingFeedback" class="muted" role="status"></p>
+  <div class="dialog-actions"><button type="button" id="disableEmbedding">停用向量模型</button><button type="button" data-close="embeddingDialog">取消</button><button type="submit" class="primary">保存配置</button></div>
+</form></dialog>
+<dialog id="importDialog"><form id="importForm"><div class="dialog-heading"><h2>导入项目</h2><button type="button" data-close="importDialog" aria-label="关闭">×</button></div><p class="muted">绑定代码与知识目录。只建立跟踪基线，不分析全部历史。</p><label>代码目录<div class="input-with-action"><input name="localPath" id="importCode" required placeholder="D:\SanQian.Xu\my-project"><button type="button" id="pickCode">选择</button></div></label><label>项目名称<input name="displayName" id="importName" required maxlength="200"></label><label>知识目录<div class="input-with-action"><input name="knowledgePath" id="importKnowledge" required placeholder="D:\SanQian.Xu\knowledge\my-project"><button type="button" id="pickKnowledge">选择</button></div></label><label>所属领域<select name="domainId" id="importDomain"></select></label><label id="gitInitChoice" class="checkbox" hidden><input type="checkbox" name="confirmGitInit">这个目录不是 Git 仓库，我确认初始化 Git。</label><div id="preflightStatus" class="feedback" role="status">填写目录后检查导入条件。</div><button type="button" id="setupImportRoot" hidden>设置知识根目录</button><div class="dialog-actions"><button type="button" data-close="importDialog">取消</button><button type="submit" class="primary" id="confirmImport" disabled>导入项目</button></div></form></dialog>
+<dialog id="domainDialog"><form id="domainForm"><div class="dialog-heading"><h2>创建领域</h2><button type="button" data-close="domainDialog" aria-label="关闭">×</button></div><label>领域名称<input name="name" required maxlength="100" placeholder="例如：开发工具"></label><p class="muted">领域用于共享相关项目的知识，不是新的代码项目。</p><div class="dialog-actions"><button type="button" data-close="domainDialog">取消</button><button class="primary" type="submit">创建领域</button></div></form></dialog>
+<dialog id="memoryDialog"><form id="memoryForm"><div class="dialog-heading"><h2>编辑记忆</h2><button type="button" data-close="memoryDialog" aria-label="关闭">×</button></div><label>内容<textarea id="memoryText" maxlength="2000" required rows="5"></textarea></label><p id="memoryEvidence" class="muted"></p><div class="dialog-actions"><button type="button" data-close="memoryDialog">取消</button><button type="submit" class="primary">保存修改</button></div></form></dialog>
+<dialog id="referenceDialog" class="reference-dialog"><div class="dialog-heading"><h2 id="referenceTitle">知识引用</h2><div class="actions"><button id="copyReference">复制引用</button><button data-close="referenceDialog" aria-label="关闭">×</button></div></div><p id="referenceMeta" class="muted"></p><pre id="referenceContent"></pre></dialog>
+<dialog id="engineDialog" class="engine-dialog"><div class="dialog-heading"><h2>知识引擎诊断</h2><button data-close="engineDialog" aria-label="关闭">×</button></div><iframe id="engineFrame" title="知识引擎诊断" referrerpolicy="same-origin"></iframe></dialog>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<script src="/product.js"></script>
+</body></html>

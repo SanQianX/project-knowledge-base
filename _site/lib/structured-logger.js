@@ -384,7 +384,7 @@ class LogRepository {
     if (filters.commitSha && filters.commitSha !== record.commitSha) return false;
     if (filters.operationId && filters.operationId !== record.operationId) return false;
     if (filters.q) {
-      const haystack = `${record.message} ${record.event} ${record.component} ${record.projectId} ${record.projectSlug} ${record.commitSha} ${record.operationId} ${JSON.stringify(record.context || {})}`.toLowerCase();
+      const haystack = `${record.message} ${record.event} ${record.component} ${record.projectId} ${record.projectSlug} ${record.commitSha} ${record.operationId} ${JSON.stringify(record.context || {})} ${JSON.stringify(record.error || {})}`.toLowerCase();
       if (!haystack.includes(String(filters.q).toLowerCase())) return false;
     }
     return true;

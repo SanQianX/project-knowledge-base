@@ -22,12 +22,14 @@ const REPORT_PATH = path.join(TEST_DIR, 'TEST-REPORT.md');
 
 const args = process.argv.slice(2);
 const WRITE_REPORT = !args.includes('--no-report');
+const BACKEND_ONLY = args.includes('--backend-only');
 const PER_TEST_TIMEOUT_MS = Number(process.env.PK_TEST_TIMEOUT_MS || 90_000);
 
 function listTestFiles() {
   return fs.readdirSync(TEST_DIR)
     .filter(file => file.endsWith('-test.js'))
     .filter(file => file !== 'run-all-tests.js')
+    .filter(file => !BACKEND_ONLY || !fs.readFileSync(path.join(TEST_DIR, file), 'utf8').includes('helpers/cdp-browser'))
     .sort();
 }
 
@@ -77,6 +79,7 @@ function runOne(file) {
 
 (async () => {
   const files = listTestFiles();
+  if (BACKEND_ONLY) console.log('Backend/contract scope only. Browser tests are excluded, not passed.');
   console.log(`Running ${files.length} test file(s)...\n`);
 
   const results = [];

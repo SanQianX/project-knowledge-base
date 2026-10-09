@@ -60,10 +60,11 @@ function isLegacyManagedHook(text) {
   return String(text || '').split(/\r?\n/).some(line => line.startsWith(LEGACY_HOOK_MARKER));
 }
 
-function buildHookBody({ projectId, triggerScriptPath, nodeExecutable = process.execPath }) {
+function buildHookBody({ projectId, triggerScriptPath, nodeExecutable = process.execPath, dataDir, bridgeHomeDir, bridgeModulePath }) {
   validateProjectId(projectId);
   if (!triggerScriptPath) throw new DomainError('HOOK_INVALID', 'triggerScriptPath is required.', { status: 400 });
   const trigger = path.resolve(triggerScriptPath);
+  const binding = [[dataDir && '--data-dir', dataDir], [bridgeHomeDir && '--bridge-home', bridgeHomeDir], [bridgeModulePath && '--bridge-module', bridgeModulePath]].filter(([flag]) => flag).map(([flag, value]) => ` ${flag} ${shellQuote(value)}`).join('');
   if (!fs.existsSync(trigger) || !fs.statSync(trigger).isFile()) {
     throw new DomainError('HOOK_INVALID', 'Hook trigger script does not exist.', { status: 400 });
   }
@@ -79,7 +80,7 @@ ${markerFor(projectId)}
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 ELECTRON_RUN_AS_NODE=1 ${shellQuote(toGitBashPath(nodeExecutable))} ${shellQuote(toGitBashPath(trigger))} \\
   --project-id ${shellQuote(projectId)} \\
-  --repo-root "$REPO_ROOT" >/dev/null 2>&1 || true
+  --repo-root "$REPO_ROOT"${binding} >/dev/null 2>&1 || true
 exit 0
 `;
 }
@@ -95,7 +96,7 @@ function installHook(options = {}) {
   const repoPath = path.resolve(String(options.repoPath || ''));
   const projectId = validateProjectId(options.projectId || options.projectSlug || '');
   const triggerScriptPath = options.triggerScriptPath || (options.siteRoot ? path.join(options.siteRoot, 'scripts', 'hook-trigger.js') : '');
-  const body = buildHookBody({ projectId, triggerScriptPath, nodeExecutable: options.nodeExecutable });
+  const body = buildHookBody({ ...options, projectId, triggerScriptPath, nodeExecutable: options.nodeExecutable });
   const hookPath = hookPathForRepo(repoPath);
   fs.mkdirSync(path.dirname(hookPath), { recursive: true });
   if (fs.existsSync(hookPath)) {

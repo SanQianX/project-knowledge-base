@@ -1,13 +1,15 @@
 {
   "name": "@sanqianx/project-knowledge",
-  "version": "4.7.0",
+  "version": "4.8.0",
   "description": "Knowledge base manager with Git integration, AI-driven analysis, and bilingual (zh-CN/en-US) knowledge output",
   "main": "_site/server.js",
   "scripts": {
     "start": "node _site/server.js",
     "test": "node _site/_test/run-all-tests.js",
     "release:sync": "node _site/scripts/sync-release-version.js",
-    "release:verify": "node _site/scripts/sync-release-version.js --check && node _site/_test/integration-adapters-test.js",
+    "vendor:modules": "node _site/scripts/vendor-modules.js",
+    "runtime:verify": "node _site/scripts/verify-module-runtime.js --working-tree",
+    "release:verify": "node _site/scripts/sync-release-version.js --check && node _site/scripts/verify-module-runtime.js && node _site/scripts/verify-product-runtime.js && node _site/_test/integration-adapters-test.js",
     "preversion": "npm run release:verify",
     "version": "node _site/scripts/sync-release-version.js --stage",
     "postversion": "npm run release:verify"
@@ -19,16 +21,18 @@
     "project-knowledge-integrations": "bin/project-knowledge-integrations.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "files": [
     "_site/server.js",
     "ui/index.html",
-    "ui/app.css",
-    "ui/app.js",
-    "ui/i18n.js",
+    "ui/product.css",
+    "ui/product.js",
     "ui/favicon.svg",
     "_site/lib/",
+    "_modules/knowledge-engine/",
+    "vendor-manifest.json",
+    "module-runtime-manifest.json",
     "_site/scripts/",
     "_site/_test/*.js",
     "_site/_test/fixtures/",
@@ -75,11 +79,11 @@
     "@huggingface/transformers": "3.8.1",
     "@lancedb/lancedb": "0.31.0",
     "@modelcontextprotocol/sdk": "1.29.0",
-    "@sanqianx/ai-coding-event-bridge-console": "latest",
-    "@sanqianx/vector-hub": "latest",
+    "@sanqianx/ai-coding-event-bridge-console": "0.7.0",
+    "@sanqianx/vector-hub": "1.0.7",
     "buffer": "^6.0.3",
     "cheerio": "^1.2.0",
-    "claude-ai-workbench": "latest",
+    "claude-ai-workbench": "npm:@sanqianx/claude-ai-workbench@0.13.0",
     "cross-spawn": "7.0.6",
     "dotenv": "^17.4.2",
     "gpt-tokenizer": "^3.4.0",

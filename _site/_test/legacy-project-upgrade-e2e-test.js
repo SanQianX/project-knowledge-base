@@ -172,7 +172,7 @@ async function run() {
     const registryStore = new ProjectRegistryStore({ layout });
     await registryStore.initialize();
     const logger = new Logger({ layout, settingsProvider: () => ({ levels: [] }), context: { component: 'legacy-upgrade-e2e' } });
-    const runtime = { registryStore, projectStore, logger, layout };
+    const runtime = { registryStore, projectStore, logger, layout, analysisOwner: 'legacy', bridgeAdapter: { hookBinding: () => ({ dataDir: layout.getDataDir() }) } };
     const hooks = await migrateManagedHooks(runtime);
     const entry = hooks.find(item => item.projectId === projectId);
     assert(entry, 'migrateManagedHooks must produce an entry for the migrated legacy project');
@@ -206,7 +206,7 @@ async function run() {
     const registryStore = new ProjectRegistryStore({ layout });
     await registryStore.initialize();
     const logger = new Logger({ layout, settingsProvider: () => ({ levels: [] }), context: { component: 'legacy-upgrade-e2e' } });
-    const runtime = { registryStore, projectStore, logger, layout };
+    const runtime = { registryStore, projectStore, logger, layout, analysisOwner: 'legacy', bridgeAdapter: { hookBinding: () => ({ dataDir: layout.getDataDir() }) } };
     const hooks = await migrateManagedHooks(runtime);
     // migrateManagedHooks skips projects whose repoPath is missing (the
     // fs.existsSync check at the top of the loop). So the registry entry
@@ -290,7 +290,7 @@ async function run() {
     const registryStore = new ProjectRegistryStore({ layout });
     await registryStore.initialize();
     const logger = new Logger({ layout, settingsProvider: () => ({ levels: [] }), context: { component: 'legacy-upgrade-e2e' } });
-    const runtime = { registryStore, projectStore, logger, layout };
+    const runtime = { registryStore, projectStore, logger, layout, analysisOwner: 'legacy', bridgeAdapter: { hookBinding: () => ({ dataDir: layout.getDataDir() }) } };
     // First startup
     const firstPass = await migrateManagedHooks(runtime);
     assert(firstPass.length > 0, `migrateManagedHooks must produce at least one entry; got ${JSON.stringify(firstPass)}`);
@@ -337,7 +337,7 @@ async function run() {
     const registryStore = new ProjectRegistryStore({ layout });
     await registryStore.initialize();
     const logger = new Logger({ layout, settingsProvider: () => ({ levels: [] }), context: { component: 'legacy-upgrade-e2e' } });
-    const runtime = { registryStore, projectStore, logger, layout };
+    const runtime = { registryStore, projectStore, logger, layout, analysisOwner: 'legacy', bridgeAdapter: { hookBinding: () => ({ dataDir: layout.getDataDir() }) } };
     const pass = await migrateManagedHooks(runtime);
     const entry = pass.find(item => item.projectId === projectId);
     assert(entry, 'migrateManagedHooks must produce an entry for the third-party-hook project');

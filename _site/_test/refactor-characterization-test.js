@@ -30,7 +30,7 @@ assert(logger.includes('LOG_LEVELS,') && logger.includes('new Set(LOG_LEVELS)'),
 assert(logger.includes('class LogRepository'));
 assert(!ui.includes('tailwindcss.com'));
 assert(!ui.includes('vue.global'));
-assert.strictEqual((ui.match(/class="shell"/g) || []).length, 1, 'production must contain one full product shell');
-assert.strictEqual((ui.match(/id="settings-logs"/g) || []).length, 1, 'production must contain one Settings logs view');
+assert.strictEqual((ui.match(/class="app"/g) || []).length, 1, 'production must contain one full product shell');
+assert.strictEqual((ui.match(/id="logsDialog"/g) || []).length, 1, 'production must contain one diagnostics view');
 
 console.log('refactor-characterization-test PASS');

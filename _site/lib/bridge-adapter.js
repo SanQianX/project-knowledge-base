@@ -69,6 +69,7 @@ class BridgeAdapter {
   isAvailable() {
     return Boolean(this.bridge && typeof this.bridge.appendCommitBoundary === 'function');
   }
+  hookBinding() { return { dataDir: this.dataDir, bridgeHomeDir: this.bridge?.homeDir || process.env.AI_CODING_EVENT_BRIDGE_HOME, bridgeModulePath: this.moduleId === 'injected' ? undefined : this.moduleId }; }
 
   // Canonical RepoIdentityV1 resolution delegated to the Bridge package so PK
   // never invents a second identity algorithm.

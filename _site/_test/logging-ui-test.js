@@ -60,6 +60,8 @@ async function jsonResponse(url) {
       ['operationId', 'op-flow-visual'],
       ['commitSha', fixture.repo.headCommit],
       ['q', '<img src=x onerror=window.__xss=1>'],
+      ['q', 'VALIDATION_FAILED'],
+      ['q', '模型输出校验失败'],
       ['levels', 'fatal'],
     ];
     for (const pair of filters) {

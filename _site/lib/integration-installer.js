@@ -316,7 +316,7 @@ class IntegrationManager {
     this.homeDir = options.homeDir || os.homedir();
     this.env = options.env || process.env;
     this.version = options.version || packageInfo.version;
-    this.packageSpec = options.packageSpec || `project-knowledge@${this.version}`;
+    this.packageSpec = options.packageSpec || `${packageInfo.name}@${this.version}`;
     this.marketplaceSource = options.marketplaceSource || DEFAULT_MARKETPLACE_SOURCE;
     this.runner = options.runner || defaultRunner;
     this.commandResolver = options.commandResolver || defaultCommandResolver;

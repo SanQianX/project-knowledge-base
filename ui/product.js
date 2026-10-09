@@ -1,0 +1,386 @@
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const all = selector => [...document.querySelectorAll(selector)];
+  const titles = { home: '智脑首页', work: '开始工作', search: '知识检索', memory: '长期记忆', projects: '领域与项目', activity: '活动记录' };
+  const modules = { terminal: 'Agent 工作台', vectorHub: '知识索引', eventBridge: '开发事件', engine: '知识引擎' };
+  const frames = {
+    terminal: { id: 'workFrame', url: '/modules/terminal/agent-terminal/?embed=1&apiBase=/api/terminal', view: 'work', ready: false },
+    vectorHub: { id: 'vectorFrame', url: '/modules/vectorhub/?embed=1&apiBase=/api/vectorhub&engineBase=/api/engine', view: 'search', ready: false },
+    eventBridge: { id: 'bridgeFrame', url: '/modules/eventbridge/?embed=1&apiBase=/api/eventbridge', view: 'activity', ready: false },
+    engine: { id: 'engineFrame', url: '/modules/engine/?embed=1&apiBase=/api/engine', ready: false },
+  };
+  const state = { brain: { id: 'brain-default', name: '我的智脑', domains: [] }, root: '', projects: [], projectId: localStorage.getItem('kb.project') || '', view: 'home', scope: 'project', memoryTab: 'confirmed', activityTab: 'updates', health: {}, snapshot: { projects: [], runs: [], events: [], memories: [] }, engineAvailable: false, epoch: 0, contexts: new Map(), stream: null, refreshing: false, importId: '', preflight: null, preflightEpoch: 0 };
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const activeProject = () => state.projects.find(p => p.projectId === state.projectId);
+  const domainName = id => state.brain.domains.find(d => d.id === id)?.name || '未分组';
+  const projectName = id => state.projects.find(p => p.projectId === id)?.name || id;
+  const time = value => value ? new Date(value).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+  const label = run => ({ queued: '排队', running: '维护中', succeeded: '已更新 · 可检索', 'index-pending': '知识已更新 · 索引待修复', failed: '维护失败' })[run.state] || run.state;
+  const badge = (text, status = '') => `<span class="status ${esc(status)}">${esc(text)}</span>`;
+  let toastTimer, refreshTimer, preflightTimer, editingMemoryId, logStream, logEpoch = 0, referenceEpoch = 0, snapshotEpoch = 0, resumeImport = false;
+  async function api(url, options = {}) {
+    const { allowNotReady, ...init } = options;
+    if (init.body && typeof init.body !== 'string') init.body = JSON.stringify(init.body);
+    if (init.body) init.headers = { 'Content-Type': 'application/json', ...init.headers };
+    const response = await fetch(url, init);
+    const data = await response.json();
+    if (!response.ok || data.ok === false && !allowNotReady) throw Object.assign(new Error(data.error?.message || data.message || (typeof data.error === 'string' ? data.error : `请求失败 (${response.status})`)), { code: data.error?.code || data.error });
+    return data;
+  }
+  function toast(text) { $('toast').textContent = text; $('toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('toast').hidden = true; }, 4000); }
+  function on(id, event, callback) { $(id).addEventListener(event, e => Promise.resolve(callback(e)).catch(error => toast(error.message))); }
+  function post(key, message) { const frame = frames[key]; if (frame.ready) $(frame.id).contentWindow.postMessage(message, location.origin); }
+  function initializeFrame(key) { const frame = frames[key]; if (!frame.initialized) { $(frame.id).src = frame.url; frame.initialized = true; } }
+  function frameVisible(key) { return key === 'engine' ? $('engineDialog').open : state.view === frames[key].view && (key !== 'eventBridge' || state.activityTab === 'sessions'); }
+  function frameContext(key) {
+    const project = activeProject();
+    const frame = frames[key];
+    const ref = key === 'terminal' ? project?.modules.terminal.projectId || project?.workspacePath : key === 'eventBridge' ? project?.modules.eventBridge.projectId || project?.workspacePath : project?.projectId;
+    frame.requestId = `${state.epoch}:${key}`;
+    post(key, { type: 'kb:theme', theme: document.documentElement.dataset.theme });
+    post(key, { type: 'kb:scope', scope: state.scope });
+    post(key, { type: 'kb:sidebar', visible: key === 'terminal' });
+    post(key, { type: 'kb:select-project', project: ref || '', projectId: project?.projectId || '', requestId: frame.requestId });
+    post(key, { type: 'kb:visibility', visible: frameVisible(key) });
+  }
+  function setView(view) {
+    if (!titles[view]) view = 'home';
+    state.view = view;
+    history.replaceState(null, '', `#${view}`);
+    all('[data-view]').forEach(button => button.classList.toggle('active', button.dataset.view === view));
+    all('.view').forEach(section => section.classList.toggle('active', section.id === `view-${view}`));
+    $('pageTitle').textContent = titles[view];
+    if (view === 'work' && activeProject()) initializeFrame('terminal');
+    if (view === 'search' && activeProject()) initializeFrame('vectorHub');
+    if (view === 'activity' && state.activityTab === 'sessions' && activeProject()) initializeFrame('eventBridge');
+    Object.keys(frames).forEach(key => post(key, { type: 'kb:visibility', visible: frameVisible(key) }));
+    render();
+  }
+  function selectProject(id) {
+    if (id === state.projectId && activeProject()) return;
+    state.projectId = id; state.epoch++;
+    referenceEpoch++; $('referenceDialog').close();
+    if ($('logsDialog').open) loadLogs().catch(error => toast(error.message));
+    localStorage.setItem('kb.project', id);
+    $('projectSelect').value = id;
+    Object.keys(frames).forEach(frameContext);
+    render(); setView(state.view);
+  }
+  function renderProjectOptions() {
+    $('projectSelect').innerHTML = state.projects.length ? state.projects.map(p => `<option value="${esc(p.projectId)}">${esc(p.name)}</option>`).join('') : '<option value="">尚未导入项目</option>';
+    $('projectSelect').disabled = !state.projects.length;
+    $('projectSelect').value = state.projectId;
+  }
+  function render() {
+    const project = activeProject();
+    $('brainLabel').textContent = state.brain.name; $('homeTitle').textContent = state.brain.name;
+    $('breadcrumb').textContent = project ? `${state.brain.name} / ${domainName(project.domainId)} / ${project.name}` : state.brain.name;
+    $('workEmpty').hidden = !!project; $('workLayout').hidden = !project;
+    $('searchEmpty').hidden = !!project; $('vectorFrame').parentElement.hidden = !project;
+    const candidates = state.snapshot.memories.filter(m => m.status === 'candidate');
+    $('memoryCount').textContent = candidates.length; $('memoryCount').hidden = !candidates.length; $('candidateCount').textContent = candidates.length || '';
+    if (state.view === 'home') renderHome(candidates);
+    if (state.view === 'projects') renderProjects();
+    if (state.view === 'memory') renderMemories();
+    if (state.view === 'activity') renderActivity();
+    renderContext();
+  }
+  function renderHome(candidates) {
+    if (!state.projects.length) { $('homeContent').innerHTML = '<div class="empty"><h2>从第一个项目开始</h2><p>选择代码目录和知识目录，保留项目原有文件。</p><button class="primary" data-action="import">导入第一个项目</button></div>'; return; }
+    const runs = state.snapshot.runs.filter(r => !state.projectId || r.projectId === state.projectId);
+    const issues = runs.filter(r => ['failed', 'index-pending'].includes(r.state));
+    const scopeIssues = (state.snapshot.sharedScopes || []).filter(s => s.brainId === state.brain.id && s.index?.status === 'pending');
+    const projectRows = state.projects.map(p => `<div class="row"><div><b>${esc(p.name)}</b><small>${esc(domainName(p.domainId))}</small></div>${badge(Object.values(p.modules).every(m => m.registered) ? '已连接' : '接线待恢复', Object.values(p.modules).every(m => m.registered) ? 'up' : 'issue')}<button data-select-project="${esc(p.projectId)}">打开</button></div>`).join('');
+    const updates = runs.slice(0, 5).map(r => `<div class="row"><time>${time(r.startedAt)}</time><div><b>${esc(projectName(r.projectId))}</b><small>${esc(r.commitSha.slice(0, 8))} · ${esc(label(r))}</small></div></div>`).join('') || '<p>尚无维护记录。导入时不会分析历史提交。</p>';
+    $('homeContent').innerHTML = `<div class="grid2"><div class="stack"><section class="panel"><h2>领域与项目</h2>${projectRows}</section><section class="panel"><h2>最近知识更新</h2>${state.engineAvailable ? updates : '<p>知识引擎暂时不可用，恢复后显示真实记录。</p>'}</section></div><div class="stack"><section class="panel"><h2>待确认记忆</h2>${candidates.length ? candidates.slice(0, 3).map(m => `<div class="row"><div><b>${esc(m.text)}</b><small>${esc(projectName(m.evidence.projectId))} · ${esc(m.evidence.commitSha.slice(0, 8))}</small></div></div>`).join('') + '<button data-go="memory">查看候选箱</button>' : '<p>没有待确认记忆。智脑不会自动把项目行为当作你的偏好。</p>'}</section><section class="panel"><h2>需要处理</h2>${issues.length ? issues.slice(0, 3).map(r => `<div class="row"><div><b>${esc(projectName(r.projectId))}</b><small>${esc(r.error?.message || label(r))}</small></div></div>`).join('') + '<button data-go="activity">查看运行详情</button>' : scopeIssues.length ? '' : '<p>没有待处理的维护异常。</p>'}${scopeIssues.map(s => `<div class="row"><div><b>${esc(s.name)}</b><small>${esc(s.index.message)}</small></div></div>`).join('')}${scopeIssues.length ? '<button data-action="system">检查索引连接</button>' : ''}${!state.engineAvailable ? '<p>知识引擎离线，请检查系统状态。</p>' : ''}</section></div></div>`;
+  }
+  function renderProjects() {
+    const group = (id, name) => `<h3>${esc(name)}</h3>${state.projects.filter(p => (p.domainId || '') === id).map(p => `<button class="${p.projectId === state.projectId ? 'active' : ''}" data-select-project="${esc(p.projectId)}">${esc(p.name)}</button>`).join('') || '<small>暂无项目</small>'}`;
+    $('projectTree').innerHTML = `<h2>${esc(state.brain.name)}</h2>${state.brain.domains.map(d => group(d.id, d.name)).join('')}${group('', '未分组')}`;
+    const project = activeProject();
+    if (!project) { $('projectDetail').innerHTML = '<div class="empty"><h2>尚未导入项目</h2><button class="primary" data-action="import">导入第一个项目</button></div>'; return; }
+    $('projectDetail').innerHTML = `<h2>${esc(project.name)}</h2><div class="detail-label">代码目录</div><div class="detail-path">${esc(project.workspacePath)}</div><div class="detail-label">知识目录</div><div class="detail-path">${esc(project.knowledgePath)}</div><label>所属领域<select id="projectDomain"><option value="">未分组</option>${state.brain.domains.map(d => `<option value="${esc(d.id)}" ${d.id === project.domainId ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></label><h3>项目连接</h3>${Object.entries(modules).map(([key, name]) => `<div class="row"><div>${esc(name)}</div>${badge(project.modules[key]?.registered ? '已连接' : '待恢复', project.modules[key]?.registered ? 'up' : 'issue')}</div>`).join('')}<div class="actions"><button class="primary" data-go="work">开始工作</button><button data-action="repair">修复接线</button><button data-action="unbind">解绑并保留数据</button></div>`;
+  }
+  function renderMemories() {
+    all('[data-memory-tab]').forEach(button => button.classList.toggle('active', button.dataset.memoryTab === state.memoryTab));
+    const memories = state.snapshot.memories.filter(m => m.status === state.memoryTab);
+    $('memoryContent').innerHTML = !state.engineAvailable ? '<div class="empty">知识引擎暂时不可用。未读取到的记忆不会显示为已确认。</div>' : memories.length ? `<div class="memory-grid">${memories.map(m => `<article class="memory-card"><p>${esc(m.text)}</p><small>${esc(projectName(m.evidence.projectId))} · commit ${esc(m.evidence.commitSha.slice(0, 8))}<br>${esc(m.evidence.entryId)}</small><div class="actions"><button data-memory-action="evidence" data-memory-id="${esc(m.id)}">查看依据</button><button data-memory-action="edit" data-memory-id="${esc(m.id)}">编辑</button>${m.status === 'candidate' ? `<button class="primary" data-memory-action="confirm" data-memory-id="${esc(m.id)}">确认</button><button data-memory-action="ignore" data-memory-id="${esc(m.id)}">忽略</button>` : badge('已确认', 'up')}</div></article>`).join('')}</div>` : `<div class="empty">${state.memoryTab === 'confirmed' ? '还没有已确认的长期记忆。' : '候选箱为空。维护产物中的有据偏好会进入这里，等待你的确认。'}</div>`;
+  }
+  function renderActivity() {
+    all('[data-activity-tab]').forEach(button => button.classList.toggle('active', button.dataset.activityTab === state.activityTab));
+    $('activityUpdates').hidden = state.activityTab !== 'updates'; $('activitySessions').hidden = state.activityTab !== 'sessions';
+    const runs = state.snapshot.runs.filter(r => r.projectId === state.projectId);
+    const open = new Set(all('.run[open]').map(d => d.dataset.runId));
+    $('activityUpdates').innerHTML = state.engineAvailable ? runs.map(r => `<details class="run" data-run-id="${esc(r.runId)}" ${open.has(r.runId) ? 'open' : ''}><summary><time>${time(r.startedAt)}</time><strong>${esc(projectName(r.projectId))} · ${esc(r.commitSha.slice(0, 8))}</strong>${badge(label(r), ['failed', 'index-pending'].includes(r.state) ? 'issue' : r.state === 'succeeded' ? 'up' : '')}</summary><div><p>提交：${esc(r.commitSha)}<br>阶段：${esc(r.phase)} · 入口：${esc(r.trigger)}<br>知识晋升：${time(r.promotedAt)} · 索引：${esc(r.indexState)}</p>${r.error ? `<p class="error">${esc(r.error.message)} (${esc(r.error.code)})</p>` : ''}${(r.staging?.operations || []).map(op => `<div class="operation">${esc(op.operation)} · ${esc(op.path)}<br>${esc(op.reason)}</div>`).join('')}${['failed', 'index-pending'].includes(r.state) ? `<button data-retry-run="${esc(r.runId)}">重试失败阶段</button>` : ''}</div></details>`).join('') || '<div class="empty">当前项目还没有知识维护记录。</div>' : '<div class="empty">知识引擎离线。记录仍保留在本机，连接恢复后自动读取。</div>';
+  }
+  function renderContext() {
+    const saved = state.contexts.get(state.projectId);
+    const context = saved?.status === 'not-retrieved' ? null : saved;
+    $('contextScope').textContent = context ? ({ ready: '已检索知识', 'file-fallback': '索引暂不可用，已检索原文件', unavailable: '知识服务不可用，未注入上下文', unregistered: '项目尚未登记知识库', disabled: '未启用知识连接' })[context.status] || '本次任务上下文' : '任务发送前自动检索';
+    $('contextContent').classList.toggle('small-empty', !context?.references?.length);
+    const seen = new Set();
+    const references = (context?.references || []).map((r, index) => ({ ...r, index })).filter(r => { const key = `${r.spaceId}:${r.projectId}:${r.entryId}:${r.commitSha || ''}`; if (seen.has(key)) return false; seen.add(key); return true; });
+    $('contextContent').classList.toggle('empty', !references.length);
+    $('contextContent').innerHTML = references.length ? references.map(r => `<button class="reference" data-context-index="${r.index}"><b>${esc(r.title)}</b><small>${esc(projectName(r.projectId))} / ${esc(r.entryId)}${r.commitSha ? ` · ${esc(r.commitSha.slice(0, 8))}` : ''}</small><p>${esc(r.text.slice(0, 180))}</p></button>`).join('') : context ? '本次任务未找到可引用的知识。' : '发送任务后显示实际检索到的项目事实、领域经验和已确认记忆。';
+  }
+  async function openReference(reference) {
+    const id = state.projectId;
+    const epoch = ++referenceEpoch;
+    $('referenceTitle').textContent = reference.title || reference.entryId;
+    $('referenceMeta').textContent = `${projectName(reference.projectId)} / ${reference.entryId}${reference.commitSha ? ` · commit ${reference.commitSha}` : ''}`;
+    $('referenceContent').textContent = reference.text || '读取知识文件…'; $('referenceDialog').showModal();
+    if (reference.entryId) {
+      const result = await api('/api/engine/get', { method: 'POST', body: { projectId: state.projects.some(p => p.projectId === reference.projectId) ? reference.projectId : id, spaceId: reference.spaceId, entryId: reference.entryId } });
+      if (epoch === referenceEpoch && id === state.projectId && $('referenceDialog').open) $('referenceContent').textContent = result.chunks.map(c => c.chunk_text).join('\n');
+    }
+  }
+  async function refreshSnapshot() {
+    const epoch = ++snapshotEpoch;
+    try { const snapshot = await api('/api/engine/snapshot'); if (epoch !== snapshotEpoch || !navigator.onLine) return; state.snapshot = snapshot; state.engineAvailable = true; }
+    catch { if (epoch !== snapshotEpoch) return; state.engineAvailable = false; }
+    render();
+  }
+  function scheduleRefresh() { if (!navigator.onLine) return; clearTimeout(refreshTimer); refreshTimer = setTimeout(() => { refreshSnapshot(); post('eventBridge', { type: 'kb:refresh' }); }, 160); }
+  function connectProgress() {
+    if (!navigator.onLine || !state.health.engine?.up || state.stream) return;
+    const stream = new EventSource('/api/engine/progress'); state.stream = stream;
+    stream.addEventListener('snapshot', () => { if (state.stream !== stream) return; $('activityConnection').textContent = '已连接实时更新'; scheduleRefresh(); });
+    stream.addEventListener('progress', () => { if (state.stream === stream) scheduleRefresh(); });
+    stream.onerror = () => { if (state.stream === stream) $('activityConnection').textContent = '连接中断，正在恢复快照'; };
+  }
+  async function refreshRegistry() {
+    if (!navigator.onLine || state.refreshing) return;
+    state.refreshing = true;
+    try {
+      const [brain, projects, health] = await Promise.all([api('/api/brain'), api('/api/projects/aggregated'), api('/api/modules/health')]);
+      state.brain = brain.brain; state.root = brain.knowledgeRoot; state.projects = projects.projects; state.health = health.modules; state.ownership = health.ownership;
+      if (!activeProject()) { state.projectId = state.projects[0]?.projectId || ''; state.epoch++; Object.keys(frames).forEach(frameContext); }
+      renderProjectOptions(); renderSystem(); connectProgress(); await refreshSnapshot(); setView(state.view);
+    } catch (error) { toast(error.message); }
+    finally { state.refreshing = false; connectProgress(); }
+  }
+  function renderSystem() {
+    const down = Object.keys(modules).filter(key => !state.health[key]?.up);
+    const pending = state.ownership?.owner === 'engine' && !state.ownership.ready;
+    $('systemDot').className = `dot ${down.length || pending ? 'issue' : 'up'}`;
+    $('systemTitle').textContent = pending ? '知识引擎接管待恢复' : down.length ? '部分服务需要处理' : '系统连接正常';
+    $('systemDetail').textContent = pending ? state.ownership.message || '迁移未完成，原知识与提交证据保留。' : down.length ? down.map(k => modules[k]).join('、') : '本机知识服务已连接';
+    $('moduleHealth').innerHTML = Object.entries(modules).map(([key, name]) => `<div class="row"><div><b>${esc(name)}</b><small>${esc(state.health[key]?.url || '')}</small></div>${badge(state.health[key]?.up ? '在线' : '离线', state.health[key]?.up ? 'up' : 'issue')}</div>`).join('');
+    if (!navigator.onLine) {
+      $('systemDot').className = 'dot issue'; $('systemTitle').textContent = '网页连接中断';
+      $('systemDetail').textContent = '恢复连接后自动读取状态，后台维护不受影响。';
+      $('moduleHealth').innerHTML = '<p>当前网页无法确认服务状态，连接恢复后重新读取。</p>';
+    }
+  }
+  async function openSystem() {
+    $('systemDrawer').hidden = false; $('drawerBackdrop').hidden = false;
+    $('brainName').value = state.brain.name; $('knowledgeRoot').value = state.root;
+    await loadMaintenance();
+  }
+  async function loadLogs() {
+    const epoch = ++logEpoch;
+    logStream?.close(); logStream = null;
+    const params = new URLSearchParams({ pageSize: '100', q: $('logsSearch').value.trim() });
+    if (state.projectId) params.set('projectId', state.projectId);
+    const result = await api(`/api/logs?${params}`);
+    if (epoch !== logEpoch || !$('logsDialog').open) return;
+    $('logsDialog').dataset.streamCursor = result.streamCursor || '';
+    $('logsContent').replaceChildren();
+    for (const record of [...(result.entries || [])].reverse()) appendLog(record);
+    $('logsStatus').textContent = `${(result.entries || []).length} 条诊断记录 · 当前项目`;
+    if (!$('logsSearch').value.trim()) {
+      const streamParams = new URLSearchParams({ streamCursor: result.streamCursor || '' });
+      if (state.projectId) streamParams.set('projectId', state.projectId);
+      logStream = new EventSource(`/api/logs/stream?${streamParams}`);
+      logStream.addEventListener('logs/appended', event => { if (epoch === logEpoch && $('logsDialog').open) appendLog(JSON.parse(event.data).record); });
+    }
+  }
+  function appendLog(record) {
+    const row = document.createElement('details'); row.className = 'log-entry';
+    row.dataset.level = record.level;
+    const summary = document.createElement('summary'); summary.className = 'row';
+    const date = document.createElement('time'); date.textContent = time(record.ts || record.at);
+    const text = document.createElement('pre'); text.textContent = record.message || '';
+    const detail = document.createElement('pre'); detail.className = 'log-detail';
+    detail.textContent = JSON.stringify(record, null, 2);
+    summary.append(date, text); row.append(summary, detail); $('logsContent').append(row);
+    while ($('logsContent').childElementCount > 100) $('logsContent').firstElementChild.remove();
+  }
+  function closeSystem() {
+    $('systemDrawer').hidden = true; $('drawerBackdrop').hidden = true;
+    if (resumeImport) {
+      resumeImport = false;
+      $('importDialog').showModal();
+      checkImport().catch(error => toast(error.message));
+    }
+  }
+  async function loadMaintenance() {
+    try {
+      const [profiles, saved] = await Promise.all([api('/api/terminal/profiles'), api('/api/terminal/maintenance-default')]);
+      const list = Array.isArray(profiles) ? profiles : profiles.profiles || [];
+      $('maintenanceModel').innerHTML = '<option value="">尚未选择后台默认模型</option>' + list.filter(p => p.enabled && p.credentialConfigured).map(p => `<option value="${esc(p.id)}">${esc(p.name)} · ${esc(p.models.default)}</option>`).join('');
+      $('maintenanceModel').value = saved.profileId || '';
+      $('configurationStatus').textContent = saved.profileId ? '此默认模型仅用于后台维护。' : '先配置供应商，再选择后台默认模型。';
+      const embedding = await api('/api/terminal/embedding-config');
+      $('embeddingStatus').textContent = embedding.configured ? `已配置 · ${embedding.config.model}` : '未配置，使用文本检索降级。';
+      const capture = (await api('/api/terminal/health')).conversationCapture;
+      $('captureStatus').textContent = !capture ? '工作台对话接线尚未启用。' : capture.error ? `工作台对话待恢复 · ${capture.pending} 条事件保留在本机，请检查接线。` : capture.pending ? `工作台对话正在同步 · ${capture.pending} 条待写入。` : capture.enabled ? '工作台对话自动保存到开发会话记录。' : '工作台对话捕获已关闭。';
+    } catch { $('maintenanceModel').innerHTML = '<option value="">工作台暂时不可用</option>'; $('configurationStatus').textContent = '无法读取模型配置，请恢复工作台服务。'; }
+  }
+  async function openEmbedding() {
+    const [profiles, embedding] = await Promise.all([api('/api/terminal/profiles'), api('/api/terminal/embedding-config')]);
+    const list = Array.isArray(profiles) ? profiles : profiles.profiles || [];
+    $('embeddingProfile').innerHTML = '<option value="">独立凭据</option>' + list.filter(p => p.enabled && p.credentialConfigured).map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+    const saved = embedding.config || {};
+    $('embeddingProfile').value = saved.profileId || '';
+    $('embeddingProvider').value = saved.provider || 'minimax';
+    $('embeddingModel').value = saved.model || 'embo-01';
+    $('embeddingEndpoint').value = saved.endpoint || '';
+    $('embeddingSecret').value = '';
+    $('embeddingSecretLabel').hidden = !!saved.profileId;
+    $('embeddingFeedback').textContent = embedding.configured ? '配置已保存。留空凭据不会覆盖现有密钥。' : '向量检索尚未配置。';
+    closeSystem(); $('embeddingDialog').showModal();
+  }
+  async function saveEmbedding(enabled = true) {
+    const body = enabled ? { provider: $('embeddingProvider').value, model: $('embeddingModel').value, endpoint: $('embeddingEndpoint').value, profileId: $('embeddingProfile').value || null, secret: $('embeddingSecret').value } : { enabled: false };
+    await api('/api/terminal/embedding-config', { method: 'PUT', body });
+    $('embeddingSecret').value = '';
+    const result = await api('/api/modules/configure', { method: 'POST', body: {} });
+    $('embeddingFeedback').textContent = !enabled ? '已停用向量模型，知识文件保留。' : result.configuration.embedding ? '已保存并同步到向量检索服务。' : '配置已保存，向量服务待恢复。请检查模块连接。';
+    await loadMaintenance();
+  }
+  async function repair() {
+    const project = activeProject(); if (!project) return toast('请先导入项目。');
+    const result = await api(`/api/projects/${encodeURIComponent(project.projectId)}/module-register`, { method: 'POST', body: {} });
+    const pending = Object.entries(result.modules).filter(([, v]) => !v.ok).map(([key]) => modules[key]);
+    $('wiringFeedback').textContent = pending.length ? `项目已登记，待恢复：${pending.join('、')}` : '四个模块已连接。';
+    toast($('wiringFeedback').textContent); await refreshRegistry(); Object.keys(frames).forEach(frameContext);
+  }
+  async function pick(target) {
+    const result = await api('/api/terminal/system/pick-folder');
+    if (result.cancelled || !result.path) return;
+    $(target).value = result.path; $(target).dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  function openImport() {
+    resumeImport = false; $('setupImportRoot').hidden = true;
+    $('importForm').reset(); state.importId = `project-${crypto.randomUUID()}`; state.preflight = null; state.preflightEpoch++;
+    $('importDomain').innerHTML = '<option value="">未分组</option>' + state.brain.domains.map(d => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('');
+    $('importDomain').value = activeProject()?.domainId || '';
+    $('gitInitChoice').hidden = true; $('confirmImport').disabled = true; $('preflightStatus').textContent = '填写目录后检查导入条件。'; $('importDialog').showModal();
+  }
+  function importInput() { return { projectId: state.importId, brainId: state.brain.id, domainId: $('importDomain').value || null, localPath: $('importCode').value.trim(), knowledgePath: $('importKnowledge').value.trim(), displayName: $('importName').value.trim(), knowledgeLanguage: 'zh-CN', confirmGitInit: $('importForm').elements.confirmGitInit.checked }; }
+  const problemLabels = { KNOWLEDGE_ROOT_MISSING: '请在系统状态中设置知识根目录。', AI_PROFILE_REQUIRED: '请配置可用模型；后台默认模型在系统状态中设置。', DUPLICATE_PROJECT: '此项目已导入，请打开已有项目。', HOOK_CONFLICT: '存在第三方 Hook，不会覆盖。请先检查冲突。', PATH_MISSING: '代码目录不存在。', PATH_REQUIRED: '请选择代码目录。' };
+  async function checkImport() {
+    const epoch = ++state.preflightEpoch; $('confirmImport').disabled = true;
+    $('setupImportRoot').hidden = true;
+    if (!$('importCode').value.trim()) return;
+    $('preflightStatus').textContent = '正在检查目录、仓库与接线条件…';
+    try {
+      const result = await api('/api/projects/preflight-import', { method: 'POST', body: importInput(), allowNotReady: true });
+      if (epoch !== state.preflightEpoch || !$('importDialog').open) return;
+      state.preflight = result; $('gitInitChoice').hidden = !result.plannedGitInit;
+      const messages = result.problems.map(p => problemLabels[p.code] || p.message);
+      $('setupImportRoot').hidden = !result.problems.some(p => p.code === 'KNOWLEDGE_ROOT_MISSING');
+      $('preflightStatus').textContent = result.ready ? result.plannedGitInit ? '目录检查通过。请确认初始化 Git；不分析历史。' : '检查通过。只建立当前提交的跟踪基线，不分析历史。' : [...new Set(messages)].join('\n');
+      $('preflightStatus').classList.toggle('issue', !result.ready);
+      $('confirmImport').disabled = !result.ready || result.plannedGitInit && !$('importForm').elements.confirmGitInit.checked || !$('importKnowledge').value.trim();
+    } catch (error) { if (epoch === state.preflightEpoch) $('preflightStatus').textContent = error.message; }
+  }
+  document.addEventListener('click', e => {
+    const button = e.target.closest('button'); if (!button) return;
+    const execute = async () => {
+      if (button.dataset.view) setView(button.dataset.view);
+      if (button.dataset.go) { if (button.dataset.go === 'memory') state.memoryTab = 'candidate'; setView(button.dataset.go); }
+      if (button.dataset.close) $(button.dataset.close).close();
+      if (button.dataset.selectProject) selectProject(button.dataset.selectProject);
+      if (button.dataset.scope) { state.scope = button.dataset.scope; all('[data-scope]').forEach(b => b.classList.toggle('active', b.dataset.scope === state.scope)); post('vectorHub', { type: 'kb:scope', scope: state.scope }); }
+      if (button.dataset.memoryTab) { state.memoryTab = button.dataset.memoryTab; renderMemories(); }
+      if (button.dataset.activityTab) { state.activityTab = button.dataset.activityTab; setView('activity'); post('eventBridge', { type: 'kb:visibility', visible: state.activityTab === 'sessions' }); post('eventBridge', { type: 'kb:refresh' }); }
+      if (button.dataset.action === 'import') openImport();
+      if (button.dataset.action === 'repair') await repair();
+      if (button.dataset.action === 'system') await openSystem();
+      if (button.dataset.action === 'unbind') { const p = activeProject(); if (p && confirm(`解绑 ${p.name}？代码、知识文件和会话历史将保留。`)) { await api(`/api/projects/${encodeURIComponent(p.projectId)}`, { method: 'DELETE', body: { deleteKnowledge: false } }); toast('已解绑，数据仍保留。'); await refreshRegistry(); } }
+      if (button.dataset.retryRun) { await api(`/api/engine/runs/${encodeURIComponent(button.dataset.retryRun)}/retry`, { method: 'POST', body: {} }); await refreshSnapshot(); }
+      if (button.dataset.contextIndex !== undefined) await openReference(state.contexts.get(state.projectId).references[Number(button.dataset.contextIndex)]);
+      if (button.dataset.memoryAction) {
+        const memory = state.snapshot.memories.find(m => m.id === button.dataset.memoryId); if (!memory) return;
+        const action = button.dataset.memoryAction;
+        if (action === 'evidence') await openReference({ ...memory.evidence, text: memory.evidence.quote, title: '记忆来源依据' });
+        else if (action === 'edit') { editingMemoryId = memory.id; $('memoryText').value = memory.text; $('memoryEvidence').textContent = `${projectName(memory.evidence.projectId)} · ${memory.evidence.commitSha.slice(0, 8)} / ${memory.evidence.entryId}`; $('memoryDialog').showModal(); }
+        else { await api(`/api/engine/memories/${encodeURIComponent(memory.id)}`, { method: 'PATCH', body: { status: action === 'confirm' ? 'confirmed' : 'ignored' } }); await refreshSnapshot(); }
+      }
+    };
+    execute().catch(error => toast(error.message));
+  });
+  document.addEventListener('change', e => { if (e.target.id === 'projectDomain') api(`/api/projects/${encodeURIComponent(state.projectId)}`, { method: 'PATCH', body: { domainId: e.target.value || null } }).then(refreshRegistry).catch(error => toast(error.message)); });
+  window.addEventListener('message', event => {
+    if (event.origin !== location.origin || !event.data || typeof event.data !== 'object') return;
+    const key = Object.keys(frames).find(k => $(frames[k].id).contentWindow === event.source); if (!key) return;
+    const message = event.data;
+    if (message.type === 'kb:ready') { frames[key].ready = true; frameContext(key); if (frames[key].openSettings) { post(key, { type: 'kb:open-settings' }); frames[key].openSettings = false; } }
+    if (message.requestId && message.requestId !== frames[key].requestId) return;
+    if (message.type === 'kb:knowledge' && key === 'terminal') {
+      const project = state.projects.find(p => p.modules.terminal.projectId === message.projectId);
+      if (project) { state.contexts.set(project.projectId, message.knowledge); if (project.projectId === state.projectId) renderContext(); }
+    }
+  });
+  on('projectSelect', 'change', e => selectProject(e.target.value));
+  on('themeToggle', 'click', () => { document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('kb.theme', document.documentElement.dataset.theme); Object.keys(frames).forEach(key => post(key, { type: 'kb:theme', theme: document.documentElement.dataset.theme })); });
+  on('openSystem', 'click', openSystem); on('closeSystem', 'click', closeSystem); on('drawerBackdrop', 'click', closeSystem);
+  on('repairWiring', 'click', repair);
+  on('configureProviders', 'click', () => { closeSystem(); setView('work'); initializeFrame('terminal'); if (frames.terminal.ready) post('terminal', { type: 'kb:open-settings' }); else frames.terminal.openSettings = true; });
+  on('saveMaintenance', 'click', async () => { await api('/api/terminal/maintenance-default', { method: 'PUT', body: { profileId: $('maintenanceModel').value || null } }); const result = await api('/api/modules/configure', { method: 'POST', body: {} }); $('configurationStatus').textContent = result.configuration.model ? '后台默认模型已保存并同步。' : '配置已保存，后台运行配置尚未同步，请检查模块连接。'; });
+  on('openEmbedding', 'click', openEmbedding);
+  on('embeddingProfile', 'change', () => { $('embeddingSecretLabel').hidden = !!$('embeddingProfile').value; });
+  on('embeddingProvider', 'change', () => { $('embeddingModel').value = $('embeddingProvider').value === 'minimax' ? 'embo-01' : 'text-embedding-3-small'; });
+  on('embeddingForm', 'submit', async event => { event.preventDefault(); await saveEmbedding(); });
+  on('disableEmbedding', 'click', () => saveEmbedding(false));
+  on('embeddingDialog', 'close', () => { $('embeddingSecret').value = ''; });
+  on('saveBrainSettings', 'click', async () => { await api('/api/brain', { method: 'PATCH', body: { name: $('brainName').value } }); await api('/api/settings', { method: 'PATCH', body: { knowledge: { rootPath: $('knowledgeRoot').value } } }); toast('设置已保存，已有知识未移动。'); await refreshRegistry(); if (resumeImport) closeSystem(); });
+  on('setupImportRoot', 'click', async () => { $('importDialog').close(); resumeImport = true; await openSystem(); $('knowledgeRoot').focus(); });
+  on('pickRoot', 'click', () => pick('knowledgeRoot')); on('pickCode', 'click', () => pick('importCode')); on('pickKnowledge', 'click', () => pick('importKnowledge'));
+  on('openEngine', 'click', () => { closeSystem(); initializeFrame('engine'); $('engineDialog').showModal(); post('engine', { type: 'kb:visibility', visible: true }); });
+  on('engineDialog', 'close', () => post('engine', { type: 'kb:visibility', visible: false }));
+  on('openLogs', 'click', async () => { closeSystem(); $('logsDialog').showModal(); await loadLogs(); });
+  on('logsDialog', 'close', () => { logEpoch++; logStream?.close(); logStream = null; });
+  on('copyReference', 'click', async () => {
+    const text = $('referenceMeta').textContent + '\n\n' + $('referenceContent').textContent;
+    try { await navigator.clipboard.writeText(text); }
+    catch { const field = document.createElement('textarea'); field.value = text; document.body.append(field); field.select(); const copied = document.execCommand('copy'); field.remove(); if (!copied) throw new Error('复制失败，请选择引用内容手动复制。'); }
+    toast('已复制知识与来源。');
+  });
+  on('loadLogs', 'click', loadLogs);
+  on('exportLogs', 'click', async () => { const params = new URLSearchParams({ q: $('logsSearch').value.trim() }); if (state.projectId) params.set('projectId', state.projectId); const response = await fetch(`/api/logs/export?${params}`); if (!response.ok) throw new Error('诊断导出失败。'); const blob = await response.blob(); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'knowledge-diagnostics.jsonl'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); });
+  on('createDomain', 'click', () => { $('domainForm').reset(); $('domainDialog').showModal(); });
+  on('domainForm', 'submit', async e => { e.preventDefault(); await api('/api/domains', { method: 'POST', body: Object.fromEntries(new FormData(e.target)) }); $('domainDialog').close(); await refreshRegistry(); });
+  on('memoryForm', 'submit', async e => { e.preventDefault(); await api(`/api/engine/memories/${encodeURIComponent(editingMemoryId)}`, { method: 'PATCH', body: { text: $('memoryText').value } }); $('memoryDialog').close(); await refreshSnapshot(); });
+  on('importForm', 'input', e => {
+    if (e.target.id === 'importCode') { const name = e.target.value.trim().split(/[\\/]/).filter(Boolean).pop() || ''; $('importName').value = name; if (state.root) $('importKnowledge').value = `${state.root.replace(/[\\/]+$/, '')}/${name}-${state.importId.slice(-6)}`; }
+    clearTimeout(preflightTimer); $('confirmImport').disabled = true; preflightTimer = setTimeout(checkImport, 250);
+  });
+  on('importForm', 'submit', async e => {
+    e.preventDefault(); if (!state.preflight?.ready || state.preflight.plannedGitInit && !$('importForm').elements.confirmGitInit.checked) return;
+    $('confirmImport').disabled = true; $('confirmImport').textContent = '正在登记…';
+    try { const result = await api('/api/projects/import', { method: 'POST', body: importInput() }); state.projectId = result.projectId; state.epoch++; $('importDialog').close(); await refreshRegistry(); Object.keys(frames).forEach(frameContext); setView('projects'); toast(Object.values(result.modules).every(m => m.ok) ? '项目已导入，四个模块已连接。' : '项目已导入，部分接线待恢复。'); }
+    finally { $('confirmImport').textContent = '导入项目'; if ($('importDialog').open) checkImport(); }
+  });
+  window.addEventListener('hashchange', () => setView(location.hash.slice(1)));
+  window.addEventListener('offline', () => {
+    snapshotEpoch++; clearTimeout(refreshTimer);
+    state.stream?.close(); state.stream = null; logStream?.close(); logStream = null; logEpoch++;
+    state.engineAvailable = false; $('activityConnection').textContent = '连接中断，恢复后自动读取快照';
+    renderSystem(); render();
+  });
+  window.addEventListener('online', () => {
+    $('activityConnection').textContent = '正在恢复快照'; refreshRegistry();
+    if ($('logsDialog').open) loadLogs().catch(error => toast(error.message));
+  });
+  window.addEventListener('beforeunload', () => { state.stream?.close(); logStream?.close(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSystem(); });
+  document.documentElement.dataset.theme = localStorage.getItem('kb.theme') === 'dark' ? 'dark' : 'light';
+  all('[data-scope]').forEach(button => button.classList.toggle('active', button.dataset.scope === state.scope));
+  state.view = titles[location.hash.slice(1)] ? location.hash.slice(1) : 'home';
+  setView(state.view); refreshRegistry();
+  setInterval(() => { if (!document.hidden) refreshRegistry(); }, 30000);
+})();
