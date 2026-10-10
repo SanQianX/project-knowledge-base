@@ -2,7 +2,7 @@
   "schema": "project-knowledge/module-content/v1",
   "productFiles": {
     "ui/index.html": "e7291caab778eba3c5499d8286804ad1f4ef31c87a957f69c8fb77befc01321b",
-    "ui/product.js": "1a6ddedd97b00c3f798c13a0a55b0f63790e701483492bc97d28cae4034efaf8",
+    "ui/product.js": "e35c1650df239cec0a9d73197fed7ac069bb09f0c51f4752e03115784a526518",
     "ui/product.css": "73554abf3f951ea01a2bfe2df81748b702a6ca4488eea16bfe5afe04ef1dea70"
   },
   "modules": {

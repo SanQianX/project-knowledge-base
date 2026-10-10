@@ -291,7 +291,7 @@
     const result = await api(`/api/projects/${encodeURIComponent(project.projectId)}/module-register`, { method: 'POST', body: {} });
     const pending = Object.entries(result.modules).filter(([, v]) => !v.ok).map(([key]) => modules[key]);
     $('wiringFeedback').textContent = pending.length ? `项目已登记，待恢复：${pending.join('、')}` : '四个模块已连接。';
-    toast($('wiringFeedback').textContent); await refreshRegistry(); Object.keys(frames).forEach(frameContext);
+    toast($('wiringFeedback').textContent); await refreshRegistry(true); Object.keys(frames).forEach(frameContext);
   }
   async function pick(target) {
     const result = await api('/api/terminal/system/pick-folder');
@@ -350,7 +350,7 @@
     };
     execute().catch(error => toast(error.message));
   });
-  document.addEventListener('change', e => { if (e.target.id === 'projectDomain') api(`/api/projects/${encodeURIComponent(state.projectId)}`, { method: 'PATCH', body: { domainId: e.target.value || null } }).then(refreshRegistry).catch(error => toast(error.message)); });
+  document.addEventListener('change', e => { if (e.target.id === 'projectDomain') api(`/api/projects/${encodeURIComponent(state.projectId)}`, { method: 'PATCH', body: { domainId: e.target.value || null } }).then(() => refreshRegistry(true)).catch(error => toast(error.message)); });
   window.addEventListener('message', event => {
     if (event.origin !== location.origin || !event.data || typeof event.data !== 'object') return;
     const key = Object.keys(frames).find(k => $(frames[k].id).contentWindow === event.source); if (!key) return;
@@ -393,7 +393,7 @@
   on('loadLogs', 'click', loadLogs);
   on('exportLogs', 'click', async () => { const params = new URLSearchParams({ q: $('logsSearch').value.trim() }); if ($('logsScope').value === 'project' && state.projectId) params.set('projectId', state.projectId); const response = await fetch(`/api/logs/export?${params}`); if (!response.ok) throw new Error('诊断导出失败。'); const blob = await response.blob(); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'knowledge-diagnostics.jsonl'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); });
   on('createDomain', 'click', () => { $('domainForm').reset(); $('domainDialog').showModal(); });
-  on('domainForm', 'submit', async e => { e.preventDefault(); await api('/api/domains', { method: 'POST', body: Object.fromEntries(new FormData(e.target)) }); $('domainDialog').close(); await refreshRegistry(); });
+  on('domainForm', 'submit', async e => { e.preventDefault(); await api('/api/domains', { method: 'POST', body: Object.fromEntries(new FormData(e.target)) }); $('domainDialog').close(); await refreshRegistry(true); });
   on('memoryForm', 'submit', async e => { e.preventDefault(); await api(`/api/engine/memories/${encodeURIComponent(editingMemoryId)}`, { method: 'PATCH', body: { text: $('memoryText').value } }); $('memoryDialog').close(); await refreshSnapshot(); });
   on('unbindForm', 'submit', async e => {
     e.preventDefault(); if (!unbindProjectId || unbinding) return;
@@ -423,7 +423,7 @@
     e.preventDefault(); if (!state.preflight?.ready || state.preflight.plannedGitInit && !$('importForm').elements.confirmGitInit.checked || state.preflight.checks.hook?.replacementProjectId && !$('importForm').elements.confirmReplaceHook.checked) return;
     $('confirmImport').disabled = true; $('confirmImport').textContent = '正在登记…';
     let failed = false, registered = false;
-    try { const result = await api('/api/projects/import', { method: 'POST', body: importInput() }); registered = true; state.projectId = result.projectId; state.epoch++; $('importDialog').close(); await refreshRegistry(); Object.keys(frames).forEach(frameContext); setView('projects'); toast(Object.values(result.modules).every(m => m.ok) ? '项目已导入，四个模块已连接。' : '项目已导入，部分接线待恢复。'); }
+    try { const result = await api('/api/projects/import', { method: 'POST', body: importInput() }); registered = true; state.projectId = result.projectId; state.epoch++; $('importDialog').close(); await refreshRegistry(true); Object.keys(frames).forEach(frameContext); setView('projects'); toast(Object.values(result.modules).every(m => m.ok) ? '项目已导入，四个模块已连接。' : '项目已导入，部分接线待恢复。'); }
     catch (error) {
       failed = true;
       if (registered) { toast(`项目已登记，但页面状态刷新失败：${error.message}`); return; }

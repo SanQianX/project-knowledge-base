@@ -18,6 +18,8 @@ assert.equal((script.match(/\.src = /g) || []).length, 1, 'frames initialize onc
 for (const contract of ['kb:theme', 'kb:select-project', 'kb:scope', 'kb:knowledge', 'kb:ready']) assert.ok(script.includes(contract));
 assert.ok(script.includes('event.origin !== location.origin') && script.includes('contentWindow === event.source'), 'module messages must be from the expected frame and origin');
 assert.ok(script.includes('state.epoch++') && script.includes('referenceEpoch') && script.includes('logEpoch'), 'late project/reference/log feedback must be isolated');
+assert.match(script, /on\('domainForm'[\s\S]*?await refreshRegistry\(true\)/, 'domain writes must invalidate pre-mutation reads');
+assert.match(script, /registered = true;[\s\S]*?await refreshRegistry\(true\)/, 'import must not reuse a pre-import snapshot');
 assert.ok(script.includes('esc(r.title)') && script.includes('esc(m.text)') && script.includes('esc(project.name)'));
 assert.ok(script.includes('text.textContent = record.message') && script.includes("'logs/appended'"), 'diagnostics stay inert and stream live');
 assert.ok(script.includes('URL.revokeObjectURL(url)') && script.includes('logStream?.close()'));

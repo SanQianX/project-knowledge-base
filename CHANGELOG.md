@@ -1,5 +1,14 @@
 # Changelog
 
+## [5.0.5] - 2026-10-10
+
+- Invalidate in-flight registry snapshots after domain creation, project import,
+  ownership changes and wiring repair. A read begun before the write cannot
+  hide the newly registered data until the next polling cycle.
+- Includes all knowledge-maintenance, Claude discovery and local diagnostic
+  fixes from 5.0.3, plus exact commit retrieval from 5.0.4. No schema migration
+  or automatic replay of failed model tasks.
+
 ## [5.0.4] - 2026-10-10
 
 - Vendor engine 0.2.2: treat a known full/prefix commit SHA as a provenance
