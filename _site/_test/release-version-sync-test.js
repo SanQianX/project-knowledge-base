@@ -90,8 +90,14 @@ try {
   ]);
   const scripts = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).scripts;
   assert.strictEqual(scripts.preversion, 'npm run release:verify');
-  assert.strictEqual(scripts.version, 'node _site/scripts/sync-release-version.js --stage');
+  assert.strictEqual(scripts.version, 'node _site/scripts/sync-release-version.js --stage --web-only');
   assert.strictEqual(scripts.postversion, 'npm run release:verify');
+  const desktopBytes = FILES.filter(file => file.startsWith('desktop/')).map(file => fs.readFileSync(path.join(TEMP, file)));
+  value.version = '9.8.8-rc.1'; fs.writeFileSync(rootPackage, JSON.stringify(value, null, 2) + '\n');
+  assert.strictEqual(run(['--web-only']).status, 0);
+  assert.strictEqual(run(['--check', '--web-only']).status, 0);
+  assert.notStrictEqual(run(['--check']).status, 0, 'desktop still needs explicit synchronization for desktop releases');
+  FILES.filter(file => file.startsWith('desktop/')).forEach((file, i) => assert.deepStrictEqual(fs.readFileSync(path.join(TEMP, file)), desktopBytes[i]));
   console.log('release-version-sync-test PASS');
 } finally {
   fs.rmSync(TEMP, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });

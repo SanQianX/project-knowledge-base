@@ -1,5 +1,18 @@
 # Changelog
 
+## [5.0.9-rc.1] - 2026-10-11
+
+- Retain classified, bounded and redacted index errors in run details, activity
+  and local log/v2 exports. Index-only retries preserve promoted files and do not
+  invoke the analysis model again.
+- Accept ZCode conversation evidence, isolate per-project journal failures and
+  report the exact blocked sequence without dropping evidence or flooding logs.
+- Synchronize production asset hashes, including the shared favicon. Permit
+  exact rc module pins but reject tags, ranges, links and source overrides.
+- Prepare a web-only candidate; latest is not promoted by this release. Existing
+  v5 data and third-party integrations are preserved; system acceptance remains
+  a separate gate from publication.
+
 ## [5.0.8] - 2026-10-10
 
 - Repair managed Codex notify chains after scoped npm package or Bridge-home

@@ -5,6 +5,10 @@ const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 const root = path.resolve(__dirname, '../..');
 const workingTree = process.argv.includes('--working-tree');
+function isPinnedModuleVersion(name, value) {
+  const version = name === 'claude-ai-workbench' ? String(value || '').replace(/^npm:@sanqianx\/claude-ai-workbench@/, '') : value;
+  return /^\d+\.\d+\.\d+(?:-rc\.\d+)?$/.test(version || '');
+}
 function verify() {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'vendor-manifest.json'), 'utf8'));
   if (manifest.schema !== 'project-knowledge/vendor-runtime/v1') throw new Error('Invalid runtime manifest');
@@ -12,7 +16,7 @@ function verify() {
   if (!engine || engine.root !== '_modules/knowledge-engine') throw new Error('Missing engine runtime');
   const packageInfo = JSON.parse(fs.readFileSync(path.join(root, 'package.json')));
   for (const dependency of ['claude-ai-workbench', '@sanqianx/vector-hub', '@sanqianx/ai-coding-event-bridge-console']) {
-    if (!/^\d+\.\d+\.\d+$/.test(packageInfo.dependencies[dependency] || '') && !/^npm:@sanqianx\/claude-ai-workbench@\d+\.\d+\.\d+$/.test(packageInfo.dependencies[dependency] || '')) throw new Error(`Module dependency must be pinned: ${dependency}`);
+    if (!isPinnedModuleVersion(dependency, packageInfo.dependencies[dependency])) throw new Error(`Module dependency must be pinned: ${dependency}`);
   }
   const required = ['package.json', 'src/bin.js', 'src/server.js', 'src/coordinator.js', 'src/analysis-worker.js', 'ui/index.html', 'ui/app.js', 'ui/app.css'];
   if (required.some(file => !engine.files[file])) throw new Error('Incomplete runtime manifest');
@@ -42,4 +46,5 @@ function verify() {
   if (enginePackage.version !== engine.version || Object.keys(enginePackage.dependencies || {}).length || Object.keys(enginePackage.devDependencies || {}).length) throw new Error('Engine version/dependency contract failed');
   process.stdout.write(workingTree ? 'Runtime content verified; uncommitted working tree is not release approval.\n' : 'Vendored runtime release gate passed.\n');
 }
-try { verify(); } catch (error) { process.stderr.write(`${error.message}\n`); process.exitCode = 1; }
+if (require.main === module) { try { verify(); } catch (error) { process.stderr.write(`${error.message}\n`); process.exitCode = 1; } }
+module.exports = { isPinnedModuleVersion };

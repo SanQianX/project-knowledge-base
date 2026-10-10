@@ -15,6 +15,7 @@ const { MemoryService } = require('./memories');
 const { execGit } = require('./runtime/git-runner');
 const { createDiagnostics } = require('./diagnostics');
 const { finalizeAnalysisOutput } = require('./analysis-output');
+const { requestIndex } = require('./index-request');
 
 class EngineCoordinator extends EventEmitter {
   constructor(store, options = {}) {
@@ -28,6 +29,7 @@ class EngineCoordinator extends EventEmitter {
     this.concurrency = Math.max(1, Math.min(2, Number(options.concurrency) || 2));
     this.active = new Map();
     this.jobs = new Set();
+    this.journalFailures = new Map();
     this.initializeHook = options.initializeHook;
     this.profiles = new Map();
     const diagnostics = createDiagnostics({ dataDir: store.dataDir, secrets: () => [...this.profiles.values()].flatMap(profile => [profile.apiKey, profile.authToken]) });
@@ -123,34 +125,58 @@ class EngineCoordinator extends EventEmitter {
     this.draining = true;
     try {
       await this.bridge.registerConsumer('knowledge-engine', { journals: ['*'] });
-      for (const journal of await this.bridge.listJournals()) {
+      const journals = await this.bridge.listJournals();
+      this.journalFailures.delete('connection');
+      for (const journal of journals) {
         if (this.closed) break;
-        const cursor = this.store.state.journalCursors[journal.journalId] || 0;
-        const events = await this.bridge.readEvents({ journalId: journal.journalId, fromSequence: cursor + 1, limit: 100 });
-        let through = cursor;
-        for (const event of events) {
-          if (this.closed) break;
-          const p = this.store.listProjects().find(p => p.enabled !== false && ((journal.journalId !== 'global' && p.journalId === journal.journalId)
-            || ((journal.journalId === 'global' || !p.journalId) && event.repoIdentity?.workspaceRoot && this.layout.pathsEqual(p.repoPath, event.repoIdentity.workspaceRoot))));
-          if (p) {
-            if (event.schema === 'ai-coding-event/v1' && ['user_prompt', 'assistant_response'].includes(event.eventType)) await this.conversations.appendBridgeEvent(p.projectId, { ...event, journalId: journal.journalId });
-            if (event.schema === 'git-commit-boundary/v1' && /^[a-f0-9]{7,64}$/i.test(event.commitSha || '')) {
-              if (!fs.existsSync(this.layout.getProjectCommitBoundaryPath(p.projectId, event.commitSha))) this.conversations.writeBoundary(p.projectId, { ...event, journalId: journal.journalId, parentShas: event.parents || [], bridgeCursorAtCommit: event.sequence, journalSequence: event.sequence, operationId: event.operationId || `bridge-${journal.journalId}-${event.sequence}`, committedAt: event.committedAt || event.capturedAt });
-              const baseline = p.runtime.lastAnalyzedCommit || p.trackingStartCommit;
-              const completed = this.reconciler.processingLedger.read(p.projectId, event.commitSha);
-              const historical = baseline && (baseline === event.commitSha || (await execGit(p.repoPath, ['merge-base', '--is-ancestor', event.commitSha, baseline])).ok);
-              if (!completed && !historical && this.store.getProject(p.projectId)?.enabled) this.enqueue({ projectId: p.projectId, commitSha: event.commitSha, trigger: 'git-hook', journalId: journal.journalId, journalSequence: event.sequence });
-            }
-          }
-          through = event.sequence;
+        try {
+          await this.consumeJournal(journal);
+          if (this.journalFailures.delete(journal.journalId)) await this.diagnostics.info('knowledge.journal.recovered', '项目事件消费已恢复。', { phase: 'consuming', context: { journalId: journal.journalId } });
+        } catch (error) {
+          // Never ACK invalid evidence; a project fault must not starve other journals.
+          await this.recordJournalFailure(journal.journalId, error);
         }
-        // All evidence projections and queued jobs are durable before ACK.
-        if (through > cursor) this.store.setJournalCursor(journal.journalId, through);
-        await this.bridge.ackConsumerCursor('knowledge-engine', through, { journalId: journal.journalId });
       }
-      this.journalError = null;
-    } catch { this.journalError = '事件日志连接异常，已保留游标并等待恢复。'; }
-    finally { this.draining = false; }
+      for (const id of this.journalFailures.keys()) if (!journals.some(j => j.journalId === id)) this.journalFailures.delete(id);
+    } catch (error) { await this.recordJournalFailure('connection', error); }
+    finally {
+      this.journalError = this.journalFailures.size ? '事件消费异常，未消费证据与游标已保留，请查看诊断日志。' : null;
+      this.draining = false;
+    }
+  }
+  async recordJournalFailure(journalId, error) {
+    const context = error.journalContext || {};
+    const failure = { journalId, sequence: context.sequence ?? null, projectId: context.projectId || null, code: error.code || 'JOURNAL_FAILED', message: this.safeMessage(error.message) };
+    if (JSON.stringify(this.journalFailures.get(journalId)) !== JSON.stringify(failure)) {
+      this.journalFailures.set(journalId, failure);
+      await this.diagnostics.error('knowledge.journal.failed', '事件消费失败，已保留未确认的证据与游标。', { projectId: failure.projectId, phase: 'consuming', error, context: { ...failure, source: context.source || null } });
+    }
+  }
+  async consumeJournal(journal) {
+    const cursor = this.store.state.journalCursors[journal.journalId] || 0;
+    const events = await this.bridge.readEvents({ journalId: journal.journalId, fromSequence: cursor + 1, limit: 100 });
+    let through = cursor;
+    for (const event of events) {
+      if (this.closed) break;
+      const p = this.store.listProjects().find(p => p.enabled !== false && ((journal.journalId !== 'global' && p.journalId === journal.journalId)
+        || ((journal.journalId === 'global' || !p.journalId) && event.repoIdentity?.workspaceRoot && this.layout.pathsEqual(p.repoPath, event.repoIdentity.workspaceRoot))));
+      try {
+        if (p) {
+          if (event.schema === 'ai-coding-event/v1' && ['user_prompt', 'assistant_response'].includes(event.eventType)) await this.conversations.appendBridgeEvent(p.projectId, { ...event, journalId: journal.journalId });
+          if (event.schema === 'git-commit-boundary/v1' && /^[a-f0-9]{7,64}$/i.test(event.commitSha || '')) {
+            if (!fs.existsSync(this.layout.getProjectCommitBoundaryPath(p.projectId, event.commitSha))) this.conversations.writeBoundary(p.projectId, { ...event, journalId: journal.journalId, parentShas: event.parents || [], bridgeCursorAtCommit: event.sequence, journalSequence: event.sequence, operationId: event.operationId || `bridge-${journal.journalId}-${event.sequence}`, committedAt: event.committedAt || event.capturedAt });
+            const baseline = p.runtime.lastAnalyzedCommit || p.trackingStartCommit;
+            const completed = this.reconciler.processingLedger.read(p.projectId, event.commitSha);
+            const historical = baseline && (baseline === event.commitSha || (await execGit(p.repoPath, ['merge-base', '--is-ancestor', event.commitSha, baseline])).ok);
+            if (!completed && !historical && this.store.getProject(p.projectId)?.enabled) this.enqueue({ projectId: p.projectId, commitSha: event.commitSha, trigger: 'git-hook', journalId: journal.journalId, journalSequence: event.sequence });
+          }
+        }
+      } catch (error) { error.journalContext = { projectId: p?.projectId, sequence: event.sequence, source: event.source }; throw error; }
+      through = event.sequence;
+    }
+    // All evidence projections and queued jobs are durable before ACK.
+    if (through > cursor) this.store.setJournalCursor(journal.journalId, through);
+    await this.bridge.ackConsumerCursor('knowledge-engine', through, { journalId: journal.journalId });
   }
   pump() {
     if (this.closed || !this.executionEnabled) return;
@@ -198,16 +224,19 @@ class EngineCoordinator extends EventEmitter {
   }
   async index(run) {
     const project = this.store.getProject(run.projectId);
+    const attempt = (run.indexAttempts || 0) + 1;
+    const context = { projectId: run.projectId, runId: run.runId, operationId: run.runId, commitSha: run.commitSha, phase: 'indexing' };
     try {
-      this.store.updateRun(run.runId, { phase: 'indexing', indexState: 'running' });
-      const response = await fetch(new URL('/api/sync', this.vectorUrl), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project: project.vectorProjectId || project.projectId, sourceDir: project.knowledgePath }), signal: AbortSignal.timeout(120000) });
-      const payload = await response.json();
-      if (!response.ok || payload.ok !== true) throw new Error('INDEX_FAILED');
+      this.store.updateRun(run.runId, { phase: 'indexing', indexState: 'running', indexAttempts: attempt });
+      await requestIndex({ baseUrl: this.vectorUrl, route: '/api/sync', body: { project: project.vectorProjectId || project.projectId, sourceDir: project.knowledgePath }, attempt, sanitize: this.safeMessage });
       await this.store.updateRuntime(run.projectId, state => { state.index.dirty = false; state.index.status = 'ready'; });
       this.store.updateRun(run.runId, { state: 'succeeded', phase: 'ready', indexState: 'succeeded', error: null, finishedAt: new Date().toISOString() });
+      await this.diagnostics.info('knowledge.index.completed', '知识向量索引已更新。', { ...context, context: { attempt } });
       this.notify(run, '知识已更新并可检索');
-    } catch {
-      this.store.updateRun(run.runId, { state: 'index-pending', phase: 'index-pending', indexState: 'failed', finishedAt: new Date().toISOString(), error: { code: 'INDEX_FAILED', message: '知识已更新，索引待修复。', retryable: true } });
+    } catch (error) {
+      const details = error.details || { failureKind: 'LOCAL_ERROR', upstreamCode: error.code || 'UNKNOWN', upstreamMessage: this.safeMessage(error.message), attempt };
+      await this.diagnostics.error('knowledge.index.failed', '知识已更新，向量索引失败。', { ...context, error, context: details });
+      this.store.updateRun(run.runId, { state: 'index-pending', phase: 'index-pending', indexState: 'failed', finishedAt: new Date().toISOString(), error: { code: 'INDEX_FAILED', message: '知识已更新，索引待修复。', retryable: true, details } });
       this.notify(run, '知识已更新，索引待修复');
     }
   }
@@ -220,6 +249,7 @@ class EngineCoordinator extends EventEmitter {
     const job = this.sharedIndexQueue.catch(() => {}).then(async () => {
       if (this.closed || !this.store.state.sharedScopes.some(s => s.id === scope.id)) return;
       let index;
+      const attempt = (this.store.state.sharedScopes.find(s => s.id === scope.id)?.index?.attempts || 0) + 1;
       try {
         const files = require('./runtime/markdown-knowledge-indexer').listMarkdownFiles(scope.knowledgePath);
         const digest = crypto.createHash('sha256');
@@ -235,11 +265,13 @@ class EngineCoordinator extends EventEmitter {
           const payload = await health.json();
           if (health.ok && payload.projects?.some(p => p.name === `scope-${scope.kind}-${scope.id}` && p.hasIndex && this.layout.pathsEqual(p.sourceDir || '', scope.knowledgePath))) return;
         }
-        const response = await fetch(new URL('/api/import', this.vectorUrl), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectName: `scope-${scope.kind}-${scope.id}`, sourceDir: scope.knowledgePath, watch: false }), signal: AbortSignal.timeout(120000) });
-        const payload = await response.json();
-        if (!response.ok || payload.ok !== true) throw new Error('INDEX_FAILED');
-        index = { status: 'ready', fingerprint, updatedAt: new Date().toISOString() };
-      } catch { index = { status: 'pending', message: '共享知识已保存，索引待恢复。' }; }
+        await requestIndex({ baseUrl: this.vectorUrl, route: '/api/import', body: { projectName: `scope-${scope.kind}-${scope.id}`, sourceDir: scope.knowledgePath, watch: false }, attempt, sanitize: this.safeMessage });
+        index = { status: 'ready', fingerprint, attempts: attempt, updatedAt: new Date().toISOString() };
+      } catch (error) {
+        const details = error.details || { failureKind: 'LOCAL_ERROR', upstreamCode: error.code || 'UNKNOWN', upstreamMessage: this.safeMessage(error.message), attempt };
+        index = { status: 'pending', message: '共享知识已保存，索引待恢复。', attempts: attempt, error: { code: 'INDEX_FAILED', details } };
+        await this.diagnostics.error('knowledge.shared_index.failed', index.message, { phase: 'indexing', operationId: `scope-index-${scope.id}-${attempt}`, error, context: { scopeId: scope.id, ...details } });
+      }
       // Configuration can replace projection objects while the import awaits.
       const current = this.store.state.sharedScopes.find(s => s.id === scope.id);
       if (!current) return;

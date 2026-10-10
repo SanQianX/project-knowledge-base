@@ -20,7 +20,7 @@ function packageVersion(rootDir) {
   return version;
 }
 
-function releaseVersionTargets(rootDir, version) {
+function releaseVersionTargets(rootDir, version, { webOnly = false } = {}) {
   return [
     {
       file: 'package-lock.json',
@@ -67,13 +67,13 @@ function releaseVersionTargets(rootDir, version) {
         args[index] = `@sanqianx/project-knowledge@${version}`;
       },
     },
-  ].map(target => ({ ...target, path: path.join(rootDir, target.file) }));
+  ].filter(target => !webOnly || !target.file.startsWith('desktop/')).map(target => ({ ...target, path: path.join(rootDir, target.file) }));
 }
 
-function inspectReleaseVersion(rootDir) {
+function inspectReleaseVersion(rootDir, options) {
   const version = packageVersion(rootDir);
   const drift = [];
-  for (const target of releaseVersionTargets(rootDir, version)) {
+  for (const target of releaseVersionTargets(rootDir, version, options)) {
     const before = fs.readFileSync(target.path, 'utf8');
     const value = JSON.parse(before);
     target.update(value);
@@ -83,10 +83,10 @@ function inspectReleaseVersion(rootDir) {
   return { version, drift };
 }
 
-function syncReleaseVersion(rootDir) {
+function syncReleaseVersion(rootDir, options) {
   const version = packageVersion(rootDir);
   const changed = [];
-  for (const target of releaseVersionTargets(rootDir, version)) {
+  for (const target of releaseVersionTargets(rootDir, version, options)) {
     const before = fs.readFileSync(target.path, 'utf8');
     const value = JSON.parse(before);
     target.update(value);
@@ -114,21 +114,23 @@ function parseArgs(argv) {
   let check = false;
   let tag = null;
   let stage = false;
+  let webOnly = false;
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--check') check = true;
     else if (arg === '--stage') stage = true;
+    else if (arg === '--web-only') webOnly = true;
     else if (arg === '--root') rootDir = path.resolve(argv[++index] || '');
     else if (arg === '--tag') tag = String(argv[++index] || '').trim();
     else throw new Error(`Unknown argument: ${arg}`);
   }
-  return { rootDir, check, tag, stage };
+  return { rootDir, check, tag, stage, webOnly };
 }
 
 function main(argv = process.argv.slice(2)) {
-  const { rootDir, check, tag, stage } = parseArgs(argv);
+  const { rootDir, check, tag, stage, webOnly } = parseArgs(argv);
   if (check) {
-    const result = inspectReleaseVersion(rootDir);
+    const result = inspectReleaseVersion(rootDir, { webOnly });
     if (result.drift.length) {
       throw new Error(`Release version ${result.version} is out of sync: ${result.drift.join(', ')}`);
     }
@@ -138,7 +140,7 @@ function main(argv = process.argv.slice(2)) {
     console.log(`release version ${result.version} is synchronized`);
     return result;
   }
-  const result = syncReleaseVersion(rootDir);
+  const result = syncReleaseVersion(rootDir, { webOnly });
   if (stage) stageReleaseVersionFiles(rootDir, result.changed);
   console.log(result.changed.length
     ? `${stage ? 'synchronized and staged' : 'synchronized'} release version ${result.version}: ${result.changed.join(', ')}`

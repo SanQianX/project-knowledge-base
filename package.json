@@ -1,17 +1,17 @@
 {
   "name": "@sanqianx/project-knowledge",
-  "version": "5.0.8",
+  "version": "5.0.9-rc.1",
   "description": "Knowledge base manager with Git integration, AI-driven analysis, and bilingual (zh-CN/en-US) knowledge output",
   "main": "_site/server.js",
   "scripts": {
     "start": "node _site/server.js",
     "test": "node _site/_test/run-all-tests.js",
-    "release:sync": "node _site/scripts/sync-release-version.js",
+    "release:sync": "node _site/scripts/sync-release-version.js --web-only",
     "vendor:modules": "node _site/scripts/vendor-modules.js",
     "runtime:verify": "node _site/scripts/verify-module-runtime.js --working-tree",
-    "release:verify": "node _site/scripts/sync-release-version.js --check && node _site/scripts/verify-module-runtime.js && node _site/scripts/verify-product-runtime.js && node _site/_test/integration-adapters-test.js",
+    "release:verify": "node _site/scripts/sync-release-version.js --check --web-only && node _site/scripts/verify-module-runtime.js && node _site/scripts/verify-product-runtime.js && node _site/_test/integration-adapters-test.js",
     "preversion": "npm run release:verify",
-    "version": "node _site/scripts/sync-release-version.js --stage",
+    "version": "node _site/scripts/sync-release-version.js --stage --web-only",
     "postversion": "npm run release:verify"
   },
   "bin": {

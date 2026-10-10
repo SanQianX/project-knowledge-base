@@ -53,7 +53,7 @@ function pack(sources) {
     process.stdout.write(`Packed ${key} ${pkg.version}: ${result.files.length} files\n`);
   }
   const manifestPath = path.join(output, 'module-candidates.json'); AtomicFile.writeJsonAtomic(manifestPath, manifest);
-  const productFiles = Object.fromEntries(['ui/index.html', 'ui/product.js', 'ui/product.css'].map(file => [file, hash(fs.readFileSync(path.join(root, file)))]));
+  const productFiles = Object.fromEntries(['ui/index.html', 'ui/product.js', 'ui/product.css', 'ui/favicon.svg'].map(file => [file, hash(fs.readFileSync(path.join(root, file)))]));
   AtomicFile.writeJsonAtomic(path.join(root, 'module-runtime-manifest.json'), { schema: 'project-knowledge/module-content/v1', productFiles, modules: Object.fromEntries(Object.entries(manifest.modules).map(([key, module]) => [key, { name: module.name, installName: module.installName, version: module.version, files: module.files }])) });
   process.stdout.write(`MODULE_CANDIDATES ${manifestPath}\n`);
   return manifestPath;
