@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.0.4] - 2026-10-10
+
+- Vendor engine 0.2.2: treat a known full/prefix commit SHA as a provenance
+  identifier. Unrelated high-scoring vector chunks cannot crowd out the matching
+  current knowledge. Preserve ordinary semantic ranking and current-file truth;
+  overwritten documents are not attributed to their earlier commit.
+- Includes the empty-knowledge and Claude discovery/diagnostic fixes from 5.0.3.
+
 ## [5.0.3] - 2026-10-10
 
 - Pin Workbench 0.13.1: reject stale Claude executable overrides without hiding

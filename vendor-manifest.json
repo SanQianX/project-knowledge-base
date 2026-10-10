@@ -3,11 +3,11 @@
   "modules": {
     "knowledge-engine": {
       "name": "@sanqianx/ai-coding-knowledge-engine",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "root": "_modules/knowledge-engine",
       "files": {
         "README.md": "236dafd8092e13ab731d4a14548e04c4ad3126bdfa63c706a6afe6f9b1dc535d",
-        "package.json": "f7a91e96c77d62aeee4d0dc9b4da327bf615f07d18b1882c305de556cd9ffb65",
+        "package.json": "4fe13c333017a073431c4b730c000a30d2be81012dbb8881dcae3167e3c38643",
         "src/analysis-contract.js": "fee063967d32eefc955cf0729f7dc8cb31bd690b85e22471c9059494a599c77a",
         "src/analysis-output.js": "95a3c19dcc9ab85d1dba7fee5b9aec80f9c000dfba89da3fd0be25a81e2fb680",
         "src/analysis-worker.js": "a105cabe6e1573b2d986b1e7a5aaf615e2fb53524156fc8e4e2c0a71f2c97e55",
@@ -17,7 +17,7 @@
         "src/diagnostics.js": "1ad8b21e0f26d7c18861d51c711a6d36e5070658205cab19727494279f0801e4",
         "src/headless-analyzer.js": "cfe54b392b2aff6e2c5157481dfeb5ccebc4ce83d1d74aa44f28cf2eb923b013",
         "src/memories.js": "0a8667e6daba99fa5022393951a28e96cdadf98af85b6af9a6be96c7f4e896fc",
-        "src/retrieval.js": "acbf76bb93fd13dac391c2e918891a56ace869db5583d2a5994641b6782496d6",
+        "src/retrieval.js": "b3ae3f701a007e3d3ff98811bb80db3505e2fcc87f94aaa9e36057edc7eb71c2",
         "src/runtime/README.md": "9be676eca76a7857b34d7357194e6f0ee733c22e61d962d53984715dbec7f673",
         "src/runtime/atomic-file.js": "9846b4b69db5ded811acf19a1181ef93615d93efaa542b858e552a7f3124ad23",
         "src/runtime/automation-config.js": "6498c5397be12b155829740595a1553d4dcd6eaa7db6ced3ef88fdc60218f00e",
