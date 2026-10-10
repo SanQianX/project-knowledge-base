@@ -8,10 +8,17 @@ const { spawnServer } = require('./helpers/spawn-server');
 const { findChrome } = require('./helpers/find-chrome');
 const { launchCdpBrowser, waitFor } = require('./helpers/cdp-browser');
 const { createLoggingUiFixture } = require('./helpers/logging-ui-fixture');
+const { Logger } = require('../lib/structured-logger');
+const { StorageLayout } = require('../lib/storage-layout');
 const ROOT = path.resolve(__dirname, '../..');
 
 async function main() {
-  const fixture = await createLoggingUiFixture({ totalLogs: 240 });
+  const fixture = await createLoggingUiFixture({ totalLogs: 240, freshProduct: true });
+  const logger = new Logger({ layout: new StorageLayout({ dataDir: fixture.dataDir }) });
+  await logger.error('project.import.failed', 'Import failed for an unregistered project', {
+    projectId: 'project-import-not-registered', operationId: 'op-import-diagnostic',
+    error: Object.assign(new Error('Git Hook path resolution failed'), { code: 'ENOENT' })
+  });
   const offline = http.createServer((req, res) => { res.writeHead(503, { 'content-type': 'application/json' }); res.end(JSON.stringify({ ok: false, error: { message: '验收中的离线模块' } })); });
   await new Promise(resolve => offline.listen(0, '127.0.0.1', resolve));
   const offlineUrl = `http://127.0.0.1:${offline.address().port}`;
@@ -35,6 +42,13 @@ async function main() {
     assert.ok(await run("document.getElementById('activityUpdates').textContent.includes('离线')"), 'offline cannot masquerade as empty/success');
     await click('#openSystem'); await click('#openLogs');
     await waitFor(() => run("document.querySelectorAll('#logsContent .log-entry').length === 100"), 'bounded diagnostic rendering');
+    assert.equal(await run("document.getElementById('logsScope').value"), 'all');
+    await run("document.getElementById('logsSearch').value='op-import-diagnostic'"); await click('#loadLogs');
+    await waitFor(() => run("document.getElementById('logsContent').textContent.includes('ENOENT')"), 'unregistered import visible despite active project');
+    await run("document.getElementById('logsScope').value='project'; document.getElementById('logsScope').dispatchEvent(new Event('change'))");
+    await waitFor(() => run("document.querySelectorAll('#logsContent .log-entry').length === 0"), 'current project excludes failed new import');
+    await run("document.getElementById('logsScope').value='all'; document.getElementById('logsScope').dispatchEvent(new Event('change'))");
+    await waitFor(() => run("document.getElementById('logsContent').textContent.includes('op-import-diagnostic')"), 'global diagnostic scope restored');
     assert.equal(await run("document.querySelectorAll('#logsDialog img, #logsDialog script').length"), 0);
     await run("document.getElementById('logsSearch').value='<img src=x onerror=window.__xss=1>'"); await click('#loadLogs');
     await waitFor(() => run("document.querySelectorAll('#logsContent .log-entry').length === 1"), 'real server query filter');
@@ -59,8 +73,8 @@ async function main() {
     // The registry does not own knowledge bytes. Use its actual double-directory binding.
     const project = (await (await fetch(base + '/api/projects/aggregated')).json()).projects[0];
     const retained = path.join(project.knowledgePath, 'keep.md'); fs.writeFileSync(retained, '# 保留知识\n');
-    await run('window.confirm = () => true'); await click('[data-action="unbind"]');
-    await waitFor(() => run("document.getElementById('toast').textContent.includes('无法安全停止写入')"), 'offline writer prevents unsafe unbind');
+    await click('[data-action="unbind"]'); await click('#confirmUnbind');
+    await waitFor(() => run("document.getElementById('unbindFeedback').textContent.includes('无法安全停止写入')"), 'offline writer prevents unsafe unbind');
     assert.equal((await (await fetch(base + '/api/projects/aggregated')).json()).projects.length, 1);
     assert.deepEqual(fs.readdirSync(fixture.repo.path), codeFiles); assert.ok(fs.existsSync(retained));
     assert.equal(browser.exceptions.length, 0, JSON.stringify(browser.exceptions));

@@ -3,6 +3,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const AtomicFile = require('./atomic-file');
 const { DomainError, validateProjectId } = require('./contracts');
+const { resolveGitPath } = require('./git-path');
 
 const HOOK_NAME = 'post-commit';
 const HOOK_MARKER = '# PROJECT-KNOWLEDGE-HOOK ';
@@ -28,13 +29,12 @@ function runGit(repoPath, args) {
 function resolveGitHooksDir(_gitDir, repoPath) {
   if (!repoPath) throw new DomainError('INVALID_ARGUMENT', 'repoPath is required.');
   const absolute = path.resolve(repoPath);
-  const hooksPath = runGit(absolute, ['rev-parse', '--path-format=absolute', '--git-path', 'hooks']);
-  if (!hooksPath) throw new DomainError('HOOK_INVALID', 'Git returned an empty hooks path.', { status: 400 });
-  return path.resolve(absolute, hooksPath);
+  const hooksPath = runGit(absolute, ['rev-parse', '--git-path', 'hooks']);
+  return resolveGitPath(absolute, hooksPath);
 }
 
 function repoGitDir(repoPath) {
-  try { return runGit(path.resolve(repoPath), ['rev-parse', '--path-format=absolute', '--git-dir']); }
+  try { return resolveGitPath(path.resolve(repoPath), runGit(path.resolve(repoPath), ['rev-parse', '--git-dir'])); }
   catch { return null; }
 }
 

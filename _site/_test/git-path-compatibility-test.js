@@ -1,0 +1,80 @@
+const assert = require('assert/strict');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const { resolveGitPath } = require('../lib/git-path');
+const { StorageLayout } = require('../lib/storage-layout');
+const { SettingsStore } = require('../lib/settings-store');
+const { ProjectRegistryStore } = require('../lib/project-registry-store');
+const { ProjectStore } = require('../lib/project-store');
+const { ProjectLifecycleService } = require('../lib/project-lifecycle-service');
+const { BridgeAdapter } = require('../lib/bridge-adapter');
+const { Logger, LogRepository } = require('../lib/structured-logger');
+const hooks = require('../lib/hook-manager');
+
+(async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-git-path-'));
+  const repo = path.join(root, '中文 空格项目'); fs.mkdirSync(repo);
+  const git = (args, cwd = repo) => {
+    const result = spawnSync('git', args, { cwd, encoding: 'utf8', windowsHide: true });
+    assert.equal(result.status, 0, result.stderr); return result.stdout.trim();
+  };
+  for (const invalid of ['', '--path-format=absolute\n.git/hooks', '.git/hooks\nother', '--unsupported', '\0']) {
+    assert.throws(() => resolveGitPath(repo, invalid), { code: 'INVALID_ARGUMENT' });
+  }
+  assert.equal(resolveGitPath(repo, '.git/hooks\r\n'), path.join(repo, '.git', 'hooks'));
+  git(['init', '-q']); git(['config', 'user.name', 'Git Compatibility']); git(['config', 'user.email', 'git-compat@example.invalid']);
+  fs.writeFileSync(path.join(repo, 'README.md'), '# baseline\n'); git(['add', '.']); git(['commit', '-qm', 'baseline']);
+  const layout = new StorageLayout({ dataDir: path.join(root, 'data') });
+  const settingsStore = new SettingsStore({ layout });
+  const registryStore = new ProjectRegistryStore({ layout });
+  const projectStore = new ProjectStore({ layout });
+  await settingsStore.initialize({ knowledge: { rootPath: path.join(root, 'knowledge') } });
+  await registryStore.initialize();
+  const bridgeAdapter = new BridgeAdapter({ dataDir: layout.getDataDir(), bridgeHomeDir: path.join(root, 'bridge') });
+  assert.ok(bridgeAdapter.isAvailable());
+  const logger = new Logger({ layout });
+  const triggerScriptPath = path.resolve(__dirname, '../scripts/hook-trigger.js');
+  const options = { layout, settingsStore, registryStore, projectStore, bridgeAdapter, logger, triggerScriptPath };
+  const lifecycle = new ProjectLifecycleService(options);
+  const input = { localPath: repo, knowledgePath: path.join(root, 'knowledge', 'fresh'), projectId: 'project-git-compat' };
+  const preflight = await lifecycle.preflightImport(input);
+  assert.equal(preflight.ready, true);
+  assert.equal(preflight.checks.git.commonDir, path.join(repo, '.git'));
+  const imported = await lifecycle.importProject(input);
+  assert.equal(imported.hook.hookPath, path.join(repo, '.git', 'hooks', 'post-commit'));
+  assert.equal(imported.config.repoIdentity.commonDir, path.join(repo, '.git'));
+  const nested = path.join(repo, 'src'); fs.mkdirSync(nested);
+  assert.equal((await bridgeAdapter.resolveRepoIdentity(nested)).repoIdentity.commonDir, imported.config.repoIdentity.commonDir);
+  fs.appendFileSync(path.join(repo, 'README.md'), 'commit after import\n'); git(['add', '.']); git(['commit', '-qm', 'captured update']);
+  const sha = git(['rev-parse', 'HEAD']);
+  const journal = await bridgeAdapter.readEvents({ after: 0, limit: 100 });
+  const boundary = journal.events.find(event => event.commitSha === sha && event.schema === 'git-commit-boundary/v1');
+  assert.ok(boundary, 'real Git post-commit Hook must append a durable boundary');
+  assert.equal(boundary.repoIdentity.commonDir, path.join(repo, '.git'));
+  assert.equal(boundary.projectId, input.projectId);
+  await lifecycle.deleteProject(input.projectId);
+  const brokenRegistry = Object.create(registryStore);
+  brokenRegistry.add = async () => { throw new Error('diagnostic registry failure'); };
+  await assert.rejects(new ProjectLifecycleService({ ...options, registryStore: brokenRegistry }).importProject(input), /Project import failed/);
+  const failed = new LogRepository({ layout }).query({ event: 'project.import.failed' }).entries[0];
+  assert.equal(failed.error.message, 'diagnostic registry failure');
+  assert.equal(failed.phase, 'hook-verified');
+  const transaction = JSON.parse(fs.readFileSync(lifecycle.transactionPath(failed.operationId), 'utf8'));
+  assert.equal(transaction.phase, 'failed'); assert.equal(transaction.failurePhase, 'hook-verified');
+  assert.equal(hooks.readHookStatus({ repoPath: repo }).installed, false);
+  const worktree = path.join(root, '关联 工作树'); git(['worktree', 'add', '-qb', 'linked', worktree]);
+  const sharedHook = hooks.installHook({ repoPath: worktree, projectId: 'project-worktree', triggerScriptPath });
+  assert.equal(path.dirname(sharedHook.hookPath), path.join(repo, '.git', 'hooks'));
+  hooks.uninstallHook({ repoPath: worktree, projectId: 'project-worktree' });
+  for (const custom of ['.custom hooks', path.join(root, '绝对 hooks')]) {
+    git(['config', 'core.hooksPath', custom], worktree);
+    const installed = hooks.installHook({ repoPath: worktree, projectId: 'project-worktree', triggerScriptPath });
+    assert.equal(path.dirname(installed.hookPath), path.resolve(worktree, custom));
+    assert.equal(hooks.readHookStatus({ repoPath: worktree }).installed, true);
+    hooks.uninstallHook({ repoPath: worktree, projectId: 'project-worktree' });
+  }
+  await logger.close();
+  console.log(`git-path-compatibility-test PASS (${git(['--version'])}; import → real Hook → journal; worktrees/custom hooks; diagnostic phase)`);
+})().catch(error => { console.error(error.stack || error.message); process.exitCode = 1; });

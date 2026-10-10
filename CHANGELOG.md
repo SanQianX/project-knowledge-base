@@ -1,5 +1,18 @@
 # Changelog
 
+## [5.0.1] - 2026-10-10
+
+- Fix project import on Git versions before 2.31: query hooks and common Git
+  directories without `--path-format`, then resolve relative paths against the
+  Git command's working directory. Reject empty, multi-line or echoed-option
+  responses before writing hooks or repository identities.
+- Apply the same correction to commit capture and pin event-bridge console
+  0.7.1 so importing a project and capturing its next commit use consistent
+  workspace metadata. No previous data is migrated.
+- Keep import failure feedback visible with its error code and operation ID.
+  Persist the actual failed transaction stage; system diagnostics default to
+  all projects so failures of not-yet-registered imports are visible/exportable.
+
 ## [5.0.0] - 2026-10-10
 
 - Fresh-data-only web product. Default state moves to `~/.project-knowledge-v5`;

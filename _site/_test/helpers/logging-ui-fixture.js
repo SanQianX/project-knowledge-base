@@ -10,6 +10,7 @@ const { makeRepo } = require('../fixtures/make-git-repos');
 
 async function createLoggingUiFixture(options = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "pk-logging-ui-" + process.pid + "-"));
+  if (options.freshProduct) require('../../lib/product-data').initializeProductData(dataDir);
   const knowledgeRoot = path.join(dataDir, "knowledge-root");
   fs.mkdirSync(knowledgeRoot, { recursive: true });
   const repo = makeRepo({ kind: "one-commit" });

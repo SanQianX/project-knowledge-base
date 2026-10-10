@@ -66,6 +66,18 @@ async function main() {
     await waitFor(() => run("document.getElementById('importDialog').open && !document.getElementById('confirmImport').disabled"), 'setup returns to ready import');
     const values = await run("Object.fromEntries(['importCode','importKnowledge','importName','importDomain'].map(id=>[id,document.getElementById(id).value]))");
     assert.deepEqual(values, { importCode: repo, importKnowledge: knowledge, importName: '回归项目', importDomain: domainId });
+    const racedHook = path.join(repo, '.git', 'hooks', 'post-commit');
+    fs.writeFileSync(racedHook, '#!/bin/sh\necho third-party fixture\n');
+    await click('#confirmImport');
+    await waitFor(() => run("document.getElementById('preflightStatus').textContent.includes('HOOK_CONFLICT') && document.getElementById('preflightStatus').textContent.includes('操作 ID：op-')"), 'durable import failure feedback');
+    await new Promise(resolve => setTimeout(resolve, 750));
+    assert.ok(await run("document.getElementById('preflightStatus').textContent.includes('HOOK_CONFLICT')"), 'failed import must not turn back into a passed preflight');
+    assert.equal((await api('/api/projects/aggregated')).projects.length, 0);
+    assert.equal(fs.readFileSync(racedHook, 'utf8'), '#!/bin/sh\necho third-party fixture\n');
+    const failureLogs = (await api('/api/logs?event=project.import.failed')).entries;
+    assert.equal(failureLogs.length, 1); assert.equal(failureLogs[0].error.code, 'HOOK_CONFLICT');
+    assert.ok(await run(`document.getElementById('preflightStatus').textContent.includes(${JSON.stringify(failureLogs[0].operationId)})`), 'UI operation ID resolves to the persisted failure');
+    fs.unlinkSync(racedHook);
     await click('#confirmImport');
     await waitFor(() => run("!document.getElementById('importDialog').open && document.getElementById('projectDetail').textContent.includes('回归项目')"), 'import feedback', 30000);
     const selected = await run("document.getElementById('projectSelect').value");

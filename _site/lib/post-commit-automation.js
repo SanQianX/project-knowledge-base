@@ -27,7 +27,7 @@ async function handlePostCommitEvent(event = {}, deps = {}) {
   if (!resolved.registryStore.readDisplaySnapshot(projectId)) throw new DomainError('PROJECT_NOT_FOUND', 'Hook projectId is not registered.', { status: 404 });
   const config = resolved.projectStore.readConfig(projectId);
   const runtimeRoot = path.resolve(runGit(path.resolve(event.repoRoot), ['rev-parse', '--show-toplevel']).stdout);
-  const commonDir = path.resolve(runGit(runtimeRoot, ['rev-parse', '--path-format=absolute', '--git-common-dir']).stdout);
+  const commonDir = path.resolve(runtimeRoot, runGit(runtimeRoot, ['rev-parse', '--git-common-dir']).stdout);
   if (config.repoIdentity && config.repoIdentity.commonDir
     && !resolved.layout.pathsEqual(config.repoIdentity.commonDir, commonDir)) {
     if (fs.existsSync(config.repoPath)) {

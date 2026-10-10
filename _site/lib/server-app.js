@@ -234,12 +234,12 @@ async function inspectGitRepository(repoPath) {
     execGit(root, ['rev-parse', '--verify', 'HEAD']),
     execGit(root, ['branch', '--show-current']),
     execGit(root, ['status', '--porcelain=v1', '--untracked-files=normal']),
-    execGit(root, ['rev-parse', '--path-format=absolute', '--git-common-dir']),
+    execGit(root, ['rev-parse', '--git-common-dir']),
   ]);
   return {
     repoStatus: head.ok ? 'ok' : 'empty',
     repoPath: top.ok ? path.resolve(top.stdout.trim()) : root,
-    commonDir: commonDir.ok ? path.resolve(commonDir.stdout.trim()) : '',
+    commonDir: commonDir.ok ? path.resolve(root, commonDir.stdout.trim()) : '',
     headCommit: head.ok ? head.stdout.trim() : null,
     branch: branch.ok ? branch.stdout.trim() : '',
     dirty: status.ok && Boolean(status.stdout.trim()),

@@ -32,7 +32,7 @@
   </main>
 </div>
 <div id="drawerBackdrop" class="drawer-backdrop" hidden></div>
-<dialog id="logsDialog" class="reference-dialog"><div class="dialog-heading"><h2>系统诊断记录</h2><button data-close="logsDialog" aria-label="关闭">×</button></div><div class="actions"><input id="logsSearch" placeholder="查找失败原因或提交 SHA" aria-label="筛选诊断记录"><button id="loadLogs">查询</button><button id="exportLogs">导出诊断记录</button></div><div id="logsStatus" class="muted"></div><div id="logsContent"></div></dialog>
+<dialog id="logsDialog" class="reference-dialog"><div class="dialog-heading"><h2>系统诊断记录</h2><button data-close="logsDialog" aria-label="关闭">×</button></div><div class="actions"><select id="logsScope" aria-label="诊断范围"><option value="all">系统与所有项目</option><option value="project">当前项目</option></select><input id="logsSearch" placeholder="查找失败原因、操作 ID 或提交 SHA" aria-label="筛选诊断记录"><button id="loadLogs">查询</button><button id="exportLogs">导出诊断记录</button></div><div id="logsStatus" class="muted"></div><div id="logsContent"></div></dialog>
 <aside class="drawer" id="systemDrawer" hidden aria-label="系统状态">
   <header><h2>系统状态</h2><button id="closeSystem" class="icon-button" aria-label="关闭系统状态">×</button></header>
   <div class="drawer-content">

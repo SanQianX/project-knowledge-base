@@ -1,6 +1,6 @@
 {
   "name": "@sanqianx/project-knowledge",
-  "version": "5.0.0",
+  "version": "5.0.1",
   "description": "Knowledge base manager with Git integration, AI-driven analysis, and bilingual (zh-CN/en-US) knowledge output",
   "main": "_site/server.js",
   "scripts": {
@@ -80,7 +80,7 @@
     "@huggingface/transformers": "3.8.1",
     "@lancedb/lancedb": "0.31.0",
     "@modelcontextprotocol/sdk": "1.29.0",
-    "@sanqianx/ai-coding-event-bridge-console": "0.7.0",
+    "@sanqianx/ai-coding-event-bridge-console": "0.7.1",
     "@sanqianx/vector-hub": "1.0.7",
     "buffer": "^6.0.3",
     "cheerio": "^1.2.0",

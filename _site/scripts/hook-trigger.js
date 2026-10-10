@@ -8,6 +8,7 @@ const { readLiveEndpoint } = require('../lib/runtime-endpoint');
 const { StorageLayout } = require('../lib/storage-layout');
 const { Logger } = require('../lib/structured-logger');
 const { BridgeAdapter } = require('../lib/bridge-adapter');
+const { resolveGitPath } = require('../lib/git-path');
 
 let bridgeIdentityModule = null;
 try {
@@ -96,11 +97,11 @@ function post(body) {
       if (toplevel) {
         let workspaceRoot = path.resolve(toplevel);
         try { workspaceRoot = fs.realpathSync.native(workspaceRoot) || workspaceRoot; } catch { workspaceRoot = path.resolve(toplevel); }
-        const commonDir = git(['rev-parse', '--path-format=absolute', '--git-common-dir']);
+        const commonDir = git(['rev-parse', '--git-common-dir']);
         const remoteRaw = git(['config', '--get', 'remote.origin.url']);
         repoIdentity = bridgeIdentityModule.buildRepoIdentityV1({
           workspaceRoot,
-          commonDir: commonDir ? path.resolve(commonDir) : null,
+          commonDir: commonDir ? resolveGitPath(repoRoot, commonDir) : null,
           remote: remoteRaw ? bridgeIdentityModule.normalizeGitUrl(remoteRaw) : null,
         });
       }

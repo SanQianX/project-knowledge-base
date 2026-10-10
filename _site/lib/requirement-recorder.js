@@ -98,9 +98,9 @@ class GitReader {
       const top = topResult.status === 0 && String(topResult.stdout || '').trim()
         ? path.resolve(String(topResult.stdout).trim())
         : null;
-      const commonResult = this.run(repoPath, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
+      const commonResult = this.run(repoPath, ['rev-parse', '--git-common-dir']);
       const commonDir = commonResult.status === 0 && String(commonResult.stdout || '').trim()
-        ? path.resolve(String(commonResult.stdout).trim())
+        ? path.resolve(repoPath, String(commonResult.stdout).trim())
         : null;
       let repoIdentity = null;
       if (top && bridgeIdentityModule) {

@@ -1,8 +1,8 @@
 {
   "schema": "project-knowledge/module-content/v1",
   "productFiles": {
-    "ui/index.html": "fd79551591729f6874c95089e479d46f208ab3b45cf45ba21eff1f6967757f7d",
-    "ui/product.js": "d5fca94df54075d598f271e01ea41ac9cce3a9847ea4f246e4f20c47daed43ed",
+    "ui/index.html": "d090decbb17ffc17ac2ac0ec63b69979e0436d712959e5ca49a02d6d9de7e59d",
+    "ui/product.js": "3d04538ca38f6cc1b85ae0337d61c244b6769e4f15f9d029e8ab096991d17dfb",
     "ui/product.css": "1e68f087cec85a69f4497492d31fd1dd8712cf5176b0c721ce765de36ce606e1"
   },
   "modules": {
@@ -174,12 +174,12 @@
     "eventBridge": {
       "name": "@sanqianx/ai-coding-event-bridge-console",
       "installName": "@sanqianx/ai-coding-event-bridge-console",
-      "version": "0.7.0",
+      "version": "0.7.1",
       "files": {
         "LICENSE": "94a3bded67f76ec9f6333ad3370111bcb6e5cadbeb6f306a8112f9543320ecc2",
         "README.md": "847242d93395aae17b42bbaa7fc8e36e6f89edecf11a1639b94b34c98729e1a9",
         "console/index.html": "680e6393c9ef88ea35c1eabff537e0b10f7a91c55986f18bca6bfe2a333eed6e",
-        "package.json": "63b9846552b8ac3b7e361bd86bb1d9389d55e7232934aaa939b168e43ad650b7",
+        "package.json": "a6c9fc47669a5aa64dd48d38d3fc2b4fb07322cfb41bbd42b0ac174f37560715",
         "src/agent-detect.js": "06d58150c4295f7d5980ac47fd6fb1a680f1b7c27fd3dcd3f57049825dc5f092",
         "src/bin.js": "e443cfabb8df1a694c9e2415a292db81f183d9e31b7fe8f5f9a14d2a09d03052",
         "src/bridge/bin/commit-boundary.js": "2c87126d9d6467ddae13acc1d0997f2124a68174738b8cd6f8614e7eeccb3d0d",
@@ -202,7 +202,7 @@
         "src/bridge/core/normalizer.js": "34b4023efada0cfdcaaba98775b072041eaf623eb7fde48953654dc27d470ae1",
         "src/bridge/core/paths.js": "6e829c00105d3b9214942f33af6225b338c668ff4cdda5c3ab92cb759d54be30",
         "src/bridge/core/project-registry.js": "8c5cc8e18d55af1a0c2d682c25ea1c37eb6f4687cf3eaa5997fc57532560d866",
-        "src/bridge/core/repo-context.js": "ea6c9638efcb7abdb45916747a4984a97c6df31cf3fc601d221e1730fa01409b",
+        "src/bridge/core/repo-context.js": "1627d416fd6aaa43d8c4be8ce5097bb69244b1afe7f1ce5e9f71956c5542ce3f",
         "src/bridge/core/runtime-home.js": "e68a3c927b02ca27299755c60c8f709f7ce97c9f4c5080deefe518bf60d9d989",
         "src/bridge/core/semver.js": "7f87ed40f3af3ae0480abc9934946358f0caa5d951472d5892b088aa468ec0f1",
         "src/bridge/core/turn-identity.js": "4ee79410d0122ca93cea565591c183db6bff64b0a467f50a4e590de4ee78c399",

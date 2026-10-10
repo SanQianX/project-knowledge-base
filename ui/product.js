@@ -25,7 +25,7 @@
     if (init.body) init.headers = { 'Content-Type': 'application/json', ...init.headers };
     const response = await fetch(url, init);
     const data = await response.json();
-    if (!response.ok || data.ok === false && !allowNotReady) throw Object.assign(new Error(data.error?.message || data.message || (typeof data.error === 'string' ? data.error : `请求失败 (${response.status})`)), { code: data.error?.code || data.error });
+    if (!response.ok || data.ok === false && !allowNotReady) throw Object.assign(new Error(data.error?.message || data.message || (typeof data.error === 'string' ? data.error : `请求失败 (${response.status})`)), { code: data.error?.code || data.error, operationId: data.error?.operationId || response.headers.get('X-Operation-Id') || '' });
     return data;
   }
   function toast(text) { $('toast').textContent = text; $('toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('toast').hidden = true; }, 4000); }
@@ -188,16 +188,17 @@
     const epoch = ++logEpoch;
     logStream?.close(); logStream = null;
     const params = new URLSearchParams({ pageSize: '100', q: $('logsSearch').value.trim() });
-    if (state.projectId) params.set('projectId', state.projectId);
+    const projectOnly = $('logsScope').value === 'project' && Boolean(state.projectId);
+    if (projectOnly) params.set('projectId', state.projectId);
     const result = await api(`/api/logs?${params}`);
     if (epoch !== logEpoch || !$('logsDialog').open) return;
     $('logsDialog').dataset.streamCursor = result.streamCursor || '';
     $('logsContent').replaceChildren();
     for (const record of [...(result.entries || [])].reverse()) appendLog(record);
-    $('logsStatus').textContent = `${(result.entries || []).length} 条诊断记录 · 当前项目`;
+    $('logsStatus').textContent = `${(result.entries || []).length} 条诊断记录 · ${projectOnly ? '当前项目' : '系统与所有项目'}`;
     if (!$('logsSearch').value.trim()) {
       const streamParams = new URLSearchParams({ streamCursor: result.streamCursor || '' });
-      if (state.projectId) streamParams.set('projectId', state.projectId);
+      if (projectOnly) streamParams.set('projectId', state.projectId);
       logStream = new EventSource(`/api/logs/stream?${streamParams}`);
       logStream.addEventListener('logs/appended', event => { if (epoch === logEpoch && $('logsDialog').open) appendLog(JSON.parse(event.data).record); });
     }
@@ -350,6 +351,7 @@
   on('engineDialog', 'close', () => post('engine', { type: 'kb:visibility', visible: false }));
   on('openLogs', 'click', async () => { closeSystem(); $('logsDialog').showModal(); await loadLogs(); });
   on('logsDialog', 'close', () => { logEpoch++; logStream?.close(); logStream = null; });
+  on('logsScope', 'change', loadLogs);
   on('copyReference', 'click', async () => {
     const text = $('referenceMeta').textContent + '\n\n' + $('referenceContent').textContent;
     try { await navigator.clipboard.writeText(text); }
@@ -357,7 +359,7 @@
     toast('已复制知识与来源。');
   });
   on('loadLogs', 'click', loadLogs);
-  on('exportLogs', 'click', async () => { const params = new URLSearchParams({ q: $('logsSearch').value.trim() }); if (state.projectId) params.set('projectId', state.projectId); const response = await fetch(`/api/logs/export?${params}`); if (!response.ok) throw new Error('诊断导出失败。'); const blob = await response.blob(); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'knowledge-diagnostics.jsonl'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); });
+  on('exportLogs', 'click', async () => { const params = new URLSearchParams({ q: $('logsSearch').value.trim() }); if ($('logsScope').value === 'project' && state.projectId) params.set('projectId', state.projectId); const response = await fetch(`/api/logs/export?${params}`); if (!response.ok) throw new Error('诊断导出失败。'); const blob = await response.blob(); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'knowledge-diagnostics.jsonl'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); });
   on('createDomain', 'click', () => { $('domainForm').reset(); $('domainDialog').showModal(); });
   on('domainForm', 'submit', async e => { e.preventDefault(); await api('/api/domains', { method: 'POST', body: Object.fromEntries(new FormData(e.target)) }); $('domainDialog').close(); await refreshRegistry(); });
   on('memoryForm', 'submit', async e => { e.preventDefault(); await api(`/api/engine/memories/${encodeURIComponent(editingMemoryId)}`, { method: 'PATCH', body: { text: $('memoryText').value } }); $('memoryDialog').close(); await refreshSnapshot(); });
@@ -388,8 +390,15 @@
   on('importForm', 'submit', async e => {
     e.preventDefault(); if (!state.preflight?.ready || state.preflight.plannedGitInit && !$('importForm').elements.confirmGitInit.checked || state.preflight.checks.hook?.replacementProjectId && !$('importForm').elements.confirmReplaceHook.checked) return;
     $('confirmImport').disabled = true; $('confirmImport').textContent = '正在登记…';
-    try { const result = await api('/api/projects/import', { method: 'POST', body: importInput() }); state.projectId = result.projectId; state.epoch++; $('importDialog').close(); await refreshRegistry(); Object.keys(frames).forEach(frameContext); setView('projects'); toast(Object.values(result.modules).every(m => m.ok) ? '项目已导入，四个模块已连接。' : '项目已导入，部分接线待恢复。'); }
-    finally { $('confirmImport').textContent = '导入项目'; if ($('importDialog').open) checkImport(); }
+    let failed = false, registered = false;
+    try { const result = await api('/api/projects/import', { method: 'POST', body: importInput() }); registered = true; state.projectId = result.projectId; state.epoch++; $('importDialog').close(); await refreshRegistry(); Object.keys(frames).forEach(frameContext); setView('projects'); toast(Object.values(result.modules).every(m => m.ok) ? '项目已导入，四个模块已连接。' : '项目已导入，部分接线待恢复。'); }
+    catch (error) {
+      failed = true;
+      if (registered) { toast(`项目已登记，但页面状态刷新失败：${error.message}`); return; }
+      $('preflightStatus').textContent = `导入失败：${error.message}\n错误码：${error.code || 'UNKNOWN'}${error.operationId ? `\n操作 ID：${error.operationId}` : ''}\n请在系统诊断记录中查看详细原因。`;
+      $('preflightStatus').classList.add('issue'); $('confirmImport').disabled = false;
+    }
+    finally { $('confirmImport').textContent = '导入项目'; if ($('importDialog').open && !failed) checkImport(); }
   });
   window.addEventListener('hashchange', () => setView(location.hash.slice(1)));
   window.addEventListener('offline', () => {

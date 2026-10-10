@@ -6,6 +6,7 @@ const { DomainError, createId } = require('./contracts');
 const AtomicFile = require('./atomic-file');
 const hookManagerDefault = require('./hook-manager');
 const { resolveEffectiveAiProfile } = require('./ai-profile-resolver');
+const { resolveGitPath } = require('./git-path');
 
 function slugify(value) {
   const slug = String(value || '').trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
@@ -86,12 +87,12 @@ class ProjectLifecycleService {
         checks.git = { ok: false, status: 'non-git', plannedInit: true, message: 'Directory is not a Git repository. Import will run `git init` before proceeding.' };
       } else {
         const head = runGit(localPath, ['rev-parse', '--verify', 'HEAD'], { allowFailure: true });
-        const commonDir = runGit(localPath, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
+        const commonDir = runGit(localPath, ['rev-parse', '--git-common-dir']);
         const branch = runGit(localPath, ['branch', '--show-current'], { allowFailure: true });
         repoInspection = {
           ok: true,
           repoPath: top.ok ? path.resolve(top.stdout) : path.resolve(localPath),
-          commonDir: commonDir.ok ? path.resolve(commonDir.stdout) : '',
+          commonDir: commonDir.ok ? resolveGitPath(localPath, commonDir.stdout) : '',
           headCommit: head.ok ? head.stdout : null,
           branch: branch.ok ? branch.stdout : '',
           emptyRepo: !head.ok,
@@ -270,9 +271,9 @@ class ProjectLifecycleService {
       journal.gitInitialized = initialized.ok;
     }
     const top = runGit(repoPath, ['rev-parse', '--show-toplevel']).stdout;
-    const commonDir = runGit(repoPath, ['rev-parse', '--path-format=absolute', '--git-common-dir']).stdout;
+    const commonDir = runGit(repoPath, ['rev-parse', '--git-common-dir']).stdout;
     const head = runGit(repoPath, ['rev-parse', '--verify', 'HEAD'], { allowFailure: true });
-    return { repoPath: path.resolve(top), commonDir: path.resolve(commonDir), head: head.ok ? head.stdout : null };
+    return { repoPath: path.resolve(top), commonDir: resolveGitPath(repoPath, commonDir), head: head.ok ? head.stdout : null };
   }
 
   async importProject(input = {}) {
@@ -376,14 +377,18 @@ class ProjectLifecycleService {
       await log.info?.('project.import.completed', 'Project import completed.', { projectId, phase: 'registry-commit', durationMs: Date.now() - Date.parse(journal.startedAt) });
       return { ok: true, operationId, projectId, config: created.config, state: created.state, hook, gitInitialized: journal.gitInitialized === true };
     } catch (error) {
+      journal.failurePhase = journal.phase;
       const rollbackWarnings = await this.rollbackImport(journal);
       journal.phase = 'failed';
       journal.failedAt = new Date().toISOString();
       journal.error = { code: error.code || '', message: String(error.message || error) };
       journal.rollbackWarnings = rollbackWarnings;
       this.writeJournal(journal);
-      await log.error?.('project.import.failed', 'Project import failed.', { projectId: journal.projectId || '', phase: journal.phase, error, context: { rollbackWarnings } });
-      if (error instanceof DomainError) throw error;
+      await log.error?.('project.import.failed', 'Project import failed.', { projectId: journal.projectId || '', phase: journal.failurePhase, error, context: { rollbackWarnings } });
+      if (error instanceof DomainError) {
+        if (!error.operationId) error.operationId = operationId;
+        throw error;
+      }
       throw new DomainError('INVALID_ARGUMENT', 'Project import failed.', { status: 500, operationId, cause: error, details: { rollbackWarnings } });
     }
   }
