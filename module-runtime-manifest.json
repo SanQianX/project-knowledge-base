@@ -1,9 +1,9 @@
 {
   "schema": "project-knowledge/module-content/v1",
   "productFiles": {
-    "ui/index.html": "d090decbb17ffc17ac2ac0ec63b69979e0436d712959e5ca49a02d6d9de7e59d",
-    "ui/product.js": "3d04538ca38f6cc1b85ae0337d61c244b6769e4f15f9d029e8ab096991d17dfb",
-    "ui/product.css": "1e68f087cec85a69f4497492d31fd1dd8712cf5176b0c721ce765de36ce606e1"
+    "ui/index.html": "e7291caab778eba3c5499d8286804ad1f4ef31c87a957f69c8fb77befc01321b",
+    "ui/product.js": "1a6ddedd97b00c3f798c13a0a55b0f63790e701483492bc97d28cae4034efaf8",
+    "ui/product.css": "73554abf3f951ea01a2bfe2df81748b702a6ca4488eea16bfe5afe04ef1dea70"
   },
   "modules": {
     "terminal": {
@@ -174,17 +174,17 @@
     "eventBridge": {
       "name": "@sanqianx/ai-coding-event-bridge-console",
       "installName": "@sanqianx/ai-coding-event-bridge-console",
-      "version": "0.7.1",
+      "version": "0.7.2",
       "files": {
         "LICENSE": "94a3bded67f76ec9f6333ad3370111bcb6e5cadbeb6f306a8112f9543320ecc2",
-        "README.md": "847242d93395aae17b42bbaa7fc8e36e6f89edecf11a1639b94b34c98729e1a9",
-        "console/index.html": "680e6393c9ef88ea35c1eabff537e0b10f7a91c55986f18bca6bfe2a333eed6e",
-        "package.json": "a6c9fc47669a5aa64dd48d38d3fc2b4fb07322cfb41bbd42b0ac174f37560715",
-        "src/agent-detect.js": "06d58150c4295f7d5980ac47fd6fb1a680f1b7c27fd3dcd3f57049825dc5f092",
+        "README.md": "4699558a9498f93a83587523ef5cae019d2146867f355134ea27100ac6245769",
+        "console/index.html": "bdc61db0ca9e6b5d8886418c1c03df141f39ab722f50d0c16bba75fe57ac46f0",
+        "package.json": "f6b965a9ce9440039d96767c7d126a8149cffa56559693955cca15b0707bcd60",
+        "src/agent-detect.js": "2a4752218e6cdb4151ae9796b23558c2dd94b55217a20fa1f1a76f506bb2f781",
         "src/bin.js": "e443cfabb8df1a694c9e2415a292db81f183d9e31b7fe8f5f9a14d2a09d03052",
         "src/bridge/bin/commit-boundary.js": "2c87126d9d6467ddae13acc1d0997f2124a68174738b8cd6f8614e7eeccb3d0d",
         "src/bridge/connectors/capture-guard.js": "aa9c51a6012966c5b6eb66a40b61ada61fd2cfd43fd4f6985d7b655421e8a1e3",
-        "src/bridge/connectors/claude-code/hook-entry.js": "abc224d4f76d372bc02649c5e1005674d089a3dbd83e09ce4c35a33b3a75c937",
+        "src/bridge/connectors/claude-code/hook-entry.js": "c88b9ace27e4d148ee7b04724ec2f990a0c71c6e59a4d22afb4c9a8e2e72048e",
         "src/bridge/connectors/claude-code/notify.js": "4325684ac92c1a2e531aefc5cbcbc886dc2b58080c410ee5e879574593f077cd",
         "src/bridge/connectors/codex/cursor-store.js": "077784e9c6b895dde95247706381dbaca68892e1382f3a957c3e90efb51059f5",
         "src/bridge/connectors/codex/hook-entry.js": "d180a3713609b251ba8a9fdffbcf202346b1098ce4e07cd3ae696216a9f56e96",
@@ -199,21 +199,21 @@
         "src/bridge/core/journal-router.js": "5fe48ae4240034f030807c80bdba35c6ef2cb7bfa3fa310105ce0fb77d272131",
         "src/bridge/core/journal.js": "13c72396c970e6acd9a97900a926daa108aded01d8bb3735213e0feff8aa20b6",
         "src/bridge/core/lock.js": "484988ce593d138183e7d94648ece97c88661e7fa8379f0ef7335a634fe15ba3",
-        "src/bridge/core/normalizer.js": "34b4023efada0cfdcaaba98775b072041eaf623eb7fde48953654dc27d470ae1",
+        "src/bridge/core/normalizer.js": "e8eaa3582538c8f45dfc8d3ceb21c1e2f46347917d086436cfd361d32f62302e",
         "src/bridge/core/paths.js": "6e829c00105d3b9214942f33af6225b338c668ff4cdda5c3ab92cb759d54be30",
         "src/bridge/core/project-registry.js": "8c5cc8e18d55af1a0c2d682c25ea1c37eb6f4687cf3eaa5997fc57532560d866",
         "src/bridge/core/repo-context.js": "1627d416fd6aaa43d8c4be8ce5097bb69244b1afe7f1ce5e9f71956c5542ce3f",
-        "src/bridge/core/runtime-home.js": "e68a3c927b02ca27299755c60c8f709f7ce97c9f4c5080deefe518bf60d9d989",
+        "src/bridge/core/runtime-home.js": "f2bfffba20c8256259cecc1014261897a4d6f721807c04b2e4d2b3dc973f14e1",
         "src/bridge/core/semver.js": "7f87ed40f3af3ae0480abc9934946358f0caa5d951472d5892b088aa468ec0f1",
         "src/bridge/core/turn-identity.js": "4ee79410d0122ca93cea565591c183db6bff64b0a467f50a4e590de4ee78c399",
         "src/bridge/index.js": "7f56d08fdcfa815a45f50c73b27d0627497ac364da55cd8e6635351f734b57b2",
         "src/bridge/installers/claude-code/installer.js": "c0a8a39d654e886fad838a54a2acb535096384d6307c88eb5dc813992efefbd2",
         "src/bridge/installers/codex/installer.js": "0c8542c2320b7e7b654ad22163bd5ee26f3792545f521e096ee5c795f2ec9303",
         "src/bridge/installers/opencode/installer.js": "27f2ed3629e55b4ee083c6d0d4ceafc614145102ead2ba99630ad979c120ab08",
-        "src/bridge/installers/zcode/installer.js": "8bca7dfd4a31cf632a86480282c28a665ee23dc3838d643dcd883db6cc053af7",
+        "src/bridge/installers/zcode/installer.js": "625343d6a9fc81b81fb3d1fcd12ac6cdf6d33fae45925631db88aaf74fe497ff",
         "src/bridge/query/conversation-query.js": "89db83f3f4bf5e2807603589da9fa03b4b494e1cb94afc772e57572ccdcb0854",
         "src/pick-folder.js": "70f55df999262b90433f2b4251aa69dd70a23b55a84756b5f1d24dbeacfbda31",
-        "src/server.js": "b2b62e5e7404d82dfc6e749d1860e3cfa072a9f669e61777355eed33762e6b5d"
+        "src/server.js": "d521073673b4e1cc84cc9fab46aae5c07f3274f7cdcf20f78696b7808be5103c"
       }
     }
   }

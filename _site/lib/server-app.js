@@ -1292,13 +1292,13 @@ function createRequestHandler(runtime, options = {}) {
       // Unified Integration Setup surface: one action manages Knowledge
       // Integration and Development Capture per client, with separate status.
       if (method === 'GET' && pathname === '/api/integrations/status') {
-        const manager = new IntegrationManager({ rootDir: runtime.rootDir });
-        const summary = await manager.statusAll({});
+        const manager = new IntegrationManager({ ...options.integrationOptions, rootDir: runtime.rootDir, logger: runtime.logger, operationId: requestOperationId, bridgeHomeDir: runtime.bridgeAdapter.hookBinding().bridgeHomeDir });
+        const summary = await manager.statusAll({ captureOnly: url.searchParams.get('captureOnly') === '1' });
         return send(res, 200, { ok: true, ...summary });
       }
       if (method === 'POST' && pathname === '/api/integrations/install') {
         const body = await readJsonBody(req);
-        const manager = new IntegrationManager({ rootDir: runtime.rootDir });
+        const manager = new IntegrationManager({ ...options.integrationOptions, rootDir: runtime.rootDir, logger: runtime.logger, operationId: requestOperationId, bridgeHomeDir: runtime.bridgeAdapter.hookBinding().bridgeHomeDir });
         const clients = Array.isArray(body.clients) && body.clients.length
           ? body.clients.map(client => String(client))
           : undefined;
@@ -1308,12 +1308,13 @@ function createRequestHandler(runtime, options = {}) {
           captureOnly: body.captureOnly === true,
           scope: body.scope || 'user',
         });
-        await runtime.logger.info('integrations.install_completed', 'Integration setup completed.', { context: { clients: summary.clients.map(entry => entry.client) } });
-        return send(res, 200, { ok: true, ...summary });
+        const complete = summary.bridge.ok && summary.clients.every(entry => (!entry.knowledgeIntegration || entry.knowledgeIntegration.ok) && (!entry.developmentCapture || entry.developmentCapture.ok));
+        await runtime.logger[complete ? 'info' : 'error'](`integrations.install_${complete ? 'completed' : 'failed'}`, complete ? 'Agent 接入完成。' : 'Agent 接入未完成，请查看各工具的失败原因。', { operationId: requestOperationId, context: { clients: summary.clients.map(entry => entry.client) } });
+        return send(res, 200, { ok: true, complete, operationId: requestOperationId, ...summary });
       }
       if (method === 'POST' && pathname === '/api/integrations/uninstall') {
         const body = await readJsonBody(req);
-        const manager = new IntegrationManager({ rootDir: runtime.rootDir });
+        const manager = new IntegrationManager({ ...options.integrationOptions, rootDir: runtime.rootDir, logger: runtime.logger, operationId: requestOperationId, bridgeHomeDir: runtime.bridgeAdapter.hookBinding().bridgeHomeDir });
         if (body.disableAllCapture === true) {
           const summary = await manager.disableAllCapture({});
           return send(res, 200, { ok: true, ...summary });
@@ -1321,9 +1322,9 @@ function createRequestHandler(runtime, options = {}) {
         const clients = Array.isArray(body.clients) && body.clients.length
           ? body.clients.map(client => String(client))
           : undefined;
-        const knowledgeResults = await manager.operate('uninstall', clients && clients.length ? clients : manager.detectClients(), { scope: body.scope || 'user' });
+        const knowledgeResults = body.captureOnly === true ? [] : await manager.operate('uninstall', clients && clients.length ? clients : manager.detectClients(), { scope: body.scope || 'user' });
         const captureResults = body.knowledgeOnly === true ? [] : await manager.operateCapture('uninstall', clients && clients.length ? clients : manager.detectClients(), {});
-        return send(res, 200, { ok: true, clients: knowledgeResults, capture: captureResults });
+        return send(res, 200, { ok: true, complete: [...knowledgeResults, ...captureResults].every(entry => entry.ok), operationId: requestOperationId, clients: knowledgeResults, capture: captureResults });
       }
 
       if (method === 'GET' && pathname === '/api/ai-profiles') {

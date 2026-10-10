@@ -20,17 +20,19 @@ try {
 const INTEGRATION_NAME = 'project-knowledge';
 const MARKETPLACE_NAME = 'project-knowledge';
 const DEFAULT_MARKETPLACE_SOURCE = 'SanQianX/project-knowledge-base';
-const SUPPORTED_CLIENTS = ['claude', 'opencode', 'codex'];
+const SUPPORTED_CLIENTS = ['claude', 'opencode', 'codex', 'zcode'];
 const DEFAULT_BRIDGE_CONSUMER = 'project-knowledge';
 const CLIENT_LABELS = {
   claude: 'Claude Code',
   opencode: 'OpenCode',
   codex: 'Codex',
+  zcode: 'ZCode',
 };
 const CLIENT_METHOD_SUFFIX = {
   claude: 'Claude',
   opencode: 'OpenCode',
   codex: 'Codex',
+  zcode: 'ZCode',
 };
 
 function normalizeClient(value) {
@@ -323,26 +325,28 @@ class IntegrationManager {
     this.commandResolver = options.commandResolver || defaultCommandResolver;
     this.dryRun = Boolean(options.dryRun);
     this.logger = options.logger || null;
+    this.operationId = options.operationId || '';
     this.planned = [];
     this.bridge = options.bridgeModule || bridgeModule;
     this.bridgeConsumerName = options.bridgeConsumerName || DEFAULT_BRIDGE_CONSUMER;
     this.bridgeHomeDir = options.bridgeHomeDir
       || this.env.AI_CODING_EVENT_BRIDGE_HOME
       || path.join(resolveDataDirPath({ dataDir: this.env.KB_DATA_DIR || '', homeDir: this.homeDir }), 'events');
-    this.claudeSettingsFile = options.claudeSettingsFile || '';
-    this.codexConfigFile = options.codexConfigFile || '';
-    this.openCodePluginsDir = options.openCodePluginsDir || '';
+    this.claudeSettingsFile = options.claudeSettingsFile || path.join(this.homeDir, '.claude', 'settings.json');
+    this.codexConfigFile = options.codexConfigFile || path.join(this.homeDir, '.codex', 'config.toml');
+    this.openCodePluginsDir = options.openCodePluginsDir || path.join(openCodeConfigDir(this.homeDir, this.env), 'plugin');
+    this.zcodeConfigFile = options.zcodeConfigFile || path.join(this.homeDir, '.zcode', 'cli', 'config.json');
   }
 
   _bridgeFacade() {
     return this.bridge.createBridge({ homeDir: this.bridgeHomeDir });
   }
 
-  _captureInstallerOptions() {
+  _captureInstallerOptions(client) {
     return {
       homeDir: this.bridgeHomeDir,
       settingsFile: this.claudeSettingsFile || undefined,
-      configFile: this.codexConfigFile || undefined,
+      configFile: client === 'zcode' ? this.zcodeConfigFile : this.codexConfigFile,
       pluginsDir: this.openCodePluginsDir || undefined,
     };
   }
@@ -382,6 +386,42 @@ class IntegrationManager {
 
   // ---- Development Capture connectors (Bridge hooks / notify / plugin) ----
 
+  async captureOperation(operation, client, options = {}) {
+    const startedAt = Date.now();
+    const context = { client, operation };
+    try {
+      const result = await this[`${operation}Capture${CLIENT_METHOD_SUFFIX[client]}`](options);
+      const ok = !result.conflict && result.state !== 'failed';
+      if (operation !== 'status' || !ok) this.log(ok ? 'info' : 'error', `integration.capture.${ok ? 'completed' : 'failed'}`, ok ? 'Agent 采集接线操作完成。' : 'Agent 采集接线未完成。', { operationId: this.operationId, durationMs: Date.now() - startedAt, error: ok ? undefined : Object.assign(new Error(result.detail), { code: 'CAPTURE_CONFLICT' }), context });
+      return { ok, ...result, ...(!ok ? { error: { code: 'CAPTURE_CONFLICT', message: result.detail } } : {}) };
+    } catch (error) {
+      this.log('error', 'integration.capture.failed', 'Agent 采集接线操作失败。', { operationId: this.operationId, durationMs: Date.now() - startedAt, error, context });
+      return { ok: false, state: 'failed', installed: false, detail: error.message, error: { code: error.code || 'CAPTURE_FAILED', message: error.message } };
+    }
+  }
+
+  async installCaptureZCode() {
+    if (this.dryRun) {
+      this.planned.push({ command: 'bridge', args: ['installZcodeHook', this.bridgeHomeDir] });
+      return { state: 'planned', installed: false, detail: '计划接入 ZCode 会话采集，未修改配置。' };
+    }
+    await this.bridge.installers.zcode.installZcodeHook(this._captureInstallerOptions('zcode'));
+    const status = await this.statusCaptureZCode();
+    if (!status.installed) throw new Error('ZCode Hook 写入后校验失败，请检查 hooks.enabled 与事件配置。');
+    return status;
+  }
+
+  async statusCaptureZCode() {
+    const status = await this.bridge.installers.zcode.statusZcodeHook(this._captureInstallerOptions('zcode'));
+    return { state: status.installed ? 'installed' : 'not-installed', installed: status.installed, conflict: false, detail: status.installed ? '已配置用户输入与回答采集；请重新打开 ZCode 会话。' : 'ZCode 会话采集尚未接入。' };
+  }
+
+  async uninstallCaptureZCode() {
+    if (this.dryRun) return { state: 'planned', detail: '计划移除 ZCode 采集，未修改配置。' };
+    await this.bridge.installers.zcode.uninstallZcodeHook(this._captureInstallerOptions('zcode'));
+    return { state: 'removed', installed: false, detail: '已移除 ZCode 托管采集，保留第三方配置与已有记录。' };
+  }
+
   async installCaptureClaude() {
     if (this.dryRun) {
       this.planned.push({ command: 'bridge', args: ['installClaudeCodeHook', this.bridgeHomeDir] });
@@ -397,7 +437,7 @@ class IntegrationManager {
       state: status.installed ? 'installed' : 'not-installed',
       installed: status.installed,
       conflict: false,
-      detail: status.installed ? `managed events: ${status.managedEvents.join(', ')}` : 'managed hooks not installed',
+      detail: status.installed ? '已配置用户输入与回答采集。' : '会话采集 Hook 尚未配置。',
     };
   }
 
@@ -453,7 +493,7 @@ class IntegrationManager {
       state: status.installed ? 'installed' : status.thirdParty ? 'conflict' : 'not-installed',
       installed: Boolean(status.installed),
       conflict: Boolean(status.thirdParty),
-      detail: status.installed ? 'managed notify installed' : status.thirdParty ? 'third-party notify present' : 'notify not installed',
+      detail: status.installed ? '已配置提交回合后的会话采集。' : status.thirdParty ? '已有第三方通知配置，不会覆盖；请查看诊断记录。' : '会话采集通知尚未配置。',
     };
   }
 
@@ -481,7 +521,7 @@ class IntegrationManager {
       state: status.installed ? 'installed' : 'not-installed',
       installed: Boolean(status.installed),
       conflict: false,
-      detail: status.installed ? 'managed plugin installed' : `plugin not installed (${status.thirdPartyFiles} third-party files preserved)`,
+      detail: status.installed ? '已配置会话采集插件。' : '会话采集插件尚未配置，保留其他插件。',
     };
   }
 
@@ -510,8 +550,20 @@ class IntegrationManager {
   }
 
   detectClients() {
-    return SUPPORTED_CLIENTS.filter(client => Boolean(this.executable(client)));
+    return SUPPORTED_CLIENTS.filter(client => Boolean(this.executable(client)) || client === 'zcode' && this.captureConfigFound(client));
   }
+
+  captureConfigFound(client) {
+    const target = { claude: this.claudeSettingsFile, codex: this.codexConfigFile, opencode: path.dirname(this.openCodePluginsDir), zcode: this.zcodeConfigFile }[client];
+    try { const stat = fs.statSync(target); return client === 'opencode' ? stat.isDirectory() : stat.isFile(); } catch { return false; }
+  }
+
+  // Capture support does not imply a verified MCP/plugin installer. Never
+  // present ZCode knowledge retrieval as installed merely because hooks exist.
+  statusZCode() { return { state: 'not-supported', supported: false, installed: false, detail: 'ZCode 当前支持会话采集；知识检索插件未接入，不会自动安装。' }; }
+  installZCode() { return this.statusZCode(); }
+  updateZCode() { return this.statusZCode(); }
+  uninstallZCode() { return this.statusZCode(); }
 
   execute(client, args, options = {}) {
     const startedAt = Date.now();
@@ -805,13 +857,7 @@ class IntegrationManager {
     const results = [];
     for (const rawClient of clients) {
       const client = normalizeClient(rawClient);
-      const suffix = CLIENT_METHOD_SUFFIX[client];
-      try {
-        const result = await this[`${operation}Capture${suffix}`](options);
-        results.push({ client, label: CLIENT_LABELS[client], ok: true, ...result });
-      } catch (error) {
-        results.push({ client, label: CLIENT_LABELS[client], ok: false, state: 'failed', detail: error.message });
-      }
+      results.push({ client, label: CLIENT_LABELS[client], ...(await this.captureOperation(operation, client, options)) });
     }
     return results;
   }
@@ -839,11 +885,7 @@ class IntegrationManager {
         }
       }
       if (options.knowledgeOnly !== true) {
-        try {
-          entry.developmentCapture = { ok: true, ...(await this[`installCapture${suffix}`]()) };
-        } catch (error) {
-          entry.developmentCapture = { ok: false, state: 'failed', detail: error.message };
-        }
+        entry.developmentCapture = await this.captureOperation('install', client);
       }
       summary.clients.push(entry);
     }
@@ -851,7 +893,7 @@ class IntegrationManager {
   }
 
   async statusAll(options = {}) {
-    const clients = options.clients && options.clients.length ? options.clients.map(normalizeClient) : this.detectClients();
+    const clients = options.clients && options.clients.length ? options.clients.map(normalizeClient) : SUPPORTED_CLIENTS;
     const summary = { clients: [], bridge: null };
     try {
       summary.bridge = { ok: true, ...(await this.bridgeStatus()) };
@@ -860,17 +902,15 @@ class IntegrationManager {
     }
     for (const client of clients) {
       const suffix = CLIENT_METHOD_SUFFIX[client];
-      const entry = { client, label: CLIENT_LABELS[client], available: Boolean(this.executable(client)) };
-      try {
-        entry.knowledgeIntegration = { ok: true, ...(await this[`status${suffix}`]()) };
-      } catch (error) {
-        entry.knowledgeIntegration = { ok: false, state: 'failed', detail: error.message };
+      const entry = { client, label: CLIENT_LABELS[client], available: Boolean(this.executable(client)), configFound: this.captureConfigFound(client) };
+      if (!options.captureOnly) {
+        try {
+          entry.knowledgeIntegration = { ok: true, ...(await this[`status${suffix}`]()) };
+        } catch (error) {
+          entry.knowledgeIntegration = { ok: false, state: 'failed', detail: error.message };
+        }
       }
-      try {
-        entry.developmentCapture = { ok: true, ...(await this[`statusCapture${suffix}`]()) };
-      } catch (error) {
-        entry.developmentCapture = { ok: false, state: 'failed', detail: error.message };
-      }
+      entry.developmentCapture = await this.captureOperation('status', client);
       summary.clients.push(entry);
     }
     return summary;
@@ -881,6 +921,7 @@ class IntegrationManager {
   async disableAllCapture(options = {}) {
     const clients = options.clients && options.clients.length ? options.clients.map(normalizeClient) : SUPPORTED_CLIENTS;
     const results = await this.operateCapture('uninstall', clients, { unregisterConsumer: false });
+    if (results.some(result => !result.ok)) return { clients: results, consumer: { ok: false, state: 'kept', detail: '部分采集未能移除，保留宿主消费者，请修复失败项后重试。' } };
     let consumer = null;
     try {
       consumer = { ok: true, ...(await this.unregisterBridgeConsumer()) };

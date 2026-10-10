@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.0.2] - 2026-10-10
+
+- Add ZCode capture to the unified CLI and web System Status connector setup,
+  including repair, status and safe removal. Keep unverified ZCode knowledge
+  plugin support explicitly separate from working capture hooks.
+- Correct command/config discovery labels and stop treating consumer
+  registration or disabled hooks as proof of capture. Report partial failures
+  with their operation ID and persist connector errors from both web and CLI.
+- Pin event-bridge 0.7.2: external hooks resolve their own Bridge home without
+  inherited environment variables; ZCode events preserve their source. Repair
+  older entries in place and retain third-party hooks within mixed groups.
+
 ## [5.0.1] - 2026-10-10
 
 - Fix project import on Git versions before 2.31: query hooks and common Git

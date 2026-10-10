@@ -19,6 +19,7 @@
   const label = run => ({ queued: '排队', running: '维护中', succeeded: '已更新 · 可检索', 'index-pending': '知识已更新 · 索引待修复', failed: '维护失败', cancelled: '已取消' })[run.state] || run.state;
   const badge = (text, status = '') => `<span class="status ${esc(status)}">${esc(text)}</span>`;
   let toastTimer, refreshTimer, preflightTimer, editingMemoryId, logStream, logEpoch = 0, referenceEpoch = 0, snapshotEpoch = 0, registryEpoch = 0, registryPromise = null, resumeImport = false, unbindProjectId = '', unbinding = false;
+  let captureEpoch = 0, captureBusy = false;
   async function api(url, options = {}) {
     const { allowNotReady, ...init } = options;
     if (init.body && typeof init.body !== 'string') init.body = JSON.stringify(init.body);
@@ -182,7 +183,35 @@
   async function openSystem() {
     $('systemDrawer').hidden = false; $('drawerBackdrop').hidden = false;
     $('brainName').value = state.brain.name; $('knowledgeRoot').value = state.root;
-    await loadMaintenance();
+    await Promise.all([loadMaintenance(), loadAgentCapture()]);
+  }
+  async function loadAgentCapture() {
+    const epoch = ++captureEpoch;
+    try {
+      const result = await api('/api/integrations/status?captureOnly=1');
+      if (epoch !== captureEpoch) return;
+      $('agentCaptureList').innerHTML = result.clients.map(agent => {
+        const capture = agent.developmentCapture;
+        const found = agent.available || agent.configFound;
+        const software = agent.available ? '检测到命令' : agent.configFound ? '检测到配置' : '未检测到';
+        const status = !capture.ok ? '接线异常' : capture.installed ? '已配置采集' : '未接入';
+        return `<div class="agent-capture-row"><div><b>${esc(agent.label)}</b><small>${esc(software)} · ${esc(status)}</small><small>${esc(capture.detail)}</small></div><div class="actions"><button data-agent-capture="install" data-agent-client="${esc(agent.client)}" ${!found || captureBusy ? 'disabled' : ''}>${capture.installed ? '修复' : '接入'}</button>${capture.installed ? `<button data-agent-capture="uninstall" data-agent-client="${esc(agent.client)}" ${captureBusy ? 'disabled' : ''}>移除采集</button>` : ''}</div></div>`;
+      }).join('');
+    } catch (error) { if (epoch === captureEpoch) $('agentCaptureList').textContent = `无法检查采集状态：${error.message}`; }
+  }
+  async function changeAgentCapture(client, operation) {
+    if (captureBusy) return;
+    captureBusy = true; captureEpoch++;
+    all('[data-agent-capture]').forEach(button => { button.disabled = true; });
+    $('agentCaptureFeedback').textContent = operation === 'install' ? '正在配置采集 Hook…' : '正在移除托管采集，已有记录保留…';
+    try {
+      const result = await api(`/api/integrations/${operation}`, { method: 'POST', body: { clients: [client], captureOnly: true } });
+      const capture = operation === 'install' ? result.clients[0]?.developmentCapture : result.capture[0];
+      const success = result.complete === true && capture?.ok;
+      $('agentCaptureFeedback').textContent = success ? operation === 'install' ? '采集配置已保存。请重新打开外部 Agent 会话，实际记录可在活动页面查看。' : '已移除托管采集，第三方配置与已有记录保留。' : `接入操作未完成：${capture?.detail || result.bridge?.detail || '请检查系统诊断记录。'}\n操作 ID：${result.operationId || '—'}`;
+      $('agentCaptureFeedback').classList.toggle('issue', !success);
+    } catch (error) { $('agentCaptureFeedback').textContent = `操作失败：${error.message}`; $('agentCaptureFeedback').classList.add('issue'); }
+    finally { captureBusy = false; await loadAgentCapture(); post('eventBridge', { type: 'kb:refresh-agents' }); }
   }
   async function loadLogs() {
     const epoch = ++logEpoch;
@@ -307,6 +336,7 @@
       if (button.dataset.action === 'import') openImport();
       if (button.dataset.action === 'repair') await repair();
       if (button.dataset.action === 'system') await openSystem();
+      if (button.dataset.agentCapture) await changeAgentCapture(button.dataset.agentClient, button.dataset.agentCapture);
       if (button.dataset.action === 'unbind') { const p = activeProject(); if (p && !unbinding) { unbindProjectId = p.projectId; $('unbindProjectName').textContent = `解绑「${p.name}」？`; $('unbindFeedback').textContent = ''; $('unbindDialog').showModal(); } }
       if (button.dataset.retryRun) { await api(`/api/engine/runs/${encodeURIComponent(button.dataset.retryRun)}/retry`, { method: 'POST', body: {} }); await refreshSnapshot(); }
       if (button.dataset.contextIndex !== undefined) await openReference(state.contexts.get(state.projectId).references[Number(button.dataset.contextIndex)]);
@@ -325,6 +355,7 @@
     if (event.origin !== location.origin || !event.data || typeof event.data !== 'object') return;
     const key = Object.keys(frames).find(k => $(frames[k].id).contentWindow === event.source); if (!key) return;
     const message = event.data;
+    if (message.type === 'kb:open-integrations' && key === 'eventBridge') { openSystem().then(() => $('agentCaptureSection').scrollIntoView({ block: 'start' })).catch(error => toast(error.message)); return; }
     if (message.type === 'kb:ready') { frames[key].ready = true; frameContext(key); if (frames[key].openSettings) { post(key, { type: 'kb:open-settings' }); frames[key].openSettings = false; } }
     if (message.requestId && message.requestId !== frames[key].requestId) return;
     if (message.type === 'kb:knowledge' && key === 'terminal') {
@@ -336,6 +367,7 @@
   on('themeToggle', 'click', () => { document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('kb.theme', document.documentElement.dataset.theme); Object.keys(frames).forEach(key => post(key, { type: 'kb:theme', theme: document.documentElement.dataset.theme })); });
   on('openSystem', 'click', openSystem); on('closeSystem', 'click', closeSystem); on('drawerBackdrop', 'click', closeSystem);
   on('repairWiring', 'click', repair);
+  on('refreshAgentCapture', 'click', () => captureBusy ? undefined : loadAgentCapture());
   on('configureProviders', 'click', () => { closeSystem(); setView('work'); initializeFrame('terminal'); if (frames.terminal.ready) post('terminal', { type: 'kb:open-settings' }); else frames.terminal.openSettings = true; });
   on('saveMaintenance', 'click', async () => { await api('/api/terminal/maintenance-default', { method: 'PUT', body: { profileId: $('maintenanceModel').value || null } }); const result = await api('/api/modules/configure', { method: 'POST', body: {} }); $('configurationStatus').textContent = result.configuration.model ? '后台默认模型已保存并同步。' : '配置已保存，后台运行配置尚未同步，请检查模块连接。'; });
   on('openEmbedding', 'click', openEmbedding);

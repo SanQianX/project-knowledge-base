@@ -85,6 +85,23 @@ vector-hub 是唯一派生索引服务，外壳不再执行第二套索引写入
 
 ## 需求记录与查询
 
+### 外部 Agent 会话采集
+
+在网页左下角打开“系统状态 → 外部 Agent 采集”，对使用的工具点击“接入”或
+“修复”；“移除采集”只移除托管 Hook，不删除历史记录或第三方配置。
+“检测到命令/检测到配置”与“已配置采集”是不同状态，未检测到不等于没有安装。
+配置完成后重新打开外部 Agent 会话，再到活动记录验证新会话是否出现。
+
+```powershell
+project-knowledge-integrations status --all
+project-knowledge-integrations install --ide zcode --capture-only
+project-knowledge-integrations uninstall --ide zcode --capture-only
+```
+
+ZCode 接入当前仅包含会话采集，不会冒充已安装 MCP/知识检索插件。
+接入失败会显示操作 ID，并写入数据目录 `logs/system/YYYY-MM-DD.jsonl`；
+网页“系统诊断记录”可查看和导出。注册消费者本身不能代替安装 Agent Hook。
+
 Claude Code、Codex、OpenCode 集成可在编码前追加用户真实需求元数据。记录写入
 项目 `requirements.jsonl`，不会触发分析或写知识。
 

@@ -30,6 +30,11 @@ project-knowledge
      agent conversations in real Git workspaces are captured into each
      imported project's Development Conversation.
    It also registers the host-level `project-knowledge` Bridge consumer.
+   ZCode is supported for Development Capture only; an unverified knowledge
+   plugin is never reported as installed. Use `install --ide zcode --capture-only`
+   or System Status → 外部 Agent 采集 in the web UI. Per-client repair/removal
+   preserves unrelated hooks and existing records. Failures include an operation
+   ID and persist to the local system diagnostic log.
    No client UI needs to be opened; third-party hooks and configs are
    preserved, and a Codex notify conflict is reported instead of overwritten.
 3. `project-knowledge` starts a fresh v5 local backend. Import projects again;

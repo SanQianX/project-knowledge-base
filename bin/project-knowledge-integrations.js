@@ -5,6 +5,8 @@ const {
   SUPPORTED_CLIENTS,
   normalizeClient,
 } = require('../_site/lib/integration-installer');
+const { Logger } = require('../_site/lib/structured-logger');
+const { createId } = require('../_site/lib/contracts');
 
 function printHelp() {
   console.log(`project-knowledge-integrations
@@ -23,6 +25,7 @@ Clients:
   claude       Claude Code plugin (MCP + Skill) + managed Bridge hooks
   opencode     OpenCode MCP + global Skill + managed Bridge plugin
   codex        Codex plugin (MCP + Skill) + managed Bridge notify
+  zcode        ZCode managed Bridge hooks (capture only; no verified MCP installer)
   all          All supported clients
 
 Options:
@@ -99,7 +102,7 @@ function selectClients(requested, manager) {
 
 function printCapabilityLine(prefix, capability) {
   if (!capability) return;
-  const mark = capability.ok ? 'OK' : 'FAIL';
+  const mark = capability.supported === false ? 'INFO' : capability.ok ? 'OK' : 'FAIL';
   console.log(`  [${mark}] ${prefix}: ${capability.state} - ${capability.detail}`);
 }
 
@@ -109,10 +112,18 @@ async function runCli(argv = process.argv.slice(2), dependencies = {}) {
     printHelp();
     return 0;
   }
+  const logger = dependencies.manager ? null : new Logger();
   const manager = dependencies.manager || new IntegrationManager({
+    logger,
+    operationId: createId('op'),
     dryRun: options.dryRun,
     marketplaceSource: options.marketplaceSource || undefined,
   });
+  try { return await runOperation(options, manager); }
+  finally { if (logger) await logger.close(); }
+}
+
+async function runOperation(options, manager) {
   const clients = selectClients(options.clients, manager);
 
   if (options.operation === 'disable-capture') {
@@ -130,7 +141,7 @@ async function runCli(argv = process.argv.slice(2), dependencies = {}) {
     return summary.clients.some(result => !result.ok) || !summary.consumer.ok ? 1 : 0;
   }
 
-  if (options.operation === 'install') {
+  if (options.operation === 'install' || options.operation === 'update' && options.captureOnly) {
     // One action configures Knowledge Integration + Development Capture
     // together (per-client flags narrow the scope). No client UI is needed.
     const summary = await manager.installAll({ clients, knowledgeOnly: options.knowledgeOnly, captureOnly: options.captureOnly, scope: options.scope });
