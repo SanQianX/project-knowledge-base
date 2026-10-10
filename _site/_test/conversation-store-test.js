@@ -45,6 +45,8 @@ const { ConversationStore, sha256 } = require('../lib/conversation-store');
   assert.strictEqual(store.readEvents(projectId).length, 1);
   assert.strictEqual(store.readEvents(projectId)[0].content, privatePrompt, 'full prompt belongs in the private business store');
   assert.strictEqual(store.readEvents(projectId)[0].contentHash, sha256(privatePrompt));
+  await store.appendBridgeEvent(projectId, { ...store.readEvents(projectId)[0], eventId: 'event-zcode-1', sequence: 12, source: 'zcode' });
+  assert.strictEqual(store.readEvents(projectId).find(event => event.eventId === 'event-zcode-1').source, 'zcode');
   assert(!JSON.stringify(logRecords).includes(privatePrompt), 'conversation body must never enter structured logs');
   assert(JSON.stringify(logRecords).includes(sha256(privatePrompt)), 'logs may retain body hash for correlation');
 
