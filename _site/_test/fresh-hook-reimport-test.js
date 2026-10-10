@@ -1,0 +1,53 @@
+const assert = require('assert/strict');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { execFileSync } = require('child_process');
+const { StorageLayout } = require('../lib/storage-layout');
+const { SettingsStore } = require('../lib/settings-store');
+const { ProjectRegistryStore } = require('../lib/project-registry-store');
+const { ProjectStore } = require('../lib/project-store');
+const { ProjectLifecycleService } = require('../lib/project-lifecycle-service');
+const hooks = require('../lib/hook-manager');
+
+(async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-fresh-hook-'));
+  const layout = new StorageLayout({ dataDir: path.join(root, 'fresh') });
+  const settingsStore = new SettingsStore({ layout });
+  const registryStore = new ProjectRegistryStore({ layout });
+  const projectStore = new ProjectStore({ layout });
+  const triggerScriptPath = path.resolve(__dirname, '../scripts/hook-trigger.js');
+  await settingsStore.initialize({ knowledge: { rootPath: path.join(root, 'knowledge') } });
+  await registryStore.initialize();
+  const options = { layout, settingsStore, registryStore, projectStore, triggerScriptPath };
+  const lifecycle = new ProjectLifecycleService(options);
+  const repo = path.join(root, '中文 项目'); fs.mkdirSync(repo);
+  const git = args => execFileSync('git', args, { cwd: repo, windowsHide: true, encoding: 'utf8' }).trim();
+  git(['init', '-q']); git(['config', 'user.name', 'Fresh Test']); git(['config', 'user.email', 'fresh@example.invalid']);
+  fs.writeFileSync(path.join(repo, 'user-code.txt'), 'unchanged'); git(['add', '.']); git(['commit', '-qm', 'baseline']);
+  const old = hooks.installHook({ repoPath: repo, projectId: 'project-old', triggerScriptPath, dataDir: path.join(root, 'old') });
+  const oldBytes = fs.readFileSync(old.hookPath, 'utf8');
+  const input = { localPath: repo, projectId: 'project-new', storageName: 'new' };
+  const preflight = await lifecycle.preflightImport(input);
+  assert.equal(preflight.checks.hook.replacementProjectId, 'project-old');
+  for (const confirmation of [undefined, 'project-wrong']) {
+    await assert.rejects(lifecycle.importProject({ ...input, replaceManagedHookProjectId: confirmation }), { code: 'HOOK_CONFLICT' });
+    assert.equal(fs.readFileSync(old.hookPath, 'utf8'), oldBytes);
+    assert.equal(registryStore.listIds().length, 0);
+  }
+  const brokenRegistry = Object.create(registryStore);
+  brokenRegistry.add = async () => { throw new Error('registry write failed'); };
+  await assert.rejects(new ProjectLifecycleService({ ...options, registryStore: brokenRegistry }).importProject({ ...input, replaceManagedHookProjectId: 'project-old' }));
+  assert.equal(fs.readFileSync(old.hookPath, 'utf8'), oldBytes, 'failed import restores the old managed hook');
+  const result = await lifecycle.importProject({ ...input, replaceManagedHookProjectId: 'project-old' });
+  assert.equal(hooks.readHookStatus({ repoPath: repo }).projectId, 'project-new');
+  assert.equal(result.state.lastAnalyzedCommit, null);
+  assert.equal(result.state.trackingStartCommit, git(['rev-parse', 'HEAD']));
+  assert.deepEqual(fs.readdirSync(result.config.knowledgePath), []);
+  assert.equal(fs.readFileSync(path.join(repo, 'user-code.txt'), 'utf8'), 'unchanged');
+  await lifecycle.deleteProject('project-new');
+  const thirdParty = '#!/bin/sh\necho third-party\n'; fs.writeFileSync(old.hookPath, thirdParty);
+  await assert.rejects(lifecycle.importProject({ ...input, replaceManagedHookProjectId: 'project-old' }), { code: 'HOOK_CONFLICT' });
+  assert.equal(fs.readFileSync(old.hookPath, 'utf8'), thirdParty);
+  console.log('PASS explicit fresh Hook replacement, rollback, baseline, third-party protection');
+})().catch(error => { console.error(error); process.exitCode = 1; });

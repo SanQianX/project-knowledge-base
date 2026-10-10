@@ -51,6 +51,7 @@ function commit(target, name) {
     settingsStore: { read: () => ({ knowledge: { rootPath: knowledgeRoot }, ai: { schema: 'ai-profiles/v1', profiles: [{ id: 'test-profile', enabled: true, vendor: 'anthropic', model: 'm' }], defaultProfileId: null } }) },
     triggerScriptPath: path.join(temp, 'hook-trigger.js'),
     hookManager: {
+      readHookStatus: () => ({ kbManaged: false }),
       installHook: options => { installed.push(options.projectId); return { ok: true, managedVersion: 2 }; },
       uninstallHook: () => ({ ok: true }),
     },

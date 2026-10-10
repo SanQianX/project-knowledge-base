@@ -16,9 +16,9 @@
   const domainName = id => state.brain.domains.find(d => d.id === id)?.name || '未分组';
   const projectName = id => state.projects.find(p => p.projectId === id)?.name || id;
   const time = value => value ? new Date(value).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
-  const label = run => ({ queued: '排队', running: '维护中', succeeded: '已更新 · 可检索', 'index-pending': '知识已更新 · 索引待修复', failed: '维护失败' })[run.state] || run.state;
+  const label = run => ({ queued: '排队', running: '维护中', succeeded: '已更新 · 可检索', 'index-pending': '知识已更新 · 索引待修复', failed: '维护失败', cancelled: '已取消' })[run.state] || run.state;
   const badge = (text, status = '') => `<span class="status ${esc(status)}">${esc(text)}</span>`;
-  let toastTimer, refreshTimer, preflightTimer, editingMemoryId, logStream, logEpoch = 0, referenceEpoch = 0, snapshotEpoch = 0, resumeImport = false;
+  let toastTimer, refreshTimer, preflightTimer, editingMemoryId, logStream, logEpoch = 0, referenceEpoch = 0, snapshotEpoch = 0, registryEpoch = 0, registryPromise = null, resumeImport = false, unbindProjectId = '', unbinding = false;
   async function api(url, options = {}) {
     const { allowNotReady, ...init } = options;
     if (init.body && typeof init.body !== 'string') init.body = JSON.stringify(init.body);
@@ -149,23 +149,29 @@
     stream.addEventListener('progress', () => { if (state.stream === stream) scheduleRefresh(); });
     stream.onerror = () => { if (state.stream === stream) $('activityConnection').textContent = '连接中断，正在恢复快照'; };
   }
-  async function refreshRegistry() {
-    if (!navigator.onLine || state.refreshing) return;
-    state.refreshing = true;
+  function refreshRegistry(force = false) {
+    if (!navigator.onLine) return Promise.resolve();
+    if (registryPromise && !force) return registryPromise;
+    const epoch = ++registryEpoch;
+    const job = (async () => {
     try {
       const [brain, projects, health] = await Promise.all([api('/api/brain'), api('/api/projects/aggregated'), api('/api/modules/health')]);
+      if (epoch !== registryEpoch) return;
       state.brain = brain.brain; state.root = brain.knowledgeRoot; state.projects = projects.projects; state.health = health.modules; state.ownership = health.ownership;
       if (!activeProject()) { state.projectId = state.projects[0]?.projectId || ''; state.epoch++; Object.keys(frames).forEach(frameContext); }
       renderProjectOptions(); renderSystem(); connectProgress(); await refreshSnapshot(); setView(state.view);
     } catch (error) { toast(error.message); }
-    finally { state.refreshing = false; connectProgress(); }
+    finally { if (epoch === registryEpoch) { registryPromise = null; connectProgress(); } }
+    })();
+    registryPromise = job;
+    return job;
   }
   function renderSystem() {
     const down = Object.keys(modules).filter(key => !state.health[key]?.up);
     const pending = state.ownership?.owner === 'engine' && !state.ownership.ready;
     $('systemDot').className = `dot ${down.length || pending ? 'issue' : 'up'}`;
-    $('systemTitle').textContent = pending ? '知识引擎接管待恢复' : down.length ? '部分服务需要处理' : '系统连接正常';
-    $('systemDetail').textContent = pending ? state.ownership.message || '迁移未完成，原知识与提交证据保留。' : down.length ? down.map(k => modules[k]).join('、') : '本机知识服务已连接';
+    $('systemTitle').textContent = pending ? '知识引擎连接待恢复' : down.length ? '部分服务需要处理' : '系统连接正常';
+    $('systemDetail').textContent = pending ? `${state.ownership.message || '服务恢复后自动重试。'}${state.ownership.error ? ` · ${state.ownership.error.step} (${state.ownership.error.code})` : ''}` : down.length ? down.map(k => modules[k]).join('、') : '本机知识服务已连接';
     $('moduleHealth').innerHTML = Object.entries(modules).map(([key, name]) => `<div class="row"><div><b>${esc(name)}</b><small>${esc(state.health[key]?.url || '')}</small></div>${badge(state.health[key]?.up ? '在线' : '离线', state.health[key]?.up ? 'up' : 'issue')}</div>`).join('');
     if (!navigator.onLine) {
       $('systemDot').className = 'dot issue'; $('systemTitle').textContent = '网页连接中断';
@@ -267,9 +273,9 @@
     $('importForm').reset(); state.importId = `project-${crypto.randomUUID()}`; state.preflight = null; state.preflightEpoch++;
     $('importDomain').innerHTML = '<option value="">未分组</option>' + state.brain.domains.map(d => `<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('');
     $('importDomain').value = activeProject()?.domainId || '';
-    $('gitInitChoice').hidden = true; $('confirmImport').disabled = true; $('preflightStatus').textContent = '填写目录后检查导入条件。'; $('importDialog').showModal();
+    $('gitInitChoice').hidden = true; $('replaceHookChoice').hidden = true; $('confirmImport').disabled = true; $('preflightStatus').textContent = '填写目录后检查导入条件。'; $('importDialog').showModal();
   }
-  function importInput() { return { projectId: state.importId, brainId: state.brain.id, domainId: $('importDomain').value || null, localPath: $('importCode').value.trim(), knowledgePath: $('importKnowledge').value.trim(), displayName: $('importName').value.trim(), knowledgeLanguage: 'zh-CN', confirmGitInit: $('importForm').elements.confirmGitInit.checked }; }
+  function importInput() { return { projectId: state.importId, brainId: state.brain.id, domainId: $('importDomain').value || null, localPath: $('importCode').value.trim(), knowledgePath: $('importKnowledge').value.trim(), displayName: $('importName').value.trim(), knowledgeLanguage: 'zh-CN', confirmGitInit: $('importForm').elements.confirmGitInit.checked, replaceManagedHookProjectId: $('importForm').elements.confirmReplaceHook.checked ? state.preflight?.checks.hook?.replacementProjectId : undefined }; }
   const problemLabels = { KNOWLEDGE_ROOT_MISSING: '请在系统状态中设置知识根目录。', AI_PROFILE_REQUIRED: '请配置可用模型；后台默认模型在系统状态中设置。', DUPLICATE_PROJECT: '此项目已导入，请打开已有项目。', HOOK_CONFLICT: '存在第三方 Hook，不会覆盖。请先检查冲突。', PATH_MISSING: '代码目录不存在。', PATH_REQUIRED: '请选择代码目录。' };
   async function checkImport() {
     const epoch = ++state.preflightEpoch; $('confirmImport').disabled = true;
@@ -279,12 +285,12 @@
     try {
       const result = await api('/api/projects/preflight-import', { method: 'POST', body: importInput(), allowNotReady: true });
       if (epoch !== state.preflightEpoch || !$('importDialog').open) return;
-      state.preflight = result; $('gitInitChoice').hidden = !result.plannedGitInit;
+      state.preflight = result; $('gitInitChoice').hidden = !result.plannedGitInit; $('replaceHookChoice').hidden = !result.checks.hook?.replacementProjectId;
       const messages = result.problems.map(p => problemLabels[p.code] || p.message);
       $('setupImportRoot').hidden = !result.problems.some(p => p.code === 'KNOWLEDGE_ROOT_MISSING');
       $('preflightStatus').textContent = result.ready ? result.plannedGitInit ? '目录检查通过。请确认初始化 Git；不分析历史。' : '检查通过。只建立当前提交的跟踪基线，不分析历史。' : [...new Set(messages)].join('\n');
       $('preflightStatus').classList.toggle('issue', !result.ready);
-      $('confirmImport').disabled = !result.ready || result.plannedGitInit && !$('importForm').elements.confirmGitInit.checked || !$('importKnowledge').value.trim();
+      $('confirmImport').disabled = !result.ready || result.plannedGitInit && !$('importForm').elements.confirmGitInit.checked || result.checks.hook?.replacementProjectId && !$('importForm').elements.confirmReplaceHook.checked || !$('importKnowledge').value.trim();
     } catch (error) { if (epoch === state.preflightEpoch) $('preflightStatus').textContent = error.message; }
   }
   document.addEventListener('click', e => {
@@ -292,7 +298,7 @@
     const execute = async () => {
       if (button.dataset.view) setView(button.dataset.view);
       if (button.dataset.go) { if (button.dataset.go === 'memory') state.memoryTab = 'candidate'; setView(button.dataset.go); }
-      if (button.dataset.close) $(button.dataset.close).close();
+      if (button.dataset.close && !(button.dataset.close === 'unbindDialog' && unbinding)) $(button.dataset.close).close();
       if (button.dataset.selectProject) selectProject(button.dataset.selectProject);
       if (button.dataset.scope) { state.scope = button.dataset.scope; all('[data-scope]').forEach(b => b.classList.toggle('active', b.dataset.scope === state.scope)); post('vectorHub', { type: 'kb:scope', scope: state.scope }); }
       if (button.dataset.memoryTab) { state.memoryTab = button.dataset.memoryTab; renderMemories(); }
@@ -300,7 +306,7 @@
       if (button.dataset.action === 'import') openImport();
       if (button.dataset.action === 'repair') await repair();
       if (button.dataset.action === 'system') await openSystem();
-      if (button.dataset.action === 'unbind') { const p = activeProject(); if (p && confirm(`解绑 ${p.name}？代码、知识文件和会话历史将保留。`)) { await api(`/api/projects/${encodeURIComponent(p.projectId)}`, { method: 'DELETE', body: { deleteKnowledge: false } }); toast('已解绑，数据仍保留。'); await refreshRegistry(); } }
+      if (button.dataset.action === 'unbind') { const p = activeProject(); if (p && !unbinding) { unbindProjectId = p.projectId; $('unbindProjectName').textContent = `解绑「${p.name}」？`; $('unbindFeedback').textContent = ''; $('unbindDialog').showModal(); } }
       if (button.dataset.retryRun) { await api(`/api/engine/runs/${encodeURIComponent(button.dataset.retryRun)}/retry`, { method: 'POST', body: {} }); await refreshSnapshot(); }
       if (button.dataset.contextIndex !== undefined) await openReference(state.contexts.get(state.projectId).references[Number(button.dataset.contextIndex)]);
       if (button.dataset.memoryAction) {
@@ -355,12 +361,32 @@
   on('createDomain', 'click', () => { $('domainForm').reset(); $('domainDialog').showModal(); });
   on('domainForm', 'submit', async e => { e.preventDefault(); await api('/api/domains', { method: 'POST', body: Object.fromEntries(new FormData(e.target)) }); $('domainDialog').close(); await refreshRegistry(); });
   on('memoryForm', 'submit', async e => { e.preventDefault(); await api(`/api/engine/memories/${encodeURIComponent(editingMemoryId)}`, { method: 'PATCH', body: { text: $('memoryText').value } }); $('memoryDialog').close(); await refreshSnapshot(); });
+  on('unbindForm', 'submit', async e => {
+    e.preventDefault(); if (!unbindProjectId || unbinding) return;
+    const projectId = unbindProjectId;
+    unbinding = true; $('confirmUnbind').disabled = true; $('confirmUnbind').textContent = '正在解绑…';
+    $('unbindFeedback').textContent = '正在停止项目接线并移除登记，磁盘文件不会删除。';
+    try {
+      await api(`/api/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE', body: { deleteKnowledge: false } });
+      state.contexts.delete(projectId);
+      state.projects = state.projects.filter(project => project.projectId !== projectId);
+      if (state.projectId === projectId) { state.projectId = state.projects[0]?.projectId || ''; state.epoch++; }
+      renderProjectOptions(); render(); Object.keys(frames).forEach(frameContext);
+      $('unbindDialog').close(); unbindProjectId = '';
+      // A late read started before DELETE cannot restore the removed project.
+      await refreshRegistry(true); localStorage.setItem('kb.project', state.projectId);
+      Object.keys(frames).forEach(frameContext);
+      toast('项目已从列表移除，代码、知识和会话仍保留。');
+    } catch (error) { $('unbindFeedback').textContent = error.message; }
+    finally { unbinding = false; $('confirmUnbind').disabled = false; $('confirmUnbind').textContent = '解绑并保留数据'; }
+  });
+  on('unbindDialog', 'cancel', e => { if (unbinding) e.preventDefault(); });
   on('importForm', 'input', e => {
     if (e.target.id === 'importCode') { const name = e.target.value.trim().split(/[\\/]/).filter(Boolean).pop() || ''; $('importName').value = name; if (state.root) $('importKnowledge').value = `${state.root.replace(/[\\/]+$/, '')}/${name}-${state.importId.slice(-6)}`; }
     clearTimeout(preflightTimer); $('confirmImport').disabled = true; preflightTimer = setTimeout(checkImport, 250);
   });
   on('importForm', 'submit', async e => {
-    e.preventDefault(); if (!state.preflight?.ready || state.preflight.plannedGitInit && !$('importForm').elements.confirmGitInit.checked) return;
+    e.preventDefault(); if (!state.preflight?.ready || state.preflight.plannedGitInit && !$('importForm').elements.confirmGitInit.checked || state.preflight.checks.hook?.replacementProjectId && !$('importForm').elements.confirmReplaceHook.checked) return;
     $('confirmImport').disabled = true; $('confirmImport').textContent = '正在登记…';
     try { const result = await api('/api/projects/import', { method: 'POST', body: importInput() }); state.projectId = result.projectId; state.epoch++; $('importDialog').close(); await refreshRegistry(); Object.keys(frames).forEach(frameContext); setView('projects'); toast(Object.values(result.modules).every(m => m.ok) ? '项目已导入，四个模块已连接。' : '项目已导入，部分接线待恢复。'); }
     finally { $('confirmImport').textContent = '导入项目'; if ($('importDialog').open) checkImport(); }

@@ -163,6 +163,8 @@ class ProjectLifecycleService {
           // Legacy v1 hook: import will replace it; that's the migration
           // path (T03 case 2), not a conflict.
           checks.hook = { ok: true, reason: 'legacy-v1' };
+        } else if (hookStatus.kbManaged && hookStatus.projectId !== input.projectId) {
+          checks.hook = { ok: true, replacementProjectId: hookStatus.projectId };
         } else {
           checks.hook = { ok: true };
         }
@@ -354,7 +356,15 @@ class ProjectLifecycleService {
       journal.created.metadata = this.layout.getProjectMetadataDir(projectId);
       journal.phase = 'metadata-created';
       this.writeJournal(journal);
-      const hook = this.hookManager.installHook({ repoPath: git.repoPath, projectId, triggerScriptPath: this.triggerScriptPath, dataDir: this.layout.getDataDir(), ...this.bridgeAdapter?.hookBinding?.() });
+      const priorHook = this.hookManager.readHookStatus({ repoPath: git.repoPath });
+      if (priorHook.kbManaged && priorHook.projectId !== projectId) {
+        if (input.replaceManagedHookProjectId !== priorHook.projectId || this.registryStore.readDisplaySnapshot(priorHook.projectId)) throw new DomainError('HOOK_CONFLICT', '目录中留有另一项目的知识库 Hook。请确认替换旧托管 Hook 后重新导入。', { status: 409 });
+        journal.replacedHook = { path: priorHook.hookPath, content: fs.readFileSync(priorHook.hookPath, 'utf8') };
+        this.writeJournal(journal);
+      }
+      journal.created.hookPath = priorHook.hookPath;
+      this.writeJournal(journal);
+      const hook = this.hookManager.installHook({ repoPath: git.repoPath, projectId, triggerScriptPath: this.triggerScriptPath, dataDir: this.layout.getDataDir(), ...this.bridgeAdapter?.hookBinding?.(), replaceManagedHookProjectId: input.replaceManagedHookProjectId });
       journal.created.hookPath = hook.hookPath;
       journal.phase = 'hook-verified';
       this.writeJournal(journal);
@@ -419,7 +429,13 @@ class ProjectLifecycleService {
       try { await this.registryStore.remove(journal.projectId); } catch (error) { warnings.push(`registry:${error.message}`); }
     }
     if (journal.created.hookPath && journal.projectId && journal.repoPath) {
-      try { this.hookManager.uninstallHook({ repoPath: journal.repoPath, projectId: journal.projectId }); } catch (error) { warnings.push(`hook:${error.message}`); }
+      try {
+        const unchanged = journal.replacedHook && fs.existsSync(journal.replacedHook.path) && fs.readFileSync(journal.replacedHook.path, 'utf8') === journal.replacedHook.content;
+        if (!unchanged) {
+          this.hookManager.uninstallHook({ repoPath: journal.repoPath, projectId: journal.projectId });
+          if (journal.replacedHook) AtomicFile.writeFileAtomic(journal.replacedHook.path, journal.replacedHook.content, { mode: 0o755 });
+        }
+      } catch (error) { warnings.push(`hook:${error.message}`); }
     }
     if (journal.created.metadata && fs.existsSync(journal.created.metadata)) {
       try { fs.rmSync(journal.created.metadata, { recursive: true, force: true }); } catch (error) { warnings.push(`metadata:${error.message}`); }

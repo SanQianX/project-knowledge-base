@@ -5,6 +5,10 @@
 
 ## 安装与运行
 
+v5 不再兼容或迁移旧知识库数据。停止旧版后重新设置模型、知识根目录并导入
+项目；默认新数据目录为 `~/.project-knowledge-v5`。旧文件保留但不读取。
+详见 [从头开始](fresh-v5-start.md)。
+
 新机器完整安装只需三条命令：
 
 ```bash
@@ -23,8 +27,8 @@ project-knowledge
      Git 工作区里的 Agent 对话捕捉进已导入项目的「开发对话」。
    同时注册 host 级 `project-knowledge` Bridge consumer。全程无需打开任何
    客户端 UI;第三方 hooks 与配置完整保留;Codex notify 冲突只上报不覆盖。
-3. `project-knowledge` 启动本地服务。旧版本导入的项目会在第一次 drain 时
-   自动升级(补写 canonical workspace 身份 + 建立对话 baseline),无需手工迁移。
+3. `project-knowledge` 启动全新的 v5 本地服务。重新配置模型、知识根目录并导入
+   项目，不迁移旧登记、会话、知识、索引或未完成任务。
 
 注意事项:
 
@@ -99,12 +103,12 @@ project-knowledge-kb history --project <projectId> --json
 
 ## 存储合同
 
-内部数据默认在 `~/.project-knowledge/`，可用 `KB_DATA_DIR` 修改。用户必须先设置
+内部数据默认在 `~/.project-knowledge-v5/`，可用 `KB_DATA_DIR` 修改。用户必须先设置
 global knowledge root，再导入项目；它只影响未来导入。每个项目导入时固化绝对
 knowledgePath，修改 global root 不会移动已有项目。
 
 ```text
-~/.project-knowledge/
+~/.project-knowledge-v5/
 ├── settings.json
 ├── projects.json                         # 仅 ID、顺序、最小显示快照
 ├── projects/<projectId>/

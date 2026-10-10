@@ -1,5 +1,24 @@
 # Changelog
 
+## [5.0.0] - 2026-10-10
+
+- Fresh-data-only web product. Default state moves to `~/.project-knowledge-v5`;
+  no previous knowledge, project registry, unfinished claims or model profiles
+  are imported. Explicitly selected old data directories are rejected unchanged.
+- Remove shell migration/cutover and engine `/api/migrate`. Engine 0.2.0 uses
+  schema version 3; validate its data generation and runtime authentication
+  before registering projects or enabling consumption. System status reports
+  safe connection stage/error codes instead of silently waiting for takeover.
+- Isolate Workbench, bridge journals and vector configuration under the new
+  product directory. No automatic embedding-credential migration.
+- Queued, unstarted tasks are cancelled on unbind; active knowledge/index write
+  leases still block removal. The visible confirmation dialog updates project
+  selection immediately and rejects stale registry responses without reloading.
+- Reimport can explicitly replace a leftover knowledge-managed Git Hook. Failed
+  imports restore the prior Hook; third-party hooks and existing knowledge files
+  are never overwritten. Import tracks HEAD without analyzing historical commits.
+
+
 ## [4.8.0] - 2026-10-10
 
 - Unified brain web product: six real pages for work, retrieval, memories,

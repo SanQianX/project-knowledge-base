@@ -186,6 +186,7 @@ class ModuleBridge {
   }
 
   proxyEngine(req, res, pathname, search) {
+    if (this.engineCompatible === false) throw new DomainError('ENGINE_CONNECTION_PENDING', '知识引擎连接尚未确认，请查看系统状态；不会读取旧服务中的知识。', { status: 503 });
     return this.proxy(req, res, `${this.engineUrl}/api/${pathname.replace(/^\/api\/engine\/?/, '')}${search || ''}`);
   }
 
@@ -230,6 +231,7 @@ class ModuleBridge {
   }
 
   async _listEngineProjects() {
+    if (this.engineCompatible === false) return [];
     try {
       const response = await this._fetch(`${this.engineUrl}/api/projects`);
       if (!response.ok) return [];
@@ -333,16 +335,6 @@ class ModuleBridge {
       const response = await this._fetch(`${this.engineUrl}/api/runtime-config`, { method: 'POST', headers, body: JSON.stringify({ projectId: 'default', profile }) });
       status.model = response.ok && !!profile;
     } catch { /* Status projection only: never log resolved profiles or raw errors. */ }
-    try {
-      const legacyResponse = await this._fetch(`${this.vectorHubUrl}/api/internal/embedding-config`, { method: 'POST', headers, body: '{}' });
-      if (legacyResponse.ok) {
-        const legacy = await legacyResponse.json();
-        if (legacy.settings && /^embedding-[a-f0-9]{64}$/.test(legacy.migrationId || '')) {
-          const imported = await this._fetch(`${this.terminalUrl}/api/claude-workbench/v1/internal/import-embedding`, { method: 'POST', headers, body: JSON.stringify(legacy) });
-          if (imported.ok) await this._fetch(`${this.vectorHubUrl}/api/internal/retire-embedding`, { method: 'POST', headers, body: JSON.stringify({ migrationId: legacy.migrationId }) });
-        }
-      }
-    } catch { /* Failed migration retains the module's protected configuration. */ }
     try {
       let settings = null;
       try {
@@ -462,7 +454,7 @@ class ModuleBridge {
       if (!requireEngine) result.engine = { ok: true, status: 'not-owner' };
       else {
       const response = await this._fetch(`${this.engineUrl}/api/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' });
-      if (response.status === 409) throw new DomainError('PROJECT_BUSY', '知识维护仍在运行，不能解绑。', { status: 409, retryable: true });
+      if (response.status === 409) throw new DomainError('PROJECT_BUSY', '此项目正在执行知识维护，请等待写入结束后再解绑。未开始的排队任务会随解绑取消。', { status: 409, retryable: true });
       result.engine = { ok: response.ok || response.status === 404, status: response.ok || response.status === 404 ? 'removed' : 'pending' };
       }
     } catch (error) { if (error.code === 'PROJECT_BUSY') throw error; result.engine = { ok: false, status: 'pending' }; }
@@ -549,7 +541,7 @@ class ModuleBridge {
           name: 'terminal',
           command: `node ${JSON.stringify(terminalEntry)}`,
           url: this.terminalUrl,
-          env: { AGENT_TERMINAL_PORT: urlPort(this.terminalUrl, 5760), AGENT_TERMINAL_HOST: urlHost(this.terminalUrl), KB_WORKBENCH_RUNTIME_TOKEN: this.runtimeToken, KB_KNOWLEDGE_ENGINE_URL: this.engineUrl, KB_EVENT_BRIDGE_URL: this.eventBridgeUrl },
+          env: { AGENT_TERMINAL_DATA_DIR: path.join(this.dataDir || require('./data-dir').getDataDir(), 'workbench'), AGENT_TERMINAL_PORT: urlPort(this.terminalUrl, 5760), AGENT_TERMINAL_HOST: urlHost(this.terminalUrl), KB_WORKBENCH_RUNTIME_TOKEN: this.runtimeToken, KB_KNOWLEDGE_ENGINE_URL: this.engineUrl, KB_EVENT_BRIDGE_URL: this.eventBridgeUrl },
         });
       } else {
         this.logger.warn('modules.supervisor', 'claude-ai-workbench runtime not installed; expecting an external service.', {});
@@ -572,7 +564,7 @@ class ModuleBridge {
           name: 'vector-hub',
           command: `node ${JSON.stringify(vectorHubEntry)} serve --host ${urlHost(this.vectorHubUrl)} --port ${urlPort(this.vectorHubUrl, 8787)} --root ${JSON.stringify(root)}`,
           url: this.vectorHubUrl,
-          env: { VECTOR_HUB_ROOT: root, VECTOR_HUB_CONFIG: process.env.VECTOR_HUB_CONFIG || path.join(root, 'config.json'), VECTOR_HUB_LEGACY_CONFIG: process.env.VECTOR_HUB_LEGACY_CONFIG || path.join(require('os').homedir(), '.vector-hub', 'config.json'), KB_VECTOR_MANAGED: '1', KB_VECTOR_RUNTIME_TOKEN: this.runtimeToken },
+          env: { VECTOR_HUB_ROOT: root, VECTOR_HUB_CONFIG: path.join(root, 'config.json'), VECTOR_HUB_LEGACY_CONFIG: path.join(root, 'no-legacy-config.json'), KB_VECTOR_MANAGED: '1', KB_VECTOR_RUNTIME_TOKEN: this.runtimeToken },
         });
       }
     }
@@ -589,9 +581,7 @@ class ModuleBridge {
       if (!eventBridgeEntry) {
         this.logger.warn('modules.supervisor', '@sanqianx/ai-coding-event-bridge-console runtime not installed; expecting an external service.', {});
       } else {
-        const homeArgs = process.env.AI_CODING_EVENT_BRIDGE_HOME
-          ? ` --home ${JSON.stringify(process.env.AI_CODING_EVENT_BRIDGE_HOME)}`
-          : '';
+        const homeArgs = ` --home ${JSON.stringify(process.env.AI_CODING_EVENT_BRIDGE_HOME || path.join(this.dataDir || require('./data-dir').getDataDir(), 'events'))}`;
         specs.push({
           name: 'event-bridge',
           command: `node ${JSON.stringify(eventBridgeEntry)} serve --host ${urlHost(this.eventBridgeUrl)} --port ${urlPort(this.eventBridgeUrl, 8790)}${homeArgs}`,

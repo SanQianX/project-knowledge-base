@@ -11,7 +11,6 @@ const { StorageLayout } = require('./storage-layout');
 const { SettingsStore } = require('./settings-store');
 const { ProjectRegistryStore } = require('./project-registry-store');
 const { ProjectStore } = require('./project-store');
-const { MigrationService } = require('./migration-service');
 const { ProjectLifecycleService } = require('./project-lifecycle-service');
 const { RequirementRecorder } = require('./requirement-recorder');
 const { ConversationStore } = require('./conversation-store');
@@ -25,7 +24,8 @@ const { handlePostCommitEvent, recoverOrphanedClaims } = require('./post-commit-
 const { KnowledgePromotionService, hashBuffer } = require('./knowledge-promotion');
 const { resolveEffectiveAiProfile } = require('./ai-profile-resolver');
 const { ModuleBridge } = require('./module-bridge');
-const { prepareEngineCutover, finishEngineCutover, forwardCommitToBridge } = require('./engine-cutover');
+const { connectEngine, forwardCommitToBridge } = require('./engine-connection');
+const { initializeProductData } = require('./product-data');
 const { IndexService } = require('./index-service');
 const { KnowledgeDatabase } = require('./knowledge-db');
 const { LocalEmbeddingService } = require('./embedding-service');
@@ -442,6 +442,7 @@ class RuntimeKnowledgeAnalyzer {
 function createRuntime(options = {}) {
   const rootDir = path.resolve(options.rootDir || path.resolve(__dirname, '..', '..'));
   const dataPath = path.resolve(options.dataDir || dataDir.getDataDir());
+  if (options.analysisOwner === 'engine') initializeProductData(dataPath);
   const layout = options.layout || new StorageLayout({ dataDir: dataPath });
   const settingsStore = options.settingsStore || new SettingsStore({ layout });
   const registryStore = options.registryStore || new ProjectRegistryStore({ layout });
@@ -466,7 +467,7 @@ function createRuntime(options = {}) {
     secretsProvider,
   });
   const activeTasks = new Map();
-  const bridgeAdapter = options.bridgeAdapter || new BridgeAdapter({ dataDir: dataPath });
+  const bridgeAdapter = options.bridgeAdapter || new BridgeAdapter({ dataDir: dataPath, ...(options.analysisOwner === 'engine' ? { bridgeHomeDir: process.env.AI_CODING_EVENT_BRIDGE_HOME || path.join(dataPath, 'events') } : {}) });
   const conversationStore = options.conversationStore || new ConversationStore({ layout, projectStore, logger });
   const bridgeConsumerService = options.bridgeConsumerService || new BridgeConsumerService({
     bridgeAdapter,
@@ -505,12 +506,11 @@ function createRuntime(options = {}) {
     isProjectBusy: projectId => isProjectBusy(projectId, projectStore, activeTasks),
     bridgeAdapter,
   });
-  const migrationService = options.migrationService || new MigrationService({ layout, legacyDataDir: dataPath, logger });
   const moduleBridge = options.moduleBridge || new ModuleBridge({ registryStore, projectStore, settingsStore, logger, dataDir: dataPath });
   return {
     analysisOwner: options.analysisOwner || 'legacy', ownership: { owner: options.analysisOwner || 'legacy', ready: false },
     rootDir, dataPath, layout, settingsStore, registryStore, projectStore, logger, logRepository,
-    activeTasks, bridgeAdapter, bridgeConsumerService, conversationStore, conversationQuery, indexAdapter, indexService, promotionService, reconciler, lifecycleService, requirementRecorder, knowledgeRuntime, migrationService, moduleBridge,
+    activeTasks, bridgeAdapter, bridgeConsumerService, conversationStore, conversationQuery, indexAdapter, indexService, promotionService, reconciler, lifecycleService, requirementRecorder, knowledgeRuntime, moduleBridge,
   };
 }
 
@@ -648,22 +648,11 @@ async function reconcileLegacyHookMigration(runtime, projectId, config, state) {
 }
 
 async function initializeRuntime(runtime) {
-  // Legacy v4.1.x package-root data is intentionally NOT relocated: this is a
-  // fresh knowledge-base system and old runtime data is not migrated. The
-  // relocation previously aborted startup on conflict, bricking fresh
-  // machines whose npm package dir carried stale v4.1.x-era files.
-  await runtime.logger.info('server.startup_started', 'Server startup began.', { phase: 'migration' });
-  const migration = await runtime.migrationService.migrateIfNeeded();
-  if (!migration.ok || migration.requiresManualRecovery) {
-    throw new DomainError('MIGRATION_FAILED', 'Runtime data migration did not complete safely.', {
-      status: 500,
-      details: { reason: migration.reason || (migration.error && migration.error.code) || '' },
-    });
-  }
+  await runtime.logger.info('server.startup_started', 'Server startup began with fresh product data.', { phase: 'initialization' });
+  const migration = { ok: true, migrated: false, reason: 'fresh-data-only' };
   dataDir.ensureDataDir(runtime.dataPath);
   await runtime.settingsStore.initialize();
   await runtime.registryStore.initialize();
-  if (runtime.analysisOwner !== 'legacy') await prepareEngineCutover(runtime);
   const recoveredPromotions = runtime.analysisOwner === 'legacy' ? await runtime.promotionService.recoverAll() : [];
   // Promotion recovery runs first because it can legitimately finish and clear
   // a claim. Any claim left after that belonged to the previous process. Make
@@ -904,7 +893,7 @@ function createRequestHandler(runtime, options = {}) {
       const moduleUi = pathname.match(/^\/modules\/(terminal|vectorhub|eventbridge|engine)\/(.*)$/);
       if (moduleUi && method === 'GET') return runtime.moduleBridge.proxyModuleUi(req, res, moduleUi[1], moduleUi[2], url.search);
       if (pathname.startsWith('/api/engine/') || pathname === '/api/engine') {
-        if (['/api/engine/runtime-config', '/api/engine/scopes', '/api/engine/control', '/api/engine/migrate'].includes(pathname)) throw new DomainError('FORBIDDEN', 'Runtime configuration is not exposed to browsers.', { status: 403 });
+        if (['/api/engine/runtime-config', '/api/engine/runtime-auth', '/api/engine/scopes', '/api/engine/control', '/api/engine/migrate'].includes(pathname)) throw new DomainError('FORBIDDEN', 'Runtime configuration is not exposed to browsers.', { status: 403 });
         return runtime.moduleBridge.proxyEngine(req, res, pathname, url.search);
       }
 
@@ -926,7 +915,7 @@ function createRequestHandler(runtime, options = {}) {
       }
       if (method === 'POST' && pathname === '/api/modules/configure') {
         await readJsonBody(req);
-        await finishEngineCutover(runtime);
+        await connectEngine(runtime);
         return send(res, 200, { ok: true, configuration: await runtime.moduleBridge.syncEngineConfiguration() });
       }
       if (method === 'GET' && pathname === '/api/brain') {
@@ -1506,10 +1495,10 @@ async function startServer(options = {}) {
     if (runtime.analysisOwner === 'legacy') runtime.indexService.retryDirtyProjects().catch(error => runtime.logger.error('index.retry_failed', 'Index retry failed.', { error }));
   }, Number(process.env.KB_MAINTENANCE_INTERVAL_MS || 60 * 60 * 1000));
   maintenanceTimer.unref?.();
-  const configurationTimer = setInterval(() => { finishEngineCutover(runtime).then(() => runtime.moduleBridge.syncEngineConfiguration()).catch(() => {}); }, 30000);
+  const configurationTimer = setInterval(() => { connectEngine(runtime).catch(() => {}); }, 30000);
   configurationTimer.unref?.();
   runtime.moduleBridge.syncEngineConfiguration().catch(() => {});
-  finishEngineCutover(runtime).catch(() => {});
+  connectEngine(runtime).catch(() => {});
 
   // T3.5 进程编排：拉起包内自带的模块服务并守护（默认开启，KB_MODULES_AUTOSTART=0 关闭）
   try {

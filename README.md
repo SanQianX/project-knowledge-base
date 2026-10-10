@@ -32,9 +32,8 @@ project-knowledge
    It also registers the host-level `project-knowledge` Bridge consumer.
    No client UI needs to be opened; third-party hooks and configs are
    preserved, and a Codex notify conflict is reported instead of overwritten.
-3. `project-knowledge` starts the local backend. Projects imported with older
-   versions are upgraded automatically on the first drain (canonical workspace
-   identity + conversation baseline — no manual migration).
+3. `project-knowledge` starts a fresh v5 local backend. Import projects again;
+   older registries, knowledge, sessions and unfinished tasks are not migrated.
 
 Notes:
 
@@ -62,7 +61,7 @@ Requires Node.js 22 or newer and Git on `PATH`.
 
 ### Windows desktop
 
-Version 4.8.0 delivers the web product through npm. A new Windows installer
+Version 5.0.0 delivers the web product through npm. A new Windows installer
 and desktop auto-update are not part of this release.
 
 ## Runtime model
@@ -138,7 +137,13 @@ scopes are nested; unconfirmed memory candidates are not task preferences.
 
 ## Storage
 
-Default internal data directory: `~/.project-knowledge/`
+Version 5 is a fresh start, not a data upgrade. Stop the previous process,
+remove any old `KB_DATA_DIR` override, configure models and import projects into
+new empty knowledge directories. Old files remain untouched but are not read.
+See [fresh v5 setup](docs/fresh-v5-start.md). Queued tasks can be cancelled by
+unbinding; only an active knowledge/index writer blocks removal.
+
+Default internal data directory: `~/.project-knowledge-v5/`
 
 Override it with `KB_DATA_DIR`:
 
@@ -157,7 +162,7 @@ Settings, metadata, indexes, caches, runtime state, logs, and recovery assets
 remain in the internal data directory:
 
 ```text
-~/.project-knowledge/
+~/.project-knowledge-v5/
 ├── settings.json
 ├── projects.json                         # minimal project ID/order index
 ├── projects/<projectId>/

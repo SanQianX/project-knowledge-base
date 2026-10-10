@@ -111,7 +111,7 @@ function installHook(options = {}) {
       // refusing — otherwise import promises a migration the installer
       // rejects for every repo hooked by an older KB generation.
     }
-    if (marker && marker.projectId !== projectId) {
+    if (marker && marker.projectId !== projectId && options.replaceManagedHookProjectId !== marker.projectId) {
       throw new DomainError('HOOK_CONFLICT', 'The managed hook belongs to another project.', { status: 409 });
     }
     if (existing === body) return { ok: true, installed: true, updated: false, hookPath, projectId, managedVersion: MANAGED_VERSION };

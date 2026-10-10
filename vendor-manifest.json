@@ -3,19 +3,18 @@
   "modules": {
     "knowledge-engine": {
       "name": "@sanqianx/ai-coding-knowledge-engine",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "root": "_modules/knowledge-engine",
       "files": {
-        "README.md": "27e06c47c58e75e3081296cbdb2885df2d346fbd87bd7e415254db501d8ef35d",
-        "package.json": "f6949c331796b8351e55293d2be5a18b4ac7a203b9270c564eeefd692a006daf",
+        "README.md": "c12b9bc9aa49dce6eaad0e6f3fd611466ab1ef6b17d2bdfb69a6dab6a42ab5ed",
+        "package.json": "6740fa3dec72ebae49fa903a4b5f8ddc2adf52d11ba9f7c4bc1f36a603636578",
         "src/analysis-contract.js": "90354d1e9b4eff74fdd9d47e097cdb5d47944785c2be66811f64e5958c94d8e7",
         "src/analysis-worker.js": "a105cabe6e1573b2d986b1e7a5aaf615e2fb53524156fc8e4e2c0a71f2c97e55",
         "src/bin.js": "22208907431d0f3a971a669c7e5eb44b3b7af9bbb36fd7ba17c3b90c4288bd70",
         "src/bridge-client.js": "ae0dba21e4286694bcd9e064ca36564ec997969ae1eb1ce4f8a6665e447cbffe",
-        "src/coordinator.js": "4e82cce47c8c16294ddc77eb946eb1c3a2f8bfd8918e05742c80845ed8ecf10c",
+        "src/coordinator.js": "e85f1f604d2090bd466244d73cf8e1862e0cbe436e62d4a2f7193afd2fac7843",
         "src/headless-analyzer.js": "2473b28d4bf06088abbcafa21d491560a9ca0ab100024c912a36bc6f981d8576",
         "src/memories.js": "0a8667e6daba99fa5022393951a28e96cdadf98af85b6af9a6be96c7f4e896fc",
-        "src/migration.js": "b018871727f3277e4a24350fef1911fbb89e2158578339210d88efc2e309be32",
         "src/retrieval.js": "acbf76bb93fd13dac391c2e918891a56ace869db5583d2a5994641b6782496d6",
         "src/runtime/README.md": "9be676eca76a7857b34d7357194e6f0ee733c22e61d962d53984715dbec7f673",
         "src/runtime/atomic-file.js": "9846b4b69db5ded811acf19a1181ef93615d93efaa542b858e552a7f3124ad23",
@@ -35,10 +34,10 @@
         "src/runtime/layout.js": "c48fa1db62e5df1edefe13218e470c5ceea4ef2781293512c2c18e5c2ba0c7e9",
         "src/runtime/markdown-knowledge-indexer.js": "44a76a9adefad07e78f77b1106b10d6c1cc7873d76362df4c546892b21f3939c",
         "src/runtime/scanner.js": "d99fa8d74a6fbbaae75ca49f62127e14cf9e48b1404e4b4d597ef39df5441410",
-        "src/server.js": "e2d983eaa9f4ffc240caab467fad8e21c6124779ac3f27c9cec2c4f06827ef65",
-        "src/store.js": "b778d93b97cd6a1174fccd3a5de1f2b170934a262e11e4447e7fdc698ac386e0",
+        "src/server.js": "e7f0b07b7a8cf2623690b9d2d23492f2c95737dc974adfeea049610a4b5ded55",
+        "src/store.js": "71f0417c2c1e42b89429e3dee1adff7b2c09e86682cb3f4843ce6d9e5aafd7ec",
         "ui/app.css": "7ad370c269e60a7b5ec907d81a607b2d16bd07b2d7c22a81f102dab51eeb2889",
-        "ui/app.js": "5f4f6fc6faeb951938a821e846e948de8859d7c908e04f6f93bf73208493993e",
+        "ui/app.js": "91ee6d8c31712e6af46de2eecbd72bbc5236c06b7cd055800831e7d57f84a0be",
         "ui/index.html": "ce3565cfefd4838b11d37a91a906ef26ca5a1834844fe3f7c897b56851a3c418"
       }
     }

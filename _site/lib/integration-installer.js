@@ -6,6 +6,7 @@ const { spawnSync } = require('child_process');
 const crossSpawn = require('cross-spawn');
 const { applyEdits, modify, parse } = require('jsonc-parser');
 const packageInfo = require('../../package.json');
+const { resolveDataDirPath } = require('./data-dir');
 
 // Fail-open module resolution: a missing/unloadable Bridge package must
 // degrade Development Capture status, never crash server startup.
@@ -327,7 +328,7 @@ class IntegrationManager {
     this.bridgeConsumerName = options.bridgeConsumerName || DEFAULT_BRIDGE_CONSUMER;
     this.bridgeHomeDir = options.bridgeHomeDir
       || this.env.AI_CODING_EVENT_BRIDGE_HOME
-      || path.join(this.homeDir, '.ai-coding-event-bridge');
+      || path.join(resolveDataDirPath({ dataDir: this.env.KB_DATA_DIR || '', homeDir: this.homeDir }), 'events');
     this.claudeSettingsFile = options.claudeSettingsFile || '';
     this.codexConfigFile = options.codexConfigFile || '';
     this.openCodePluginsDir = options.openCodePluginsDir || '';
