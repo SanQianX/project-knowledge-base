@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.0.9-rc.2] - 2026-10-11
+
+- Pin the verified Workbench 0.13.2-rc.1 and vector-hub 1.0.8-rc.1 candidates.
+  Normalize known official MiniMax embedding route aliases at runtime without
+  changing existing v5 configuration bytes or private gateway paths.
+- Queue same-project index writes across embedding-model rebuilds. Failed writes
+  do not poison retries, and unrelated projects remain independent.
+- Restore safe relative Markdown document navigation and verify the standalone
+  retrieval UI at 1920x1080. Tests never kill unrelated port owners.
+- Isolate regression-suite ports and tolerate Windows fixture file release.
+  Candidate publication is not full product acceptance; latest remains unchanged.
+
 ## [5.0.9-rc.1] - 2026-10-11
 
 - Retain classified, bounded and redacted index errors in run details, activity
