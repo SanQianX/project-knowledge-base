@@ -49,15 +49,7 @@ function makeRepo({ kind = 'one-commit' } = {}) {
   const commits = [];
   const cleanup = () => {
     if (path.dirname(repoPath) !== path.resolve(os.tmpdir()) || !path.basename(repoPath).startsWith(`kb-fixture-${kind}-${process.pid}-`)) throw new Error('Unsafe fixture cleanup');
-    function remove(directory) {
-      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-        const file = path.join(directory, entry.name);
-        if (entry.isDirectory() && !entry.isSymbolicLink()) remove(file);
-        else { try { fs.unlinkSync(file); } catch (error) { if (error.code !== 'EPERM') throw error; fs.chmodSync(file, 0o600); fs.unlinkSync(file); } }
-      }
-      fs.rmdirSync(directory);
-    }
-    if (fs.existsSync(repoPath)) remove(repoPath);
+    if (fs.existsSync(repoPath)) fs.rmSync(repoPath, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   };
 
   if (kind === 'not-git') {

@@ -5,10 +5,10 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { spawnServer } = require('./helpers/spawn-server');
+const freePort = require('./helpers/free-port');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const PORT = 7804;
-const BASE = `http://127.0.0.1:${PORT}`;
+let PORT, BASE;
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pkb-sse-v2-'));
 const repoPath = fs.mkdtempSync(path.join(os.tmpdir(), 'pkb-sse-repo-'));
 
@@ -60,6 +60,7 @@ async function waitFor(predicate) {
 }
 
 (async () => {
+  PORT = await freePort(); BASE = `http://127.0.0.1:${PORT}`;
   git(['init', '--initial-branch=main']);
   git(['config', 'user.email', 'sse@example.test']);
   git(['config', 'user.name', 'SSE Test']);

@@ -4,11 +4,11 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { spawnServer } = require('./helpers/spawn-server');
+const freePort = require('./helpers/free-port');
 const githubTeamStore = require('../lib/github-team-store');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const PORT = Number(process.env.KB_TEAM_KNOWLEDGE_PORT || 7837);
-const BASE_URL = `http://127.0.0.1:${PORT}`;
+let PORT, BASE_URL;
 const TEMP = fs.mkdtempSync(path.join(os.tmpdir(), `kb-team-v2-${process.pid}-`));
 const DATA_DIR = path.join(TEMP, 'data');
 const SOURCE_ONE = path.join(TEMP, 'source-one');
@@ -51,6 +51,7 @@ async function json(method, route, body) {
 }
 
 (async () => {
+  PORT = process.env.KB_TEAM_KNOWLEDGE_PORT ? Number(process.env.KB_TEAM_KNOWLEDGE_PORT) : await freePort(); BASE_URL = `http://127.0.0.1:${PORT}`;
   let spawned;
   try {
     initializeRepo(SOURCE_ONE, 'Source one');
