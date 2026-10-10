@@ -7,6 +7,7 @@ const crossSpawn = require('cross-spawn');
 const { applyEdits, modify, parse } = require('jsonc-parser');
 const packageInfo = require('../../package.json');
 const { resolveDataDirPath } = require('./data-dir');
+const { planNotify, writeNotify } = require('./codex-notify-config');
 
 // Fail-open module resolution: a missing/unloadable Bridge package must
 // degrade Development Capture status, never crash server startup.
@@ -84,147 +85,6 @@ function writeFileAtomic(filePath, content) {
   const temporary = `${filePath}.${process.pid}.${Date.now()}.tmp`;
   fs.writeFileSync(temporary, content, 'utf8');
   fs.renameSync(temporary, filePath);
-}
-
-function codexNotifyLine(source) {
-  const lines = String(source || '').split(/\r?\n/);
-  const index = lines.findIndex(line => /^\s*notify\s*=/.test(line));
-  if (index < 0) return null;
-  const value = lines[index].replace(/^\s*notify\s*=\s*/, '');
-  try {
-    const args = JSON.parse(value);
-    return Array.isArray(args) && args.every(item => typeof item === 'string') ? { lines, index, args } : null;
-  } catch {
-    // Older Bridge releases wrote Windows paths into TOML double-quoted
-    // arrays without JSON escaping their backslashes. Codex accepts those
-    // entries; keep them readable so an upgrade can repair them safely.
-    if (!/^\s*\[.*\]\s*$/.test(value)) return null;
-    const args = [];
-    const matcher = /"((?:\\.|[^"\\])*)"/g;
-    let lastIndex = 0;
-    let match;
-    while ((match = matcher.exec(value))) {
-      if (!/^[\s,\[]*$/.test(value.slice(lastIndex, match.index))) return null;
-      args.push(match[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\'));
-      lastIndex = matcher.lastIndex;
-    }
-    if (!args.length || !/^[\s,\]]*$/.test(value.slice(lastIndex))) return null;
-    return { lines, index, args };
-  }
-}
-
-const NESTED_NOTIFY_MARKERS = new Set(['--previous-notify', '--next-base64', '--bridge-base64']);
-
-function decodeNestedNotify(marker, value) {
-  if (!NESTED_NOTIFY_MARKERS.has(marker) || typeof value !== 'string' || value.length > 1024 * 1024) return null;
-  const candidates = marker === '--previous-notify'
-    ? [value, Buffer.from(value, 'base64').toString('utf8')]
-    : [Buffer.from(value, 'base64').toString('utf8')];
-  for (const candidate of candidates) {
-    try {
-      const parsed = JSON.parse(candidate);
-      if (Array.isArray(parsed) && parsed.every(item => typeof item === 'string')) return parsed;
-    } catch {
-      // Try the next supported representation.
-    }
-  }
-  return null;
-}
-
-function notifyTreeSome(args, predicate, depth = 0) {
-  if (!Array.isArray(args) || depth > 8) return false;
-  if (predicate(args)) return true;
-  for (let index = 0; index < args.length - 1; index += 1) {
-    const nested = decodeNestedNotify(args[index], args[index + 1]);
-    if (nested && notifyTreeSome(nested, predicate, depth + 1)) return true;
-  }
-  return false;
-}
-
-function isDevTaskRadarNotify(args) {
-  return notifyTreeSome(args, isDirectDevTaskRadarNotify);
-}
-
-function isDirectDevTaskRadarNotify(args) {
-  return Array.isArray(args) && args.some(arg => /devtask-radar[\\/]connectors[\\/]codex[\\/]notify-hook\.js$/i.test(arg));
-}
-
-function bridgeNextNotifyArgs(bridgeHomeDir) {
-  return ['node', path.join(bridgeHomeDir, 'bin', 'bridge-hook.cjs')];
-}
-
-function codexNotifyFanoutPath(rootDir) {
-  return path.join(rootDir, '_site', 'scripts', 'codex-notify-fanout.cjs');
-}
-
-function isProjectKnowledgeFanout(args, rootDir, bridgeHomeDir) {
-  return notifyTreeSome(args, candidate => {
-    if (candidate[0] !== 'node' || candidate[1] !== codexNotifyFanoutPath(rootDir)) return false;
-    const bridgeIndex = candidate.indexOf('--bridge-base64');
-    if (bridgeIndex < 0 || !candidate[bridgeIndex + 1]) return false;
-    try {
-      const bridge = JSON.parse(Buffer.from(candidate[bridgeIndex + 1], 'base64').toString('utf8'));
-      return Array.isArray(bridge) && bridge.join('\n') === bridgeNextNotifyArgs(bridgeHomeDir).join('\n');
-    } catch {
-      return false;
-    }
-  });
-}
-
-function isBridgeNextNotify(args, bridgeHomeDir) {
-  const expected = bridgeNextNotifyArgs(bridgeHomeDir).join('\n');
-  return notifyTreeSome(args, candidate => candidate.join('\n') === expected);
-}
-
-function isBridgeOnlyNotify(args, bridgeHomeDir) {
-  return Array.isArray(args) && args.join('\n') === bridgeNextNotifyArgs(bridgeHomeDir).join('\n');
-}
-
-function chainBridgeAfterDevTaskRadar(configFile, bridgeHomeDir) {
-  if (!configFile || !fs.existsSync(configFile)) return { chained: false, reason: 'config-not-found' };
-  const source = fs.readFileSync(configFile, 'utf8');
-  const parsed = codexNotifyLine(source);
-  if (!parsed || !isDirectDevTaskRadarNotify(parsed.args)) return { chained: false, reason: 'unsupported-third-party-notify' };
-  if (isBridgeNextNotify(parsed.args, bridgeHomeDir)) return { chained: true, changed: false };
-  if (parsed.args.includes('--next-base64')) return { chained: false, reason: 'third-party-next-notify-present' };
-  const next = Buffer.from(JSON.stringify(bridgeNextNotifyArgs(bridgeHomeDir))).toString('base64');
-  const args = [...parsed.args, '--next-base64', next];
-  const indentation = (parsed.lines[parsed.index].match(/^\s*/) || [''])[0];
-  parsed.lines[parsed.index] = `${indentation}notify = ${JSON.stringify(args)}`;
-  const eol = source.includes('\r\n') ? '\r\n' : '\n';
-  writeFileAtomic(configFile, parsed.lines.join(eol));
-  return { chained: true, changed: true };
-}
-
-function wrapDevTaskRadarNotify(configFile, rootDir, bridgeHomeDir) {
-  if (!configFile || !fs.existsSync(configFile)) return { chained: false, reason: 'config-not-found' };
-  const source = fs.readFileSync(configFile, 'utf8');
-  const parsed = codexNotifyLine(source);
-  if (!parsed) return { chained: false, reason: 'unsupported-third-party-notify' };
-  if (isProjectKnowledgeFanout(parsed.args, rootDir, bridgeHomeDir)) return { chained: true, changed: false };
-  if (!JSON.stringify(parsed.args).includes('devtask-radar')) return { chained: false, reason: 'unsupported-third-party-notify' };
-  const next = Buffer.from(JSON.stringify(parsed.args)).toString('base64');
-  const bridge = Buffer.from(JSON.stringify(bridgeNextNotifyArgs(bridgeHomeDir))).toString('base64');
-  const fanout = ['node', codexNotifyFanoutPath(rootDir), '--next-base64', next, '--bridge-base64', bridge];
-  const indentation = (parsed.lines[parsed.index].match(/^\s*/) || [''])[0];
-  parsed.lines[parsed.index] = `${indentation}notify = ${JSON.stringify(fanout)}`;
-  const eol = source.includes('\r\n') ? '\r\n' : '\n';
-  writeFileAtomic(configFile, parsed.lines.join(eol));
-  return { chained: true, changed: true };
-}
-
-function wrapBridgeOnlyNotify(configFile, rootDir, bridgeHomeDir) {
-  if (!configFile || !fs.existsSync(configFile)) return { chained: false, reason: 'config-not-found' };
-  const source = fs.readFileSync(configFile, 'utf8');
-  const parsed = codexNotifyLine(source);
-  if (!parsed || !isBridgeOnlyNotify(parsed.args, bridgeHomeDir)) return { chained: false, reason: 'not-bridge-only-notify' };
-  const bridge = Buffer.from(JSON.stringify(bridgeNextNotifyArgs(bridgeHomeDir))).toString('base64');
-  const fanout = ['node', codexNotifyFanoutPath(rootDir), '--bridge-base64', bridge];
-  const indentation = (parsed.lines[parsed.index].match(/^\s*/) || [''])[0];
-  parsed.lines[parsed.index] = `${indentation}notify = ${JSON.stringify(fanout)}`;
-  const eol = source.includes('\r\n') ? '\r\n' : '\n';
-  writeFileAtomic(configFile, parsed.lines.join(eol));
-  return { chained: true, changed: true };
 }
 
 function updateJsoncValue(filePath, propertyPath, value) {
@@ -455,55 +315,35 @@ class IntegrationManager {
       this.planned.push({ command: 'bridge', args: ['installCodexNotify', this.bridgeHomeDir] });
       return { state: 'planned', installed: false, conflict: false, detail: 'managed Codex notify (dry-run)' };
     }
-    const result = await this.bridge.installers.codex.installCodexNotify(this._captureInstallerOptions());
-    if (result.conflict) {
-      const configFile = this.codexConfigFile || path.join(this.homeDir, '.codex', 'config.toml');
-      const chained = chainBridgeAfterDevTaskRadar(configFile, this.bridgeHomeDir);
-      if (chained.chained) {
-        return { state: 'installed', installed: true, conflict: false, detail: 'Bridge notify chained after the compatible DevTask Radar notifier' };
-      }
-      const wrapped = wrapDevTaskRadarNotify(configFile, this.rootDir, this.bridgeHomeDir);
-      if (wrapped.chained) {
-        return { state: 'installed', installed: true, conflict: false, detail: 'Bridge notify fan-out preserves the existing DevTask Radar notifier' };
-      }
-      return { state: 'conflict', installed: false, conflict: true, detail: 'third-party notify present; not overwritten' };
-    }
-    const configFile = this.codexConfigFile || path.join(this.homeDir, '.codex', 'config.toml');
-    const wrapped = wrapBridgeOnlyNotify(configFile, this.rootDir, this.bridgeHomeDir);
-    if (!wrapped.chained) {
-      return { state: 'failed', installed: false, conflict: false, detail: 'managed notify could not be configured for Codex session capture' };
-    }
-    return { state: 'installed', installed: true, conflict: false, detail: 'managed Bridge notify fan-out installed' };
+    const plan = planNotify(this.codexConfigFile, this);
+    if (plan.conflict) return { state: 'conflict', installed: false, conflict: true, detail: plan.detail };
+    // The host owns composition and root-level TOML placement; Bridge only
+    // materializes its independent runtime, never rewrites the notify setting.
+    await this.bridge.ensureRuntimeHome({ homeDir: this.bridgeHomeDir });
+    const written = writeNotify(this.codexConfigFile, plan);
+    return { state: 'installed', installed: true, conflict: false, detail: written.changed ? '已接入 Codex 会话采集，保留有效的原通知；请重新打开 Codex 会话。' : 'Codex 会话采集已接入，通知链无需重复修改。', ...written };
   }
 
   async statusCaptureCodex() {
-    const status = await this.bridge.installers.codex.statusCodexNotify(this._captureInstallerOptions());
-    if (status.thirdParty) {
-      const configFile = this.codexConfigFile || path.join(this.homeDir, '.codex', 'config.toml');
-      const source = fs.existsSync(configFile) ? fs.readFileSync(configFile, 'utf8') : '';
-      const parsed = codexNotifyLine(source);
-      if (parsed && isProjectKnowledgeFanout(parsed.args, this.rootDir, this.bridgeHomeDir)) {
-        return { state: 'installed', installed: true, conflict: false, detail: 'Bridge notify fan-out preserves the existing DevTask Radar notifier' };
-      }
-      if (parsed && isDevTaskRadarNotify(parsed.args) && isBridgeNextNotify(parsed.args, this.bridgeHomeDir)) {
-        return { state: 'installed', installed: true, conflict: false, detail: 'Bridge notify chained after the compatible DevTask Radar notifier' };
-      }
-    }
+    const plan = planNotify(this.codexConfigFile, this);
+    const runtimeReady = fs.existsSync(path.join(this.rootDir, '_site', 'scripts', 'codex-notify-fanout.cjs'))
+      && fs.existsSync(path.join(this.bridgeHomeDir, 'bin', 'bridge-hook.cjs'));
+    const installed = !plan.conflict && !plan.changed && runtimeReady;
     return {
-      state: status.installed ? 'installed' : status.thirdParty ? 'conflict' : 'not-installed',
-      installed: Boolean(status.installed),
-      conflict: Boolean(status.thirdParty),
-      detail: status.installed ? '已配置提交回合后的会话采集。' : status.thirdParty ? '已有第三方通知配置，不会覆盖；请查看诊断记录。' : '会话采集通知尚未配置。',
+      state: installed ? 'installed' : plan.conflict ? 'conflict' : 'not-installed',
+      installed,
+      conflict: Boolean(plan.conflict),
+      detail: installed ? '已配置 Codex 会话采集，原通知保持有效。' : plan.conflict ? plan.detail : !runtimeReady && !plan.changed ? 'Codex 采集运行文件缺失，请执行接入/修复。' : 'Codex 会话采集尚未接入或旧接线需要修复。',
     };
   }
 
   async uninstallCaptureCodex(options = {}) {
-    await this.bridge.installers.codex.uninstallCodexNotify({
-      ...this._captureInstallerOptions(),
-      unregisterConsumer: options.unregisterConsumer === true,
-      consumerName: this.bridgeConsumerName,
-    });
-    return { state: 'removed', detail: 'managed notify removed' };
+    if (this.dryRun) return { state: 'planned', installed: false, detail: '计划移除 Codex 托管采集，保留原通知。' };
+    const plan = planNotify(this.codexConfigFile, this, false);
+    if (plan.conflict) return { state: 'conflict', installed: false, conflict: true, detail: plan.detail };
+    const written = writeNotify(this.codexConfigFile, plan);
+    if (options.unregisterConsumer === true) await this.unregisterBridgeConsumer();
+    return { state: 'removed', installed: false, conflict: false, detail: '已移除 Codex 托管采集，保留有效的原通知和已有记录。', ...written };
   }
 
   async installCaptureOpenCode() {

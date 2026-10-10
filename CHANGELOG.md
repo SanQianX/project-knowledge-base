@@ -1,5 +1,20 @@
 # Changelog
 
+## [5.0.8] - 2026-10-10
+
+- Repair managed Codex notify chains after scoped npm package or Bridge-home
+  changes. Preserve live desktop wrappers and valid third-party notifications;
+  unwrap only missing, known Codex runtime wrappers. Unknown notifiers remain
+  conflicts, never overwritten. Repeat setup is idempotent; removal unwraps
+  capture without deleting existing notifications or evidence.
+- Accept Codex's documented JSON argument as well as legacy stdin notifications.
+  Preserve the third-party payload and transport, adapt only the Bridge wake-up
+  aliases, and isolate child-process errors between notification branches.
+- Place new notify entries at the TOML root. Back up only the modified setting,
+  and refuse stale writes when another program changes the config after preflight.
+- Add real Git/Bridge/journal capture regression with isolated rollout fixtures,
+  duplicate-notify and missing-session checks; no model calls or user-data reset.
+
 ## [5.0.7] - 2026-10-10
 
 - Normalize CLI command case and reject unknown commands, extra arguments and

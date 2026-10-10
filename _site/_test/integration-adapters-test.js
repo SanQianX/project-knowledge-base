@@ -146,15 +146,21 @@ async function main() {
   assert(chained.installed && !chained.conflict, 'a compatible DevTask Radar notifier should chain Bridge instead of blocking capture');
   const chainedConfig = JSON.parse(fs.readFileSync(chainedCodexConfig, 'utf8').replace(/^\s*notify\s*=\s*/, '').trim());
   const nextIndex = chainedConfig.indexOf('--next-base64');
-  assert(nextIndex >= 0, 'compatible notifier chain should append a downstream Bridge notifier');
+  assert(nextIndex >= 0, 'managed fan-out must preserve the compatible notifier as its independent branch');
   const nextNotify = JSON.parse(Buffer.from(chainedConfig[nextIndex + 1], 'base64').toString('utf8'));
-  assert(nextNotify.join(' ').includes('bridge-hook.cjs'), 'downstream notifier must be the Bridge shim');
+  assert(nextNotify[1] === 'C:/tools/devtask-radar/connectors/codex/notify-hook.js', 'Radar remains the existing independent notifier');
+  const bridgeIndex = chainedConfig.indexOf('--bridge-base64');
+  const bridgeNotify = JSON.parse(Buffer.from(chainedConfig[bridgeIndex + 1], 'base64').toString('utf8'));
+  assert(bridgeNotify[1] === path.join(TEMP, 'bridge-home', 'bin', 'bridge-hook.cjs'), 'capture must receive the payload through the current Bridge shim');
   const chainedStatus = await chainedManager.statusCaptureCodex();
   assert(chainedStatus.installed && !chainedStatus.conflict, 'status should recognize the compatible chained notifier');
 
   const nestedCodexConfig = path.join(TEMP, 'nested-codex-config.toml');
   const nestedDevTask = ['node', 'C:/tools/devtask-radar/connectors/codex/notify-hook.js', '--next-base64', oldNotifier];
-  fs.writeFileSync(nestedCodexConfig, `notify = ["C:/runtime/codex-computer-use.exe", "turn-ended", "--previous-notify", ${JSON.stringify(JSON.stringify(nestedDevTask))}]\n`, 'utf8');
+  const desktopExecutable = path.join(TEMP, 'OpenAI', 'Codex', 'runtimes', 'cua_node', 'test-runtime', 'bin', 'node_modules', '@oai', 'sky', 'bin', 'windows', 'codex-computer-use.exe');
+  fs.mkdirSync(path.dirname(desktopExecutable), { recursive: true });
+  fs.writeFileSync(desktopExecutable, '');
+  fs.writeFileSync(nestedCodexConfig, `notify = ${JSON.stringify([desktopExecutable, 'turn-ended', '--previous-notify', JSON.stringify(nestedDevTask)])}\n`, 'utf8');
   const nestedManager = new IntegrationManager({
     rootDir: ROOT,
     homeDir: path.join(TEMP, 'nested-codex-home'),
@@ -164,6 +170,7 @@ async function main() {
   const nested = await nestedManager.installCaptureCodex();
   assert(nested.installed && !nested.conflict, 'a nested DevTask Radar notifier should be preserved through the fan-out wrapper');
   const nestedConfig = JSON.parse(fs.readFileSync(nestedCodexConfig, 'utf8').replace(/^\s*notify\s*=\s*/, '').trim());
+  assert(nestedConfig[0] === desktopExecutable, 'the active Codex desktop wrapper keeps its position');
   assert(nestedConfig.join(' ').includes('codex-notify-fanout.cjs'), 'nested notifier chain should use the Project Knowledge fan-out wrapper');
   const nestedStatus = await nestedManager.statusCaptureCodex();
   assert(nestedStatus.installed && !nestedStatus.conflict, 'status should recognize the managed nested fan-out wrapper');
@@ -172,7 +179,7 @@ async function main() {
   // --previous-notify. The managed fan-out is still installed and must not be
   // misreported as a third-party conflict or wrapped a second time.
   const desktopWrappedConfig = path.join(TEMP, 'desktop-wrapped-codex-config.toml');
-  const desktopWrappedArgs = ['C:/runtime/codex-computer-use.exe', 'turn-ended', '--previous-notify', JSON.stringify(nestedConfig)];
+  const desktopWrappedArgs = [desktopExecutable, 'turn-ended', '--previous-notify', JSON.stringify(nestedConfig)];
   fs.writeFileSync(desktopWrappedConfig, `notify = ${JSON.stringify(desktopWrappedArgs)}\n`, 'utf8');
   const desktopWrappedManager = new IntegrationManager({
     rootDir: ROOT,

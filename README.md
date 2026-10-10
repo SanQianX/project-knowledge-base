@@ -36,7 +36,10 @@ project-knowledge
    preserves unrelated hooks and existing records. Failures include an operation
    ID and persist to the local system diagnostic log.
    No client UI needs to be opened; third-party hooks and configs are
-   preserved, and a Codex notify conflict is reported instead of overwritten.
+   preserved. Codex setup repairs this product's stale notify paths, keeps live
+   desktop notification wrappers and existing compatible Radar notifications,
+   and refuses to overwrite unknown third-party commands. Changed notify
+   settings are backed up beside `config.toml` without copying other settings.
 3. `project-knowledge` starts a fresh v5 local backend. Import projects again;
    older registries, knowledge, sessions and unfinished tasks are not migrated.
 
@@ -48,6 +51,11 @@ Notes:
 - To narrow the setup: `--ide claude`, `--capture-only`, `--knowledge-only`;
   to remove capture per client: `uninstall --capture-only`; to disable
   capture globally (including the Bridge consumer): `disable-capture`.
+- To repair Codex capture after an npm or Codex desktop upgrade, use System
+  Status → 外部 Agent 采集 → 接入/修复, or
+  `project-knowledge-integrations install --ide codex --capture-only`.
+  Repeating setup does not add notification wrappers. Removing capture restores
+  the preserved notification chain and leaves captured records on disk.
 
 The local service listens on `127.0.0.1:5757` by default. The CLI can select a
 nearby free port and records the active loopback endpoint so managed Git Hooks
