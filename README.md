@@ -58,11 +58,23 @@ project-knowledge              # start in the background and open the UI
 project-knowledge --fg         # run in the foreground
 project-knowledge status       # show the active local backend
 project-knowledge stop         # stop the background backend
+project-knowledge status --all # list verified local instances and data directories
+project-knowledge stop --port 5804 # stop a specific verified instance
+project-knowledge --data "D:/data/knowledge" # select an independent data directory
 project-knowledge --port 9000
 project-knowledge --no-open
 ```
 
 Requires Node.js 22 or newer and Git on `PATH`.
+
+Commands such as `stop`, `STOP`, and `Stop` are equivalent. Unknown commands and
+invalid arguments fail without starting a service. Default start/status/stop are
+scoped to the selected data directory; stopping another directory requires an
+explicit port or `--data`. The CLI uses a local control channel, not a shared PID
+file or blind process termination. Stop succeeds only after the backend and its
+owned modules finish shutdown; independently started modules are preserved.
+An older or unverifiable instance is reported explicitly, never treated as safely
+stopped. Stop the previous running version before upgrading.
 
 ### Windows desktop
 

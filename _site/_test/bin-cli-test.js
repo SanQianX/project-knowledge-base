@@ -14,9 +14,9 @@ const { spawn, spawnSync } = require('child_process');
 const ROOT = path.resolve(__dirname, '..', '..');
 const BIN = path.join(ROOT, 'bin', 'project-knowledge.js');
 const KB_BIN = path.join(ROOT, 'bin', 'project-knowledge-kb.js');
-const PID_FILE = path.join(os.tmpdir(), '.project-knowledge.pid');
 const ISOLATED_STATUS_PORT = 19000 + (process.pid % 1000);
 const TEST_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), `kb-bin-cli-${process.pid}-`));
+const PID_FILE = path.join(TEST_DATA_DIR, 'runtime-endpoint.json');
 const TEST_BRIDGE_HOME = fs.mkdtempSync(path.join(os.tmpdir(), `kb-bin-cli-bridge-${process.pid}-`));
 const TEST_ENV = { ...process.env, KB_DATA_DIR: TEST_DATA_DIR, KB_SKIP_MIGRATION: '1', AI_CODING_EVENT_BRIDGE_HOME: TEST_BRIDGE_HOME, KB_MODULES_AUTOSTART: '0' };
 
@@ -35,8 +35,7 @@ function run(args, opts = {}) {
 function readPidFile() {
   try {
     if (!fs.existsSync(PID_FILE)) return null;
-    const lines = fs.readFileSync(PID_FILE, 'utf-8').trim().split('\n');
-    return { pid: parseInt(lines[0], 10), port: lines[1] ? parseInt(lines[1], 10) : null };
+    return JSON.parse(fs.readFileSync(PID_FILE, 'utf8'));
   } catch { return null; }
 }
 

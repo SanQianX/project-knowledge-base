@@ -5,6 +5,7 @@ const crypto = require('crypto');
 
 const dataDir = require('./data-dir');
 const runtimeEndpoint = require('./runtime-endpoint');
+const runtimeControl = require('./runtime-control');
 const hookManager = require('./hook-manager');
 const claudeCliRunner = require('./claude-cli-runner');
 const { StorageLayout } = require('./storage-layout');
@@ -965,6 +966,10 @@ function createRequestHandler(runtime, options = {}) {
       if (method === 'GET' && pathname === '/api/health') {
         return send(res, 200, { ok: true, schema: 'server-health/v2', logger: runtime.logger.getHealth(), projects: runtime.registryStore.listIds().length });
       }
+      if (method === 'GET' && pathname === '/api/runtime/identity') {
+        if (!isLoopback(req.socket?.remoteAddress?.replace(/^::ffff:/, ''))) throw new DomainError('ORIGIN_FORBIDDEN', 'Runtime identity is local-only.', { status: 403 });
+        return send(res, 200, runtime.instanceIdentity);
+      }
       if (method === 'GET' && pathname === '/api/state') {
         const settings = runtime.settingsStore.readPublicView();
         return send(res, 200, { ok: true, schema: 'server-state/v2', settings, projects: listProjectViews(runtime.registryStore, runtime.projectStore), logger: runtime.logger.getHealth() });
@@ -1467,6 +1472,7 @@ async function startServer(options = {}) {
   }
   let startup;
   let server;
+  let controlServer;
   try {
     startup = await initializeRuntime(runtime);
     const handler = createRequestHandler(runtime, { ...options, port, host });
@@ -1533,10 +1539,14 @@ async function startServer(options = {}) {
       if (runtime.bridgeConsumerService) await runtime.bridgeConsumerService.stop().catch(() => {});
       await runtime.moduleBridge.stopSupervised();
       await runtime.logger.close();
+      await controlServer?.close();
       runtimeEndpoint.clearEndpoint(runtime.dataPath, { pid: process.pid });
     })();
     return stopping;
   };
+  runtime.instanceIdentity = runtimeControl.identity(runtime.dataPath, { host, port, version: require('../../package.json').version, startedAt: runtimeEndpoint.readEndpoint(runtime.dataPath)?.startedAt || new Date().toISOString() });
+  try { controlServer = await runtimeControl.listen(runtime.dataPath, runtime.instanceIdentity, () => stop('cli-control')); }
+  catch (error) { await stop('control-startup-failed'); throw error; }
   return { server, runtime, startup, startupPromise, stop, host, port };
 }
 

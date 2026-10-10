@@ -1,5 +1,16 @@
 # Changelog
 
+## [5.0.7] - 2026-10-10
+
+- Normalize CLI command case and reject unknown commands, extra arguments and
+  invalid ports before any service or data is created.
+- Replace the shared temporary PID and blind orphan scan with per-data-directory
+  local control channels. Stop waits for the backend and owned module shutdown;
+  stale or unrelated PIDs are never signaled.
+- Add verified local instance inventory (`status --all`), explicit targeted stop
+  (`stop --port`) and data-directory selection (`--data`). Display the actual
+  port, version and data directory; refuse unverifiable or mismatched targets.
+
 ## [5.0.6] - 2026-10-10
 
 - Do not mistake unregistered, abandoned legacy chat records for a knowledge
