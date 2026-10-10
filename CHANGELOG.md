@@ -1,5 +1,16 @@
 # Changelog
 
+## [5.0.6] - 2026-10-10
+
+- Do not mistake unregistered, abandoned legacy chat records for a knowledge
+  database on first launch. Preserve their bytes without restoring sessions or
+  importing projects; continue rejecting actual old registries and maintenance.
+- Wait for the background server's real HTTP readiness before reporting success
+  or opening the browser. Surface startup failures in the invoking terminal with
+  a nonzero exit code, and name the exact conflicting data entries.
+- Isolate regression data from the user's default data directory. Add a detached
+  npm CLI startup regression from an unrelated working directory.
+
 ## [5.0.5] - 2026-10-10
 
 - Invalidate in-flight registry snapshots after domain creation, project import,

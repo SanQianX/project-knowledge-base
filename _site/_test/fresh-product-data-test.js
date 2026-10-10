@@ -16,6 +16,20 @@ const { connectEngine } = require('../lib/engine-connection');
   assert.equal(fs.readFileSync(path.join(old, 'projects.json'), 'utf8'), bytes);
   const fresh = path.join(root, 'fresh'); initializeProductData(fresh); initializeProductData(fresh);
   assert.equal(JSON.parse(fs.readFileSync(path.join(fresh, 'product-data.json'))).schema, DATA_SCHEMA);
+  const auxiliary = path.join(root, 'auxiliary');
+  const session = path.join(auxiliary, 'runtime', 'claude-sessions', 'unregistered-test', 'session.json');
+  fs.mkdirSync(path.dirname(session), { recursive: true });
+  fs.writeFileSync(session, 'untouched abandoned chat');
+  fs.writeFileSync(path.join(auxiliary, 'launcher.log'), 'old startup failure');
+  initializeProductData(auxiliary);
+  assert.equal(fs.readFileSync(session, 'utf8'), 'untouched abandoned chat');
+  for (const entry of ['claims', 'runs', 'promotions', 'transactions', 'unknown-business-state']) {
+    const pending = path.join(root, entry);
+    fs.mkdirSync(path.join(pending, 'runtime', entry), { recursive: true });
+    fs.writeFileSync(path.join(pending, 'runtime', entry, 'record.json'), '{}');
+    assert.throws(() => initializeProductData(pending), error => error.code === 'SCHEMA_UNSUPPORTED' && error.message.includes(`runtime/${entry}`));
+    assert.equal(fs.existsSync(path.join(pending, 'product-data.json')), false);
+  }
   const paths = [];
   let activationStatus = 403;
   const logs = [];

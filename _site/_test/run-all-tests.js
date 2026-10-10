@@ -54,13 +54,15 @@ function runOne(file) {
   // Every test child gets its own Bridge journal sandbox so hook-trigger /
   // server runtimes never touch the developer's ~/.ai-coding-event-bridge.
   const bridgeHome = fs.mkdtempSync(path.join(os.tmpdir(), `kb-runall-bridge-${process.pid}-`));
+  const dataHome = fs.mkdtempSync(path.join(os.tmpdir(), `kb-runall-data-${process.pid}-`));
   const result = spawnSync(process.execPath, [path.join(TEST_DIR, file)], {
     cwd: ROOT,
     encoding: 'utf-8',
     timeout: PER_TEST_TIMEOUT_MS,
-    env: { ...process.env, FORCE_COLOR: '0', AI_CODING_EVENT_BRIDGE_HOME: bridgeHome, KB_MODULES_AUTOSTART: '0' },
+    env: { ...process.env, FORCE_COLOR: '0', KB_DATA_DIR: dataHome, AI_CODING_EVENT_BRIDGE_HOME: bridgeHome, KB_MODULES_AUTOSTART: '0' },
   });
   try { fs.rmSync(bridgeHome, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); } catch {}
+  try { fs.rmSync(dataHome, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); } catch {}
   const failure = result.status === 0 ? null : classifyFailure(result);
   return {
     file,

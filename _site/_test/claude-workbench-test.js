@@ -9,6 +9,10 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+const TEST_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-workbench-unit-'));
+process.env.KB_DATA_DIR = TEST_DATA;
+process.on('exit', () => fs.rmSync(TEST_DATA, { recursive: true, force: true }));
 const runner = require('../lib/claude-cli-runner');
 
 const ROOT = path.resolve(__dirname, '..', '..');

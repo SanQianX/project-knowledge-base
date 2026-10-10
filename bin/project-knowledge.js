@@ -6,7 +6,7 @@
 
 const path = require('path');
 const { spawn, spawnSync, exec, execSync } = require('child_process');
-const { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync, openSync } = require('fs');
+const { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync, openSync, closeSync } = require('fs');
 const net = require('net');
 const os = require('os');
 const { getDataDir } = require('../_site/lib/data-dir');
@@ -69,6 +69,33 @@ function openBrowser(url) {
     cmd = `xdg-open "${url}"`;
   }
   try { exec(cmd); } catch { /* best-effort */ }
+}
+
+function notifyLauncher(message) {
+  if (process.connected && typeof process.send === 'function') process.send(message);
+}
+
+function waitForStartup(child, logPath) {
+  return new Promise((resolve, reject) => {
+    const finish = (error, value) => {
+      clearTimeout(timer);
+      child.removeListener('message', onMessage);
+      child.removeListener('error', onError);
+      child.removeListener('exit', onExit);
+      if (child.connected) child.disconnect();
+      if (error) reject(error); else resolve(value);
+    };
+    const onMessage = message => {
+      if (message && message.type === 'kb:launcher-ready') finish(null, message);
+      else if (message && message.type === 'kb:launcher-failed') finish(new Error(message.message));
+    };
+    const onError = error => finish(error);
+    const onExit = code => finish(new Error(`后台进程在启动完成前退出（${code}）。请查看 ${logPath}`));
+    const timer = setTimeout(() => finish(new Error(`启动尚未完成，请运行 project-knowledge status 并查看 ${logPath}`)), 45000);
+    child.on('message', onMessage);
+    child.once('error', onError);
+    child.once('exit', onExit);
+  });
 }
 
 function isPortFree(port, host = '127.0.0.1') {
@@ -259,7 +286,7 @@ Options:
   -v, --version       Print version and exit
   -h, --help          Show this help message
 
-Runtime data lives next to the npm global root; PID file at ${PID_FILE}.
+Runtime data: ${DATA_DIR}; PID file at ${PID_FILE}.
 `);
   process.exit(0);
 }
@@ -357,28 +384,44 @@ if (!foreground) {
     mkdirSync(path.dirname(LAUNCH_LOG), { recursive: true });
     logFd = openSync(LAUNCH_LOG, 'a');
   } catch { /* best-effort: fall back to discarding output */ }
-  const stdio = logFd == null ? 'ignore' : ['ignore', logFd, logFd];
+  const stdio = ['ignore', logFd == null ? 'ignore' : logFd, logFd == null ? 'ignore' : logFd, 'ipc'];
 
   const child = spawn(
     process.execPath,
     [...process.argv.slice(1), '--fg', ...forwarded],
     { detached: true, stdio, windowsHide: true }
   );
+  if (logFd != null) closeSync(logFd);
   child.unref();
 
   console.log('project-knowledge starting in background');
   console.log(`Diagnostics: ${LAUNCH_LOG}`);
-  console.log(`Use "project-knowledge status" to check, "project-knowledge stop" to stop.`);
-  process.exit(0);
+  waitForStartup(child, LAUNCH_LOG).then(ready => {
+    console.log(`project-knowledge is ready at ${ready.url}`);
+    console.log(`Use "project-knowledge status" to check, "project-knowledge stop" to stop.`);
+    process.exit(0);
+  }).catch(error => {
+    console.error(`启动失败：${error.message}`);
+    console.error(`Diagnostics: ${LAUNCH_LOG}`);
+    process.exit(1);
+  });
+} else {
+  main().catch((err) => {
+    console.error(`[project-knowledge] startup failed: ${err.message}`);
+    notifyLauncher({ type: 'kb:launcher-failed', message: err.message });
+    removePid(process.pid);
+    runtimeEndpoint.clearEndpoint(DATA_DIR, { pid: process.pid });
+    process.exitCode = 1;
+  });
 }
 
-// ── Foreground: start server ──
-process.env.KB_SITE_HOST = host;
-
 async function main() {
+  process.env.KB_SITE_HOST = host;
   const existingEndpoint = runtimeEndpoint.readLiveEndpoint(DATA_DIR);
   if (existingEndpoint && existingEndpoint.pid !== process.pid) {
-    console.log(`Already running (PID ${existingEndpoint.pid}) at http://${existingEndpoint.host}:${existingEndpoint.port}`);
+    const url = `http://${existingEndpoint.host}:${existingEndpoint.port}`;
+    console.log(`Already running (PID ${existingEndpoint.pid}) at ${url}`);
+    notifyLauncher({ type: 'kb:launcher-ready', url, pid: existingEndpoint.pid, port: existingEndpoint.port });
     process.exit(0);
   }
   const actualPort = portExplicit ? port : await findFreePort(port, host);
@@ -393,7 +436,9 @@ async function main() {
   if (!claim.claimed) {
     const active = claim.endpoint;
     if (active) {
-      console.log(`Already running (PID ${active.pid}) at http://${active.host}:${active.port}`);
+      const url = `http://${active.host}:${active.port}`;
+      console.log(`Already running (PID ${active.pid}) at ${url}`);
+      notifyLauncher({ type: 'kb:launcher-ready', url, pid: active.pid, port: active.port });
     } else {
       console.error('Another project-knowledge process is starting. Please try again in a moment.');
     }
@@ -405,35 +450,22 @@ async function main() {
     runtimeEndpoint.clearEndpoint(DATA_DIR, { pid: process.pid });
   };
   process.on('exit', cleanup);
-  process.on('SIGINT', () => { cleanup(); process.exit(0); });
-  process.on('SIGTERM', () => { cleanup(); process.exit(0); });
-  // Windows console-close sends SIGBREAK; Node doesn't run exit handlers after
-  // a forceful TerminateProcess, but SIGBREAK does fire before the process is
-  // torn down, so we can still clean up here.
-  if (process.platform === 'win32') {
-    process.on('SIGBREAK', () => { cleanup(); process.exit(0); });
-  }
 
-  const url = `http://localhost:${actualPort}`;
+  const url = `http://${host === '::1' ? '[::1]' : host}:${actualPort}`;
   if (actualPort !== port) {
     console.log(`(Port ${port} was busy, using ${actualPort} instead)`);
   }
   console.log(`project-knowledge ${pkg.version}`);
-  console.log(`Listening at ${url}`);
   // Resolve data dir the same way server.js will, so we can show the user
   // where their config and KB files live BEFORE the server boots.
   try {
     console.log(`Data dir: ${getDataDir()}`);
   } catch {}
 
-  require(path.join(__dirname, '..', '_site', 'server.js'));
+  const instance = await require(path.join(__dirname, '..', '_site', 'server.js'));
+  if (process.platform === 'win32') process.once('SIGBREAK', () => instance.stop('SIGBREAK').then(() => { process.exitCode = 0; }));
+  console.log(`Listening at ${url}`);
+  notifyLauncher({ type: 'kb:launcher-ready', url, pid: process.pid, port: actualPort });
 
   if (shouldOpen) setTimeout(() => openBrowser(url), 500);
 }
-
-main().catch((err) => {
-  console.error(err.message);
-  removePid(process.pid);
-  runtimeEndpoint.clearEndpoint(DATA_DIR, { pid: process.pid });
-  process.exit(1);
-});
