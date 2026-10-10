@@ -1,5 +1,18 @@
 # Changelog
 
+## [5.0.3] - 2026-10-10
+
+- Pin Workbench 0.13.1: reject stale Claude executable overrides without hiding
+  a valid installation; discover native/PATH/package entries and probe JS/CJS/MJS
+  through Node. Discovery, doctor and runtime failures record their actual cause.
+- Vendor engine 0.2.1: an empty knowledge tree is a valid first-use state. Require
+  evidence-backed nonempty Markdown; normalize only missing titles in validated
+  staging output and reseal hashes before promotion. Empty/invalid output still
+  fails safely with a concrete reason, without overwriting existing knowledge.
+- Route module diagnostics through the supervisor to local product logs and the
+  diagnostic page; redact runtime credentials before IPC. Preserve failed runs
+  for explicit retry rather than silently replaying model tasks on upgrade.
+
 ## [5.0.2] - 2026-10-10
 
 - Add ZCode capture to the unified CLI and web System Status connector setup,

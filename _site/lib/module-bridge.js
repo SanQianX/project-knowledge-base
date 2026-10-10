@@ -610,6 +610,13 @@ class ModuleBridge {
       windowsHide: true,
       env: { ...process.env, ...(spec.env || {}) },
     });
+    child.on('message', message => {
+      if (message?.type !== 'kb:diagnostic' || !message.record || !['terminal', 'knowledge-engine'].includes(spec.name)) return;
+      const record = message.record;
+      if (!['debug', 'info', 'warn', 'error'].includes(record.level) || typeof record.event !== 'string' || typeof record.message !== 'string') return;
+      const component = spec.name === 'terminal' ? 'claude-ai-workbench' : 'knowledge-engine';
+      try { Promise.resolve(this.logger[record.level]?.(record.event, record.message, { component, projectId: record.projectId, runId: record.runId, operationId: record.operationId, commitSha: record.commitSha, phase: record.phase, error: record.error, context: record.context })).catch(() => {}); } catch {}
+    });
     let attempts = spec._attempts || 0;
     child.on('error', error => {
       this.supervised = this.supervised.filter(existing => existing !== child);
