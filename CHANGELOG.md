@@ -1,5 +1,18 @@
 # Changelog
 
+## [5.0.9-rc.8] - 2026-10-11
+
+- Pin Workbench 0.13.2-rc.4: atomically replace all native Agent histories,
+  retaining the previous complete record on disk-full or locked-file errors.
+  CLI fallback no longer deletes durable history before a failed rename.
+- Keep the original disk-full loss and separate successful background recovery
+  records. Candidate acceptance includes faults against downloaded module bytes.
+- Pin vector-hub 1.0.8-rc.2. Managed indexes now follow the knowledge root
+  under `.indexes`; show the acknowledged actual directory in System Status.
+  Rebuild on a root/model change while retaining the old index directory;
+  serialize queued writes and avoid a full paid rebuild on normal restart.
+- Do not promote latest until installed and existing-v5 acceptance pass.
+
 ## [5.0.9-rc.7] - 2026-10-11
 
 - Vendor engine 0.2.3-rc.3: recognize promoted commit identifiers inside
