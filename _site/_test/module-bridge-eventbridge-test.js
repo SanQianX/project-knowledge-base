@@ -108,7 +108,7 @@ async function main() {
       vectorHubUrl: DEAD_URL,
       eventBridgeUrl: stubUrl,
       engineUrl: DEAD_URL,
-      registryStore: { listIds: () => ['demo-proj'] },
+      registryStore: { listIds: () => ['demo-proj'], readDisplaySnapshot: id => id === 'demo-proj' ? { displayName: 'demo' } : null },
       projectStore: makeStoreStub(),
     });
 

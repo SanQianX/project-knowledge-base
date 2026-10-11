@@ -24,7 +24,10 @@ async function connectEngine(runtime) {
     step = 'project-wiring';
     for (const id of runtime.registryStore.listIds()) {
       projectId = id;
-      const config = runtime.projectStore.readConfig(id);
+      if (!runtime.registryStore.readDisplaySnapshot(id)) continue;
+      let config;
+      try { config = runtime.projectStore.readConfig(id); }
+      catch (error) { if (!runtime.registryStore.readDisplaySnapshot(id)) continue; throw error; }
       const modules = await bridge.registerProjectLinks({ projectId: id, name: config.displayName, workspacePath: config.repoPath, knowledgePath: config.knowledgePath });
       if (!modules.engine.ok || !modules.eventBridge.ok) throw new Error('PROJECT_WIRING_PENDING');
     }

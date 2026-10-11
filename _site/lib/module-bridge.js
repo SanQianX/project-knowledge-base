@@ -93,6 +93,7 @@ class ModuleBridge {
     this.runtimeToken = options.runtimeToken || crypto.randomBytes(32).toString('hex');
     this.registryStore = options.registryStore || null;
     this.projectStore = options.projectStore || null;
+    this.projectWiringQueue = new Map();
     this.settingsStore = options.settingsStore || null;
     this.dataDir = options.dataDir || null;
     this.supervised = [];
@@ -398,7 +399,24 @@ class ModuleBridge {
    * (retry on the next register call or health-check pass), never a hard error.
    * KB_MODULES_REGISTER=0 disables fan-out entirely (test isolation).
    */
-  async registerProjectLinks({ projectId, name, workspacePath, knowledgePath }) {
+  _withProjectWiring(projectId, action) {
+    const prior = this.projectWiringQueue.get(projectId) || Promise.resolve();
+    const operation = prior.catch(() => {}).then(action);
+    const settled = operation.finally(() => { if (this.projectWiringQueue.get(projectId) === settled) this.projectWiringQueue.delete(projectId); });
+    this.projectWiringQueue.set(projectId, settled);
+    return settled;
+  }
+
+  registerProjectLinks(input) {
+    return this._withProjectWiring(input.projectId, () => {
+      // A supervisor may have captured this project before a concurrent unbind.
+      // Recheck the spine after acquiring the same lease as the removal path.
+      if (this.registryStore && !this.registryStore.readDisplaySnapshot(input.projectId)) return Object.fromEntries(['terminal', 'vectorHub', 'eventBridge', 'engine'].map(key => [key, { ok: true, status: 'removed', skipped: 'project-not-registered' }]));
+      return this._registerProjectLinks(input);
+    });
+  }
+
+  async _registerProjectLinks({ projectId, name, workspacePath, knowledgePath }) {
     const result = { terminal: { ok: false }, vectorHub: { ok: false }, eventBridge: { ok: false }, engine: { ok: false } };
     if (String(process.env.KB_MODULES_REGISTER || '') === '0') {
       result.terminal = { ok: false, status: 'disabled' };
@@ -490,7 +508,17 @@ class ModuleBridge {
    * only drops its derived index (source untouched); terminal removes the project
    * with keepSessions=1 so session records survive; the event-bridge console only
    * unregisters the project — journals and sealed commit documents stay on disk. */
-  async removeProjectLinks({ projectId, requireEngine = true }) {
+  removeProjectLinks(input) {
+    return this._withProjectWiring(input.projectId, async () => {
+      const result = await this._removeProjectLinks(input);
+      // The caller owns registry/lifecycle changes. Hold the wiring lease until
+      // its transaction settles, so delayed reconfiguration cannot resurrect it.
+      await input.onRemoved?.(result);
+      return result;
+    });
+  }
+
+  async _removeProjectLinks({ projectId, requireEngine = true }) {
     const wiring = (this.projectStore ? this.projectStore.readState(projectId).modules : null) || {};
     const result = { terminal: { ok: false }, vectorHub: { ok: false }, eventBridge: { ok: false }, engine: { ok: false } };
     // Stop the writer first, before removing hooks/index registrations.

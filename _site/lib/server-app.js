@@ -1057,11 +1057,13 @@ function createRequestHandler(runtime, options = {}) {
           throw new DomainError('PROJECT_NOT_FOUND', 'Project was not found.', { status: 404 });
         }
         const body = await readJsonBody(req);
-        if (runtime.registryStore.readDisplaySnapshot(projectId)) await runtime.moduleBridge.removeProjectLinks({ projectId, requireEngine: runtime.analysisOwner !== 'legacy' });
-        const result = await runtime.lifecycleService.deleteProject(projectId, {
+        const remove = () => runtime.lifecycleService.deleteProject(projectId, {
           deleteKnowledge: body.deleteKnowledge === true,
           confirmationToken: body.confirmationToken || '',
         });
+        let result;
+        if (runtime.registryStore.readDisplaySnapshot(projectId)) await runtime.moduleBridge.removeProjectLinks({ projectId, requireEngine: runtime.analysisOwner !== 'legacy', onRemoved: async () => { result = await remove(); } });
+        else result = await remove();
         return send(res, 200, result);
       }
       const gitStatusMatch = pathname.match(/^\/api\/projects\/([^/]+)\/git-status$/);
