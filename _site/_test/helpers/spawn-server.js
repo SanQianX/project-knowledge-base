@@ -20,6 +20,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
+const runtimeControl = require('../../lib/runtime-control');
+const runtimeEndpoint = require('../../lib/runtime-endpoint');
 
 function defaultDataDir(tag) {
   return fs.mkdtempSync(path.join(os.tmpdir(), `kb-data-${tag || 'test'}-${process.pid}-`));
@@ -59,16 +61,25 @@ function spawnServer({ root, port, host = '127.0.0.1', dataDir, extraEnv = {}, t
     dataDir: dir,
     bridgeHome,
     cleanup: async () => {
-      try { child.kill(); } catch {}
-      // Windows keeps data-dir handles alive until the child fully exits;
-      // removing the directory before that races with EPERM.
+      // On Windows SIGTERM is a force kill. Drain owned background work via
+      // the verified control channel first, so Git/Agent children release cwd.
+      const live = runtimeEndpoint.readEndpoint(dir);
+      if (live?.pid === child.pid && child.exitCode === null) {
+        try { await runtimeControl.request(dir, { action: 'stop', pid: live.pid, port: live.port, startedAt: live.startedAt }, 10000); } catch {}
+        await new Promise(resolve => {
+          const timer = setTimeout(resolve, 1500);
+          child.once('close', () => { clearTimeout(timer); resolve(); });
+          if (child.exitCode !== null) { clearTimeout(timer); resolve(); }
+        });
+      }
+      if (child.exitCode === null) try { child.kill(); } catch {}
       await new Promise(resolve => {
         const timer = setTimeout(resolve, 5000);
-        child.once('exit', () => { clearTimeout(timer); resolve(); });
+        child.once('close', () => { clearTimeout(timer); resolve(); });
         if (child.exitCode !== null) { clearTimeout(timer); resolve(); }
       });
-      try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
-      try { fs.rmSync(bridgeHome, { recursive: true, force: true }); } catch {}
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+      fs.rmSync(bridgeHome, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     },
   };
 }
