@@ -1,5 +1,16 @@
 # Changelog
 
+## [5.0.9-rc.9] - 2026-10-11
+
+- Vendor engine 0.2.3-rc.4. Freeze existing target paths and hashes before
+  analysis so missing retrieval snippets cannot be mistaken for absent files.
+  Preserve full old documents when only partial context is available; illegal
+  create operations still fail safely instead of silently overwriting data.
+- Keep the failed rc.8 secondary-development maintenance evidence and verify
+  that exact commit after downloading this candidate, not patched source bytes.
+- Render long index-directory paths as a full-width block in System Status.
+- latest remains unchanged until the real closed-loop and existing-v5 gates pass.
+
 ## [5.0.9-rc.8] - 2026-10-11
 
 - Pin Workbench 0.13.2-rc.4: atomically replace all native Agent histories,
