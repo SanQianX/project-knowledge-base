@@ -31,6 +31,9 @@ const { once } = require('events');
 const { DomainError } = require('./contracts');
 
 const PROXY_TIMEOUT_MS = 10000;
+// Native client startup includes knowledge retrieval and a local server/CLI
+// handshake. It has a bounded setup budget, separate from ordinary reads/SSE.
+const AGENT_START_TIMEOUT_MS = 90000;
 // Registration drives a full embedding pass in vector-hub (remote API); a
 // fresh knowledge folder can easily exceed the interactive proxy budget.
 const REGISTER_TIMEOUT_MS = 60000;
@@ -131,7 +134,11 @@ class ModuleBridge {
     // The native folder pickers hold the request open until the user closes
     // the dialog — they need a human-scale budget, not the API budget.
     const isPicker = /\/(system\/)?pick-folder/.test(target);
-    const timeoutMs = isPicker ? PICKER_TIMEOUT_MS : PROXY_TIMEOUT_MS;
+    const targetUrl = new URL(target);
+    const pathname = targetUrl.pathname;
+    const isAgentStart = req.method === 'POST' && /^\/api\/claude-workbench\/v1\/sessions(?:\/[^/]+\/input)?\/?$/.test(pathname);
+    const timeoutMs = isPicker ? PICKER_TIMEOUT_MS : isAgentStart ? AGENT_START_TIMEOUT_MS : PROXY_TIMEOUT_MS;
+    const startedAt = Date.now();
     let upstream;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -148,8 +155,13 @@ class ModuleBridge {
       clearTimeout(timer);
       res.off?.('close', disconnected);
       if (res.destroyed) return;
+      const details = { failureKind: controller.signal.aborted ? 'UPSTREAM_TIMEOUT' : 'NETWORK_ERROR', timeoutMs };
+      this.logger.warn('module.proxy.failed', '模块请求未完成，请检查连接或客户端启动。', {
+        component: 'module-bridge', phase: 'proxy', durationMs: Date.now() - startedAt,
+        context: { ...details, method: req.method, path: pathname },
+      });
       res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ ok: false, error: 'MODULE_UNREACHABLE', target }));
+      res.end(JSON.stringify({ ok: false, error: 'MODULE_UNREACHABLE', target: targetUrl.origin + pathname, details }));
       return;
     }
     const contentType = upstream.headers.get('content-type') || 'application/json; charset=utf-8';
