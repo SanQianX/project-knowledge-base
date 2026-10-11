@@ -1,5 +1,16 @@
 # Changelog
 
+## [5.0.9] - 2026-10-12
+
+- Freeze the accepted rc.19 web runtime and exact module versions; no new
+  product features, old-version migration or existing v5 data reset.
+- Include index failure diagnostics, index-only recovery, knowledge-root
+  index storage, safe client discovery/notify chaining, maintenance isolation
+  and the embedded Workbench startup/streaming fixes from the candidate series.
+- Publish initially to next. Official npm installation, Node 22/24 regression,
+  real MiniMax knowledge/embedding loops and existing-user upgrade acceptance
+  must pass before stable latest promotion.
+
 ## [5.0.9-rc.19] - 2026-10-12
 
 - Pin Workbench 0.13.2-rc.7. Startup shows a loading state and keeps controls
