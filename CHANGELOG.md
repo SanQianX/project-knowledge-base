@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.0.9-rc.7] - 2026-10-11
+
+- Vendor engine 0.2.3-rc.3: recognize promoted commit identifiers inside
+  natural-language tasks, including short and multiple SHAs. Raw conversation
+  mentions cannot replace the current promoted knowledge references.
+- Preserve failed installed Workbench/context checks from rc.6; latest remains
+  unchanged until fresh registry runtime and existing-v5 acceptance pass.
+
 ## [5.0.9-rc.6] - 2026-10-11
 
 - Vendor engine 0.2.3-rc.2. Unassigned projects no longer share an implicit
