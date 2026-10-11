@@ -1,5 +1,20 @@
 # Changelog
 
+## [5.0.9-rc.15] - 2026-10-11
+
+- Serialize registration, module removal and registry deletion for each project.
+  Recheck membership inside the wiring lease so delayed supervisor registration
+  cannot resurrect a project after keep-data unbind. Unrelated projects remain
+  independent; failed deletion can still be repaired and retried.
+- Reproduce the race with a delayed real HTTP registration and preserve the
+  downloaded rc.14 Node 22 UI failure. Include the regression in the package.
+- Use non-binding CLI readiness probes in tests; the old bind probe could take
+  the exact port while its own foreground child was starting.
+- Real MiniMax acceptance covers overlapping analyses, another commit and a
+  dirty developer draft during analysis, streaming, secondary development,
+  four installed clients and evidenced preference candidates. New downloaded
+  candidate acceptance and actual-user cutover still precede stable latest.
+
 ## [5.0.9-rc.14] - 2026-10-11
 
 - Vendor engine 0.2.3-rc.7: isolated maintenance consumes frozen evidence even
