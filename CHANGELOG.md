@@ -1,5 +1,18 @@
 # Changelog
 
+## [5.0.9-rc.17] - 2026-10-11
+
+- Pin Workbench 0.13.2-rc.6. Repeated embedded notifications for the current
+  project no longer abandon a newly created session; real project changes and
+  late project lookups still preserve isolation and per-project drafts.
+- Keep a healthy progress stream labelled as connected on redundant online
+  events. Verify actual offline cleanup, snapshot recovery and exactly one
+  restored SSE connection with a real browser and HTTP proxy.
+- Preserve the rc.16 real Workbench failure and require official-package
+  streaming/citation acceptance before upgrading the actual user instance.
+- No data reset or third-party configuration overwrite. Stable latest remains
+  behind the full candidate and installed-product acceptance gates.
+
 ## [5.0.9-rc.16] - 2026-10-11
 
 - Pin Workbench 0.13.2-rc.5. Bound OpenCode's health request at both
