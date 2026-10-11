@@ -98,7 +98,7 @@ async function waitForServer() {
     const resolved = runtime.resolveProject({ repoPath: movedRepo });
     assert.strictEqual(resolved.projectId, 'project-stable');
     assert.strictEqual(resolved.knowledgePath, oldKnowledge);
-    assert.strictEqual(resolved.indexPath, layout.getIndexPath());
+    assert.strictEqual(resolved.indexPath, layout.getVectorRootPath(settingsStore.read()));
     const mcpResolved = await callTool(runtime, 'project_knowledge_resolve', { projectId: 'project-stable' });
     assert.strictEqual(mcpResolved.knowledgePath, resolved.knowledgePath);
     assert.strictEqual(mcpResolved.indexPath, resolved.indexPath);
