@@ -113,7 +113,7 @@ async function createMcpClient() {
     let response = await client.request('tools/call', { name: 'project_knowledge_resolve', arguments: { repoPath: repo } });
     assert.strictEqual(response.result.structuredContent.projectId, 'project-demo');
     assert.strictEqual(response.result.structuredContent.knowledgePath, markdownKb);
-    assert.strictEqual(response.result.structuredContent.indexPath, layout.getIndexPath());
+    assert.strictEqual(response.result.structuredContent.indexPath, layout.getVectorRootPath(settingsStore.read()));
 
     response = await client.request('tools/call', { name: 'project_knowledge_search', arguments: { projectId: 'project-demo', query: 'refresh tokens' } });
     assert.strictEqual(response.result.structuredContent.source, 'knowledge-retrieval-service');

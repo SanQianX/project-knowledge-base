@@ -163,7 +163,7 @@ class KnowledgeToolRuntime {
       repoPath: path.resolve(resolvedRepoPath || config.repoPath),
       knowledgePath: path.resolve(config.knowledgePath),
       kbPath: path.resolve(config.knowledgePath),
-      indexPath: this.layout.getIndexPath(),
+      indexPath: this.layout.getVectorRootPath(this.settingsStore.read({ allowMissing: true })),
       primarySpaceId: `project:${projectId}`,
       relatedProjectIds: Array.isArray(config.relatedProjectIds) ? [...config.relatedProjectIds] : [],
       index: { ...state.index },

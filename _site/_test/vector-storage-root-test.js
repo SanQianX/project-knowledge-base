@@ -3,11 +3,27 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const { StorageLayout } = require('../lib/storage-layout');
 const { ModuleBridge } = require('../lib/module-bridge');
+const { KnowledgeToolRuntime } = require('../lib/knowledge-tool-runtime');
 const root = path.resolve('D:/knowledge storage 中文');
 const layout = new StorageLayout({ dataDir: path.resolve('D:/metadata') });
 assert.equal(layout.getVectorRootPath({ knowledge: { rootPath: root } }), path.join(root, '.indexes'));
 assert.equal(layout.getVectorRootPath({ knowledge: { rootPath: '' } }), path.join(layout.getDataDir(), 'vectorhub'));
 const settingsStore = { read: () => ({ knowledge: { rootPath: root }, brain: { id: 'brain-default', domains: [] } }) };
+let knowledgeRoot = root;
+const tools = new KnowledgeToolRuntime({
+  layout,
+  settingsStore: { read: () => ({ knowledge: { rootPath: knowledgeRoot } }) },
+  registryStore: { listIds: () => ['project-storage'] },
+  projectStore: {
+    readConfig: () => ({ displayName: 'Storage', repoPath: path.join(root, 'repo'), knowledgePath: path.join(root, 'project') }),
+    readState: () => ({ index: { generation: 3 } }),
+  },
+});
+assert.equal(tools.resolveProject({ projectId: 'project-storage' }).indexPath, path.join(root, '.indexes'), 'MCP/CLI resolution must report the vector-hub location, not the retired shell database');
+knowledgeRoot = path.join(root, 'changed root');
+assert.equal(tools.resolveProject({ projectId: 'project-storage' }).indexPath, path.join(knowledgeRoot, '.indexes'), 'a running MCP process must reread the selected knowledge root');
+knowledgeRoot = '';
+assert.equal(tools.resolveProject({ projectId: 'project-storage' }).indexPath, path.join(layout.getDataDir(), 'vectorhub'));
 const bridge = new ModuleBridge({ settingsStore, dataDir: layout.getDataDir() });
 const spec = bridge._supervisedSpecs().find(spec => spec.name === 'vector-hub');
 assert.equal(spec.env.VECTOR_HUB_ROOT, path.join(root, '.indexes'));
