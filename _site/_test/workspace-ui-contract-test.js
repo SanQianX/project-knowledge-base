@@ -11,6 +11,7 @@ for (const view of ['home', 'work', 'search', 'memory', 'projects', 'activity'])
   assert.ok(html.includes(`id="view-${view}"`));
 }
 assert.equal((html.match(/data-view=/g) || []).length, 6, 'diagnostics must not become another primary product');
+assert.match(html, /<select\b[^>]*id="projectSelect"[^>]*\bdisabled\b/, 'project selection is disabled until the initial registry snapshot has loaded');
 for (const id of ['workFrame', 'vectorFrame', 'bridgeFrame', 'engineFrame', 'importDialog', 'importCode', 'importKnowledge', 'importDomain', 'setupImportRoot', 'createDomain', 'logsDialog', 'systemDrawer', 'copyReference']) assert.equal((html.match(new RegExp(`id="${id}"`, 'g')) || []).length, 1);
 assert.ok(html.includes('data-action="import"') && html.includes('不分析全部历史'));
 assert.ok(!html.includes('srcdoc') && !/data-simulate|data-analyze|data-install-hook/.test(html));
