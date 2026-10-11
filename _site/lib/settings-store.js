@@ -1,6 +1,7 @@
 const { SCHEMAS, DomainError, publicAiProfilesConfig } = require('./contracts');
 const AtomicFile = require('./atomic-file');
 const { StorageLayout } = require('./storage-layout');
+const path = require('node:path');
 
 function defaultSettings() {
   return {
@@ -43,9 +44,12 @@ function validateSettings(settings) {
   }
   settings.brain = settings.brain || { id: 'brain-default', name: '我的智脑', domains: [] };
   if (settings.brain.id !== 'brain-default' || typeof settings.brain.name !== 'string' || !settings.brain.name.trim() || settings.brain.name.length > 100 || !Array.isArray(settings.brain.domains)) throw new DomainError('DATA_CORRUPT', 'Brain metadata is invalid.', { status: 500 });
+  const validBinding = value => value === undefined || typeof value === 'string' && path.isAbsolute(value);
+  if (!validBinding(settings.brain.knowledgePath)) throw new DomainError('DATA_CORRUPT', 'Brain knowledge binding is invalid.', { status: 500 });
   const ids = new Set();
   for (const domain of settings.brain.domains) {
     if (!domain || !/^domain-[a-z0-9-]+$/.test(domain.id) || ids.has(domain.id) || typeof domain.name !== 'string' || !domain.name.trim() || domain.name.length > 100) throw new DomainError('DATA_CORRUPT', 'Domain metadata is invalid.', { status: 500 });
+    if (!validBinding(domain.knowledgePath)) throw new DomainError('DATA_CORRUPT', 'Domain knowledge binding is invalid.', { status: 500 });
     ids.add(domain.id);
   }
   const logging = settings.logging || {};
@@ -92,6 +96,7 @@ class SettingsStore {
 
   async updatePatch(patch) {
     return this.atomic.withFileLock(this.lockPath, async () => {
+      if (patch?.brain && (Object.prototype.hasOwnProperty.call(patch.brain, 'knowledgePath') || patch.brain.domains?.some?.(domain => Object.prototype.hasOwnProperty.call(domain, 'knowledgePath')))) throw new DomainError('INVALID_ARGUMENT', '共享知识目录绑定只允许受控接线写入。');
       if (patch && patch.logging && typeof patch.logging === 'object') {
         const unknown = Object.keys(patch.logging).find(key => key !== 'levels');
         if (unknown) throw new DomainError('INVALID_ARGUMENT', `Logging setting is read-only or unsupported: ${unknown}.`, { details: { field: unknown } });
@@ -117,6 +122,21 @@ class SettingsStore {
       validateSettings(settings);
       this.atomic.writeJsonAtomic(this.filePath, settings);
       return domain;
+    });
+  }
+
+  async bindSharedKnowledgePaths(scopes) {
+    return this.atomic.withFileLock(this.lockPath, async () => {
+      const settings = this.read();
+      let changed = false;
+      for (const scope of scopes) {
+        const target = scope.kind === 'brain' && scope.id === settings.brain.id ? settings.brain : settings.brain.domains.find(domain => domain.id === scope.id);
+        if (!target || !path.isAbsolute(scope.knowledgePath || '')) throw new DomainError('INVALID_ARGUMENT', '共享知识绑定无效。');
+        if (target.knowledgePath && !this.layout.pathsEqual(target.knowledgePath, scope.knowledgePath)) throw new DomainError('IMMUTABLE_FIELD', '共享知识目录不能隐式移动。', { status: 409 });
+        if (!target.knowledgePath) { target.knowledgePath = path.resolve(scope.knowledgePath); changed = true; }
+      }
+      if (changed) { settings.updatedAt = new Date().toISOString(); validateSettings(settings); this.atomic.writeJsonAtomic(this.filePath, settings); }
+      return settings;
     });
   }
 

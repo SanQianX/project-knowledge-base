@@ -194,13 +194,18 @@ project-knowledge
 ```
 
 The user selects a global knowledge root before importing projects. That root
-only chooses the directory for future imports. Each imported project stores an
+chooses directories for future imports, new shared scopes, and derived vector
+indexes (`<knowledge root>/.indexes`). Each imported project stores an
 absolute, fixed `knowledgePath`; changing the global root does not move existing
 projects.
 
-The selected knowledge root contains only authoritative project Markdown.
-Settings, metadata, indexes, caches, runtime state, logs, and recovery assets
-remain in the internal data directory:
+Existing project and shared-knowledge directories do not move when the root
+changes. Brain/domain directory bindings are retained in the shell settings
+after the engine acknowledges them. Existing engine bindings are reused when
+first recording those fields. A failed registration is shown as pending, not
+healthy. Old index directories are retained; indexes rebuild at the new root.
+Settings, registration metadata, caches, runtime state, logs, and recovery
+assets remain in the internal data directory; vector payloads do not:
 
 ```text
 ~/.project-knowledge-v5/
@@ -220,6 +225,8 @@ remain in the internal data directory:
 └── recovery/                             # migrations, promotion/index backups
 
 <selected knowledge root>/
+├── .indexes/                            # rebuildable vector payloads
+├── _shared/<brain or domain ID>/         # fixed shared-knowledge bindings
 └── <project storage name>/
     ├── README.md                         # when produced by verified knowledge
     ├── GOAL.md

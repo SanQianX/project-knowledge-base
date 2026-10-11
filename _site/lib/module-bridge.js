@@ -323,7 +323,7 @@ class ModuleBridge {
     let indexPath = null;
     try { indexPath = new StorageLayout({ dataDir }).getVectorRootPath(this.settingsStore?.read()); }
     catch { /* Corrupt settings must not switch storage or prevent credential revocation. */ }
-    const status = { scopes: false, model: false, embedding: false, indexStorage: { expectedPath: indexPath, actualPath: null, status: 'pending' } };
+    const status = { scopes: false, scopeStatus: { status: 'pending' }, model: false, embedding: false, indexStorage: { expectedPath: indexPath, actualPath: null, status: 'pending' } };
     const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${this.runtimeToken}` };
     try {
       if (this.settingsStore) {
@@ -331,11 +331,28 @@ class ModuleBridge {
         if (settings.knowledge.rootPath) {
           const brain = settings.brain;
           const root = path.join(settings.knowledge.rootPath, '_shared');
-          const scopes = [{ id: brain.id, kind: 'brain', brainId: brain.id, name: brain.name, knowledgePath: path.join(root, brain.id) }, ...brain.domains.map(d => ({ id: d.id, kind: 'domain', brainId: brain.id, domainId: d.id, name: d.name, knowledgePath: path.join(root, d.id) }))];
-          status.scopes = (await this._fetch(`${this.engineUrl}/api/scopes`, { method: 'POST', headers, body: JSON.stringify({ scopes }) })).ok;
+          const response = await this._fetch(`${this.engineUrl}/api/snapshot`);
+          if (!response.ok) throw new DomainError('ENGINE_UNAVAILABLE', '共享知识接线暂时不可用。');
+          const prior = (await response.json()).sharedScopes || [];
+          // Root settings govern new directories and derived indexes, never move
+          // existing knowledge. Retain engine-acknowledged bindings in the spine.
+          const binding = (item, kind) => {
+            const existing = prior.find(scope => scope.id === item.id && scope.kind === kind && scope.brainId === brain.id);
+            if (existing && !path.isAbsolute(existing.knowledgePath || '')) throw new DomainError('DATA_CORRUPT', '共享目录绑定损坏。');
+            return item.knowledgePath || existing?.knowledgePath || path.join(root, item.id);
+          };
+          const scopes = [{ id: brain.id, kind: 'brain', brainId: brain.id, name: brain.name, knowledgePath: binding(brain, 'brain') }, ...brain.domains.map(d => ({ id: d.id, kind: 'domain', brainId: brain.id, domainId: d.id, name: d.name, knowledgePath: binding(d, 'domain') }))];
+          const applied = await this._fetch(`${this.engineUrl}/api/scopes`, { method: 'POST', headers, body: JSON.stringify({ scopes }) });
+          if (!applied.ok) throw new DomainError('SHARED_SCOPE_APPLY_FAILED', '共享目录接线未完成。');
+          await this.settingsStore.bindSharedKnowledgePaths?.(scopes);
+          status.scopes = true; status.scopeStatus = { status: 'ready' };
         }
       }
-    } catch { /* A scope failure must not prevent revoking a stale model key. */ }
+    } catch (error) {
+      status.scopeStatus = { status: 'pending', code: ['DATA_CORRUPT', 'IMMUTABLE_FIELD', 'ENGINE_UNAVAILABLE', 'SHARED_SCOPE_APPLY_FAILED'].includes(error.code) ? error.code : 'ENGINE_UNAVAILABLE' };
+      this.logger.warn('modules.scopes.pending', 'Shared knowledge wiring is pending; existing data is retained.', { context: { code: status.scopeStatus.code } });
+      // A scope failure must not prevent revoking a stale model key.
+    }
     try {
       let profile = null;
       try {
