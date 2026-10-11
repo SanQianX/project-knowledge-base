@@ -1,5 +1,15 @@
 # Changelog
 
+## [5.0.9-rc.4] - 2026-10-11
+
+- Pin Workbench 0.13.2-rc.2: resolve the installed ZCode provider resource
+  layout without rewriting desktop or personal configuration, and label
+  runtime failures with the correct agent.
+- Disable the project selector until the first registry snapshot. This fixes
+  the startup interaction race exposed by the Node 22 packaged UI regression.
+- Latest is unchanged; real installed acceptance and client authentication are
+  independent gates, not implied by a successful version probe.
+
 ## [5.0.9-rc.3] - 2026-10-11
 
 - Route engine-wired CLI and MCP reads through the same authoritative engine
