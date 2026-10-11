@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.0.9-rc.19] - 2026-10-12
+
+- Pin Workbench 0.13.2-rc.7. Startup shows a loading state and keeps controls
+  inert until projects and event handlers are ready; the existing streaming
+  and session recovery paths are unchanged.
+- Preserve the real rc.18 premature-click failure and require its actual
+  usable-page ready receipt in browser acceptance. Add a deterministic
+  startup gate regression and Node 22/24 retests.
+- Include Windows test-server cleanup hardening and corrected storage-root
+  assertions. Retain existing v5 data, third-party configuration and the
+  official-package acceptance gate before stable latest promotion.
+
 ## [5.0.9-rc.18] - 2026-10-12
 
 - Project resolution for MCP and CLI now reports the vector-hub storage root
