@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.0.9-rc.13] - 2026-10-11
+
+- Give native Agent session creation and input setup a bounded 90-second proxy
+  budget. Ordinary API reads/abort/permissions retain 10 seconds; SSE streaming
+  and folder-picker contracts are unchanged.
+- Record safe proxy failure categories and deadlines without raw errors or URL
+  queries. Preserve MODULE_UNREACHABLE compatibility and add optional details.
+- Reproduce the installed OpenCode cold-start failure with a real delayed HTTP
+  server; verify the targeted budget, unrelated routes and credential redaction.
+- Retain rc.12 real acceptance and failed OpenCode results separately; require
+  a newly downloaded candidate and cold-client retest before user upgrade.
+
 ## [5.0.9-rc.12] - 2026-10-11
 
 - Vendor engine 0.2.3-rc.6 to address the Windows transient state-file rename
