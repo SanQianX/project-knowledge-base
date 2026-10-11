@@ -1,5 +1,16 @@
 # Changelog
 
+## [5.0.9-rc.3] - 2026-10-11
+
+- Route engine-wired CLI and MCP reads through the same authoritative engine
+  as the web UI, preserving commit references and project/domain/brain scopes.
+  Verify the selected runtime identity and reject unavailable, mismatched or
+  malformed services instead of silently querying a different local index.
+- Preserve the MCP `space` alias and expose explicit scope selection. Bound
+  responses and never forward profile or credential objects to read routes.
+- Drain isolated regression servers before Windows fixture cleanup. Candidate
+  publication still does not promote latest or claim complete acceptance.
+
 ## [5.0.9-rc.2] - 2026-10-11
 
 - Pin the verified Workbench 0.13.2-rc.1 and vector-hub 1.0.8-rc.1 candidates.
