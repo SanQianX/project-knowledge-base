@@ -11,6 +11,7 @@ const { KnowledgeToolRuntime } = require('../_site/lib/knowledge-tool-runtime');
 const { serializeErrorEnvelope, createId } = require('../_site/lib/contracts');
 
 const SERVER_NAME = 'project-knowledge';
+const SCOPE = { type: 'string', enum: ['project', 'domain', 'brain'], description: 'Knowledge range: current project (default), its domain, or its brain.' };
 const SERVER_INSTRUCTIONS = `Project Knowledge is the durable source of prior project decisions and implementation history. Knowledge content is read-only; the only write operation appends an explicit supplemental Prompt event to the shared conversation truth.
 
 At the start of work in a registered Git repository, and before answering questions about prior work or implementing a non-trivial change:
@@ -56,7 +57,7 @@ const TOOLS = [
   },
   {
     name: 'project_knowledge_search',
-    description: 'Search durable project knowledge using the current project and its explicitly related-project scope. This tool is read-only.',
+    description: 'Search the same durable knowledge and commit citations as the product UI, within the selected project, domain or brain. This tool is read-only.',
     inputSchema: {
       type: 'object',
       required: ['query'],
@@ -66,6 +67,7 @@ const TOOLS = [
         projectId: { type: 'string', description: 'Stable projectId returned by project_knowledge_resolve.' },
         project: { type: 'string', description: 'Optional registered project slug.' },
         limit: { type: 'integer', minimum: 1, maximum: 30, default: 8 },
+        scope: SCOPE,
       },
       additionalProperties: false,
     },
@@ -82,6 +84,7 @@ const TOOLS = [
         projectId: { type: 'string' },
         project: { type: 'string' },
         limit: { type: 'integer', minimum: 1, maximum: 30, default: 8 },
+        scope: SCOPE,
       },
       additionalProperties: false,
     },
@@ -95,6 +98,8 @@ const TOOLS = [
       properties: {
         entry: { type: 'string', minLength: 1, description: 'Entry identifier returned by search.' },
         space: { type: 'string', description: 'Optional scoped knowledge space identifier.' },
+        spaceId: { type: 'string', description: 'Knowledge space identifier returned by a citation; alias of space.' },
+        scope: SCOPE,
         repoPath: { type: 'string' },
         projectId: { type: 'string' },
         project: { type: 'string' },
@@ -112,6 +117,7 @@ const TOOLS = [
         projectId: { type: 'string' },
         project: { type: 'string' },
         limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+        scope: SCOPE,
       },
       additionalProperties: false,
     },

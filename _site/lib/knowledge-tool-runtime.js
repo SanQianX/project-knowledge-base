@@ -12,6 +12,7 @@ const { EMBEDDING_DIMENSIONS } = require('./knowledge-schema');
 const { DomainError } = require('./contracts');
 const { KnowledgeRetrievalService } = require('./knowledge-retrieval-service');
 const { ConversationStore } = require('./conversation-store');
+const { EngineKnowledgeClient } = require('./engine-knowledge-client');
 
 function gitRoot(candidate) {
   const resolved = path.resolve(candidate || process.cwd());
@@ -97,6 +98,7 @@ class KnowledgeToolRuntime {
     this.settingsStore = options.settingsStore || new SettingsStore({ layout: this.layout });
     this.registryStore = options.registryStore || new ProjectRegistryStore({ layout: this.layout });
     this.projectStore = options.projectStore || new ProjectStore({ layout: this.layout });
+    this.engineClient = options.engineClient || new EngineKnowledgeClient({ layout: this.layout, engineUrl: options.engineUrl, fetchImpl: options.fetchImpl });
     this.database = null;
     this.embedder = null;
     this.conversationStore = options.conversationStore || new ConversationStore({
@@ -279,10 +281,13 @@ class KnowledgeToolRuntime {
 
   async search(input = {}) {
     const project = this.resolveProject(input);
+    if (this.projectStore.readState(project.projectId).modules?.engine) return this.engineClient.request('search', input, project);
     return this.retrievalService.search({ ...input, project });
   }
 
   async ask(input = {}) {
+    const project = this.resolveProject(input);
+    if (this.projectStore.readState(project.projectId).modules?.engine) return this.engineClient.request('ask', input, project);
     const searched = await this.search(input);
     const citations = searched.results.slice(0, 5).map((result, index) => ({
       index: index + 1,
@@ -300,6 +305,7 @@ class KnowledgeToolRuntime {
 
   async get(input = {}) {
     const project = this.resolveProject(input);
+    if (this.projectStore.readState(project.projectId).modules?.engine) return this.engineClient.request('get', input, project);
     const entryId = String(input.entryId || input.entry || '').trim().replace(/\\/g, '/');
     if (!entryId) throw new DomainError('INVALID_ARGUMENT', 'entry is required.');
     const target = path.resolve(project.knowledgePath, ...entryId.split('/'));
@@ -321,6 +327,7 @@ class KnowledgeToolRuntime {
 
   async history(input = {}) {
     const project = this.resolveProject(input);
+    if (this.projectStore.readState(project.projectId).modules?.engine) return this.engineClient.request('history', input, project);
     const changesRoot = path.join(project.knowledgePath, 'changes');
     const results = markdownFiles(project.knowledgePath).filter(file => this.layout.isPathInside(changesRoot, file, { realpath: true })).map(file => {
       const text = fs.readFileSync(file, 'utf8');

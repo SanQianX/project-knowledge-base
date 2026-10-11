@@ -160,6 +160,15 @@ Queries never create or rewrite configuration. If the internal index is
 unavailable, search falls back to current Markdown. Project, domain and brain
 scopes are nested; unconfirmed memory candidates are not task preferences.
 
+For engine-wired projects, the CLI and MCP delegate `search`, `ask`, `get` and
+`history` to the same engine used by the web UI, including commit provenance.
+They verify the running instance against the selected data directory; an
+unavailable or mismatched instance is an explicit failure, not a second local
+index with different facts. Only projects without engine wiring retain the
+local legacy read contract. Use `--scope domain` or `--scope brain` to broaden
+CLI searches; MCP accepts the equivalent `scope`. Shared-file reads accept
+`--space <spaceId>` (MCP: `space` or `spaceId`).
+
 ## Storage
 
 Version 5 is a fresh start, not a data upgrade. Stop the previous process,

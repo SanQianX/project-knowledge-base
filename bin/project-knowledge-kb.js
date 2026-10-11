@@ -25,7 +25,9 @@ Read-only local knowledge tools:
   project-knowledge-kb get     --project <projectId-or-legacy-slug> --entry <path>
   project-knowledge-kb history --project <projectId-or-legacy-slug> [--limit 20]
 
-Add --json for machine-readable output. These commands never modify knowledge or project configuration.\n`);
+Add --scope project|domain|brain for a search range, --space <id> for a cited
+shared entry, and --json for machine-readable output. These commands never
+modify knowledge or project configuration.\n`);
 }
 
 async function main(argv = process.argv.slice(2), options = {}) {
@@ -38,7 +40,7 @@ async function main(argv = process.argv.slice(2), options = {}) {
   if (!args.project) throw new Error('--project is required');
   const runtime = options.runtime || new KnowledgeToolRuntime(options);
   try {
-    const input = { project: args.project, query: args.query, limit: args.limit, entry: args.entry };
+    const input = { project: args.project, query: args.query, limit: args.limit, entry: args.entry, scope: args.scope, spaceId: args.spaceId || args.space };
     let result;
     if (args.command === 'search') result = await runtime.search(input);
     else if (args.command === 'ask') result = await runtime.ask(input);
