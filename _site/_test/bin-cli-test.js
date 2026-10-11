@@ -78,10 +78,23 @@ function isPortListening(port) {
 async function waitForListening(port, deadlineMs = 8000) {
   const deadline = Date.now() + deadlineMs;
   while (Date.now() < deadline) {
-    if (await isPortListening(port)) return true;
+    if (await canConnect(port)) return true;
     await new Promise(resolve => setTimeout(resolve, 150));
   }
   return false;
+}
+
+function canConnect(port) {
+  // A bind probe can steal the selected port exactly as the child starts.
+  // Readiness checks must connect, never compete with the server's listener.
+  return new Promise(resolve => {
+    const socket = net.createConnection({ host: '127.0.0.1', port });
+    let settled = false;
+    const finish = result => { if (settled) return; settled = true; socket.destroy(); resolve(result); };
+    socket.setTimeout(500, () => finish(false));
+    socket.once('connect', () => finish(true));
+    socket.once('error', () => finish(false));
+  });
 }
 
 (async () => {
@@ -185,7 +198,7 @@ async function waitForListening(port, deadlineMs = 8000) {
   while (Date.now() < deadline && !detectedPort) {
     const rec = readPidFile();
     if (rec && rec.port && rec.port !== busyPort) {
-      if (await isPortListening(rec.port)) {
+      if (await canConnect(rec.port)) {
         detectedPort = rec.port;
         break;
       }
