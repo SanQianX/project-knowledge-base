@@ -1,5 +1,16 @@
 # Changelog
 
+## [5.0.9-rc.10] - 2026-10-11
+
+- Preserve acknowledged brain/domain knowledge-directory bindings when changing
+  the knowledge root. Only derived indexes and future imports/shared scopes use
+  the new root; existing knowledge and confirmed memories stay in place.
+- Persist bindings in shell metadata, reject implicit rebinding, and report
+  shared-scope connection failures in UI and safe structured logs.
+- Add real-engine regression for confirmed memory, domain retrieval, restart,
+  new domain registration, offline retry and protected bindings on Node 22/24.
+- Candidate acceptance still precedes the existing-v5 upgrade and stable latest.
+
 ## [5.0.9-rc.9] - 2026-10-11
 
 - Vendor engine 0.2.3-rc.4. Freeze existing target paths and hashes before
