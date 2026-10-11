@@ -1,5 +1,15 @@
 # Changelog
 
+## [5.0.9-rc.18] - 2026-10-12
+
+- Project resolution for MCP and CLI now reports the vector-hub storage root
+  selected in settings, not the retired shell database path. A running tool
+  rereads root changes; resolution does not move files or rebuild indexes.
+- Preserve the reproduced rc.17 diagnostic mismatch and add Node 22/24
+  coverage for configured, changed and unset roots and MCP output.
+- Retain existing v5 data and all accepted module pins. Publish to next;
+  stable latest remains behind official-package and actual-user acceptance.
+
 ## [5.0.9-rc.17] - 2026-10-11
 
 - Pin Workbench 0.13.2-rc.6. Repeated embedded notifications for the current
