@@ -3,11 +3,11 @@
   "modules": {
     "knowledge-engine": {
       "name": "@sanqianx/ai-coding-knowledge-engine",
-      "version": "0.2.3-rc.4",
+      "version": "0.2.3-rc.5",
       "root": "_modules/knowledge-engine",
       "files": {
-        "README.md": "df15aafdfe833186c1f655a1847171435214b96ad168c5eb44774fec82d28cf6",
-        "package.json": "61e95ac2871a4e4e8964851161aac3c7fe4ef5015c8d03ec6ff1e9e53bbaa43f",
+        "README.md": "8c501eebd770b4a54f3ec97bb2c21b8953eed7d7b21ce1a0ecdb9e11ac795c7b",
+        "package.json": "bb46aa0bb25124f104eedd14287003201da26d6dfdbd0bde9218d65997eb0801",
         "src/analysis-contract.js": "fee063967d32eefc955cf0729f7dc8cb31bd690b85e22471c9059494a599c77a",
         "src/analysis-output.js": "95a3c19dcc9ab85d1dba7fee5b9aec80f9c000dfba89da3fd0be25a81e2fb680",
         "src/analysis-worker.js": "a105cabe6e1573b2d986b1e7a5aaf615e2fb53524156fc8e4e2c0a71f2c97e55",
@@ -19,7 +19,7 @@
         "src/index-request.js": "78f26b872299005499fff4f2d1f9e8f986784f2ff36a5cf2be2b1e7b7c7d9378",
         "src/knowledge-targets.js": "aa44ec285d16d7b1c0b63bf084058a1d6f867fa9929c753b6b0cbb24f7b20ee2",
         "src/memories.js": "0a8667e6daba99fa5022393951a28e96cdadf98af85b6af9a6be96c7f4e896fc",
-        "src/retrieval.js": "bbb09cefc3c6ed692a51edfeecf6ac50619b8a2afbdf2034e0fdb5e00f4cfa68",
+        "src/retrieval.js": "4cfc2a6d11fcd480ac4e87818729e475b0c24917082e460594e62af0509afdd4",
         "src/runtime/README.md": "9be676eca76a7857b34d7357194e6f0ee733c22e61d962d53984715dbec7f673",
         "src/runtime/atomic-file.js": "9846b4b69db5ded811acf19a1181ef93615d93efaa542b858e552a7f3124ad23",
         "src/runtime/automation-config.js": "6498c5397be12b155829740595a1553d4dcd6eaa7db6ced3ef88fdc60218f00e",
@@ -36,7 +36,7 @@
         "src/runtime/knowledge-promotion.js": "c24aba505caf11cdc8faba763beffc65956c1330ef28ed5fbd6ae16eac640fa6",
         "src/runtime/knowledge-retrieval-service.js": "75444f495a9ad0720af0e57b8d27d7ac1325c78a768f4f68ebd86ebc2524945e",
         "src/runtime/layout.js": "c48fa1db62e5df1edefe13218e470c5ceea4ef2781293512c2c18e5c2ba0c7e9",
-        "src/runtime/markdown-knowledge-indexer.js": "44a76a9adefad07e78f77b1106b10d6c1cc7873d76362df4c546892b21f3939c",
+        "src/runtime/markdown-knowledge-indexer.js": "4d6b5b955849d274ca0614ef030c94526da7c39ab0874f02c168d0681f5b1406",
         "src/runtime/scanner.js": "d99fa8d74a6fbbaae75ca49f62127e14cf9e48b1404e4b4d597ef39df5441410",
         "src/server.js": "7deff466d28b94ec8975cd87ebd55c59d0aa6b49a8dfa447b552b1d32aa9c4b7",
         "src/store.js": "71f0417c2c1e42b89429e3dee1adff7b2c09e86682cb3f4843ce6d9e5aafd7ec",

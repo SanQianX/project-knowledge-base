@@ -1,5 +1,16 @@
 # Changelog
 
+## [5.0.9-rc.11] - 2026-10-11
+
+- Pin vector-hub 1.0.8-rc.3 and vendor engine 0.2.3-rc.5. Raw commit
+  conversations and internal backups are analysis evidence, not knowledge.
+  Exclude them from managed indexes, search and get; retain source evidence.
+- Prune stale derived records during sync and rebuild once on source-policy
+  upgrade, without repeating paid whole-index work on ordinary restarts.
+- Keep standalone vector-hub general document support unchanged.
+- Record both original failing regressions and successful Node 22/24 reruns;
+  installed, real model and existing-v5 gates still precede latest promotion.
+
 ## [5.0.9-rc.10] - 2026-10-11
 
 - Preserve acknowledged brain/domain knowledge-directory bindings when changing
