@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.0.9-rc.6] - 2026-10-11
+
+- Vendor engine 0.2.3-rc.2. Unassigned projects no longer share an implicit
+  domain in retrieval or Workbench task context. Explicit domains and whole
+  brain queries retain their inclusive scopes.
+- Keep the failed rc.5 real Workbench acceptance as a separate record. This
+  candidate must pass fresh downloaded-runtime checks before promotion.
+
 ## [5.0.9-rc.5] - 2026-10-11
 
 - Pin Workbench 0.13.2-rc.3: retain OpenCode final answers across tool rounds,
