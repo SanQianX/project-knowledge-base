@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.0.9-rc.5] - 2026-10-11
+
+- Pin Workbench 0.13.2-rc.3: retain OpenCode final answers across tool rounds,
+  isolate CLI history by product data directory and recover only owned v5
+  session records without moving or deleting originals.
+- Support current ZCode model-selection and failure events. Shared provider
+  credentials stay in memory behind a temporary loopback transport; client
+  shutdown cleans up the transport and settles rejected sends correctly.
+- Candidate publication does not promote latest or imply complete acceptance.
+  Real client execution, installed UI regression and existing-data upgrade
+  remain separately recorded gates.
+
 ## [5.0.9-rc.4] - 2026-10-11
 
 - Pin Workbench 0.13.2-rc.2: resolve the installed ZCode provider resource
