@@ -451,7 +451,7 @@
     renderSystem(); render();
   });
   window.addEventListener('online', () => {
-    $('activityConnection').textContent = '正在恢复快照'; refreshRegistry();
+    $('activityConnection').textContent = state.engineAvailable && state.stream?.readyState === EventSource.OPEN ? '已连接实时更新' : '正在恢复快照'; refreshRegistry();
     if ($('logsDialog').open) loadLogs().catch(error => toast(error.message));
   });
   window.addEventListener('beforeunload', () => { state.stream?.close(); logStream?.close(); });
