@@ -1,5 +1,18 @@
 # Changelog
 
+## [5.0.9-rc.14] - 2026-10-11
+
+- Vendor engine 0.2.3-rc.7: isolated maintenance consumes frozen evidence even
+  while the user edits or commits in the source repository. Do not mistake live
+  development for analyzer writes; retain live-source protection for custom
+  analyzers without the isolation capability.
+- Add a paused child-worker regression covering another commit, uncommitted
+  drafts, frozen attribution, same-project FIFO and unchanged path/tool guards.
+- Existing-user npm acceptance verified real MiniMax streaming, retained v5
+  history/configuration, D-root indexes and index-only e9f6560 recovery. Preserve
+  the actual rc.13 PROJECT_BUSY failure and require a real mid-analysis commit
+  retest from downloaded rc.14 before stable promotion.
+
 ## [5.0.9-rc.13] - 2026-10-11
 
 - Give native Agent session creation and input setup a bounded 90-second proxy
