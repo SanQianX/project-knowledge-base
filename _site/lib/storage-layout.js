@@ -49,6 +49,10 @@ class StorageLayout {
   getRegistryLockPath() { return path.join(this.dataDir, 'runtime', 'locks', 'projects.lock'); }
 
   getIndexPath() { return path.join(this.dataDir, 'index', 'knowledge.lancedb'); }
+  getVectorRootPath(settings) {
+    const root = settings?.knowledge?.rootPath;
+    return root ? path.join(path.resolve(root), '.indexes') : path.join(this.dataDir, 'vectorhub');
+  }
   getCachePath(...segments) { return path.join(this.dataDir, 'cache', ...segments); }
   getRuntimePath(...segments) { return path.join(this.dataDir, 'runtime', ...segments); }
   getRecoveryPath(...segments) { return path.join(this.dataDir, 'recovery', ...segments); }

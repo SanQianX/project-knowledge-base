@@ -127,6 +127,13 @@ visible as dirty state and is retried.
 vector-hub owns the derived index; the shell no longer runs a second index
 writer. Failed indexing leaves promoted Markdown intact and repairable.
 
+Managed vectors follow the configured knowledge root at `<knowledge>/.indexes`.
+The system drawer displays the actual directory and pending wiring separately.
+Root changes leave project Markdown and old indexes untouched, drain existing
+index writes, switch subsequent writes, and rebuild registered knowledge with
+the configured embedding model. Credentials and small runtime metadata remain
+in the product data directory; no expensive historical Agent analysis is started.
+
 The application does not create, edit, refresh, or delete `CLAUDE.md`.
 
 ## Requirement capture

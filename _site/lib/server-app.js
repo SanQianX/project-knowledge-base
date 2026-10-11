@@ -921,7 +921,7 @@ function createRequestHandler(runtime, options = {}) {
       }
       if (method === 'GET' && pathname === '/api/brain') {
         const settings = runtime.settingsStore.read();
-        return send(res, 200, { ok: true, brain: settings.brain, knowledgeRoot: settings.knowledge.rootPath, configuration: runtime.moduleBridge.configStatus || null });
+        return send(res, 200, { ok: true, brain: settings.brain, knowledgeRoot: settings.knowledge.rootPath, indexStoragePath: runtime.layout.getVectorRootPath(settings), configuration: runtime.moduleBridge.configStatus || null });
       }
       if (method === 'PATCH' && pathname === '/api/brain') {
         const body = await readJsonBody(req);
@@ -982,8 +982,8 @@ function createRequestHandler(runtime, options = {}) {
         if (body.logging) throw new DomainError('IMMUTABLE_FIELD', 'Logging storage and capture policy are not user settings.', { status: 409 });
         if (!Object.keys(patch).length) throw new DomainError('INVALID_ARGUMENT', 'Only the knowledge root is mutable on this route.');
         const settings = await runtime.settingsStore.updatePatch(patch);
-        await runtime.moduleBridge.syncEngineConfiguration();
-        return send(res, 200, { ok: true, settings: { ...settings, ai: publicAiProfilesConfig(settings.ai) } });
+        const configuration = await runtime.moduleBridge.syncEngineConfiguration();
+        return send(res, 200, { ok: true, settings: { ...settings, ai: publicAiProfilesConfig(settings.ai) }, configuration });
       }
 
       if (method === 'GET' && pathname === '/api/projects') return send(res, 200, { ok: true, projects: listProjectViews(runtime.registryStore, runtime.projectStore) });

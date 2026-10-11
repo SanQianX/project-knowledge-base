@@ -24,6 +24,7 @@
 
 const { spawn, spawnSync } = require('child_process');
 const path = require('path');
+const { StorageLayout } = require('./storage-layout');
 const fs = require('fs');
 const crypto = require('crypto');
 const { once } = require('events');
@@ -310,10 +311,19 @@ class ModuleBridge {
     } };
   }
 
-  async syncEngineConfiguration() {
-    if (this.syncingConfig) return this.configStatus || { scopes: false, model: false };
-    this.syncingConfig = true;
-    const status = { scopes: false, model: false, embedding: false };
+  syncEngineConfiguration() {
+    if (this.configSyncPromise) return this.configSyncPromise.catch(() => undefined).then(() => this.syncEngineConfiguration());
+    const pending = this._syncEngineConfiguration().finally(() => { if (this.configSyncPromise === pending) this.configSyncPromise = null; });
+    this.configSyncPromise = pending;
+    return pending;
+  }
+
+  async _syncEngineConfiguration() {
+    const dataDir = this.dataDir || require('./data-dir').getDataDir();
+    let indexPath = null;
+    try { indexPath = new StorageLayout({ dataDir }).getVectorRootPath(this.settingsStore?.read()); }
+    catch { /* Corrupt settings must not switch storage or prevent credential revocation. */ }
+    const status = { scopes: false, model: false, embedding: false, indexStorage: { expectedPath: indexPath, actualPath: null, status: 'pending' } };
     const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${this.runtimeToken}` };
     try {
       if (this.settingsStore) {
@@ -341,10 +351,15 @@ class ModuleBridge {
         const resolved = await this._fetch(`${this.terminalUrl}/api/claude-workbench/v1/internal/embedding-config`, { method: 'POST', headers, body: '{}' });
         if (resolved.ok) settings = await resolved.json();
       } catch { /* Revocation wins over a previously cached runtime key. */ }
-      const applied = await this._fetch(`${this.vectorHubUrl}/api/internal/runtime-config`, { method: 'POST', headers, body: JSON.stringify({ settings }) });
+      const applied = await this._fetch(`${this.vectorHubUrl}/api/internal/runtime-config`, { method: 'POST', headers, body: JSON.stringify({ settings, ...(indexPath ? { storageRoot: indexPath } : {}) }) });
       status.embedding = applied.ok && !!settings;
+      if (applied.ok) {
+        const result = await applied.json();
+        status.indexStorage.actualPath = result.rootPath || null;
+        status.indexStorage.status = result.rootPath && path.resolve(result.rootPath) === indexPath ? 'ready' : 'pending';
+      }
     } catch { /* Public status contains no resolved configuration. */ }
-    this.syncingConfig = false; this.configStatus = status;
+    this.configStatus = status;
     return status;
   }
 
@@ -559,12 +574,13 @@ class ModuleBridge {
         this.logger.warn('modules.supervisor', '@sanqianx/vector-hub runtime not installed; expecting an external service.', {});
       } else {
         const dataDir = this.dataDir || require('./data-dir').getDataDir();
-        const root = path.join(dataDir, 'vectorhub');
+        const configRoot = path.join(dataDir, 'vectorhub');
+        const root = new StorageLayout({ dataDir }).getVectorRootPath(this.settingsStore?.read());
         specs.push({
           name: 'vector-hub',
           command: `node ${JSON.stringify(vectorHubEntry)} serve --host ${urlHost(this.vectorHubUrl)} --port ${urlPort(this.vectorHubUrl, 8787)} --root ${JSON.stringify(root)}`,
           url: this.vectorHubUrl,
-          env: { VECTOR_HUB_ROOT: root, VECTOR_HUB_CONFIG: path.join(root, 'config.json'), VECTOR_HUB_LEGACY_CONFIG: path.join(root, 'no-legacy-config.json'), KB_VECTOR_MANAGED: '1', KB_VECTOR_RUNTIME_TOKEN: this.runtimeToken },
+          env: { VECTOR_HUB_ROOT: root, VECTOR_HUB_CONFIG: path.join(configRoot, 'config.json'), VECTOR_HUB_LEGACY_CONFIG: path.join(configRoot, 'no-legacy-config.json'), KB_VECTOR_MANAGED: '1', KB_VECTOR_RUNTIME_TOKEN: this.runtimeToken },
         });
       }
     }

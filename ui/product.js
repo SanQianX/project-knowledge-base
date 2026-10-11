@@ -159,6 +159,7 @@
       const [brain, projects, health] = await Promise.all([api('/api/brain'), api('/api/projects/aggregated'), api('/api/modules/health')]);
       if (epoch !== registryEpoch) return;
       state.brain = brain.brain; state.root = brain.knowledgeRoot; state.projects = projects.projects; state.health = health.modules; state.ownership = health.ownership;
+      state.indexStorage = { path: brain.indexStoragePath, ...brain.configuration?.indexStorage };
       if (!activeProject()) { state.projectId = state.projects[0]?.projectId || ''; state.epoch++; Object.keys(frames).forEach(frameContext); }
       renderProjectOptions(); renderSystem(); connectProgress(); await refreshSnapshot(); setView(state.view);
     } catch (error) { toast(error.message); }
@@ -170,9 +171,12 @@
   function renderSystem() {
     const down = Object.keys(modules).filter(key => !state.health[key]?.up);
     const pending = state.ownership?.owner === 'engine' && !state.ownership.ready;
+    const storagePending = !!state.indexStorage?.expectedPath && state.indexStorage.status !== 'ready';
+    renderStorageInfo();
     $('systemDot').className = `dot ${down.length || pending ? 'issue' : 'up'}`;
     $('systemTitle').textContent = pending ? '知识引擎连接待恢复' : down.length ? '部分服务需要处理' : '系统连接正常';
     $('systemDetail').textContent = pending ? `${state.ownership.message || '服务恢复后自动重试。'}${state.ownership.error ? ` · ${state.ownership.error.step} (${state.ownership.error.code})` : ''}` : down.length ? down.map(k => modules[k]).join('、') : '本机知识服务已连接';
+    if (storagePending && !pending && !down.length) { $('systemDot').className = 'dot issue'; $('systemTitle').textContent = '索引目录接线待恢复'; $('systemDetail').textContent = `目标目录：${state.indexStorage.expectedPath}。请在系统状态中修复接线。`; }
     $('moduleHealth').innerHTML = Object.entries(modules).map(([key, name]) => `<div class="row"><div><b>${esc(name)}</b><small>${esc(state.health[key]?.url || '')}</small></div>${badge(state.health[key]?.up ? '在线' : '离线', state.health[key]?.up ? 'up' : 'issue')}</div>`).join('');
     if (!navigator.onLine) {
       $('systemDot').className = 'dot issue'; $('systemTitle').textContent = '网页连接中断';
@@ -183,7 +187,12 @@
   async function openSystem() {
     $('systemDrawer').hidden = false; $('drawerBackdrop').hidden = false;
     $('brainName').value = state.brain.name; $('knowledgeRoot').value = state.root;
+    renderStorageInfo();
     await Promise.all([loadMaintenance(), loadAgentCapture()]);
+  }
+  function renderStorageInfo() {
+    $('indexStoragePath').textContent = state.indexStorage?.actualPath || state.indexStorage?.path || '设置知识根目录后自动确定';
+    $('indexStorageStatus').textContent = state.indexStorage?.status === 'ready' ? '索引目录已生效。' : `索引接线待恢复；目标目录：${state.indexStorage?.expectedPath || state.indexStorage?.path || '尚未设置'}`;
   }
   async function loadAgentCapture() {
     const epoch = ++captureEpoch;
@@ -376,7 +385,7 @@
   on('embeddingForm', 'submit', async event => { event.preventDefault(); await saveEmbedding(); });
   on('disableEmbedding', 'click', () => saveEmbedding(false));
   on('embeddingDialog', 'close', () => { $('embeddingSecret').value = ''; });
-  on('saveBrainSettings', 'click', async () => { await api('/api/brain', { method: 'PATCH', body: { name: $('brainName').value } }); await api('/api/settings', { method: 'PATCH', body: { knowledge: { rootPath: $('knowledgeRoot').value } } }); toast('设置已保存，已有知识未移动。'); await refreshRegistry(); if (resumeImport) closeSystem(); });
+  on('saveBrainSettings', 'click', async () => { await api('/api/brain', { method: 'PATCH', body: { name: $('brainName').value } }); const saved = await api('/api/settings', { method: 'PATCH', body: { knowledge: { rootPath: $('knowledgeRoot').value } } }); toast(saved.configuration?.indexStorage?.status === 'ready' ? '设置已保存，索引目录已生效；已有知识未移动。' : '设置已保存，索引目录接线待恢复；已有知识保留。'); await refreshRegistry(true); if (resumeImport) closeSystem(); });
   on('setupImportRoot', 'click', async () => { $('importDialog').close(); resumeImport = true; await openSystem(); $('knowledgeRoot').focus(); });
   on('pickRoot', 'click', () => pick('knowledgeRoot')); on('pickCode', 'click', () => pick('importCode')); on('pickKnowledge', 'click', () => pick('importKnowledge'));
   on('openEngine', 'click', () => { closeSystem(); initializeFrame('engine'); $('engineDialog').showModal(); post('engine', { type: 'kb:visibility', visible: true }); });

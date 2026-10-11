@@ -40,7 +40,7 @@
     <section id="agentCaptureSection"><div class="actions"><h3>外部 Agent 采集</h3><button id="refreshAgentCapture">检查状态</button></div><p class="muted">只接入你使用的工具。采集外部开发会话，不会重新安装 Agent，也不影响已有记录。</p><div id="agentCaptureList"></div><p id="agentCaptureFeedback" class="feedback" role="status"></p></section>
     <section><h3>后台维护模型</h3><p class="muted">使用持久化默认模型，不跟随聊天中的临时切换。</p><select id="maintenanceModel" aria-label="后台维护默认模型"></select><div class="actions"><button id="saveMaintenance">保存默认模型</button><button id="configureProviders">管理模型供应商</button></div><p id="configurationStatus" class="muted"></p></section>
     <section><h3>向量检索模型</h3><p id="embeddingStatus" class="muted">正在读取配置。</p><button id="openEmbedding">配置向量模型</button><p class="muted">凭据由工作台统一保存。未配置时仍可使用文本检索。</p></section>
-    <section><h3>智脑设置</h3><label>名称<input id="brainName" maxlength="100"></label><label>知识根目录<div class="input-with-action"><input id="knowledgeRoot"><button id="pickRoot">选择</button></div></label><p class="muted">修改根目录不会移动已有项目知识或共享知识。</p><button id="saveBrainSettings">保存设置</button></section>
+    <section><h3>智脑设置</h3><label>名称<input id="brainName" maxlength="100"></label><label>知识根目录<div class="input-with-action"><input id="knowledgeRoot"><button id="pickRoot">选择</button></div></label><label>向量索引目录<output id="indexStoragePath" class="detail-path"></output></label><p id="indexStorageStatus" class="muted"></p><p class="muted">索引跟随知识根目录，可重新构建；切换时原索引保留，已有项目知识与共享知识不移动。</p><button id="saveBrainSettings">保存设置</button></section>
     <section><div class="actions"><button id="openEngine">知识引擎诊断</button><button id="openLogs">系统诊断记录</button></div><p class="muted">诊断不影响正在进行的会话与维护。</p></section>
   </div>
 </aside>
