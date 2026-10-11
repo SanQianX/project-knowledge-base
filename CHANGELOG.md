@@ -1,5 +1,15 @@
 # Changelog
 
+## [5.0.9-rc.16] - 2026-10-11
+
+- Pin Workbench 0.13.2-rc.5. Bound OpenCode's health request at both
+  response headers and JSON body so a stalled local server cannot exceed
+  the startup handshake budget before the existing CLI fallback.
+- Reproduce the old behavior using two live HTTP connections, retain the
+  failed rc.15 client acceptance and require a new official-package retest.
+- No project, knowledge, history, provider or third-party hook reset.
+  Candidate is published to next; stable latest still requires acceptance.
+
 ## [5.0.9-rc.15] - 2026-10-11
 
 - Serialize registration, module removal and registry deletion for each project.
