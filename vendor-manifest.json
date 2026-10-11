@@ -3,11 +3,11 @@
   "modules": {
     "knowledge-engine": {
       "name": "@sanqianx/ai-coding-knowledge-engine",
-      "version": "0.2.3-rc.5",
+      "version": "0.2.3-rc.6",
       "root": "_modules/knowledge-engine",
       "files": {
-        "README.md": "8c501eebd770b4a54f3ec97bb2c21b8953eed7d7b21ce1a0ecdb9e11ac795c7b",
-        "package.json": "bb46aa0bb25124f104eedd14287003201da26d6dfdbd0bde9218d65997eb0801",
+        "README.md": "efcef635df01736a8672219642a76175f3059d23b466f529140d791ec75000d5",
+        "package.json": "09e32aacd4ec5c3b596e60f3210f62515c625844e31866261c5596937195db30",
         "src/analysis-contract.js": "fee063967d32eefc955cf0729f7dc8cb31bd690b85e22471c9059494a599c77a",
         "src/analysis-output.js": "95a3c19dcc9ab85d1dba7fee5b9aec80f9c000dfba89da3fd0be25a81e2fb680",
         "src/analysis-worker.js": "a105cabe6e1573b2d986b1e7a5aaf615e2fb53524156fc8e4e2c0a71f2c97e55",
@@ -39,7 +39,7 @@
         "src/runtime/markdown-knowledge-indexer.js": "4d6b5b955849d274ca0614ef030c94526da7c39ab0874f02c168d0681f5b1406",
         "src/runtime/scanner.js": "d99fa8d74a6fbbaae75ca49f62127e14cf9e48b1404e4b4d597ef39df5441410",
         "src/server.js": "7deff466d28b94ec8975cd87ebd55c59d0aa6b49a8dfa447b552b1d32aa9c4b7",
-        "src/store.js": "71f0417c2c1e42b89429e3dee1adff7b2c09e86682cb3f4843ce6d9e5aafd7ec",
+        "src/store.js": "7dd1a60fd5338cf91ff8836c0c18f29b101dcaf17d4b9f07d07716799543f577",
         "ui/app.css": "7ad370c269e60a7b5ec907d81a607b2d16bd07b2d7c22a81f102dab51eeb2889",
         "ui/app.js": "33a2ba38f0dafbbb2e30a1eb3fc93476bfcaf528e124e1a9b2edd2fb69221e9e",
         "ui/index.html": "ce3565cfefd4838b11d37a91a906ef26ca5a1834844fe3f7c897b56851a3c418"

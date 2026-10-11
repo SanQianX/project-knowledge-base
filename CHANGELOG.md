@@ -1,5 +1,16 @@
 # Changelog
 
+## [5.0.9-rc.12] - 2026-10-11
+
+- Vendor engine 0.2.3-rc.6 to address the Windows transient state-file rename
+  failure exposed by installed rc.11 fault acceptance. Use exclusive random
+  temporary files and bounded sharing retries, retain durable state on failure,
+  and never unlink live state to force replacement.
+- Add deterministic sharing-violation, permanent-lock, foreign-temp and
+  disk-full regressions; all 39 engine tests pass on Node 22 and Node 24.
+- Preserve the rc.11 failure and require new installed acceptance before any
+  existing-user upgrade or stable latest promotion.
+
 ## [5.0.9-rc.11] - 2026-10-11
 
 - Pin vector-hub 1.0.8-rc.3 and vendor engine 0.2.3-rc.5. Raw commit
