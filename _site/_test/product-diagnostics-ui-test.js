@@ -83,7 +83,11 @@ async function main() {
     if (browser) console.error(await browser.evaluate("JSON.stringify({ toast:document.getElementById('toast').textContent, project:document.getElementById('projectSelect').value, detail:document.getElementById('projectDetail').textContent })"));
     throw error;
   } finally {
-    await browser?.close(); await server.cleanup(); offline.closeAllConnections(); await new Promise(resolve => offline.close(resolve)); fixture.cleanup();
+    try { await browser?.close(); }
+    finally {
+      try { await server.cleanup(); }
+      finally { offline.closeAllConnections(); await new Promise(resolve => offline.close(resolve)); fixture.cleanup(); }
+    }
   }
 }
 main().catch(error => { console.error(error.stack || error.message); process.exitCode = 1; });

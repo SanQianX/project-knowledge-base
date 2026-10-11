@@ -78,8 +78,8 @@ function spawnServer({ root, port, host = '127.0.0.1', dataDir, extraEnv = {}, t
         child.once('close', () => { clearTimeout(timer); resolve(); });
         if (child.exitCode !== null) { clearTimeout(timer); resolve(); }
       });
-      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-      fs.rmSync(bridgeHome, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+      await fs.promises.rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      await fs.promises.rm(bridgeHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     },
   };
 }
