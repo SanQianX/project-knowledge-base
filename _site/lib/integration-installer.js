@@ -784,9 +784,14 @@ class IntegrationManager {
       locations = (index.plugins?.[`${INTEGRATION_NAME}@${MARKETPLACE_NAME}`] || []).filter(p => p.version === knowledge.version).map(p => p.installPath);
     } catch {}
     if (!locations.length) locations.push(path.join(this.homeDir, '.claude/plugins/cache', MARKETPLACE_NAME, INTEGRATION_NAME, knowledge.version));
-    const files = ['hooks/claude.json', 'scripts/context-hook.cjs'];
+    const files = ['hooks/claude.json', 'scripts/context-hook.cjs', '.mcp.json', '.claude-plugin/plugin.json'];
     const configured = locations.some(directory => typeof directory === 'string' && files.every(file => {
-      try { return fs.readFileSync(path.join(directory, file)).equals(fs.readFileSync(path.join(this.rootDir, 'plugins', INTEGRATION_NAME, file))); } catch { return false; }
+      // Native marketplaces use Git checkout newline rules; npm integrity
+      // remains byte-exact elsewhere. Only normalize text line endings here.
+      try {
+        const text = target => new TextDecoder('utf-8', { fatal: true }).decode(fs.readFileSync(target)).replace(/\r\n/g, '\n');
+        return text(path.join(directory, file)) === text(path.join(this.rootDir, 'plugins', INTEGRATION_NAME, file));
+      } catch { return false; }
     }));
     return { supported: true, state: configured ? 'configured' : 'needs-repair', configured, expectedVersion: this.version, detail: configured ? '前置读取脚本已接线；请重新打开会话。具体需求是否已读取请查看 agent.context 与 knowledge.context 日志。' : '插件前置读取文件缺失或内容不匹配，请更新/修复插件。' };
   }

@@ -55,6 +55,9 @@ async function main() {
     assert.ok(commandCalls.includes('plugin marketplace update project-knowledge'));
     assert.ok(commandCalls.includes('plugin update project-knowledge@project-knowledge --scope user'));
     assert.equal(manager.statusClaude().state, 'installed');
+    const cacheRoot = path.join(root, '.claude/plugins/cache/project-knowledge/project-knowledge', manager.version);
+    for (const file of ['hooks/claude.json', 'scripts/context-hook.cjs']) fs.writeFileSync(path.join(cacheRoot, file), fs.readFileSync(path.join(cacheRoot, file), 'utf8').replace(/\r?\n/g, '\r\n'));
+    assert.equal(manager.automaticContextStatus('claude', manager.statusClaude()).configured, true, 'Git CRLF checkout and npm LF are the same client integration');
     const before = commandCalls.filter(c => c.startsWith('plugin update')).length; manager.installClaude();
     assert.equal(commandCalls.filter(c => c.startsWith('plugin update')).length, before);
     console.log('Automatic context protocol, fail-open safety and stale-plugin upgrade passed.');
