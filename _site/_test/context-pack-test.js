@@ -5,6 +5,7 @@ const path = require('path');
 const os = require('os');
 const { spawn } = require('child_process');
 const { spawnServer } = require('./helpers/spawn-server');
+const freePort = require('./helpers/free-port');
 const { makeRepo, git } = require('./fixtures/make-git-repos');
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -19,8 +20,7 @@ try { fs.copyFileSync(path.join(ROOT, 'claude-prompts.json'), path.join(DATA_DIR
 
 const { buildContextPack, isSafePath, PACKAGE_CONFIG_FILES } = require('../lib/context-pack-builder');
 let PROJECTS_JSON = path.join(DATA_DIR, 'projects.json');
-const PORT = process.env.KB_CTX_TEST_PORT || '7796';
-const BASE_URL = `http://127.0.0.1:${PORT}`;
+let PORT, BASE_URL;
 const TEMP_SLUG = 'task-006-temp';
 
 function assert(cond, msg) { if (!cond) throw new Error(msg); }
@@ -56,6 +56,8 @@ async function cleanup() {
 }
 
 (async () => {
+  PORT = process.env.KB_CTX_TEST_PORT || await freePort();
+  BASE_URL = `http://127.0.0.1:${PORT}`;
   // 1. Path safety
   assert(isSafePath('/tmp/proj', 'a/b.md'), 'safe path should pass');
   assert(!isSafePath('/tmp/proj', '../escape.md'), 'parent traversal should fail');

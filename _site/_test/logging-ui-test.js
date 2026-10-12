@@ -3,9 +3,9 @@ const path = require('path');
 const { spawnServer } = require('./helpers/spawn-server');
 const { requestJson, waitFor } = require('./helpers/cdp-browser');
 const { createLoggingUiFixture } = require('./helpers/logging-ui-fixture');
+const freePort = require('./helpers/free-port');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const port = 8750 + (process.pid % 180);
 
 function baseParams(fixture, pageSize) {
   const params = new URLSearchParams();
@@ -24,10 +24,11 @@ async function jsonResponse(url) {
 }
 
 (async () => {
+  const port = await freePort();
   const fixture = await createLoggingUiFixture({ totalLogs: 64 });
   const server = spawnServer({ root: ROOT, port, dataDir: fixture.dataDir, tag: 'logging-ui-api', stdio: 'ignore' });
   try {
-    await waitFor(() => requestJson('http://127.0.0.1:' + port + '/api/health').then(body => body.ok), 'logging API', 20000);
+    await waitFor(() => requestJson('http://127.0.0.1:' + port + '/api/runtime/identity').then(body => body.pid === server.child.pid && body.dataDir === fixture.dataDir), 'owned logging API', 20000);
     const baseUrl = 'http://127.0.0.1:' + port;
     const firstParams = baseParams(fixture, 10);
     const first = await jsonResponse(baseUrl + '/api/logs?' + firstParams.toString());

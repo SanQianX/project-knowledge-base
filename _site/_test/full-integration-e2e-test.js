@@ -4,14 +4,14 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { spawnServer } = require('./helpers/spawn-server');
+const freePort = require('./helpers/free-port');
 const { StorageLayout } = require('../lib/storage-layout');
 const { ProjectRegistryStore } = require('../lib/project-registry-store');
 const { ProjectStore } = require('../lib/project-store');
 const { RequirementRecorder } = require('../lib/requirement-recorder');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const PORT = Number(process.env.KB_FULL_E2E_PORT || 7942);
-const BASE_URL = `http://127.0.0.1:${PORT}`;
+let PORT, BASE_URL;
 const TEMP = fs.mkdtempSync(path.join(os.tmpdir(), `project-knowledge-e2e-${process.pid}-`));
 const DATA_DIR = path.join(TEMP, 'data');
 const REPO = path.join(TEMP, 'repo with 空格');
@@ -58,7 +58,7 @@ async function start() {
   spawned.child.stdout.on('data', chunk => { output += chunk; });
   spawned.child.stderr.on('data', chunk => { output += chunk; });
   for (let attempt = 0; attempt < 150; attempt += 1) {
-    try { if ((await fetch(`${BASE_URL}/api/health`)).ok) return { ...spawned, output: () => output }; } catch {}
+    try { const response = await fetch(`${BASE_URL}/api/runtime/identity`); const identity = await response.json(); if (response.ok && identity.pid === spawned.child.pid && identity.dataDir === DATA_DIR) return { ...spawned, output: () => output }; } catch {}
     if (spawned.child.exitCode != null) throw new Error(`server exited during startup (${spawned.child.exitCode})\n${output}`);
     await new Promise(resolve => setTimeout(resolve, 100));
   }
@@ -86,6 +86,8 @@ async function waitForState(predicate, label) {
 }
 
 (async () => {
+  PORT = process.env.KB_FULL_E2E_PORT ? Number(process.env.KB_FULL_E2E_PORT) : await freePort();
+  BASE_URL = `http://127.0.0.1:${PORT}`;
   let server;
   fs.mkdirSync(REPO, { recursive: true });
   git(['init', '--initial-branch=main']);
