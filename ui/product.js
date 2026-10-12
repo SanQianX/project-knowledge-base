@@ -105,8 +105,40 @@
   }
   function renderMemories() {
     all('[data-memory-tab]').forEach(button => button.classList.toggle('active', button.dataset.memoryTab === state.memoryTab));
-    const memories = state.snapshot.memories.filter(m => m.status === state.memoryTab);
-    $('memoryContent').innerHTML = !state.engineAvailable ? '<div class="empty">知识引擎暂时不可用。未读取到的记忆不会显示为已确认。</div>' : memories.length ? `<div class="memory-grid">${memories.map(m => `<article class="memory-card"><p>${esc(m.text)}</p><small>${esc(projectName(m.evidence.projectId))} · commit ${esc(m.evidence.commitSha.slice(0, 8))}<br>${esc(m.evidence.entryId)}</small><div class="actions"><button data-memory-action="evidence" data-memory-id="${esc(m.id)}">查看依据</button><button data-memory-action="edit" data-memory-id="${esc(m.id)}">编辑</button>${m.status === 'candidate' ? `<button class="primary" data-memory-action="confirm" data-memory-id="${esc(m.id)}">确认</button><button data-memory-action="ignore" data-memory-id="${esc(m.id)}">忽略</button>` : badge('已确认', 'up')}</div></article>`).join('')}</div>` : `<div class="empty">${state.memoryTab === 'confirmed' ? '还没有已确认的长期记忆。' : '候选箱为空。维护产物中的有据偏好会进入这里，等待你的确认。'}</div>`;
+    const type = $('memoryScopeFilter').value, target = $('memoryTargetFilter').value;
+    const memories = state.snapshot.memories.filter(m => m.status === state.memoryTab && (!type || (m.scopeType || 'global') === type) && (!type || type === 'global' || !target || m.scopeId === target));
+    $('memoryContent').innerHTML = !state.engineAvailable ? '<div class="empty">知识引擎暂时不可用。未读取到的记忆不会显示为已确认。</div>' : memories.length ? `<div class="memory-grid">${memories.map(m => `<article class="memory-card" data-memory-card="${esc(m.id)}"><div class="memory-meta">${badge(memoryScopeName(m))}${m.targetAvailable === false ? badge('目标已失效，不会注入', 'issue') : m.status === 'confirmed' && m.syncStatus === 'pending' ? badge('写入待恢复', 'issue') : m.status === 'confirmed' && m.indexStatus === 'failed' ? badge('索引待恢复', 'issue') : ''}</div><p>${esc(m.text)}</p><small>来源：${esc(projectName(m.evidence.projectId))} · commit ${esc(m.evidence.commitSha.slice(0, 8))}<br>${esc(m.evidence.entryId)}</small><div class="actions"><button data-memory-action="evidence" data-memory-id="${esc(m.id)}">查看依据</button>${m.status === 'candidate' ? `<button class="primary" data-memory-action="confirm" data-memory-id="${esc(m.id)}">审核确认</button><button data-memory-action="ignore" data-memory-id="${esc(m.id)}">忽略</button>` : `<button data-memory-action="edit" data-memory-id="${esc(m.id)}">编辑</button>${badge(m.syncStatus === 'pending' ? '待同步' : '已确认', m.syncStatus === 'pending' ? 'issue' : 'up')}`}</div></article>`).join('')}</div>` : `<div class="empty">${type ? '此范围内没有匹配的记忆。' : state.memoryTab === 'confirmed' ? '还没有已确认的长期记忆。' : '候选箱为空。维护产物中的有据偏好会进入这里，等待你的确认。'}</div>`;
+  }
+  function memoryScopeName(memory) {
+    const type = memory.scopeType || 'global';
+    return type === 'global' ? '全局 · 所有领域与项目' : `${type === 'domain' ? '领域' : '项目'} · ${type === 'domain' ? domainName(memory.scopeId) : projectName(memory.scopeId)}`;
+  }
+  function memoryTargets(type) { return type === 'domain' ? state.brain.domains : type === 'project' ? state.projects.map(p => ({ id: p.projectId, name: p.name })) : []; }
+  function updateMemoryTarget(type, selected = '') {
+    const options = memoryTargets(type);
+    $('memoryTargetLabel').hidden = type === 'global'; $('memoryTarget').required = type !== 'global'; $('memoryTarget').disabled = type === 'global';
+    $('memoryTarget').innerHTML = '<option value="">请选择适用目标</option>' + options.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+    $('memoryTarget').value = selected;
+    $('memoryScopeHint').textContent = type === 'global' ? '确认后可用于所有领域和项目。' : type === 'domain' ? '只用于所选领域当前所属的项目。可改选其他已有领域。' : '只用于所选项目。可改选其他已有项目。';
+  }
+  function updateMemoryFilter() {
+    const type = $('memoryScopeFilter').value, previous = $('memoryTargetFilter').value;
+    $('memoryTargetFilter').hidden = !['domain', 'project'].includes(type);
+    $('memoryTargetFilter').innerHTML = '<option value="">全部目标</option>' + memoryTargets(type).map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+    $('memoryTargetFilter').value = memoryTargets(type).some(p => p.id === previous) ? previous : '';
+    renderMemories();
+  }
+  function openMemory(memory) {
+    editingMemoryId = memory.id;
+    $('memoryDialogTitle').textContent = memory.status === 'candidate' ? '审核并确认记忆' : '编辑已确认记忆';
+    $('memoryText').value = memory.text; $('memoryScope').value = memory.scopeType || 'global';
+    updateMemoryTarget($('memoryScope').value, memory.scopeId || memory.brainId);
+    $('memoryOriginal').textContent = `原始总结：${memory.originalText || memory.text}`;
+    $('memoryEvidence').textContent = `${projectName(memory.evidence.projectId)} · ${memory.evidence.commitSha} / ${memory.evidence.entryId}`;
+    $('memoryQuote').textContent = memory.evidence.quote;
+    $('memoryFeedback').hidden = true; $('saveMemoryCandidate').hidden = memory.status !== 'candidate';
+    $('confirmMemory').textContent = memory.status === 'candidate' ? '确认并保存' : '保存修改';
+    $('memoryDialog').showModal();
   }
   function renderActivity() {
     all('[data-activity-tab]').forEach(button => button.classList.toggle('active', button.dataset.activityTab === state.activityTab));
@@ -131,7 +163,7 @@
     $('referenceTitle').textContent = reference.title || reference.entryId;
     $('referenceMeta').textContent = `${projectName(reference.projectId)} / ${reference.entryId}${reference.commitSha ? ` · commit ${reference.commitSha}` : ''}`;
     $('referenceContent').textContent = reference.text || '读取知识文件…'; $('referenceDialog').showModal();
-    if (reference.entryId) {
+    if (reference.entryId && reference.readFile !== false) {
       const result = await api('/api/engine/get', { method: 'POST', body: { projectId: state.projects.some(p => p.projectId === reference.projectId) ? reference.projectId : id, spaceId: reference.spaceId, entryId: reference.entryId } });
       if (epoch === referenceEpoch && id === state.projectId && $('referenceDialog').open) $('referenceContent').textContent = result.chunks.map(c => c.chunk_text).join('\n');
     }
@@ -162,7 +194,7 @@
       state.indexStorage = { path: brain.indexStoragePath, ...brain.configuration?.indexStorage };
       state.scopeStatus = brain.configuration?.scopeStatus;
       if (!activeProject()) { state.projectId = state.projects[0]?.projectId || ''; state.epoch++; Object.keys(frames).forEach(frameContext); }
-      renderProjectOptions(); renderSystem(); connectProgress(); await refreshSnapshot(); setView(state.view);
+      renderProjectOptions(); renderSystem(); connectProgress(); await refreshSnapshot(); updateMemoryFilter(); setView(state.view);
     } catch (error) { toast(error.message); }
     finally { if (epoch === registryEpoch) { registryPromise = null; connectProgress(); } }
     })();
@@ -354,9 +386,9 @@
       if (button.dataset.memoryAction) {
         const memory = state.snapshot.memories.find(m => m.id === button.dataset.memoryId); if (!memory) return;
         const action = button.dataset.memoryAction;
-        if (action === 'evidence') await openReference({ ...memory.evidence, text: memory.evidence.quote, title: '记忆来源依据' });
-        else if (action === 'edit') { editingMemoryId = memory.id; $('memoryText').value = memory.text; $('memoryEvidence').textContent = `${projectName(memory.evidence.projectId)} · ${memory.evidence.commitSha.slice(0, 8)} / ${memory.evidence.entryId}`; $('memoryDialog').showModal(); }
-        else { await api(`/api/engine/memories/${encodeURIComponent(memory.id)}`, { method: 'PATCH', body: { status: action === 'confirm' ? 'confirmed' : 'ignored' } }); await refreshSnapshot(); }
+        if (action === 'evidence') await openReference({ ...memory.evidence, readFile: false, text: memory.evidence.quote, title: '记忆来源依据（冻结原文）' });
+        else if (action === 'edit' || action === 'confirm') openMemory(memory);
+        else { await api(`/api/engine/memories/${encodeURIComponent(memory.id)}`, { method: 'PATCH', body: { status: 'ignored' } }); await refreshSnapshot(); }
       }
     };
     execute().catch(error => toast(error.message));
@@ -405,7 +437,25 @@
   on('exportLogs', 'click', async () => { const params = new URLSearchParams({ q: $('logsSearch').value.trim() }); if ($('logsScope').value === 'project' && state.projectId) params.set('projectId', state.projectId); const response = await fetch(`/api/logs/export?${params}`); if (!response.ok) throw new Error('诊断导出失败。'); const blob = await response.blob(); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'knowledge-diagnostics.jsonl'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); });
   on('createDomain', 'click', () => { $('domainForm').reset(); $('domainDialog').showModal(); });
   on('domainForm', 'submit', async e => { e.preventDefault(); await api('/api/domains', { method: 'POST', body: Object.fromEntries(new FormData(e.target)) }); $('domainDialog').close(); await refreshRegistry(true); });
-  on('memoryForm', 'submit', async e => { e.preventDefault(); await api(`/api/engine/memories/${encodeURIComponent(editingMemoryId)}`, { method: 'PATCH', body: { text: $('memoryText').value } }); $('memoryDialog').close(); await refreshSnapshot(); });
+  on('memoryScopeFilter', 'change', updateMemoryFilter); on('memoryTargetFilter', 'change', renderMemories);
+  on('memoryScope', 'change', () => {
+    const memory = state.snapshot.memories.find(m => m.id === editingMemoryId), type = $('memoryScope').value;
+    const source = state.projects.find(p => p.projectId === memory?.evidence.projectId);
+    updateMemoryTarget(type, type === 'project' ? source?.projectId : type === 'domain' ? source?.domainId : '');
+  });
+  on('memoryForm', 'submit', async e => {
+    e.preventDefault();
+    if ($('confirmMemory').disabled) return;
+    const type = $('memoryScope').value, body = { text: $('memoryText').value, scopeType: type, scopeId: type === 'global' ? state.brain.id : $('memoryTarget').value };
+    if (e.submitter?.dataset.mode === 'confirmed') body.status = 'confirmed';
+    $('confirmMemory').disabled = true; $('saveMemoryCandidate').disabled = true;
+    try {
+      const result = await api(`/api/engine/memories/${encodeURIComponent(editingMemoryId)}`, { method: 'PATCH', body });
+      $('memoryDialog').close(); await refreshSnapshot();
+      toast(result.memory.syncStatus === 'pending' ? '确认已保存，记忆文件待恢复；未同步内容不会注入任务。' : body.status === 'confirmed' ? '记忆内容与适用范围已确认。' : '候选已保存，尚未生效。');
+    } catch (error) { $('memoryFeedback').textContent = error.message; $('memoryFeedback').hidden = false; }
+    finally { $('confirmMemory').disabled = false; $('saveMemoryCandidate').disabled = false; }
+  });
   on('unbindForm', 'submit', async e => {
     e.preventDefault(); if (!unbindProjectId || unbinding) return;
     const projectId = unbindProjectId;

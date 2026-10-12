@@ -1,5 +1,16 @@
 # Changelog
 
+## [5.0.10-rc.1] - 2026-10-12
+
+- Add global/domain/project memory applicability and a single review form for
+  editing content, selecting any existing target and confirming atomically.
+- Retain original evidence, scope-aware duplicate suppression, existing v5
+  global memories and all fixed code/knowledge directory bindings.
+- Filter exclusive memories before retrieval ranking and file reads; clear old
+  projections after scope changes and report/retry pending file synchronization.
+- Keep the accepted Workbench, vector-hub and event-bridge versions unchanged;
+  candidate package acceptance precedes stable latest promotion.
+
 ## [5.0.9] - 2026-10-12
 
 - Freeze the accepted rc.19 web runtime and exact module versions; no new
