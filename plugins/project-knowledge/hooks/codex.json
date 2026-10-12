@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/scripts/context-hook.cjs\" --client codex",
+            "timeout": 12,
+            "additionalContextLimit": 0,
+            "statusMessage": "正在读取项目知识与适用记忆"
+          }
+        ]
+      }
+    ]
+  }
+}

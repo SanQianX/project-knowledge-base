@@ -63,6 +63,7 @@
     state.projectId = id; state.epoch++;
     referenceEpoch++; $('referenceDialog').close();
     if ($('logsDialog').open) loadLogs().catch(error => toast(error.message));
+    if (!$('systemDrawer').hidden) loadAgentCapture().catch(error => toast(error.message));
     localStorage.setItem('kb.project', id);
     $('projectSelect').value = id;
     Object.keys(frames).forEach(frameContext);
@@ -231,7 +232,9 @@
   async function loadAgentCapture() {
     const epoch = ++captureEpoch;
     try {
-      const result = await api('/api/integrations/status');
+      const projectId = state.projectId;
+      const result = await api('/api/integrations/status' + (projectId ? '?projectId=' + encodeURIComponent(projectId) : ''));
+      if (projectId !== state.projectId) return;
       if (epoch !== captureEpoch) return;
       $('agentCaptureList').innerHTML = result.clients.map(agent => {
         const capture = agent.developmentCapture;

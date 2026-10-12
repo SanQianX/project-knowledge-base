@@ -1300,7 +1300,10 @@ function createRequestHandler(runtime, options = {}) {
       // Integration and Development Capture per client, with separate status.
       if (method === 'GET' && pathname === '/api/integrations/status') {
         const manager = new IntegrationManager({ ...options.integrationOptions, rootDir: runtime.rootDir, logger: runtime.logger, operationId: requestOperationId, bridgeHomeDir: runtime.bridgeAdapter.hookBinding().bridgeHomeDir });
-        const summary = await manager.statusAll({ captureOnly: url.searchParams.get('captureOnly') === '1' });
+        const projectId = url.searchParams.get('projectId');
+        if (projectId && !runtime.registryStore.listIds().includes(projectId)) throw new DomainError('PROJECT_NOT_FOUND', '当前项目尚未登记。', { status: 404 });
+        const cwd = projectId ? runtime.projectStore.readConfig(projectId).repoPath : undefined;
+        const summary = await manager.statusAll({ captureOnly: url.searchParams.get('captureOnly') === '1', cwd });
         return send(res, 200, { ok: true, ...summary });
       }
       if (method === 'POST' && pathname === '/api/integrations/install') {

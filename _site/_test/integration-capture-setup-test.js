@@ -32,9 +32,13 @@ function makeManager() {
       const cache = path.join(homeDir, '.claude/plugins/cache/project-knowledge/project-knowledge', version);
       if (command === 'claude' && args.slice(0, 2).join(' ') === 'plugin install') { fs.mkdirSync(cache, { recursive: true }); fs.cpSync(path.join(ROOT, 'plugins/project-knowledge'), cache, { recursive: true }); }
       if (command === 'claude' && args.join(' ') === 'plugin list --json') return { status: 0, stdout: JSON.stringify(fs.existsSync(cache) ? [{ id: 'project-knowledge@project-knowledge', version, enabled: true }] : []), stderr: '' };
+      const codexCache = path.join(homeDir, 'codex-plugin-cache');
+      if (command === 'codex' && args.slice(0, 2).join(' ') === 'plugin add') { fs.mkdirSync(codexCache, { recursive: true }); fs.cpSync(path.join(ROOT, 'plugins/project-knowledge'), codexCache, { recursive: true }); }
+      if (command === 'codex' && args.join(' ') === 'plugin list --json') return { status: 0, stdout: JSON.stringify({ installed: fs.existsSync(codexCache) ? [{ pluginId: 'project-knowledge@project-knowledge', version, enabled: true, source: { path: codexCache } }] : [] }), stderr: '' };
       return { status: 0, stdout: '', stderr: '' };
     },
     bridgeHomeDir: bridgeHome,
+    codexHookProbe: async () => ({ data: [] }),
     claudeSettingsFile: claudeSettings,
     codexConfigFile: codexConfig,
     openCodePluginsDir: openCodePlugins,

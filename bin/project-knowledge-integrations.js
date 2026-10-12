@@ -25,7 +25,7 @@ Clients:
   claude       Claude Code plugin (MCP + Skill) + managed Bridge hooks
   opencode     OpenCode MCP + global Skill + managed Bridge plugin
   codex        Codex plugin (MCP + Skill) + managed Bridge notify
-  zcode        ZCode managed Bridge hooks (capture only; no verified MCP installer)
+  zcode        ZCode native context + managed Bridge capture (not an MCP-plugin claim)
   all          All supported clients
 
 Options:
@@ -39,7 +39,8 @@ Options:
   -h, --help               Show this help
 
 Without --ide, installed clients are detected automatically. One install
-action configures both capabilities; no client UI needs to be opened.`);
+action configures both capabilities. Codex automatic context additionally
+requires native /hooks review and trust; installation never bypasses it.`);
 }
 
 function parseArgs(argv) {

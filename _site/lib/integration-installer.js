@@ -183,6 +183,7 @@ class IntegrationManager {
     this.marketplaceSource = options.marketplaceSource || DEFAULT_MARKETPLACE_SOURCE;
     this.runner = options.runner || defaultRunner;
     this.commandResolver = options.commandResolver || defaultCommandResolver;
+    this.codexHookProbe = options.codexHookProbe || require('./codex-context-status').readCodexHooks;
     this.dryRun = Boolean(options.dryRun);
     this.logger = options.logger || null;
     this.operationId = options.operationId || '';
@@ -386,7 +387,9 @@ class IntegrationManager {
   executable(client) {
     const name = client === 'claude' ? 'claude' : client;
     if (this.dryRun) return process.platform === 'win32' ? `${name}.cmd` : name;
-    return this.commandResolver(name, this.env);
+    const command = this.commandResolver(name, this.env);
+    if (command || client !== 'zcode' || this.commandResolver !== defaultCommandResolver) return command;
+    try { return require('claude-ai-workbench/packages/server/lib/drivers/zcode-driver').discoverZCodeCli({ env: this.env })?.path || ''; } catch { return ''; }
   }
 
   detectClients() {
@@ -398,12 +401,11 @@ class IntegrationManager {
     try { const stat = fs.statSync(target); return client === 'opencode' ? stat.isDirectory() : stat.isFile(); } catch { return false; }
   }
 
-  // Capture support does not imply a verified MCP/plugin installer. Never
-  // present ZCode knowledge retrieval as installed merely because hooks exist.
-  statusZCode() { return { state: 'not-supported', supported: false, installed: false, detail: 'ZCode 当前支持会话采集；知识检索插件未接入，不会自动安装。' }; }
-  installZCode() { return this.statusZCode(); }
-  updateZCode() { return this.statusZCode(); }
-  uninstallZCode() { return this.statusZCode(); }
+  zcodeContextOptions() { return { configFile: this.zcodeConfigFile, rootDir: this.rootDir, dryRun: this.dryRun }; }
+  statusZCode() { return require('./zcode-context-integration').status(this.zcodeContextOptions()); }
+  installZCode() { return require('./zcode-context-integration').install(this.zcodeContextOptions()); }
+  updateZCode() { return this.installZCode(); }
+  uninstallZCode() { return require('./zcode-context-integration').uninstall(this.zcodeContextOptions()); }
 
   execute(client, args, options = {}) {
     const startedAt = Date.now();
@@ -548,21 +550,53 @@ class IntegrationManager {
 
   installCodex() {
     this.ensureCodexMarketplace();
-    if (!this.dryRun && this.codexPlugin()) {
+    const plugin = this.dryRun ? null : this.codexPlugin();
+    if (plugin?.enabled === false) throw new Error('知识库插件已被用户禁用，请在 Codex 中明确启用，未静默修改。');
+    if (plugin && (plugin.version !== this.version || !this.codexContextFilesMatch(plugin))) return this.updateCodex();
+    if (plugin) {
       return { state: 'installed', detail: 'plugin already installed' };
     }
     this.execute('codex', ['plugin', 'add', `${INTEGRATION_NAME}@${MARKETPLACE_NAME}`]);
-    return { state: 'installed', detail: 'plugin, MCP, and Skill installed' };
+    if (!this.dryRun) this.verifyCodexInstallation();
+    return { state: 'installed', detail: '插件已安装；在原生 /hooks 中审查并信任前置读取 Hook 后才会运行。' };
   }
 
   updateCodex() {
+    if (!this.dryRun && this.codexPlugin()?.enabled === false) throw new Error('知识库插件已被用户禁用，请在 Codex 中明确启用，未静默修改。');
     this.ensureCodexMarketplace();
     this.execute('codex', ['plugin', 'marketplace', 'upgrade', MARKETPLACE_NAME]);
     if (this.dryRun || this.codexPlugin()) {
       this.execute('codex', ['plugin', 'remove', `${INTEGRATION_NAME}@${MARKETPLACE_NAME}`]);
     }
     this.execute('codex', ['plugin', 'add', `${INTEGRATION_NAME}@${MARKETPLACE_NAME}`]);
-    return { state: 'updated', detail: 'marketplace refreshed and plugin reinstalled' };
+    if (!this.dryRun) this.verifyCodexInstallation();
+    return { state: 'updated', detail: '知识插件已更新；新定义须在原生 /hooks 中审查并信任，未写入信任或跳过审查。' };
+  }
+
+  codexContextFilesMatch(plugin) {
+    const directory = plugin?.source?.path;
+    if (typeof directory !== 'string' || !path.isAbsolute(directory)) return false;
+    return ['hooks/codex.json', 'scripts/context-hook.cjs', '.mcp.json', '.codex-plugin/plugin.json'].every(file => {
+      try { const read = root => new TextDecoder('utf-8', { fatal: true }).decode(fs.readFileSync(path.join(root, file))).replace(/\r\n/g, '\n'); return read(directory) === read(path.join(this.rootDir, 'plugins', INTEGRATION_NAME)); } catch { return false; }
+    });
+  }
+
+  verifyCodexInstallation() {
+    const plugin = this.codexPlugin();
+    if (!plugin || plugin.version !== this.version || plugin.enabled === false || !this.codexContextFilesMatch(plugin)) throw new Error(`Codex 插件或前置读取文件未更新到 ${this.version}，未把旧插件标为成功。`);
+  }
+
+  async automaticCodexContextStatus(knowledge, cwd = this.homeDir) {
+    const basic = this.automaticContextStatus('codex', knowledge);
+    if (!basic.filesVerified) return basic;
+    try {
+      const snapshot = await this.codexHookProbe({ command: this.executable('codex'), env: { ...this.env, CODEX_HOME: this.env.CODEX_HOME || path.dirname(this.codexConfigFile) }, cwd });
+      const entries = snapshot?.data || [];
+      const hooks = entries.flatMap(entry => entry.hooks || []).filter(hook => hook.eventName === 'userPromptSubmit' && hook.pluginId === `${INTEGRATION_NAME}@${MARKETPLACE_NAME}` && /context-hook\.cjs/.test(hook.command || ''));
+      const configured = hooks.length === 1 && hooks[0].enabled === true && ['trusted', 'managed'].includes(hooks[0].trustStatus) && entries.every(entry => !entry.errors?.length);
+      const disabled = hooks.some(h => h.enabled === false);
+      return { ...basic, configured, state: configured ? 'configured' : disabled ? 'disabled' : hooks.length ? 'waiting-trust' : 'needs-repair', trustStatus: hooks[0]?.trustStatus || 'unknown', detail: configured ? '原生前置读取定义已启用并信任；实际读取见知识上下文日志。' : disabled ? 'Codex 前置读取 Hook 已禁用，未擅自启用。' : hooks.length ? '待信任：请在 Codex 原生 /hooks 中审查 Project Knowledge 的 UserPromptSubmit 定义；更新后需重新审查。' : 'Codex 未加载前置读取 Hook，请检查客户端版本、Hook 开关及插件来源。' };
+    } catch { return { ...basic, state: 'check-failed', configured: false, detail: '无法验证原生 Hook 的信任状态；未将已安装插件当作自动读取已就绪。请在 Codex 中打开 /hooks 检查。' }; }
   }
 
   uninstallCodex() {
@@ -580,10 +614,12 @@ class IntegrationManager {
     if (!command) return { state: 'unavailable', installed: false, detail: 'Codex CLI not found' };
     const plugin = this.codexPlugin();
     return {
-      state: plugin ? 'installed' : 'not-installed',
+      state: plugin?.enabled === false ? 'disabled' : plugin && plugin.version !== this.version ? 'needs-update' : plugin ? 'installed' : 'not-installed',
       installed: Boolean(plugin),
       version: plugin?.version,
-      detail: plugin ? `plugin enabled: ${plugin.enabled !== false}` : 'plugin not installed',
+      expectedVersion: this.version,
+      source: plugin?.source,
+      detail: plugin?.enabled === false ? '插件已禁用，未自动启用。' : plugin && plugin.version !== this.version ? '知识插件版本不匹配，请更新后重新审查原生 Hook。' : plugin ? '知识插件已安装；原生 Hook 信任状态单独验证。' : 'plugin not installed',
     };
   }
 
@@ -764,7 +800,7 @@ class IntegrationManager {
         } catch (error) {
           entry.knowledgeIntegration = { ok: false, state: 'failed', detail: error.message };
         }
-        entry.automaticContext = this.automaticContextStatus(client, entry.knowledgeIntegration);
+        entry.automaticContext = client === 'codex' ? await this.automaticCodexContextStatus(entry.knowledgeIntegration, options.cwd) : this.automaticContextStatus(client, entry.knowledgeIntegration);
       }
       entry.developmentCapture = await this.captureOperation('status', client);
       summary.clients.push(entry);
@@ -773,6 +809,11 @@ class IntegrationManager {
   }
 
   automaticContextStatus(client, knowledge) {
+    if (client === 'zcode') { const available = Boolean(this.executable('zcode')); return { supported: true, configured: available && knowledge?.state === 'installed', state: available ? knowledge?.state || 'not-installed' : 'unavailable', detail: available ? knowledge?.detail || '前置读取尚未接入。' : '未找到可运行的 ZCode；配置存在不等于原生入口可用。' }; }
+    if (client === 'codex') {
+      const filesVerified = knowledge?.state === 'installed' && this.codexContextFilesMatch({ source: knowledge.source });
+      return { supported: true, configured: false, filesVerified, state: filesVerified ? 'waiting-trust' : knowledge?.state === 'installed' ? 'needs-repair' : knowledge?.state || 'not-installed', expectedVersion: this.version, detail: filesVerified ? '已安装，等待验证原生 Hook 的信任状态。' : '插件版本、启用或前置读取文件尚未通过验证，请接入/修复。' };
+    }
     if (client !== 'claude') return { supported: false, state: 'not-supported', configured: false, detail: '当前版本尚未验收此客户端的自动前置读取；知识工具与采集状态单独显示。' };
     const state = knowledge?.state || 'not-installed';
     try { if (JSON.parse(fs.readFileSync(this.claudeSettingsFile, 'utf8')).disableAllHooks === true) return { supported: true, state: 'disabled', configured: false, detail: 'Claude Code 的 Hook 已被用户禁用，未擅自修改。' }; } catch {}

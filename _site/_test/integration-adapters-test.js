@@ -113,6 +113,8 @@ async function main() {
   assert(claudeCalls.some(call => call.args.join(' ') === 'plugin install project-knowledge@project-knowledge --scope user'), 'Claude Code should install the native plugin');
 
   const codexCalls = [];
+  const codexCache = path.join(TEMP, 'codex-plugin-cache');
+  fs.mkdirSync(codexCache, { recursive: true }); fs.cpSync(pluginRoot, codexCache, { recursive: true });
   const codexManager = new IntegrationManager({
     rootDir: ROOT,
     commandResolver: name => name,
@@ -124,7 +126,7 @@ async function main() {
       if (args.join(' ') === 'plugin list --json') {
         return {
           status: 0,
-          stdout: JSON.stringify({ installed: [{ pluginId: 'project-knowledge@project-knowledge' }] }),
+          stdout: JSON.stringify({ installed: [{ pluginId: 'project-knowledge@project-knowledge', version: packageInfo.version, enabled: true, source: { path: codexCache } }] }),
           stderr: '',
         };
       }
