@@ -2,6 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { execFileSync } = require('node:child_process');
 const AtomicFile = require('../lib/atomic-file');
 
 const root = path.resolve(__dirname, '../..');
@@ -39,6 +40,7 @@ function vendor(source) {
   // No broad cleanup: obsolete files remain visible to the verifier until an
   // explicit reviewed cleanup. Untracked/user changes are never overwritten.
   previous.modules['knowledge-engine'] = { name: pkg.name, version: pkg.version, root: '_modules/knowledge-engine', files };
+  if (fs.existsSync(path.join(source, '.git'))) previous.modules['knowledge-engine'].sourceCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: source, encoding: 'utf8', windowsHide: true }).trim();
   AtomicFile.writeJsonAtomic(manifestFile, previous);
   process.stdout.write(`Vendored knowledge-engine ${pkg.version}: ${Object.keys(files).length} runtime files\n`);
 }

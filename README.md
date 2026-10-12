@@ -138,6 +138,14 @@ The application does not create, edit, refresh, or delete `CLAUDE.md`.
 
 ## Requirement capture
 
+### Automatic development context
+
+Claude Code's bundled plugin has a synchronous `UserPromptSubmit` hook. It verifies the current local product instance and asks `/api/engine/context` for project/domain facts plus applicable confirmed project, domain and global memories before the model processes a normal request. No reminder to use MCP is required. The complete context is bounded to 8,000 characters; memories have an independent 3,000-character budget. MCP and the Skill remain available for deeper reads. Workbench uses the same engine endpoint and suppresses duplicate native injection.
+
+Knowledge Integration, Automatic Context and Development Capture are separate capabilities in System Status. An old or disabled plugin is not automatic-context readiness: npm upgrades do not silently upgrade third-party clients, and the existing integration repair action updates stale product plugins. Reopen external sessions after updating. This release adds Claude Code first; Codex and ZCode automatic context are not yet accepted, and OpenCode keeps its existing tool integration.
+
+Context reading has a ten-second total client deadline and fails open with a visible warning. A vector failure is reported as file fallback, not vector success; an unknown project is ignored rather than borrowing a different project's context. `knowledge.context.prepared` and `agent.context.output` logs contain only metadata and citations, not the request or knowledge body. An output log does not itself prove model delivery; native-client acceptance must verify that separately. Internal analysis and Workbench-owned context suppress repeated client injection.
+
 Coding-agent integrations can append the user's real request before code is
 changed. Requirement capture writes bounded metadata to the selected project's
 `requirements.jsonl`; it does not start analysis or write knowledge.

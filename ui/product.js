@@ -231,16 +231,29 @@
   async function loadAgentCapture() {
     const epoch = ++captureEpoch;
     try {
-      const result = await api('/api/integrations/status?captureOnly=1');
+      const result = await api('/api/integrations/status');
       if (epoch !== captureEpoch) return;
       $('agentCaptureList').innerHTML = result.clients.map(agent => {
         const capture = agent.developmentCapture;
         const found = agent.available || agent.configFound;
         const software = agent.available ? '检测到命令' : agent.configFound ? '检测到配置' : '未检测到';
         const status = !capture.ok ? '接线异常' : capture.installed ? '已配置采集' : '未接入';
-        return `<div class="agent-capture-row"><div><b>${esc(agent.label)}</b><small>${esc(software)} · ${esc(status)}</small><small>${esc(capture.detail)}</small></div><div class="actions"><button data-agent-capture="install" data-agent-client="${esc(agent.client)}" ${!found || captureBusy ? 'disabled' : ''}>${capture.installed ? '修复' : '接入'}</button>${capture.installed ? `<button data-agent-capture="uninstall" data-agent-client="${esc(agent.client)}" ${captureBusy ? 'disabled' : ''}>移除采集</button>` : ''}</div></div>`;
+        const auto = agent.automaticContext;
+        return `<div class="agent-capture-row"><div><b>${esc(agent.label)}</b><small>${esc(software)} · ${esc(status)}</small><small>${esc(capture.detail)}</small>${auto ? `<small>开发前知识：${esc(auto.detail)}</small>` : ''}</div><div class="actions">${auto?.supported ? `<button data-agent-knowledge="install" data-agent-client="${esc(agent.client)}" ${!found || captureBusy ? 'disabled' : ''}>${auto.configured ? '检查/修复知识接入' : '接入/修复知识读取'}</button>` : ''}<button data-agent-capture="install" data-agent-client="${esc(agent.client)}" ${!found || captureBusy ? 'disabled' : ''}>${capture.installed ? '修复采集' : '接入采集'}</button>${capture.installed ? `<button data-agent-capture="uninstall" data-agent-client="${esc(agent.client)}" ${captureBusy ? 'disabled' : ''}>移除采集</button>` : ''}</div></div>`;
       }).join('');
     } catch (error) { if (epoch === captureEpoch) $('agentCaptureList').textContent = `无法检查采集状态：${error.message}`; }
+  }
+  async function repairAgentKnowledge(client) {
+    if (captureBusy) return;
+    captureBusy = true; captureEpoch++;
+    $('agentCaptureFeedback').textContent = '正在检查并更新知识插件，保留第三方配置…';
+    try {
+      const result = await api('/api/integrations/install', { method: 'POST', body: { clients: [client], knowledgeOnly: true } });
+      const capability = result.clients[0]?.knowledgeIntegration;
+      $('agentCaptureFeedback').textContent = result.complete && capability?.ok ? '知识接线操作已完成。请重新打开客户端；如客户端要求信任 Hook，请按原生提示确认，再检查前置读取状态。' : `知识接线未完成：${capability?.detail || '请查看系统诊断。'}\n操作 ID：${result.operationId || '—'}`;
+      $('agentCaptureFeedback').classList.toggle('issue', !result.complete);
+    } catch (error) { $('agentCaptureFeedback').textContent = `知识接线操作失败：${error.message}`; $('agentCaptureFeedback').classList.add('issue'); }
+    finally { captureBusy = false; await loadAgentCapture(); }
   }
   async function changeAgentCapture(client, operation) {
     if (captureBusy) return;
@@ -380,6 +393,7 @@
       if (button.dataset.action === 'repair') await repair();
       if (button.dataset.action === 'system') await openSystem();
       if (button.dataset.agentCapture) await changeAgentCapture(button.dataset.agentClient, button.dataset.agentCapture);
+      if (button.dataset.agentKnowledge) await repairAgentKnowledge(button.dataset.agentClient);
       if (button.dataset.action === 'unbind') { const p = activeProject(); if (p && !unbinding) { unbindProjectId = p.projectId; $('unbindProjectName').textContent = `解绑「${p.name}」？`; $('unbindFeedback').textContent = ''; $('unbindDialog').showModal(); } }
       if (button.dataset.retryRun) { await api(`/api/engine/runs/${encodeURIComponent(button.dataset.retryRun)}/retry`, { method: 'POST', body: {} }); await refreshSnapshot(); }
       if (button.dataset.contextIndex !== undefined) await openReference(state.contexts.get(state.projectId).references[Number(button.dataset.contextIndex)]);

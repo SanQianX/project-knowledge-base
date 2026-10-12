@@ -1,7 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "project-knowledge",
-  "version": "5.0.10",
+  "hooks": "./hooks/claude.json",
+  "version": "5.0.11-rc.1",
   "description": "Read durable project decisions and implementation history from Project Knowledge.",
   "author": {
     "name": "SanQianX",

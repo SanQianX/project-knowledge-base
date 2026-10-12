@@ -27,7 +27,13 @@ function makeManager() {
     homeDir,
     env: {},
     commandResolver: name => name,
-    runner: (command, args) => ({ status: 0, stdout: '', stderr: '' }),
+    runner: (command, args) => {
+      const version = require('../../package.json').version;
+      const cache = path.join(homeDir, '.claude/plugins/cache/project-knowledge/project-knowledge', version);
+      if (command === 'claude' && args.slice(0, 2).join(' ') === 'plugin install') { fs.mkdirSync(cache, { recursive: true }); fs.cpSync(path.join(ROOT, 'plugins/project-knowledge'), cache, { recursive: true }); }
+      if (command === 'claude' && args.join(' ') === 'plugin list --json') return { status: 0, stdout: JSON.stringify(fs.existsSync(cache) ? [{ id: 'project-knowledge@project-knowledge', version, enabled: true }] : []), stderr: '' };
+      return { status: 0, stdout: '', stderr: '' };
+    },
     bridgeHomeDir: bridgeHome,
     claudeSettingsFile: claudeSettings,
     codexConfigFile: codexConfig,

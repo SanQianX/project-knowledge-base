@@ -153,6 +153,7 @@ async function runOperation(options, manager) {
       for (const entry of summary.clients) {
         printCapabilityLine(`${entry.label} Knowledge Integration`, entry.knowledgeIntegration);
         printCapabilityLine(`${entry.label} Development Capture`, entry.developmentCapture);
+        if (entry.automaticContext) console.log(`  [INFO] ${entry.label} Automatic Context: ${entry.automaticContext.state} - ${entry.automaticContext.detail}`);
       }
       if (options.dryRun && manager.planned.length) {
         console.log('\nPlanned operations:');

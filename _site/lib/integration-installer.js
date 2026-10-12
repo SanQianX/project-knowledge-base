@@ -476,7 +476,10 @@ class IntegrationManager {
 
   installClaude(options = {}) {
     this.ensureClaudeMarketplace();
-    if (!this.dryRun && this.claudePlugin()) {
+    const plugin = this.dryRun ? null : this.claudePlugin();
+    if (plugin?.enabled === false) throw new Error('知识库插件已被用户禁用，请在 Claude Code 中明确启用；未静默修改。');
+    if (plugin && (plugin.version !== this.version || !this.automaticContextStatus('claude', { state: 'installed', version: plugin.version }).configured)) return this.updateClaude(options);
+    if (plugin) {
       return { state: 'installed', detail: 'plugin already installed' };
     }
     this.execute('claude', [
@@ -486,6 +489,7 @@ class IntegrationManager {
       '--scope',
       options.scope || 'user',
     ]);
+    if (!this.dryRun) this.verifyClaudeInstallation();
     return { state: 'installed', detail: 'plugin, MCP, and Skill installed' };
   }
 
@@ -500,7 +504,17 @@ class IntegrationManager {
       '--scope',
       options.scope || 'user',
     ]);
+    if (!this.dryRun) {
+      this.verifyClaudeInstallation();
+    }
     return { state: 'updated', detail: 'plugin marketplace and installed plugin updated' };
+  }
+
+  verifyClaudeInstallation() {
+    const plugin = this.claudePlugin();
+    if (!plugin || plugin.version !== this.version || plugin.enabled === false) throw new Error(`插件版本或启用状态未更新到 ${this.version}，请检查 marketplace；未把旧插件标为成功。`);
+    const automatic = this.automaticContextStatus('claude', { state: 'installed', version: plugin.version });
+    if (!automatic.configured) throw new Error(`插件更新后前置读取仍未接线：${automatic.detail} 未误报全部成功。`);
   }
 
   uninstallClaude(options = {}) {
@@ -524,10 +538,11 @@ class IntegrationManager {
     if (!command) return { state: 'unavailable', installed: false, detail: 'Claude Code CLI not found' };
     const plugin = this.claudePlugin();
     return {
-      state: plugin ? 'installed' : 'not-installed',
+      state: plugin?.enabled === false ? 'disabled' : plugin && plugin.version !== this.version ? 'needs-update' : plugin ? 'installed' : 'not-installed',
       installed: Boolean(plugin),
       version: plugin?.version,
-      detail: plugin ? `plugin enabled: ${plugin.enabled !== false}` : 'plugin not installed',
+      expectedVersion: this.version,
+      detail: plugin?.enabled === false ? '插件已被禁用；未自动启用。' : plugin && plugin.version !== this.version ? `插件 ${plugin.version || '未知'} 与运行包 ${this.version} 不一致，请接入/修复。` : plugin ? '知识工具插件已配置；自动上下文状态单独验证。' : 'plugin not installed',
     };
   }
 
@@ -749,11 +764,31 @@ class IntegrationManager {
         } catch (error) {
           entry.knowledgeIntegration = { ok: false, state: 'failed', detail: error.message };
         }
+        entry.automaticContext = this.automaticContextStatus(client, entry.knowledgeIntegration);
       }
       entry.developmentCapture = await this.captureOperation('status', client);
       summary.clients.push(entry);
     }
     return summary;
+  }
+
+  automaticContextStatus(client, knowledge) {
+    if (client !== 'claude') return { supported: false, state: 'not-supported', configured: false, detail: '当前版本尚未验收此客户端的自动前置读取；知识工具与采集状态单独显示。' };
+    const state = knowledge?.state || 'not-installed';
+    try { if (JSON.parse(fs.readFileSync(this.claudeSettingsFile, 'utf8')).disableAllHooks === true) return { supported: true, state: 'disabled', configured: false, detail: 'Claude Code 的 Hook 已被用户禁用，未擅自修改。' }; } catch {}
+    if (state !== 'installed') return { supported: true, state, configured: false, expectedVersion: this.version, detail: state === 'needs-update' ? '知识插件版本不匹配，请接入/修复后重新打开 Claude Code。' : state === 'disabled' ? '插件已被禁用；请在客户端明确启用。' : '前置知识读取尚未接入。' };
+    if (!/^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$/.test(knowledge.version || '')) return { supported: true, state: 'needs-update', configured: false, detail: '无法验证插件版本。' };
+    let locations = [];
+    try {
+      const index = JSON.parse(fs.readFileSync(path.join(this.homeDir, '.claude/plugins/installed_plugins.json'), 'utf8'));
+      locations = (index.plugins?.[`${INTEGRATION_NAME}@${MARKETPLACE_NAME}`] || []).filter(p => p.version === knowledge.version).map(p => p.installPath);
+    } catch {}
+    if (!locations.length) locations.push(path.join(this.homeDir, '.claude/plugins/cache', MARKETPLACE_NAME, INTEGRATION_NAME, knowledge.version));
+    const files = ['hooks/claude.json', 'scripts/context-hook.cjs'];
+    const configured = locations.some(directory => typeof directory === 'string' && files.every(file => {
+      try { return fs.readFileSync(path.join(directory, file)).equals(fs.readFileSync(path.join(this.rootDir, 'plugins', INTEGRATION_NAME, file))); } catch { return false; }
+    }));
+    return { supported: true, state: configured ? 'configured' : 'needs-repair', configured, expectedVersion: this.version, detail: configured ? '前置读取脚本已接线；请重新打开会话。具体需求是否已读取请查看 agent.context 与 knowledge.context 日志。' : '插件前置读取文件缺失或内容不匹配，请更新/修复插件。' };
   }
 
   // Global disable: remove every connector first, then (and only then)

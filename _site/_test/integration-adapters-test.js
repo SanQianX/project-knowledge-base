@@ -93,13 +93,17 @@ async function main() {
   assert(!instructionUpdated.includes(instructionPath.replace(/\\/g, '\\\\')), 'uninstall should remove only its Instructions reference');
 
   const claudeCalls = [];
+  let claudeInstalled = false;
+  const claudeHome = path.join(TEMP, 'claude-home');
   const claudeManager = new IntegrationManager({
     rootDir: ROOT,
+    homeDir: claudeHome,
     commandResolver: name => name,
     runner: (command, args) => {
       claudeCalls.push({ command, args });
       if (args.join(' ') === 'plugin marketplace list --json') return { status: 0, stdout: '[]', stderr: '' };
-      if (args.join(' ') === 'plugin list --json') return { status: 0, stdout: '[]', stderr: '' };
+      if (args.join(' ') === 'plugin list --json') return { status: 0, stdout: JSON.stringify(claudeInstalled ? [{ id: 'project-knowledge@project-knowledge', version: packageInfo.version, enabled: true }] : []), stderr: '' };
+      if (args.slice(0, 2).join(' ') === 'plugin install') { claudeInstalled = true; const cache = path.join(claudeHome, '.claude/plugins/cache/project-knowledge/project-knowledge', packageInfo.version); fs.mkdirSync(cache, { recursive: true }); fs.cpSync(pluginRoot, cache, { recursive: true }); }
       return { status: 0, stdout: '', stderr: '' };
     },
   });
