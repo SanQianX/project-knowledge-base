@@ -7,8 +7,8 @@
     "ui/favicon.svg": "c48be946b224112ebb0238b44263f7a61bda31e531afa895c2e9801c0ff24f32",
     "plugins/project-knowledge/hooks/claude.json": "d61510327e3e1facbb4c645228e9f50cad05a88b33d80c4c22e5ba9f8b9f5359",
     "plugins/project-knowledge/scripts/context-hook.cjs": "b138fab6d8fcb35f8101ccfda565ccec694acb888f94347c5864c804ebb5e1a0",
-    "plugins/project-knowledge/.claude-plugin/plugin.json": "d9feb14520106a72478577662a30950b4646b3f9d01d2719633a679b7320f93e",
-    "plugins/project-knowledge/.mcp.json": "70a47a1c7d8f846406727933e1ef7b838f20ec275f31da15ed387d947c4c4e3b"
+    "plugins/project-knowledge/.claude-plugin/plugin.json": "b04275a69c2790c7706c480615afc57211612d6ca8ce2865aa2ba9a742c27f14",
+    "plugins/project-knowledge/.mcp.json": "0d371611f442631f1f03520d00d146242d23c584b50efccbe29d032aad68c35c"
   },
   "modules": {
     "terminal": {

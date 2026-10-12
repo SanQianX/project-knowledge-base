@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.0.11] - 2026-10-12
+
+- Claude Code 的普通开发需求通过原生前置 Hook 自动取得项目/领域知识和适用的已确认长期记忆；MCP 保留用于深入读取。
+- 引擎统一准备有界上下文，工作台复用同一接口并避免重复注入；知识读取失败明确提示后继续，向量故障不冒充成功。
+- 修复旧知识插件存在即跳过更新及 Windows Git CRLF/npm LF 接线误判；插件版本、启用、文件与采集能力分别验证。
+- 保留 v5 数据、模型、第三方 Hook 和向量位置；原生模型请求与开发提交闭环分开验收。首批只承诺 Claude Code 自动读取，Codex/ZCode 后续交付。
+
 ## [5.0.10] - 2026-10-12
 
 - Freeze the accepted rc.2 scoped-memory runtime: review and edit candidates,
