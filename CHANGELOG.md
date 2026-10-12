@@ -1,5 +1,16 @@
 # Changelog
 
+## [5.0.10] - 2026-10-12
+
+- Freeze the accepted rc.2 scoped-memory runtime: review and edit candidates,
+  choose global/domain/project applicability, and confirm in one transaction.
+- Preserve v5 knowledge, source evidence, histories and directory bindings;
+  only applicable, confirmed and synchronized memories enter task retrieval.
+- Include real MiniMax candidate extraction, 1536-dimensional embeddings,
+  project/domain/global isolation, CLI/MCP agreement and restart regression.
+- Publish first to next; formal npm installation and existing-user upgrade
+  acceptance precede stable latest promotion. Other module versions stay pinned.
+
 ## [5.0.10-rc.2] - 2026-10-12
 
 - Require candidate entry IDs to name an actually promoted Markdown document;
