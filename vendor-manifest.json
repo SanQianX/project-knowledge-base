@@ -3,17 +3,17 @@
   "modules": {
     "knowledge-engine": {
       "name": "@sanqianx/ai-coding-knowledge-engine",
-      "version": "0.2.5-rc.1",
+      "version": "0.2.5-rc.2",
       "root": "_modules/knowledge-engine",
       "files": {
-        "README.md": "c16caeb9e0943b3d51023a2fea21ceb02bfd80159bdb4e564d92baae17a0cd35",
-        "package.json": "c11e867cb80f31ed7e60cdd41e4880ee70006864aa5678e75288390efab4e336",
+        "README.md": "6196d476afa5180476f299f0c502258a93a4e6da55650999a6ca8d29ea569439",
+        "package.json": "eb6c04af2136c50d8e0d6c4c70a955a056130c59ea222846d6835108219ed25a",
         "src/analysis-contract.js": "913a63b63fb4a4a9df071f95bbeb8f8c40ef87e2f8445ab0742086ced70ffbf7",
         "src/analysis-output.js": "95a3c19dcc9ab85d1dba7fee5b9aec80f9c000dfba89da3fd0be25a81e2fb680",
         "src/analysis-worker.js": "a105cabe6e1573b2d986b1e7a5aaf615e2fb53524156fc8e4e2c0a71f2c97e55",
         "src/bin.js": "22208907431d0f3a971a669c7e5eb44b3b7af9bbb36fd7ba17c3b90c4288bd70",
         "src/bridge-client.js": "ae0dba21e4286694bcd9e064ca36564ec997969ae1eb1ce4f8a6665e447cbffe",
-        "src/context.js": "2808d54b250dc1070fb281f2f572aef1828b710dfaf539becca6ec6a7af4a2db",
+        "src/context.js": "61de65d35ca5db558a1ba6a858cce2c81614659f5a883b2fc820d0b66282b305",
         "src/coordinator.js": "8b9a572f415844db6c34dd62e485fb2c2ff50b655ff662802c5cab6207c2c8f0",
         "src/diagnostics.js": "f7b516ace61a1e9faaa6876930b9e2e258499a25857d1203f4e53d28bfd0fa1a",
         "src/headless-analyzer.js": "e01f81b8f24a4423c19dd8893be8c702a85edbdbb644322e3acab96c3ebaac7d",
@@ -45,7 +45,7 @@
         "ui/app.js": "33a2ba38f0dafbbb2e30a1eb3fc93476bfcaf528e124e1a9b2edd2fb69221e9e",
         "ui/index.html": "ce3565cfefd4838b11d37a91a906ef26ca5a1834844fe3f7c897b56851a3c418"
       },
-      "sourceCommit": "f83a3383719afb8db2e13bf0062bc0d0c412c8cc"
+      "sourceCommit": "ab052860da449f6e1d94f51df431619a082634ec"
     }
   }
 }
