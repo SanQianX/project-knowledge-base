@@ -79,7 +79,8 @@ async function main() {
   } finally {
     await browser?.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
     offline.closeAllConnections(); await new Promise(resolve => offline.close(resolve)); await runtime.logger.close();
-    fs.rmSync(temp, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    assert.equal(path.dirname(temp), path.resolve(os.tmpdir())); assert.ok(path.basename(temp).startsWith('kb-agent-capture-ui-'));
+    fs.rmSync(temp, { recursive: true, force: true, maxRetries: 12, retryDelay: 200 });
   }
 }
 main().catch(error => { console.error(error.stack); process.exitCode = 1; });
