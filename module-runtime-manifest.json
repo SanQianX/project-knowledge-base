@@ -2,7 +2,7 @@
   "schema": "project-knowledge/module-content/v1",
   "productFiles": {
     "ui/index.html": "e4320976133d054afb3c1429337d6c0ef4792c413ce73d5b2d6ea2f06c29a573",
-    "ui/product.js": "9c8cb126d404d75c03b0d5e2c7ad93dc06b2a4693f2eab520faeb70a009f5cf3",
+    "ui/product.js": "405870e03638a119929088b11846e4077158a22326a8f1922d7e8ead83ad70ea",
     "ui/product.css": "0c31d4937780b3a277689b4619208ad0e5dc59a84d7e27fc16b5f1815d59b47c",
     "ui/favicon.svg": "c48be946b224112ebb0238b44263f7a61bda31e531afa895c2e9801c0ff24f32"
   },

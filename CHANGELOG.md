@@ -1,5 +1,15 @@
 # Changelog
 
+## [5.0.10-rc.2] - 2026-10-12
+
+- Require candidate entry IDs to name an actually promoted Markdown document;
+  record rejected candidate counts and safe reason codes instead of silently
+  losing model suggestions or inventing source citations.
+- Keep valid knowledge updates independent of optional candidate failures;
+  roll back an unpersisted candidate batch and expose diagnostics in activity.
+- Distinguish changed-memory index jobs from unchanged health probes so ready
+  memories do not remain falsely marked as indexing.
+
 ## [5.0.10-rc.1] - 2026-10-12
 
 - Add global/domain/project memory applicability and a single review form for
