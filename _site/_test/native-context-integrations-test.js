@@ -45,6 +45,22 @@ async function main() {
     current.hooks.enabled = false; fs.writeFileSync(configFile, JSON.stringify(current)); assert.equal(manager.statusZCode().state, 'disabled'); assert.throws(() => manager.installZCode(), /禁用/);
     current.hooks.enabled = true; fs.writeFileSync(configFile, JSON.stringify(current)); manager.uninstallZCode();
     assert.deepEqual(JSON.parse(fs.readFileSync(configFile)), before, 'remove only the owned context entry, not capture or user config');
+    const oldScript = path.join(root, 'old-prefix/node_modules/@sanqianx/project-knowledge/plugins/project-knowledge/scripts/context-hook.cjs');
+    const oldOwned = { type: 'process', command: 'node', args: [oldScript, '--client', 'zcode'], timeoutMs: 12000 };
+    const similarThirdParty = { type: 'process', command: 'node', args: [path.join(root, 'custom/project-knowledge/scripts/context-hook.cjs'), '--client', 'zcode'] };
+    fs.writeFileSync(configFile, JSON.stringify({ ...before, hooks: { ...before.hooks, events: { ...before.hooks.events, UserPromptSubmit: [{ note: 'preserve group metadata', hooks: [thirdParty, oldOwned, similarThirdParty] }, { hooks: [oldOwned] }] } } }));
+    assert.equal(manager.statusZCode().installed, false, 'an old prefix is not current readiness');
+    manager.installZCode(); manager.installZCode();
+    const rewired = JSON.parse(fs.readFileSync(configFile));
+    const entries = rewired.hooks.events.UserPromptSubmit.flatMap(g => g.hooks);
+    assert.ok(!entries.some(h => h.args?.[0] === oldScript), 'an old managed npm path must not survive a new-prefix install');
+    assert.equal(entries.filter(h => h.args?.[0] === path.join(manager.rootDir, 'plugins/project-knowledge/scripts/context-hook.cjs')).length, 1, 'old duplicate managed entries collapse to one');
+    assert.ok(entries.some(h => JSON.stringify(h) === JSON.stringify(similarThirdParty)), 'similar third-party scripts are not owned');
+    assert.equal(rewired.hooks.events.UserPromptSubmit[0].note, 'preserve group metadata');
+    assert.deepEqual(rewired.hooks.events.Stop, before.hooks.events.Stop);
+    assert.equal(rewired.model, before.model); assert.deepEqual(rewired.env, before.env);
+    manager.uninstallZCode();
+    assert.deepEqual(JSON.parse(fs.readFileSync(configFile)).hooks.events.UserPromptSubmit[0].hooks, [thirdParty, similarThirdParty]);
     fs.writeFileSync(configFile, '{invalid'); assert.throws(() => manager.installZCode(), /JSON/); assert.equal(fs.readFileSync(configFile, 'utf8'), '{invalid');
     const endpoint = { schema: 'project-knowledge/runtime-endpoint/v1', host: '127.0.0.1', pid: process.pid, port: 12345, startedAt: 'test' }; fs.writeFileSync(path.join(root, 'runtime-endpoint.json'), JSON.stringify(endpoint));
     for (const client of ['codex', 'zcode']) {

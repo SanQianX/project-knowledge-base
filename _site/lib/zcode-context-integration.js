@@ -12,13 +12,18 @@ function configuration(file) {
 const scriptFor = root => path.join(root, 'plugins/project-knowledge/scripts/context-hook.cjs');
 const normalize = file => { const value = path.resolve(file).replace(/\\/g, '/'); return process.platform === 'win32' ? value.toLowerCase() : value; };
 function owned(hook, root) {
-  return hook?.type === 'process' && hook.command === 'node' && Array.isArray(hook.args) && hook.args.length === 3 && typeof hook.args[0] === 'string' && normalize(hook.args[0]) === normalize(scriptFor(root)) && hook.args[1] === '--client' && hook.args[2] === 'zcode';
+  if (hook?.type !== 'process' || hook.command !== 'node' || !Array.isArray(hook.args) || hook.args.length !== 3 || typeof hook.args[0] !== 'string' || !path.isAbsolute(hook.args[0]) || hook.args[1] !== '--client' || hook.args[2] !== 'zcode') return false;
+  const file = normalize(hook.args[0]);
+  // Only the exact current script or a canonical managed npm installation is
+  // ours. An unrelated script with a similar basename remains untouched.
+  return file === normalize(scriptFor(root)) || /\/node_modules\/(?:@sanqianx\/)?project-knowledge\/plugins\/project-knowledge\/scripts\/context-hook\.cjs$/i.test(file);
 }
 function status({ configFile, rootDir }) {
   const config = configuration(configFile);
-  const installed = (config.hooks?.events?.UserPromptSubmit || []).some(g => Array.isArray(g?.hooks) && g.hooks.some(h => owned(h, rootDir))) && fs.existsSync(scriptFor(rootDir));
+  const entries = (config.hooks?.events?.UserPromptSubmit || []).flatMap(g => Array.isArray(g?.hooks) ? g.hooks.filter(h => owned(h, rootDir)) : []);
+  const installed = entries.length === 1 && normalize(entries[0].args[0]) === normalize(scriptFor(rootDir)) && fs.existsSync(scriptFor(rootDir));
   const disabled = config.hooks?.enabled === false;
-  return { state: disabled ? 'disabled' : installed && config.hooks?.enabled === true ? 'installed' : 'not-installed', supported: true, installed: installed && !disabled && config.hooks?.enabled === true, detail: disabled ? 'ZCode 配置 Hook 已被用户禁用，未擅自启用。' : installed ? '原生 UserPromptSubmit 只读上下文入口已配置；MCP 插件状态不作已安装承诺。' : '开发前知识读取尚未接入；与会话采集独立。' };
+  return { state: disabled ? 'disabled' : installed && config.hooks?.enabled === true ? 'installed' : entries.length ? 'needs-repair' : 'not-installed', supported: true, installed: installed && !disabled && config.hooks?.enabled === true, detail: disabled ? 'ZCode 配置 Hook 已被用户禁用，未擅自启用。' : installed ? '原生 UserPromptSubmit 只读上下文入口已配置；MCP 插件状态不作已安装承诺。' : entries.length ? '知识读取入口仍指向旧安装或重复配置，请接入/修复；未误报就绪。' : '开发前知识读取尚未接入；与会话采集独立。' };
 }
 function install({ configFile, rootDir, dryRun }) {
   const config = configuration(configFile);
@@ -32,9 +37,13 @@ function install({ configFile, rootDir, dryRun }) {
     if (!Array.isArray(groups)) throw new Error('ZCode UserPromptSubmit 配置格式无效，未覆盖。');
     const hook = { type: 'process', command: 'node', args: [scriptFor(rootDir), '--client', 'zcode'], timeoutMs: 12000 };
     let found = false;
-    for (const group of groups) if (Array.isArray(group?.hooks)) group.hooks = group.hooks.map(h => { if (!owned(h, rootDir)) return h; found = true; return hook; });
-    if (!found) groups.push({ hooks: [hook] });
-    config.hooks.events.UserPromptSubmit = groups; config.hooks.enabled = true;
+    const updated = groups.map(group => {
+      if (!Array.isArray(group?.hooks)) return group;
+      const hooks = group.hooks.flatMap(h => { if (!owned(h, rootDir)) return [h]; if (found) return []; found = true; return [hook]; });
+      return hooks.length || !group.hooks.length ? { ...group, hooks } : null;
+    }).filter(Boolean);
+    if (!found) updated.push({ hooks: [hook] });
+    config.hooks.events.UserPromptSubmit = updated; config.hooks.enabled = true;
     AtomicFile.writeJsonAtomic(configFile, config);
   }
   return { state: dryRun ? 'planned' : 'installed', supported: true, installed: !dryRun, detail: 'ZCode 原生前置读取已配置，保留原模型、第三方 Hook 与采集入口；请重新打开会话。' };
