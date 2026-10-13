@@ -7,10 +7,10 @@
     "ui/favicon.svg": "c48be946b224112ebb0238b44263f7a61bda31e531afa895c2e9801c0ff24f32",
     "plugins/project-knowledge/hooks/claude.json": "d61510327e3e1facbb4c645228e9f50cad05a88b33d80c4c22e5ba9f8b9f5359",
     "plugins/project-knowledge/scripts/context-hook.cjs": "b138fab6d8fcb35f8101ccfda565ccec694acb888f94347c5864c804ebb5e1a0",
-    "plugins/project-knowledge/.claude-plugin/plugin.json": "6b493baf6d245fff47e6757ce3356da3828ceeb183295ebfd58d467cf6609e40",
-    "plugins/project-knowledge/.mcp.json": "2109dbb407cd81cb29c534db4536eb4a9476b10f18e6eaf369473161bc0a903b",
+    "plugins/project-knowledge/.claude-plugin/plugin.json": "cf50fe8dacbec068c46e531114c1f81576e63578692ab165795b96c69ace63a3",
+    "plugins/project-knowledge/.mcp.json": "6b4e25e51cc24361810af627be6bda0a97cc416230056308fab56ed5ddc1d73b",
     "plugins/project-knowledge/hooks/codex.json": "216e03c07295606ef6ebb2c4f669ad0d790b5e7c4f3f34600488033db75e4239",
-    "plugins/project-knowledge/.codex-plugin/plugin.json": "5dc33fc8c71b322f42945fc1c95735541f3737aaa6abacbc372c2b97ecd09ece"
+    "plugins/project-knowledge/.codex-plugin/plugin.json": "33075d6e47ba58c443eda339706f57688efb9974fa3bbb08f7cc09604602a87f"
   },
   "modules": {
     "terminal": {
