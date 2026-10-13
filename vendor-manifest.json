@@ -3,11 +3,11 @@
   "modules": {
     "knowledge-engine": {
       "name": "@sanqianx/ai-coding-knowledge-engine",
-      "version": "0.2.7-rc.4",
+      "version": "0.2.7-rc.5",
       "root": "_modules/knowledge-engine",
       "files": {
         "README.md": "e55d09671139a97825bb59b1ce2e594cf82a51d392205442bc4f09c4cf42708c",
-        "package.json": "1faf25907fd3382dddc68c1a3e92e767c268e5e55715ba6579a33507583759c1",
+        "package.json": "aade97e4cde45a55154fe81e97890ab4f42184f0d344a6921c174c09462afa21",
         "src/analysis-contract.js": "913a63b63fb4a4a9df071f95bbeb8f8c40ef87e2f8445ab0742086ced70ffbf7",
         "src/analysis-output.js": "95a3c19dcc9ab85d1dba7fee5b9aec80f9c000dfba89da3fd0be25a81e2fb680",
         "src/analysis-worker.js": "a105cabe6e1573b2d986b1e7a5aaf615e2fb53524156fc8e4e2c0a71f2c97e55",
@@ -36,7 +36,7 @@
         "src/runtime/conversation-store.js": "644318f9c04376a3317ced240dd94afa99a79631f0ecc394c5aa298ae2bc0474",
         "src/runtime/evidence-bundle.js": "33d4614849d5e1d69aba8b75c3a43c18b7b6f94e5c78654c82ef631331cc94cc",
         "src/runtime/git-runner.js": "b74fe197bd4dcf3e70635ef7b1f2615edf965c1d9a3ffe5406aabd41b76d74a9",
-        "src/runtime/knowledge-promotion.js": "3bf9de68e8604adeb197fe8437012c3688fb3ddac884d4321ec132218df10935",
+        "src/runtime/knowledge-promotion.js": "cb48eeba8ff5f69411d1b35c418302f0ff51e2de25e435c7641ef7f63c329471",
         "src/runtime/knowledge-retrieval-service.js": "75444f495a9ad0720af0e57b8d27d7ac1325c78a768f4f68ebd86ebc2524945e",
         "src/runtime/layout.js": "e47fe54c605218493ce46f6289798d9db2a3ecec95089d288ed03d3b75cf871a",
         "src/runtime/markdown-knowledge-indexer.js": "4d6b5b955849d274ca0614ef030c94526da7c39ab0874f02c168d0681f5b1406",
@@ -47,7 +47,7 @@
         "ui/app.js": "33a2ba38f0dafbbb2e30a1eb3fc93476bfcaf528e124e1a9b2edd2fb69221e9e",
         "ui/index.html": "ce3565cfefd4838b11d37a91a906ef26ca5a1834844fe3f7c897b56851a3c418"
       },
-      "sourceCommit": "5c07a801aae1e0a79698763cbe161575bcda0578"
+      "sourceCommit": "af65e4f31fc237df07f571b063b3c0c76f922cda"
     }
   }
 }
