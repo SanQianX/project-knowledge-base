@@ -25,7 +25,7 @@ const { EngineKnowledgeClient } = require('../lib/engine-knowledge-client');
   await projects.create(projectId, { repoPath, knowledgePath }, { modules: { engine: { status: 'registered', projectId } } });
   await projects.updateState(projectId, state => { state.modules = { engine: { status: 'registered', projectId } }; });
   await registry.add(projectId, { displayNameSnapshot: 'Test' });
-  let invalidIdentity = false, malformed = false, businessError = false, oversized = false, wrongBinding = false;
+  let invalidIdentity = false, malformed = false, businessError = false, oversized = false, wrongBinding = false, scopeChanged = false;
   const calls = [];
   const reference = { scope_project_id: projectId, entry_id: 'changes/aaaaaaaaaaaa.md', commitSha: 'a'.repeat(40), chunk_text: 'Engine authoritative knowledge' };
   const payload = { ok: true, projectId, backend: 'hybrid+markdown-truth', results: [reference], answer: reference.chunk_text, citations: [{ ...reference, entryId: reference.entry_id }], chunks: [{ chunk_text: reference.chunk_text }] };
@@ -37,6 +37,7 @@ const { EngineKnowledgeClient } = require('../lib/engine-knowledge-client');
     let text = ''; for await (const bytes of req) text += bytes;
     calls.push({ route: req.url, input: JSON.parse(text || '{}') });
     if (oversized) return res.end(JSON.stringify({ ok: true, text: 'x'.repeat(2 * 1024 * 1024) }));
+    if (scopeChanged) { res.statusCode = 409; return res.end(JSON.stringify({ ok: false, error: { code: 'PROJECT_SCOPE_CHANGED' } })); }
     if (businessError) { res.statusCode = 403; return res.end(JSON.stringify({ ok: false, error: { code: 'PATH_OUTSIDE_ROOT', message: 'private-test-secret' } })); }
     res.end(malformed ? '[]' : JSON.stringify(payload));
   });
@@ -86,6 +87,9 @@ const { EngineKnowledgeClient } = require('../lib/engine-knowledge-client');
     businessError = false; oversized = true;
     await assert.rejects(runtime.search({ projectId, query: 'knowledge' }), e => e.code === 'ENGINE_INVALID_RESPONSE');
     oversized = false;
+    scopeChanged = true;
+    await assert.rejects(runtime.search({ projectId, query: 'knowledge' }), e => e.code === 'PROJECT_SCOPE_CHANGED' && e.status === 409);
+    scopeChanged = false;
     const direct = new EngineKnowledgeClient({ layout, engineUrl: `http://127.0.0.1:${server.address().port}` });
     assert.deepEqual(await direct.request('search', {}, runtime.resolveProject({ projectId })), payload);
     assert.equal(calls.at(-1).route, '/api/search');
