@@ -73,10 +73,12 @@ async function main() {
   assert(captured.every(event => event.repoIdentity.workspaceId === registered.id && path.resolve(event.projectPath).toLowerCase() === path.resolve(repoPath).toLowerCase()), 'workspace comes from rollout metadata, not the notification or server cwd');
   assert(!JSON.stringify(captured).includes('NOT-EVIDENCE'), 'notification summaries are never captured as conversation facts');
 
-  const beforeRepeat = fs.statSync(cursorFile).mtimeMs;
+  const beforeRepeat = JSON.parse(fs.readFileSync(cursorFile, 'utf8')).updatedAt;
   await new Promise(resolve => setTimeout(resolve, 25));
   invokeNotify(notify, payload);
-  await waitFor(() => fs.statSync(cursorFile).mtimeMs !== beforeRepeat, 'second notification reaches the real cursor reader');
+  // Filesystems may coalesce mtime; the durable cursor timestamp proves that
+  // the reader completed another pass rather than merely touching a file.
+  await waitFor(() => JSON.parse(fs.readFileSync(cursorFile, 'utf8')).updatedAt !== beforeRepeat, 'second notification reaches the real cursor reader');
   assert.strictEqual(readEvents(eventsFile).length, 2, 'duplicate notify cannot duplicate captured evidence');
 
   invokeNotify(notify, JSON.stringify({ type: 'agent-turn-complete', 'thread-id': 'missing-session-e2e', 'last-assistant-message': 'must not be fabricated' }));
