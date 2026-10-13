@@ -244,21 +244,29 @@
     $('indexStoragePath').textContent = state.indexStorage?.actualPath || state.indexStorage?.path || '设置知识根目录后自动确定';
     $('indexStorageStatus').textContent = state.indexStorage?.status === 'ready' ? '索引目录已生效。' : `索引接线待恢复；目标目录：${state.indexStorage?.expectedPath || state.indexStorage?.path || '尚未设置'}`;
   }
-  async function loadAgentCapture() {
+  let captureScanTimer = null;
+  async function loadAgentCapture(force = false) {
+    clearTimeout(captureScanTimer);
     const epoch = ++captureEpoch;
     try {
       const projectId = state.projectId;
-      const result = await api('/api/integrations/status' + (projectId ? '?projectId=' + encodeURIComponent(projectId) : ''));
+      const params = new URLSearchParams();
+      if (projectId) params.set('projectId', projectId);
+      if (force) params.set('refresh', '1');
+      const result = await api('/api/integrations/status?' + params);
       if (projectId !== state.projectId) return;
       if (epoch !== captureEpoch) return;
       $('agentCaptureList').innerHTML = result.clients.map(agent => {
         const capture = agent.developmentCapture;
         const found = agent.available || agent.configFound;
-        const software = agent.available ? '检测到命令' : agent.configFound ? '检测到配置' : '未检测到';
-        const status = !capture.ok ? '接线异常' : capture.installed ? '已配置采集' : '未接入';
+        const software = agent.available ? '检测到命令' : agent.configFound ? '检测到配置' : capture.state === 'checking' ? '正在检测客户端' : '未检测到';
+        const status = capture.state === 'checking' ? '检查中' : !capture.ok ? '检查或接线异常' : capture.installed ? '已配置采集' : '未接入';
         const auto = agent.automaticContext;
         return `<div class="agent-capture-row"><div><b>${esc(agent.label)}</b><small>${esc(software)} · ${esc(status)}</small><small>${esc(capture.detail)}</small>${auto ? `<small>开发前知识：${esc(auto.detail)}</small>` : ''}</div><div class="actions">${auto?.supported ? `<button data-agent-knowledge="install" data-agent-client="${esc(agent.client)}" ${!found || captureBusy ? 'disabled' : ''}>${auto.configured ? '检查/修复知识接入' : '接入/修复知识读取'}</button>` : ''}<button data-agent-capture="install" data-agent-client="${esc(agent.client)}" ${!found || captureBusy ? 'disabled' : ''}>${capture.installed ? '修复采集' : '接入采集'}</button>${capture.installed ? `<button data-agent-capture="uninstall" data-agent-client="${esc(agent.client)}" ${captureBusy ? 'disabled' : ''}>移除采集</button>` : ''}</div></div>`;
       }).join('');
+      if (['checking', 'refreshing'].includes(result.scan?.state)) captureScanTimer = setTimeout(() => {
+        if (epoch === captureEpoch && !$('systemDrawer').hidden) loadAgentCapture().catch(error => toast(error.message));
+      }, 1500);
     } catch (error) { if (epoch === captureEpoch) $('agentCaptureList').textContent = `无法检查采集状态：${error.message}`; }
   }
   async function repairAgentKnowledge(client) {
@@ -271,7 +279,7 @@
       $('agentCaptureFeedback').textContent = result.complete && capability?.ok ? '知识接线操作已完成。请重新打开客户端；如客户端要求信任 Hook，请按原生提示确认，再检查前置读取状态。' : `知识接线未完成：${capability?.detail || '请查看系统诊断。'}\n操作 ID：${result.operationId || '—'}`;
       $('agentCaptureFeedback').classList.toggle('issue', !result.complete);
     } catch (error) { $('agentCaptureFeedback').textContent = `知识接线操作失败：${error.message}`; $('agentCaptureFeedback').classList.add('issue'); }
-    finally { captureBusy = false; await loadAgentCapture(); }
+    finally { captureBusy = false; await loadAgentCapture(true); }
   }
   async function changeAgentCapture(client, operation) {
     if (captureBusy) return;
@@ -318,6 +326,7 @@
     while ($('logsContent').childElementCount > 100) $('logsContent').firstElementChild.remove();
   }
   function closeSystem() {
+    clearTimeout(captureScanTimer);
     $('systemDrawer').hidden = true; $('drawerBackdrop').hidden = true;
     if (resumeImport) {
       resumeImport = false;
@@ -442,7 +451,7 @@
   on('themeToggle', 'click', () => { document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('kb.theme', document.documentElement.dataset.theme); Object.keys(frames).forEach(key => post(key, { type: 'kb:theme', theme: document.documentElement.dataset.theme })); });
   on('openSystem', 'click', openSystem); on('closeSystem', 'click', closeSystem); on('drawerBackdrop', 'click', closeSystem);
   on('repairWiring', 'click', repair);
-  on('refreshAgentCapture', 'click', () => captureBusy ? undefined : loadAgentCapture());
+  on('refreshAgentCapture', 'click', () => captureBusy ? undefined : loadAgentCapture(true));
   on('configureProviders', 'click', () => { closeSystem(); setView('work'); initializeFrame('terminal'); if (frames.terminal.ready) post('terminal', { type: 'kb:open-settings' }); else frames.terminal.openSettings = true; });
   on('saveMaintenance', 'click', async () => { await api('/api/terminal/maintenance-default', { method: 'PUT', body: { profileId: $('maintenanceModel').value || null } }); const result = await api('/api/modules/configure', { method: 'POST', body: {} }); $('configurationStatus').textContent = result.configuration.model ? '后台默认模型已保存并同步。' : '配置已保存，后台运行配置尚未同步，请检查模块连接。'; });
   on('openEmbedding', 'click', openEmbedding);

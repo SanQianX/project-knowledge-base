@@ -44,7 +44,11 @@ async function run(payload, { env = process.env, argv = process.argv.slice(2), f
     const response = await fetchImpl(new URL('/api/engine/context', base), { ...options, method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ repoPath: payload.cwd, query: payload.prompt, client, sessionId: payload.session_id, turnId: payload.turn_id, requestId }) });
     result = await boundedJson(response);
     const code = typeof result.error === 'string' ? result.error : result.error?.code;
-    if (response.status === 404 && code === 'PROJECT_NOT_FOUND') return {};
+    if (response.status === 404 && code === 'PROJECT_NOT_FOUND') {
+      log(dataDir, 'agent.context.skipped', { requestId, client, code, status: 'unregistered', durationMs: Date.now() - started });
+      const message = '未识别到当前代码目录在运行中知识库的登记，本次未注入知识；这不代表知识库为空。已导入的项目请检查代码目录与引擎接线。';
+      return { systemMessage: message, hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: message } };
+    }
     if (!response.ok || result.ok !== true) throw new Error(/^[A-Z][A-Z0-9_]{0,79}$/.test(code || '') ? code : 'CONTEXT_UNAVAILABLE');
     if (result.requestId !== requestId || !Array.isArray(result.references) || !Array.isArray(result.memories) || !Array.isArray(result.facts) || typeof result.prompt !== 'string' || result.prompt.length > 8000 || !['ready', 'empty', 'file-fallback'].includes(result.status)) throw new Error('CONTEXT_INVALID_RESPONSE');
     const note = result.status === 'file-fallback' ? '知识向量检索暂不可用，本次使用当前文件事实。' : result.status === 'empty' ? '已查询当前知识范围，没有匹配知识或适用的已确认记忆。' : '';

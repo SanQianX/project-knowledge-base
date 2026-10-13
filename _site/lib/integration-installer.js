@@ -51,6 +51,7 @@ function defaultCommandResolver(name, env = process.env) {
     encoding: 'utf8',
     windowsHide: true,
     env,
+    timeout: 5000,
   });
   if (result.status !== 0) return '';
   const candidates = String(result.stdout || '')
@@ -69,7 +70,7 @@ function defaultRunner(command, args, options = {}) {
     windowsHide: true,
     env: options.env || process.env,
     cwd: options.cwd,
-    timeout: options.timeout || 120_000,
+    timeout: options.timeout || (process.env.KB_INTEGRATION_STATUS_WORKER === '1' ? 5000 : 120_000),
   });
 }
 
@@ -182,6 +183,8 @@ class IntegrationManager {
     this.version = options.version || packageInfo.version;
     this.packageSpec = options.packageSpec || `${packageInfo.name}@${this.version}`;
     this.marketplaceSource = options.marketplaceSource || DEFAULT_MARKETPLACE_SOURCE;
+    this.claudeMarketplaceSource = options.marketplaceSource || this.rootDir;
+    this.explicitMarketplace = Boolean(options.marketplaceSource);
     this.runner = options.runner || defaultRunner;
     this.commandResolver = options.commandResolver || defaultCommandResolver;
     this.codexHookProbe = options.codexHookProbe || require('./codex-context-status').readCodexHooks;
@@ -481,8 +484,18 @@ class IntegrationManager {
   }
 
   ensureClaudeMarketplace() {
-    if (!this.dryRun && this.claudeMarketplaceExists()) return;
-    this.execute('claude', ['plugin', 'marketplace', 'add', this.marketplaceSource]);
+    if (!this.explicitMarketplace && !fs.existsSync(path.join(this.rootDir, '.claude-plugin/marketplace.json'))) throw new Error('npm 包内的插件市场缺失；不会回退到 GitHub 下载。');
+    if (!this.dryRun && this.claudeMarketplaceExists()) {
+      if (this.explicitMarketplace) return;
+      let source;
+      try { source = JSON.parse(fs.readFileSync(path.join(this.homeDir, '.claude/plugins/known_marketplaces.json'), 'utf8'))[MARKETPLACE_NAME]?.source; } catch {}
+      const directory = source?.path || source?.directory;
+      if (directory && path.resolve(directory).toLowerCase() === path.resolve(this.rootDir).toLowerCase()) return;
+      const remote = source?.repo === DEFAULT_MARKETPLACE_SOURCE || /^https:\/\/github\.com\/SanQianX\/project-knowledge-base(?:\.git)?\/?$/i.test(source?.url || '');
+      if (!remote) throw new Error('同名插件市场来源不是当前 npm 包，且无法确认属于本产品；未覆盖第三方来源。请检查插件市场配置。');
+      this.execute('claude', ['plugin', 'marketplace', 'remove', MARKETPLACE_NAME]);
+    }
+    this.execute('claude', ['plugin', 'marketplace', 'add', this.claudeMarketplaceSource]);
   }
 
   ensureCodexMarketplace() {
@@ -491,9 +504,10 @@ class IntegrationManager {
   }
 
   installClaude(options = {}) {
-    this.ensureClaudeMarketplace();
-    const plugin = this.dryRun ? null : this.claudePlugin();
+    let plugin = this.dryRun ? null : this.claudePlugin();
     if (plugin?.enabled === false) throw new Error('知识库插件已被用户禁用，请在 Claude Code 中明确启用；未静默修改。');
+    this.ensureClaudeMarketplace();
+    plugin = this.dryRun ? null : this.claudePlugin();
     if (plugin && (plugin.version !== this.version || !this.automaticContextStatus('claude', { state: 'installed', version: plugin.version }).configured)) return this.updateClaude(options);
     if (plugin) {
       return { state: 'installed', detail: 'plugin already installed' };

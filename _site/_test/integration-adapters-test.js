@@ -109,7 +109,7 @@ async function main() {
   });
   const claudeResult = await claudeManager.operate('install', ['claude'], { scope: 'user' });
   assert(claudeResult[0].ok, 'Claude Code installation should complete');
-  assert(claudeCalls.some(call => call.args.join(' ') === 'plugin marketplace add SanQianX/project-knowledge-base'), 'Claude Code should register the GitHub marketplace');
+  assert(claudeCalls.some(call => call.args.slice(0, 3).join(' ') === 'plugin marketplace add' && call.args[3] === ROOT), 'Claude Code should register the npm-bundled local marketplace without GitHub');
   assert(claudeCalls.some(call => call.args.join(' ') === 'plugin install project-knowledge@project-knowledge --scope user'), 'Claude Code should install the native plugin');
 
   const codexCalls = [];

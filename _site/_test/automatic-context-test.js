@@ -33,7 +33,8 @@ async function main() {
     const mismatch = await run(payload, { env, fetchImpl: async () => Response.json({ ...identity, dataDir: path.join(root, 'other') }) });
     assert.match(mismatch.systemMessage, /CONTEXT_IDENTITY_MISMATCH/);
     const unknown = await run(payload, { env, fetchImpl: async url => String(url).endsWith('/identity') ? Response.json(identity) : Response.json({ ok: false, error: 'PROJECT_NOT_FOUND' }, { status: 404 }) });
-    assert.deepEqual(unknown, {});
+    assert.match(unknown.systemMessage, /未识别到当前代码目录/);
+    assert.match(unknown.hookSpecificOutput.additionalContext, /不代表知识库为空/);
     const offline = await run(payload, { env, fetchImpl: async () => { throw new Error('sensitive untrusted upstream text'); } });
     assert.match(offline.systemMessage, /可继续开发/); assert.ok(!JSON.stringify(offline).includes('sensitive'));
     const slow = await run(payload, { env, timeoutMs: 30, fetchImpl: (url, options) => new Promise((resolve, reject) => options.signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true })) });
@@ -50,6 +51,9 @@ async function main() {
       }
       return { status: 0, stdout: '' };
     } });
+    const knownMarketplaces = path.join(root, '.claude/plugins/known_marketplaces.json');
+    fs.mkdirSync(path.dirname(knownMarketplaces), { recursive: true });
+    fs.writeFileSync(knownMarketplaces, JSON.stringify({ 'project-knowledge': { source: { source: 'directory', path: manager.rootDir } } }));
     assert.equal(manager.statusClaude().state, 'needs-update');
     manager.installClaude();
     assert.ok(commandCalls.includes('plugin marketplace update project-knowledge'));

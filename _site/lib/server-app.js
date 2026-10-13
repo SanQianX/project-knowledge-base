@@ -1299,14 +1299,18 @@ function createRequestHandler(runtime, options = {}) {
       // Unified Integration Setup surface: one action manages Knowledge
       // Integration and Development Capture per client, with separate status.
       if (method === 'GET' && pathname === '/api/integrations/status') {
-        const manager = new IntegrationManager({ ...options.integrationOptions, rootDir: runtime.rootDir, logger: runtime.logger, operationId: requestOperationId, bridgeHomeDir: runtime.bridgeAdapter.hookBinding().bridgeHomeDir });
+        runtime.integrationStatusScan ||= new (require('./integration-status-scan').IntegrationStatusScan)();
+        const managerOptions = { ...options.integrationOptions, rootDir: runtime.rootDir, logger: runtime.logger, operationId: requestOperationId, bridgeHomeDir: runtime.bridgeAdapter.hookBinding().bridgeHomeDir };
         const projectId = url.searchParams.get('projectId');
         if (projectId && !runtime.registryStore.listIds().includes(projectId)) throw new DomainError('PROJECT_NOT_FOUND', '当前项目尚未登记。', { status: 404 });
         const cwd = projectId ? runtime.projectStore.readConfig(projectId).repoPath : undefined;
-        const summary = await manager.statusAll({ captureOnly: url.searchParams.get('captureOnly') === '1', cwd });
+        const requested = url.searchParams.get('clients');
+        const clients = requested ? requested.split(',').filter(Boolean).map(require('./integration-installer').normalizeClient) : undefined;
+        const summary = await runtime.integrationStatusScan.read(managerOptions, { captureOnly: url.searchParams.get('captureOnly') === '1', cwd, clients }, { force: url.searchParams.get('refresh') === '1' });
         return send(res, 200, { ok: true, ...summary });
       }
       if (method === 'POST' && pathname === '/api/integrations/install') {
+        runtime.integrationStatusScan?.invalidate();
         const body = await readJsonBody(req);
         const manager = new IntegrationManager({ ...options.integrationOptions, rootDir: runtime.rootDir, logger: runtime.logger, operationId: requestOperationId, bridgeHomeDir: runtime.bridgeAdapter.hookBinding().bridgeHomeDir });
         const clients = Array.isArray(body.clients) && body.clients.length
@@ -1525,6 +1529,7 @@ async function startServer(options = {}) {
   const stop = async reason => {
     if (stopping) return stopping;
     stopping = (async () => {
+      runtime.integrationStatusScan?.close();
       clearInterval(maintenanceTimer);
       clearInterval(configurationTimer);
       await runtime.logger.info('server.shutdown_started', 'Server shutdown started.', { phase: 'shutdown', context: { reason } });

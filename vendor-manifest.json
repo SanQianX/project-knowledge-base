@@ -3,24 +3,26 @@
   "modules": {
     "knowledge-engine": {
       "name": "@sanqianx/ai-coding-knowledge-engine",
-      "version": "0.2.6",
+      "version": "0.2.7-rc.1",
       "root": "_modules/knowledge-engine",
       "files": {
-        "README.md": "e940e32f14a00a61aae6ee424679ac3c9fc48ba2c4b4171a9bf6fb44b27a74e6",
-        "package.json": "a39cd05d857ae2277a0a31019df5c72cee581e8e527355513b2123ed15f07dd2",
+        "README.md": "eae7e1a59416c623064f68dbf33d13d41e21096bf67701e41464e0a86c84abdd",
+        "package.json": "3d1b9c0f8f97749cce1abcf5713c5f81acb2efe00cb4eb346ca073805b9961f5",
         "src/analysis-contract.js": "913a63b63fb4a4a9df071f95bbeb8f8c40ef87e2f8445ab0742086ced70ffbf7",
         "src/analysis-output.js": "95a3c19dcc9ab85d1dba7fee5b9aec80f9c000dfba89da3fd0be25a81e2fb680",
         "src/analysis-worker.js": "a105cabe6e1573b2d986b1e7a5aaf615e2fb53524156fc8e4e2c0a71f2c97e55",
         "src/bin.js": "22208907431d0f3a971a669c7e5eb44b3b7af9bbb36fd7ba17c3b90c4288bd70",
         "src/bridge-client.js": "ae0dba21e4286694bcd9e064ca36564ec997969ae1eb1ce4f8a6665e447cbffe",
-        "src/context.js": "bbe7bba175b17e87f4b142afd6731df31e8791ed9c20f3cc7345a39e66398087",
+        "src/context.js": "10cb504e25c5a0a835063ae2562b0603ac06240257797d756ab11289a907f0a7",
         "src/coordinator.js": "8b9a572f415844db6c34dd62e485fb2c2ff50b655ff662802c5cab6207c2c8f0",
         "src/diagnostics.js": "f7b516ace61a1e9faaa6876930b9e2e258499a25857d1203f4e53d28bfd0fa1a",
         "src/headless-analyzer.js": "e01f81b8f24a4423c19dd8893be8c702a85edbdbb644322e3acab96c3ebaac7d",
         "src/index-request.js": "78f26b872299005499fff4f2d1f9e8f986784f2ff36a5cf2be2b1e7b7c7d9378",
         "src/knowledge-targets.js": "aa44ec285d16d7b1c0b63bf084058a1d6f867fa9929c753b6b0cbb24f7b20ee2",
         "src/memories.js": "bba8e19380e906a80fd3e5d2a7f809d940466924578c8187d1f376f906f10f2b",
-        "src/retrieval.js": "10189819e44d7898d47ddc269cf6dd90b188ef6c3b280147eba24fd48b30a588",
+        "src/retrieval-policy.json": "3205fb4eb114a839a74f902e6fae6a61e1460958e5a9d7e29add32b60ba4e05a",
+        "src/retrieval-ranking.js": "422c068ea995d4f8c7e1ffb64b4b72921017862add74da8996b1827c6c64c23d",
+        "src/retrieval.js": "9cc9dc67aac63515e04e2efaa51281663574cb8937d67573b16250b50faae0e0",
         "src/runtime/README.md": "9be676eca76a7857b34d7357194e6f0ee733c22e61d962d53984715dbec7f673",
         "src/runtime/atomic-file.js": "9846b4b69db5ded811acf19a1181ef93615d93efaa542b858e552a7f3124ad23",
         "src/runtime/automation-config.js": "6498c5397be12b155829740595a1553d4dcd6eaa7db6ced3ef88fdc60218f00e",
@@ -29,7 +31,7 @@
         "src/runtime/commit-prompt.js": "11856175a405c00514add6a540324a0efe3d7e5dd872c9e8a0b77f9f40abc551",
         "src/runtime/commit-reconciler.js": "41d0bafe43692cf37ac4e9c4b81a8bcfd828ca849cbe20d9fede237b6d001c69",
         "src/runtime/content-hash.js": "201ee7dcc054310f14097a00058cf9b28fa913367eef616e0fdd8facbf3c6c41",
-        "src/runtime/contracts.js": "9965fd02f7df54e4e27b098656001ace319d3d5fb73ed86bae154476d868708f",
+        "src/runtime/contracts.js": "1088fd8bb36a5dc32a52496d54a6c7c5255c53ca5ff1fe90e42cfeb276e99044",
         "src/runtime/conversation-exclusions.js": "ef8545034b862d384fb460140490bb531b58d94992f5e2222ebaaa079b44fa63",
         "src/runtime/conversation-store.js": "644318f9c04376a3317ced240dd94afa99a79631f0ecc394c5aa298ae2bc0474",
         "src/runtime/evidence-bundle.js": "33d4614849d5e1d69aba8b75c3a43c18b7b6f94e5c78654c82ef631331cc94cc",
@@ -45,7 +47,7 @@
         "ui/app.js": "33a2ba38f0dafbbb2e30a1eb3fc93476bfcaf528e124e1a9b2edd2fb69221e9e",
         "ui/index.html": "ce3565cfefd4838b11d37a91a906ef26ca5a1834844fe3f7c897b56851a3c418"
       },
-      "sourceCommit": "c8c600e6674e96caa3663612a5a9fab31eefe9be"
+      "sourceCommit": "ef6aaa589baccd8b62bb5058ecac6e318c1124a4"
     }
   }
 }
