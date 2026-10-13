@@ -165,6 +165,22 @@ async function main() {
   assert.strictEqual(readNotify(fanoutOnly.configFile), null, 'uninstall removes the notify entry only if no third-party notifier remains');
   assertUnrelatedSettings(fanoutOnly);
 
+  const defaultLegacy = name => ['node', path.join(TEMP, name, 'home', '.ai-coding-event-bridge', 'bin', 'bridge-hook.cjs')];
+  const rawLegacy = fixture('legacy-default-home', defaultLegacy('legacy-default-home'));
+  await assertInstallIdempotent(rawLegacy);
+  assert(!descendants(readNotify(rawLegacy.configFile)).some(command => command[1] === defaultLegacy('legacy-default-home')[1]), 'replace the known old standalone Bridge instead of chaining it as a third party');
+  await rawLegacy.manager.uninstallCaptureCodex();
+  assert.strictEqual(readNotify(rawLegacy.configFile), null, 'uninstall must not resurrect a retired Bridge home');
+
+  const nestedLegacyCommand = defaultLegacy('nested-legacy-default-home');
+  const legacyRadar = [...radar, '--previous-notify', JSON.stringify(nestedLegacyCommand)];
+  const nestedLegacy = fixture('nested-legacy-default-home', oldFanout('old-with-legacy-next', legacyRadar, staleBridge));
+  await assertInstallIdempotent(nestedLegacy);
+  assert(!descendants(readNotify(nestedLegacy.configFile)).some(command => command[1] === nestedLegacyCommand[1]), 'remove known stale Bridge capture hidden in a compatible notification branch');
+  assert(descendants(readNotify(nestedLegacy.configFile)).some(command => JSON.stringify(command) === JSON.stringify(radar)), 'preserve Radar and its non-notify arguments');
+  await nestedLegacy.manager.uninstallCaptureCodex();
+  assert.deepStrictEqual(readNotify(nestedLegacy.configFile), radar);
+
   // Missing files alone never authorize deleting a third-party notifier.
   // Neither a matching script basename nor the word devtask-radar is ownership.
   for (const [name, command] of [

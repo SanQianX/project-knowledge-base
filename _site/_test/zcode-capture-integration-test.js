@@ -79,7 +79,7 @@ const { runCli } = require('../../bin/project-knowledge-integrations');
     assert(failed.clients[0].developmentCapture.error.code);
     await logger.flush();
     const errors = new LogRepository({ layout }).query({ event: 'integration.capture.failed' }).entries;
-    assert(errors.some(entry => entry.operationId === failed.operationId && entry.context.client === 'zcode' && entry.error.message.includes('valid JSON')), 'actual failed phase and operation ID are persisted');
+    assert(errors.some(entry => entry.operationId === failed.operationId && entry.context.client === 'zcode' && entry.error.message.includes('JSON')), 'actual failed phase and operation ID are persisted');
     fs.writeFileSync(configFile, JSON.stringify(twice));
     const removed = await request('/api/integrations/uninstall', { clients: ['zcode'], captureOnly: true });
     assert.equal(removed.complete, true);

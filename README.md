@@ -56,6 +56,11 @@ Notes:
   `project-knowledge-integrations install --ide codex --capture-only`.
   Repeating setup does not add notification wrappers. Removing capture restores
   the preserved notification chain and leaves captured records on disk.
+- Capture repair replaces the known old standalone Bridge entry with the
+  current product Bridge and keeps one capture hook per event. Claude Code
+  and ZCode mixed-group third-party hooks and knowledge-context hooks remain
+  intact. Duplicate or stale entries are reported as needing repair rather
+  than healthy; existing journals are not moved or deleted.
 
 The local service listens on `127.0.0.1:5757` by default. The CLI can select a
 nearby free port and records the active loopback endpoint so managed Git Hooks

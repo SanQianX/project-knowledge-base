@@ -8,6 +8,7 @@ const { applyEdits, modify, parse } = require('jsonc-parser');
 const packageInfo = require('../../package.json');
 const { resolveDataDirPath } = require('./data-dir');
 const { planNotify, writeNotify } = require('./codex-notify-config');
+const { planCaptureHooks, repairCaptureHooks, removeCaptureHooks } = require('./capture-hook-config');
 
 // Fail-open module resolution: a missing/unloadable Bridge package must
 // degrade Development Capture status, never crash server startup.
@@ -253,7 +254,8 @@ class IntegrationManager {
     try {
       const result = await this[`${operation}Capture${CLIENT_METHOD_SUFFIX[client]}`](options);
       const ok = !result.conflict && result.state !== 'failed';
-      if (operation !== 'status' || !ok) this.log(ok ? 'info' : 'error', `integration.capture.${ok ? 'completed' : 'failed'}`, ok ? 'Agent 采集接线操作完成。' : 'Agent 采集接线未完成。', { operationId: this.operationId, durationMs: Date.now() - startedAt, error: ok ? undefined : Object.assign(new Error(result.detail), { code: 'CAPTURE_CONFLICT' }), context });
+      const repairContext = { ...context, ...(typeof result.changed === 'boolean' ? { changed: result.changed } : {}), ...(Number.isInteger(result.removedLegacy) ? { removedLegacy: result.removedLegacy, removedDuplicates: result.removedDuplicates } : {}) };
+      if (operation !== 'status' || !ok) this.log(ok ? 'info' : 'error', `integration.capture.${ok ? 'completed' : 'failed'}`, ok ? 'Agent 采集接线操作完成。' : 'Agent 采集接线未完成。', { operationId: this.operationId, durationMs: Date.now() - startedAt, error: ok ? undefined : Object.assign(new Error(result.detail), { code: 'CAPTURE_CONFLICT' }), context: repairContext });
       return { ok, ...result, ...(!ok ? { error: { code: 'CAPTURE_CONFLICT', message: result.detail } } : {}) };
     } catch (error) {
       this.log('error', 'integration.capture.failed', 'Agent 采集接线操作失败。', { operationId: this.operationId, durationMs: Date.now() - startedAt, error, context });
@@ -266,19 +268,24 @@ class IntegrationManager {
       this.planned.push({ command: 'bridge', args: ['installZcodeHook', this.bridgeHomeDir] });
       return { state: 'planned', installed: false, detail: '计划接入 ZCode 会话采集，未修改配置。' };
     }
+    planCaptureHooks(this.zcodeConfigFile, 'zcode', this);
     await this.bridge.installers.zcode.installZcodeHook(this._captureInstallerOptions('zcode'));
+    const repaired = repairCaptureHooks(this.zcodeConfigFile, 'zcode', this);
     const status = await this.statusCaptureZCode();
     if (!status.installed) throw new Error('ZCode Hook 写入后校验失败，请检查 hooks.enabled 与事件配置。');
-    return status;
+    return { ...status, ...repaired };
   }
 
   async statusCaptureZCode() {
     const status = await this.bridge.installers.zcode.statusZcodeHook(this._captureInstallerOptions('zcode'));
+    const plan = planCaptureHooks(this.zcodeConfigFile, 'zcode', this);
+    if (plan.repairNeeded || status.installed && !fs.existsSync(path.join(this.bridgeHomeDir, 'bin', 'bridge-hook.cjs'))) return { state: 'needs-repair', installed: false, conflict: false, repairNeeded: true, detail: '检测到重复、旧接线或缺失的 Bridge 入口，请执行接入/修复。' };
     return { state: status.installed ? 'installed' : 'not-installed', installed: status.installed, conflict: false, detail: status.installed ? '已配置用户输入与回答采集；请重新打开 ZCode 会话。' : 'ZCode 会话采集尚未接入。' };
   }
 
   async uninstallCaptureZCode() {
     if (this.dryRun) return { state: 'planned', detail: '计划移除 ZCode 采集，未修改配置。' };
+    removeCaptureHooks(this.zcodeConfigFile, 'zcode', this);
     await this.bridge.installers.zcode.uninstallZcodeHook(this._captureInstallerOptions('zcode'));
     return { state: 'removed', installed: false, detail: '已移除 ZCode 托管采集，保留第三方配置与已有记录。' };
   }
@@ -288,12 +295,17 @@ class IntegrationManager {
       this.planned.push({ command: 'bridge', args: ['installClaudeCodeHook', this.bridgeHomeDir] });
       return { state: 'planned', installed: false, conflict: false, detail: 'managed Bridge hooks (dry-run)' };
     }
+    planCaptureHooks(this.claudeSettingsFile, 'claude', this);
     const result = await this.bridge.installers.claudeCode.installClaudeCodeHook(this._captureInstallerOptions());
-    return { state: 'installed', installed: true, conflict: false, detail: `managed hooks: ${result.added.join(', ') || 'already present'}` };
+    if (result.runtime?.conflict) throw new Error('Bridge 运行版本冲突，保留旧采集接线。');
+    const repaired = repairCaptureHooks(this.claudeSettingsFile, 'claude', this);
+    return { state: 'installed', installed: true, conflict: false, detail: `managed hooks: ${result.added.join(', ') || 'already present'}`, ...repaired };
   }
 
   async statusCaptureClaude() {
     const status = await this.bridge.installers.claudeCode.statusClaudeCodeHook(this._captureInstallerOptions());
+    const plan = planCaptureHooks(this.claudeSettingsFile, 'claude', this);
+    if (plan.repairNeeded || status.installed && !fs.existsSync(path.join(this.bridgeHomeDir, 'bin', 'bridge-hook.cjs'))) return { state: 'needs-repair', installed: false, conflict: false, repairNeeded: true, detail: '检测到重复、旧接线或缺失的 Bridge 入口，请执行接入/修复。' };
     return {
       state: status.installed ? 'installed' : 'not-installed',
       installed: status.installed,
@@ -303,6 +315,8 @@ class IntegrationManager {
   }
 
   async uninstallCaptureClaude(options = {}) {
+    if (this.dryRun) return { state: 'planned', detail: '计划移除 Claude Code 采集，未修改配置。' };
+    removeCaptureHooks(this.claudeSettingsFile, 'claude', this);
     await this.bridge.installers.claudeCode.uninstallClaudeCodeHook({
       ...this._captureInstallerOptions(),
       unregisterConsumer: options.unregisterConsumer === true,

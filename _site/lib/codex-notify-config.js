@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { bridgeBinding } = require('./capture-hook-config');
 
 function readNotify(configFile) {
   const source = fs.existsSync(configFile) ? fs.readFileSync(configFile, 'utf8') : '';
@@ -79,7 +80,7 @@ function inspectTree(args, options, state, depth = 0) {
       || args.length !== (next ? 6 : 4)) throw Object.assign(new Error('托管通知链格式异常，未覆盖现有配置。'), { code: 'CAPTURE_CONFLICT' });
     state.owned = true;
     inspectTree(next && next.args, options, state, depth + 1);
-  } else if (sameCommand(args, bridgeCommand(options.bridgeHomeDir))) {
+  } else if (bridgeBinding(args, options)) {
     state.owned = true;
   } else if (desktopCommand(args)) {
     const previous = nested(args, '--previous-notify');
@@ -114,7 +115,7 @@ function rewriteTree(args, options, state, canAnchor = true) {
     const cleaned = rewriteTree(next && next.args, options, state, false);
     return anchor ? fanout(cleaned, options) : cleaned;
   }
-  if (sameCommand(args, bridgeCommand(options.bridgeHomeDir))) return null;
+  if (bridgeBinding(args, options)) return null;
   if (desktopCommand(args)) {
     const previous = nested(args, '--previous-notify');
     const cleaned = rewriteTree(previous && previous.args, options, state, canAnchor);
