@@ -592,7 +592,12 @@ class IntegrationManager {
   updateCodex() {
     if (!this.dryRun && this.codexPlugin()?.enabled === false) throw new Error('知识库插件已被用户禁用，请在 Codex 中明确启用，未静默修改。');
     this.ensureCodexMarketplace();
-    this.execute('codex', ['plugin', 'marketplace', 'upgrade', MARKETPLACE_NAME]);
+    const refreshed = this.execute('codex', ['plugin', 'marketplace', 'upgrade', MARKETPLACE_NAME], { allowFailure: true });
+    // Native refresh is Git-only. A local catalogue already points at current
+    // files; reinstall those files, but never hide a real Git/network failure.
+    if (refreshed.status !== 0 && !/^Error: marketplace `project-knowledge` is not configured as a Git marketplace\s*$/.test(String(refreshed.stderr || refreshed.stdout || '').trim())) {
+      throw new Error(String(refreshed.stderr || refreshed.stdout || '').trim() || 'Codex marketplace refresh failed.');
+    }
     if (this.dryRun || this.codexPlugin()) {
       this.execute('codex', ['plugin', 'remove', `${INTEGRATION_NAME}@${MARKETPLACE_NAME}`]);
     }

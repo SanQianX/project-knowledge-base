@@ -17,13 +17,14 @@ async function main() {
     const thirdParty = { type: 'process', command: 'node', args: ['third-party-hook.js'], timeoutMs: 4000 };
     const before = { model: 'user-model', env: { USER_VALUE: 'keep' }, hooks: { enabled: true, events: { UserPromptSubmit: [{ hooks: [thirdParty] }], Stop: [{ hooks: [thirdParty] }] } } };
     fs.writeFileSync(configFile, JSON.stringify(before));
-    let version = '5.0.9', enabled = true, trusted = false;
+    let version = '5.0.9', enabled = true, trusted = false, marketplaceMode = 'git';
     const calls = [], cache = path.join(root, 'codex-cache');
     const manager = new IntegrationManager({ homeDir: root, zcodeConfigFile: configFile, commandResolver: name => name,
       codexHookProbe: async () => ({ data: [{ cwd: root, errors: [], warnings: [], hooks: [{ eventName: 'userPromptSubmit', pluginId: 'project-knowledge@project-knowledge', command: hook.command, sourcePath: path.join(cache, 'hooks/codex.json'), enabled: true, trustStatus: trusted ? 'trusted' : 'untrusted' }] }] }),
       runner: (command, args) => {
         calls.push(args.join(' '));
         if (args.join(' ') === 'plugin marketplace list') return { status: 0, stdout: 'project-knowledge marketplace' };
+        if (args.join(' ') === 'plugin marketplace upgrade project-knowledge' && marketplaceMode !== 'git') return { status: 1, stderr: marketplaceMode === 'local' ? 'Error: marketplace `project-knowledge` is not configured as a Git marketplace' : 'Git authentication failed' };
         if (args.join(' ') === 'plugin list --json') return { status: 0, stdout: JSON.stringify({ installed: [{ pluginId: 'project-knowledge@project-knowledge', version, enabled, source: { path: cache } }] }) };
         if (args.slice(0, 2).join(' ') === 'plugin add') { version = manager.version; fs.mkdirSync(cache, { recursive: true }); fs.cpSync(plugin, cache, { recursive: true }); }
         return { status: 0, stdout: '' };
@@ -37,6 +38,14 @@ async function main() {
     const count = calls.filter(c => c.startsWith('plugin add')).length; manager.installCodex(); assert.equal(calls.filter(c => c.startsWith('plugin add')).length, count);
     enabled = false; assert.throws(() => manager.installCodex(), /禁用/); assert.equal(manager.statusCodex().state, 'disabled'); enabled = true;
     assert.ok(calls.every(c => !/trust|bypass/.test(c)), 'installer never writes native trust or bypasses review');
+    marketplaceMode = 'local'; version = '5.0.9';
+    assert.equal(manager.installCodex().state, 'updated', 'local catalogues reload owned files without a Git refresh');
+    assert.equal(manager.statusCodex().state, 'installed');
+    marketplaceMode = 'network-failed'; version = '5.0.9';
+    const removals = calls.filter(c => c.startsWith('plugin remove')).length;
+    assert.throws(() => manager.installCodex(), /Git authentication failed/);
+    assert.equal(calls.filter(c => c.startsWith('plugin remove')).length, removals, 'an actual Git failure must not remove the working plugin or be treated as a local catalogue');
+    marketplaceMode = 'git'; version = manager.version;
     const installed = manager.installZCode(); assert.equal(installed.state, 'installed'); manager.installZCode();
     const current = JSON.parse(fs.readFileSync(configFile));
     assert.equal(current.model, before.model); assert.deepEqual(current.env, before.env); assert.deepEqual(current.hooks.events.Stop, before.hooks.events.Stop);
