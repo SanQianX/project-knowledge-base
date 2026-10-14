@@ -436,7 +436,7 @@ class IntegrationManager {
 
   log(level, event, message, input = {}) {
     if (!this.logger || typeof this.logger[level] !== 'function') return;
-    Promise.resolve(this.logger[level](event, message, { component: 'integration-manager', ...input })).catch(() => {
+    Promise.resolve(this.logger[level](event, message, { component: 'integration-manager', operationId: this.operationId, ...input })).catch(() => {
       try { process.stderr.write(`[integration-manager logger fallback] ${event}\n`); } catch {
         // stderr is the final non-recursive observer fallback.
       }
@@ -638,19 +638,29 @@ class IntegrationManager {
     }
     const result = this.runner(command, args, {
       env: this.env,
-      cwd: this.rootDir,
+      cwd: options.cwd || this.rootDir,
       timeout: options.timeout,
     });
     if (result.error) {
       this.log('error', 'integration.command_failed', 'Integration CLI command failed.', { durationMs: Date.now() - startedAt, error: Object.assign(new Error('Integration CLI command failed.'), { code: result.error.code || 'INTEGRATION_COMMAND_FAILED' }), context: { client, argsHash } });
       throw result.error;
     }
+    const localRefFailure = client === 'codex' && String(result.stderr || '').trim() === 'Error: --ref is only supported for git marketplace sources';
     if (result.status !== 0 && !options.allowFailure) {
       const detail = String(result.stderr || result.stdout || '').trim();
-      this.log('error', 'integration.command_failed', 'Integration CLI command failed.', { durationMs: Date.now() - startedAt, error: Object.assign(new Error('Integration CLI command failed.'), { code: 'INTEGRATION_COMMAND_FAILED' }), context: { client, status: result.status, argsHash, outputHash: `sha256:${crypto.createHash('sha256').update(detail, 'utf8').digest('hex')}` } });
+      this.log('error', 'integration.command_failed', 'Integration CLI command failed.', { durationMs: Date.now() - startedAt, error: Object.assign(new Error('Integration CLI command failed.'), { code: localRefFailure ? 'CODEX_LOCAL_SOURCE_REF' : 'INTEGRATION_COMMAND_FAILED' }), context: { client, status: result.status, argsHash, outputHash: `sha256:${crypto.createHash('sha256').update(detail, 'utf8').digest('hex')}` } });
       throw new Error(detail || `${CLIENT_LABELS[client]} command failed with exit code ${result.status}`);
     }
-    this.log('info', 'integration.command_completed', 'Integration CLI command completed.', { durationMs: Date.now() - startedAt, context: { client, status: result.status, argsHash } });
+    const completed = result.status === 0;
+    const safeError = completed ? undefined : Object.assign(new Error(localRefFailure
+      ? 'Codex 把本地目录中的 @ 误当作 Git ref；请使用目录内相对路径重试。'
+      : 'Integration CLI command returned a failure.'), {
+      code: localRefFailure ? 'CODEX_LOCAL_SOURCE_REF' : 'INTEGRATION_COMMAND_FAILED',
+    });
+    this.log(completed ? 'info' : 'warn', completed ? 'integration.command_completed' : 'integration.command_failed', completed ? 'Integration CLI command completed.' : 'Integration CLI command returned a failure.', {
+      durationMs: Date.now() - startedAt, error: safeError,
+      context: { client, status: result.status, argsHash },
+    });
     return result;
   }
 
@@ -718,6 +728,16 @@ class IntegrationManager {
     this.execute('claude', ['plugin', 'marketplace', 'add', this.claudeMarketplaceSource]);
   }
 
+  addCodexMarketplaceSource(source, options = {}) {
+    // Codex 0.137 parses @ in an absolute npm path as a Git ref. Resolve a
+    // real local directory via cwd instead; rollback must use its own cwd.
+    let local = false;
+    if (path.isAbsolute(source) && source.includes('@')) {
+      try { local = fs.statSync(source).isDirectory(); } catch {}
+    }
+    return this.execute('codex', ['plugin', 'marketplace', 'add', local ? '.' : source], local ? { ...options, cwd: source } : options);
+  }
+
   ensureCodexMarketplace() {
     const target = path.resolve(this.codexMarketplaceAddSource);
     if (!this.dryRun) {
@@ -727,9 +747,9 @@ class IntegrationManager {
         if (path.resolve(existing).toLowerCase() === target.toLowerCase()) return;
         if (!this.isOwnCodexMarketplaceSource(existing)) throw new Error('同名 Codex 插件市场来源不是当前安装包，且无法确认属于本产品；未覆盖第三方来源。请检查 Codex 插件市场配置。');
         this.execute('codex', ['plugin', 'marketplace', 'remove', MARKETPLACE_NAME]);
-        const added = this.execute('codex', ['plugin', 'marketplace', 'add', target], { allowFailure: true });
+        const added = this.addCodexMarketplaceSource(target, { allowFailure: true });
         if (added.status !== 0) {
-          const restored = this.execute('codex', ['plugin', 'marketplace', 'add', existing], { allowFailure: true });
+          const restored = this.addCodexMarketplaceSource(existing, { allowFailure: true });
           throw new Error(restored.status === 0
             ? 'Codex 插件市场更换为当前安装包失败，已恢复原市场来源；请重试接入。'
             : 'Codex 插件市场更换为当前安装包失败，恢复原市场来源也未成功；请手动检查 codex 插件市场。');
@@ -737,7 +757,7 @@ class IntegrationManager {
         return;
       }
     }
-    this.execute('codex', ['plugin', 'marketplace', 'add', target]);
+    this.addCodexMarketplaceSource(target);
   }
 
   installClaude(options = {}) {
