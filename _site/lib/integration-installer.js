@@ -2,13 +2,15 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
-const { spawnSync } = require('child_process');
+const { createRequire } = require('node:module');
+const { spawn, spawnSync } = require('child_process');
 const crossSpawn = require('cross-spawn');
 const { applyEdits, modify, parse } = require('jsonc-parser');
 const packageInfo = require('../../package.json');
 const { resolveDataDirPath } = require('./data-dir');
 const { planNotify, writeNotify } = require('./codex-notify-config');
 const { planCaptureHooks, repairCaptureHooks, removeCaptureHooks } = require('./capture-hook-config');
+const { writeJsonAtomic } = require('./atomic-file');
 
 // Fail-open module resolution: a missing/unloadable Bridge package must
 // degrade Development Capture status, never crash server startup.
@@ -22,6 +24,43 @@ try {
 const INTEGRATION_NAME = 'project-knowledge';
 const MARKETPLACE_NAME = 'project-knowledge';
 const DEFAULT_MARKETPLACE_SOURCE = 'SanQianX/project-knowledge-base';
+const INTEGRATION_RUNTIME_SCHEMA = 'project-knowledge/integration-runtime/v1';
+const MCP_LAUNCHER_ERROR_SCHEMA = 'project-knowledge/mcp-launcher-error/v1';
+const INTEGRATION_PACKAGE_NAME = '@sanqianx/project-knowledge';
+const MCP_SERVER_NAME = 'project-knowledge';
+const MCP_TOOL_NAMES = ['project_knowledge_resolve', 'project_knowledge_record_requirement', 'project_knowledge_search', 'project_knowledge_ask', 'project_knowledge_get', 'project_knowledge_history'];
+const MCP_LAUNCHER_FILE = path.join('plugins', INTEGRATION_NAME, 'scripts', 'mcp-launcher.cjs');
+const MCP_PROBE_TIMEOUT_MS = 8000;
+const MCP_PROBE_STDERR_CAP_BYTES = 32768;
+const MCP_PROBE_STDOUT_CAP_BYTES = 32768;
+const MCP_PROBE_FAILURE_DETAILS = {
+  PROBE_SPAWN_FAILED: '无法启动本地 MCP 启动进程；请检查 Node 运行时。',
+  INITIALIZE_REJECTED: '本地 MCP 服务拒绝了 initialize 握手；未回显上游错误内容。',
+  SERVER_IDENTITY: 'MCP 服务身份不是 project-knowledge，判定未通过。',
+  VERSION_MISMATCH: 'MCP 服务版本与当前产品版本不一致。',
+  TOOLS_CONTRACT: 'MCP 服务未提供完整的六个知识工具。',
+  PROBE_OUTPUT_OVERFLOW: '探测输出超过大小上限，已立即失败并清理子进程。',
+  PROBE_TIMEOUT: 'MCP initialize 握手超时。',
+  PROBE_CRASH: '启动探测自身异常终止；已使用固定诊断，未回显异常内容。',
+  LAUNCHER_ERROR_UNKNOWN: '本地启动器返回了无法识别的错误代码；未回显其内容。',
+  BINDING_MISSING: '尚未写入本地运行时绑定；请先完成知识接入。',
+  BINDING_CORRUPT: '本地运行时绑定不可读；请修复知识接入。',
+  BINDING_PACKAGE_MISMATCH: '运行时绑定不是本产品包。',
+  BINDING_VERSION_MISMATCH: '运行时绑定版本不一致；请更新插件。',
+};
+// Launcher error codes the probe may adopt from stderr. Anything else is an
+// untrusted value: it never becomes a result code and is never echoed.
+const MCP_LAUNCHER_ERROR_CODE_ALLOWLIST = [
+  'BINDING_MISSING',
+  'BINDING_CORRUPT',
+  'BINDING_SCHEMA_MISMATCH',
+  'BINDING_PACKAGE_MISMATCH',
+  'BINDING_VERSION_MISMATCH',
+  'BINDING_INVALID_ROOT',
+  'BINDING_ENTRY_MISSING',
+  'BINDING_ENTRY_INVALID',
+  'LAUNCH_FAILED',
+];
 const SUPPORTED_CLIENTS = ['claude', 'opencode', 'codex', 'zcode'];
 const DEFAULT_BRIDGE_CONSUMER = 'project-knowledge';
 const CLIENT_LABELS = {
@@ -185,9 +224,12 @@ class IntegrationManager {
     this.marketplaceSource = options.marketplaceSource || DEFAULT_MARKETPLACE_SOURCE;
     this.claudeMarketplaceSource = options.marketplaceSource || this.rootDir;
     this.explicitMarketplace = Boolean(options.marketplaceSource);
+    this.codexMarketplaceAddSource = options.codexMarketplaceSource || options.marketplaceSource || this.rootDir;
+    this.explicitCodexMarketplace = Boolean(options.codexMarketplaceSource || options.marketplaceSource);
     this.runner = options.runner || defaultRunner;
     this.commandResolver = options.commandResolver || defaultCommandResolver;
     this.codexHookProbe = options.codexHookProbe || require('./codex-context-status').readCodexHooks;
+    this.mcpProbe = options.mcpProbe || null;
     this.dryRun = Boolean(options.dryRun);
     this.logger = options.logger || null;
     this.operationId = options.operationId || '';
@@ -418,6 +460,162 @@ class IntegrationManager {
     try { const stat = fs.statSync(target); return client === 'opencode' ? stat.isDirectory() : stat.isFile(); } catch { return false; }
   }
 
+  // ---- Local MCP runtime binding and startup diagnostics ----
+
+  integrationRuntimeBindingPath() {
+    return path.join(resolveDataDirPath({ dataDir: this.env.KB_DATA_DIR || '', homeDir: this.homeDir }), 'integration-runtime.json');
+  }
+
+  ensureIntegrationRuntimeBinding(options = {}) {
+    const manifest = JSON.parse(fs.readFileSync(path.join(this.rootDir, 'package.json'), 'utf8'));
+    if (manifest.name !== INTEGRATION_PACKAGE_NAME) throw new Error('知识接入绑定的运行包不是本产品包，已拒绝写入绑定。');
+    const bin = manifest.bin && typeof manifest.bin === 'object' && !Array.isArray(manifest.bin) ? manifest.bin['project-knowledge-mcp'] : manifest.bin;
+    const packageRoot = path.resolve(this.rootDir);
+    const entry = typeof bin === 'string' && bin ? path.resolve(packageRoot, bin) : '';
+    const entryError = 'package.json must declare an existing project-knowledge-mcp bin entry inside the package before binding the local MCP runtime.';
+    const lexical = entry ? path.relative(packageRoot, entry) : '..';
+    if (!entry || !lexical || lexical === '..' || lexical.startsWith('..' + path.sep) || path.isAbsolute(lexical)) throw new Error(entryError);
+    // The same realpath containment the launcher enforces at start: a link
+    // inside the package that resolves outside the real root must never be
+    // bound, and the entry must be a regular file.
+    let rootReal = '';
+    let entryReal = '';
+    try {
+      rootReal = fs.realpathSync(packageRoot);
+      entryReal = fs.realpathSync(entry);
+    } catch (error) { throw new Error(entryError); }
+    const relativeReal = path.relative(rootReal, entryReal);
+    if (!relativeReal || relativeReal === '..' || relativeReal.startsWith('..' + path.sep) || path.isAbsolute(relativeReal)) throw new Error(entryError);
+    let entryStat = null;
+    try { entryStat = fs.statSync(entryReal); } catch (error) { throw new Error(entryError); }
+    if (!entryStat.isFile()) throw new Error(entryError);
+    const bindingPath = this.integrationRuntimeBindingPath();
+    const binding = { schema: INTEGRATION_RUNTIME_SCHEMA, packageName: manifest.name, packageRoot, version: manifest.version, updatedAt: new Date().toISOString() };
+    try {
+      const existing = JSON.parse(fs.readFileSync(bindingPath, 'utf8'));
+      // An injected beforeRename means the caller explicitly wants the write
+      // path exercised (failure surfacing); only the quiet repair path may
+      // short-circuit to keep the binding byte- and mtime-idempotent.
+      const verifyWrite = typeof options.beforeRename === 'function';
+      if (!verifyWrite && existing && typeof existing === 'object' && existing.schema === INTEGRATION_RUNTIME_SCHEMA && existing.packageName === binding.packageName && existing.packageRoot === binding.packageRoot && existing.version === binding.version) {
+        return { state: 'unchanged', path: bindingPath, version: manifest.version };
+      }
+    } catch (error) { /* missing or unreadable bindings are rewritten below */ }
+    if (this.dryRun) {
+      this.planned.push({ command: 'runtime-binding', args: ['write', bindingPath] });
+      return { state: 'planned', path: bindingPath };
+    }
+    writeJsonAtomic(bindingPath, binding, typeof options.beforeRename === 'function' ? { beforeRename: options.beforeRename } : {});
+    return { state: 'written', path: bindingPath, version: manifest.version };
+  }
+
+  async probeMcpStartup(probeOptions = {}) {
+    const launcherPath = probeOptions.launcherPath || path.join(this.rootDir, MCP_LAUNCHER_FILE);
+    const scope = probeOptions.scope || 'product-runtime';
+    const expectedVersion = typeof probeOptions.version === 'string' && probeOptions.version ? probeOptions.version : this.version;
+    const timeoutMs = Number.isFinite(probeOptions.timeoutMs) ? probeOptions.timeoutMs : MCP_PROBE_TIMEOUT_MS;
+    const stderrCapBytes = Number.isFinite(probeOptions.stderrCapBytes) ? probeOptions.stderrCapBytes : MCP_PROBE_STDERR_CAP_BYTES;
+    const stdoutCapBytes = Number.isFinite(probeOptions.stdoutCapBytes) ? probeOptions.stdoutCapBytes : MCP_PROBE_STDOUT_CAP_BYTES;
+    const checkedAt = new Date().toISOString();
+    let Client = null;
+    let StdioClientTransport = null;
+    try {
+      const requireFromPackage = createRequire(path.join(this.rootDir, 'package.json'));
+      Client = requireFromPackage('@modelcontextprotocol/sdk/client/index.js').Client;
+      StdioClientTransport = requireFromPackage('@modelcontextprotocol/sdk/client/stdio.js').StdioClientTransport;
+    } catch (error) {
+      this.log('error', 'integration.mcp_probe_sdk_unavailable', 'The MCP SDK is unavailable; the probe fails explicitly instead of guessing.', { error, context: { scope } });
+      return { state: 'failed', checkedAt, scope, expectedVersion, code: 'PROBE_SDK_UNAVAILABLE', detail: '安装包内缺少 MCP SDK，无法执行启动探测；未据此判定客户端未接入。' };
+    }
+    return await new Promise(resolve => {
+      let client = null;
+      let timer = null;
+      let settled = false;
+      let stderrTail = '';
+      let stderrBytes = 0;
+      let stdoutBytes = 0;
+      const failed = (code, extra = {}) => {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
+        resolve({ state: 'failed', checkedAt, scope, expectedVersion, code, ...extra, detail: MCP_PROBE_FAILURE_DETAILS[code] || '本地 MCP 启动探测未通过；诊断不回显上游文本。' });
+      };
+      const cleanup = async () => {
+        const closing = client;
+        client = null;
+        if (!closing) return;
+        try { await closing.close(); } catch (error) { /* the SDK escalates SIGTERM/SIGKILL on its own child only */ }
+      };
+      // The probe must exercise the manager's own isolated data dir; a host
+      // KB_DATA_DIR (for example a Workbench session export) must not leak in.
+      const probeEnv = { ...process.env, ...this.env, KB_DATA_DIR: path.dirname(this.integrationRuntimeBindingPath()) };
+      const transport = new StdioClientTransport({ command: process.execPath, args: [launcherPath], env: probeEnv, stderr: 'pipe' });
+      transport.stderr.on('data', chunk => {
+        stderrBytes += chunk.length;
+        stderrTail = (stderrTail + String(chunk)).slice(-4096);
+        if (stderrBytes > stderrCapBytes) {
+          failed('PROBE_OUTPUT_OVERFLOW');
+          cleanup();
+        }
+      });
+      // The SDK exposes no public stdout tap, so count bytes on the child
+      // stream right after start(): a hostile single-line flood fails at the
+      // cap instead of growing the SDK read buffer for the whole timeout.
+      const startTransport = transport.start.bind(transport);
+      transport.start = async () => {
+        await startTransport();
+        const stream = transport._process && transport._process.stdout;
+        if (stream) stream.on('data', chunk => {
+          stdoutBytes += chunk.length;
+          if (stdoutBytes > stdoutCapBytes) {
+            failed('PROBE_OUTPUT_OVERFLOW');
+            cleanup();
+          }
+        });
+      };
+      client = new Client({ name: 'project-knowledge-integration-probe', version: '1' }, { capabilities: {} });
+      timer = setTimeout(() => {
+        failed('PROBE_TIMEOUT');
+        cleanup();
+      }, timeoutMs);
+      (async () => {
+        try {
+          await client.connect(transport);
+          if (settled) return;
+          const serverVersion = client.getServerVersion();
+          if (!serverVersion || serverVersion.name !== MCP_SERVER_NAME) return failed('SERVER_IDENTITY');
+          // A foreign serverVersion string is untrusted text; only the fixed
+          // mismatch code is reported, never the value itself.
+          if (String(serverVersion.version || '') !== expectedVersion) return failed('VERSION_MISMATCH');
+          let listed = null;
+          try { listed = await client.listTools(); } catch (error) { return failed('TOOLS_CONTRACT', { toolCount: 0 }); }
+          if (settled) return;
+          const names = (listed && Array.isArray(listed.tools) ? listed.tools : []).map(tool => String((tool && tool.name) || '')).filter(Boolean);
+          if (names.length !== MCP_TOOL_NAMES.length || !MCP_TOOL_NAMES.every(name => names.includes(name))) return failed('TOOLS_CONTRACT', { toolCount: names.length });
+          settled = true;
+          clearTimeout(timer);
+          resolve({ state: 'ready', checkedAt, scope, expectedVersion, actualVersion: String(serverVersion.version || ''), serverName: serverVersion.name, tools: names, detail: '本地 MCP 服务已完成 initialize，并通过身份、版本与六工具契约校验。' });
+        } catch (error) {
+          if (!settled) {
+            const lines = stderrTail.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+            const last = lines[lines.length - 1] || '';
+            try {
+              const payload = JSON.parse(last);
+              if (payload && payload.schema === MCP_LAUNCHER_ERROR_SCHEMA && payload.code) {
+                const launcherCode = String(payload.code);
+                return failed(MCP_LAUNCHER_ERROR_CODE_ALLOWLIST.includes(launcherCode) ? launcherCode : 'LAUNCHER_ERROR_UNKNOWN');
+              }
+            } catch { /* plain-text launcher diagnostics fall through to fixed codes */ }
+            if (error && (error.code === 'ENOENT' || /spawn/i.test(String((error && error.message) || error)))) return failed('PROBE_SPAWN_FAILED');
+            return failed('INITIALIZE_REJECTED');
+          }
+        } finally {
+          await cleanup();
+        }
+      })();
+    });
+  }
+
   zcodeContextOptions() { return { configFile: this.zcodeConfigFile, rootDir: this.rootDir, dryRun: this.dryRun }; }
   statusZCode() { return require('./zcode-context-integration').status(this.zcodeContextOptions()); }
   installZCode() { return require('./zcode-context-integration').install(this.zcodeContextOptions()); }
@@ -479,8 +677,30 @@ class IntegrationManager {
   }
 
   codexMarketplaceExists() {
+    return this.codexMarketplaceRegisteredSource() !== null;
+  }
+
+  codexMarketplaceRegisteredSource() {
     const result = this.execute('codex', ['plugin', 'marketplace', 'list'], { allowFailure: true });
-    return String(result.stdout || '').split(/\r?\n/).some(line => line.trim().startsWith(`${MARKETPLACE_NAME} `));
+    const line = String(result.stdout || '').split(/\r?\n/).map(item => item.trim()).find(item => item.startsWith(`${MARKETPLACE_NAME} `));
+    const source = line ? line.slice(MARKETPLACE_NAME.length).trim() : '';
+    return source || null;
+  }
+
+  isOwnCodexMarketplaceSource(source) {
+    const text = String(source || '').trim();
+    if (!text) return false;
+    if (text.toLowerCase() === DEFAULT_MARKETPLACE_SOURCE.toLowerCase()) return true;
+    if (/^(?:git\+)?https:\/\/github\.com\/SanQianX\/project-knowledge-base(?:\.git)?\/?$/i.test(text)) return true;
+    if (!path.isAbsolute(text)) return false;
+    const directory = path.resolve(text);
+    let stat = null;
+    try { stat = fs.statSync(directory); } catch { return true; }
+    if (!stat.isDirectory()) return false;
+    try {
+      const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'package.json'), 'utf8'));
+      return Boolean(manifest) && manifest.name === INTEGRATION_PACKAGE_NAME;
+    } catch { return false; }
   }
 
   ensureClaudeMarketplace() {
@@ -499,11 +719,29 @@ class IntegrationManager {
   }
 
   ensureCodexMarketplace() {
-    if (!this.dryRun && this.codexMarketplaceExists()) return;
-    this.execute('codex', ['plugin', 'marketplace', 'add', this.marketplaceSource]);
+    const target = path.resolve(this.codexMarketplaceAddSource);
+    if (!this.dryRun) {
+      const existing = this.codexMarketplaceRegisteredSource();
+      if (existing !== null) {
+        if (this.explicitCodexMarketplace) return;
+        if (path.resolve(existing).toLowerCase() === target.toLowerCase()) return;
+        if (!this.isOwnCodexMarketplaceSource(existing)) throw new Error('同名 Codex 插件市场来源不是当前安装包，且无法确认属于本产品；未覆盖第三方来源。请检查 Codex 插件市场配置。');
+        this.execute('codex', ['plugin', 'marketplace', 'remove', MARKETPLACE_NAME]);
+        const added = this.execute('codex', ['plugin', 'marketplace', 'add', target], { allowFailure: true });
+        if (added.status !== 0) {
+          const restored = this.execute('codex', ['plugin', 'marketplace', 'add', existing], { allowFailure: true });
+          throw new Error(restored.status === 0
+            ? 'Codex 插件市场更换为当前安装包失败，已恢复原市场来源；请重试接入。'
+            : 'Codex 插件市场更换为当前安装包失败，恢复原市场来源也未成功；请手动检查 codex 插件市场。');
+        }
+        return;
+      }
+    }
+    this.execute('codex', ['plugin', 'marketplace', 'add', target]);
   }
 
   installClaude(options = {}) {
+    this.ensureIntegrationRuntimeBinding();
     let plugin = this.dryRun ? null : this.claudePlugin();
     if (plugin?.enabled === false) throw new Error('知识库插件已被用户禁用，请在 Claude Code 中明确启用；未静默修改。');
     this.ensureClaudeMarketplace();
@@ -524,6 +762,7 @@ class IntegrationManager {
   }
 
   updateClaude(options = {}) {
+    this.ensureIntegrationRuntimeBinding();
     this.ensureClaudeMarketplace();
     this.execute('claude', ['plugin', 'marketplace', 'update', MARKETPLACE_NAME]);
     if (!this.dryRun && !this.claudePlugin()) return this.installClaude(options);
@@ -577,6 +816,7 @@ class IntegrationManager {
   }
 
   installCodex() {
+    this.ensureIntegrationRuntimeBinding();
     this.ensureCodexMarketplace();
     const plugin = this.dryRun ? null : this.codexPlugin();
     if (plugin?.enabled === false) throw new Error('知识库插件已被用户禁用，请在 Codex 中明确启用，未静默修改。');
@@ -590,6 +830,7 @@ class IntegrationManager {
   }
 
   updateCodex() {
+    this.ensureIntegrationRuntimeBinding();
     if (!this.dryRun && this.codexPlugin()?.enabled === false) throw new Error('知识库插件已被用户禁用，请在 Codex 中明确启用，未静默修改。');
     this.ensureCodexMarketplace();
     const refreshed = this.execute('codex', ['plugin', 'marketplace', 'upgrade', MARKETPLACE_NAME], { allowFailure: true });
@@ -750,9 +991,21 @@ class IntegrationManager {
 
   async operate(operation, clients, options = {}) {
     const results = [];
+    let bindingFailure = null;
+    if (operation === 'install' || operation === 'update') {
+      // The runtime binding is a precondition for knowledge installs: a
+      // binding failure must fail the knowledge result, never report success.
+      try {
+        this.ensureIntegrationRuntimeBinding();
+      } catch (error) {
+        bindingFailure = Object.assign(new Error('本地 MCP 运行时绑定校验失败，已阻止知识接入；采集能力不受影响。'), { code: 'INTEGRATION_RUNTIME_BINDING_FAILED' });
+        this.log('error', 'integration.runtime_binding_failed', 'Failed to write the local MCP runtime binding.', { error, context: { operation } });
+      }
+    }
     for (const rawClient of clients) {
       const client = normalizeClient(rawClient);
       try {
+        if (bindingFailure) throw bindingFailure;
         const suffix = CLIENT_METHOD_SUFFIX[client];
         let result;
         if (operation === 'status') result = this[`status${suffix}`]();
@@ -771,6 +1024,7 @@ class IntegrationManager {
           ok: false,
           state: 'failed',
           detail: error.message,
+          ...(error.code ? { code: error.code } : {}),
         });
       }
     }
@@ -798,14 +1052,28 @@ class IntegrationManager {
     } catch (error) {
       summary.bridge = { ok: false, state: 'failed', detail: error.message };
     }
+    let bindingFailure = null;
+    if (options.captureOnly !== true) {
+      try {
+        summary.runtimeBinding = { ok: true, ...this.ensureIntegrationRuntimeBinding() };
+      } catch (error) {
+        summary.runtimeBinding = { ok: false, state: 'failed', detail: error.message };
+        bindingFailure = Object.assign(new Error('本地 MCP 运行时绑定校验失败，已阻止知识接入；采集能力不受影响。'), { code: 'INTEGRATION_RUNTIME_BINDING_FAILED' });
+        this.log('error', 'integration.runtime_binding_failed', 'Failed to write the local MCP runtime binding.', { error, context: { operation: 'installAll' } });
+      }
+    }
     for (const client of clients) {
       const suffix = CLIENT_METHOD_SUFFIX[client];
       const entry = { client, label: CLIENT_LABELS[client] };
       if (options.captureOnly !== true) {
-        try {
-          entry.knowledgeIntegration = { ok: true, ...(await this[`install${suffix}`](options)) };
-        } catch (error) {
-          entry.knowledgeIntegration = { ok: false, state: 'failed', detail: error.message };
+        if (bindingFailure) {
+          entry.knowledgeIntegration = { ok: false, state: 'failed', code: bindingFailure.code, detail: bindingFailure.message };
+        } else {
+          try {
+            entry.knowledgeIntegration = { ok: true, ...(await this[`install${suffix}`](options)) };
+          } catch (error) {
+            entry.knowledgeIntegration = { ok: false, state: 'failed', detail: error.message };
+          }
         }
       }
       if (options.knowledgeOnly !== true) {
@@ -816,6 +1084,32 @@ class IntegrationManager {
     return summary;
   }
 
+  installedMcpLauncherPaths(client) {
+    const launchers = [];
+    const seen = new Set();
+    const consider = directory => {
+      if (typeof directory !== 'string' || !path.isAbsolute(directory)) return;
+      const launcher = path.join(directory, 'scripts', 'mcp-launcher.cjs');
+      if (seen.has(launcher)) return;
+      try { if (!fs.statSync(launcher).isFile()) return; } catch { return; }
+      seen.add(launcher);
+      launchers.push(launcher);
+    };
+    if (client === 'claude') {
+      try {
+        const index = JSON.parse(fs.readFileSync(path.join(this.homeDir, '.claude', 'plugins', 'installed_plugins.json'), 'utf8'));
+        for (const record of (index.plugins?.[`${INTEGRATION_NAME}@${MARKETPLACE_NAME}`] || [])) {
+          if (record && record.version === this.version) consider(record.installPath);
+        }
+      } catch { /* no native install index yet */ }
+      consider(path.join(this.homeDir, '.claude', 'plugins', 'cache', MARKETPLACE_NAME, INTEGRATION_NAME, this.version));
+    }
+    if (client === 'codex' && this.executable('codex')) {
+      try { consider(this.codexPlugin()?.source?.path); } catch { /* the client CLI failed to list plugins; there is no installed entry to probe */ }
+    }
+    return launchers;
+  }
+
   async statusAll(options = {}) {
     const clients = options.clients && options.clients.length ? options.clients.map(normalizeClient) : SUPPORTED_CLIENTS;
     const summary = { clients: [], bridge: null };
@@ -823,6 +1117,23 @@ class IntegrationManager {
       summary.bridge = { ok: true, ...(await this.bridgeStatus()) };
     } catch (error) {
       summary.bridge = { ok: false, state: 'failed', bridgeHealthy: false, detail: error.message };
+    }
+    // Probes start in parallel so one hung launcher costs a single timeout.
+    // Client probes exercise the entry that client would actually launch
+    // (never the host source tree); identical entries share one host check,
+    // and the shared product-runtime probe covers the shipping runtime.
+    const runProbe = info => (this.mcpProbe ? this.mcpProbe(info) : this.probeMcpStartup(info)).catch(() => ({ state: 'failed', checkedAt: new Date().toISOString(), code: 'PROBE_CRASH', expectedVersion: this.version, detail: MCP_PROBE_FAILURE_DETAILS.PROBE_CRASH }));
+    const clientProbes = new Map();
+    const hostProbe = options.captureOnly ? null : runProbe({ client: 'host', scope: 'product-runtime', version: this.version });
+    if (!options.captureOnly) {
+      const sharedByLauncher = new Map();
+      for (const client of clients) {
+        if (client !== 'claude' && client !== 'codex') continue;
+        const launcherPath = this.installedMcpLauncherPaths(client)[0];
+        if (!launcherPath) continue;
+        if (!sharedByLauncher.has(launcherPath)) sharedByLauncher.set(launcherPath, runProbe({ client, scope: `client:${client}`, launcherPath, version: this.version }));
+        clientProbes.set(client, sharedByLauncher.get(launcherPath).then(result => ({ ...result, scope: `client:${client}` })));
+      }
     }
     for (const client of clients) {
       const suffix = CLIENT_METHOD_SUFFIX[client];
@@ -834,10 +1145,16 @@ class IntegrationManager {
           entry.knowledgeIntegration = { ok: false, state: 'failed', detail: error.message };
         }
         entry.automaticContext = client === 'codex' ? await this.automaticCodexContextStatus(entry.knowledgeIntegration, options.cwd) : this.automaticContextStatus(client, entry.knowledgeIntegration);
+        if (client === 'claude' || client === 'codex') {
+          entry.mcpStartup = clientProbes.has(client)
+            ? await clientProbes.get(client)
+            : { state: 'failed', checkedAt: new Date().toISOString(), scope: `client:${client}`, code: 'CLIENT_PLUGIN_ENTRY_MISSING', expectedVersion: this.version, detail: '该客户端没有已安装的知识插件入口；未用宿主源码入口代替客户端实际启动入口做健康判定。' };
+        }
       }
       entry.developmentCapture = await this.captureOperation('status', client);
       summary.clients.push(entry);
     }
+    if (hostProbe) summary.mcpRuntime = await hostProbe;
     return summary;
   }
 

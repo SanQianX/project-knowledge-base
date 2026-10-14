@@ -60,11 +60,15 @@ function releaseVersionTargets(rootDir, version, { webOnly = false } = {}) {
     {
       file: 'plugins/project-knowledge/.mcp.json',
       update(value) {
-        const args = value && value.mcpServers && value.mcpServers['project-knowledge'] && value.mcpServers['project-knowledge'].args;
-        if (!Array.isArray(args)) throw new Error('project-knowledge MCP server has no args array');
-        const index = args.findIndex(arg => /^(?:@sanqianx\/)?project-knowledge@/.test(String(arg)));
-        if (index < 0) throw new Error('project-knowledge MCP server has no pinned package argument');
-        args[index] = `@sanqianx/project-knowledge@${version}`;
+        const server = value && value.mcpServers && value.mcpServers['project-knowledge'];
+        const serialized = JSON.stringify(server || {});
+        if (/npx/i.test(serialized) || /@sanqianx\/project-knowledge@/.test(serialized)) throw new Error('project-knowledge MCP server must use the bundled launcher; the npx/pinned package form is rejected');
+        const args = Array.isArray(server && server.args) ? server.args : [];
+        const bootstrap = String(args[1] || '');
+        if (!server || server.command !== 'node' || args[0] !== '-e' || !bootstrap.includes('mcp-launcher.cjs')) throw new Error('project-knowledge MCP server must launch the bundled mcp-launcher.cjs via node -e');
+        if (server.cwd !== undefined) throw new Error('project-knowledge MCP server must not pin a cwd; the plugin version is carried by env.KB_PLUGIN_VERSION');
+        if (bootstrap.includes('process.cwd')) throw new Error('the MCP bootstrap must never consult process.cwd');
+        server.env = { ...(server.env || {}), KB_PLUGIN_VERSION: version };
       },
     },
   ].filter(target => !webOnly || !target.file.startsWith('desktop/')).map(target => ({ ...target, path: path.join(rootDir, target.file) }));

@@ -62,6 +62,7 @@ async function main() {
     await waitFor(() => run("document.querySelector('[data-agent-client=zcode][data-agent-capture=uninstall]') !== null"), 'theme retains capture status');
     await browser.screenshot(path.join(artifacts, '1920-dark.png'));
     fs.writeFileSync(configFile, '{invalid JSON');
+    await waitFor(() => run("(() => { const b = document.querySelector('[data-agent-client=zcode][data-agent-capture=install]'); return b !== null && !b.disabled; })()"), 'capture row settled before invalid config');
     await click('[data-agent-client=zcode][data-agent-capture=install]');
     await waitFor(() => run("document.getElementById('agentCaptureFeedback').textContent.includes('操作 ID')"), 'partial failure rendered');
     assert(await run("document.getElementById('agentCaptureFeedback').classList.contains('issue')"));
@@ -69,7 +70,7 @@ async function main() {
     assert(logs.length > 0 && logs[0].error.message.includes('valid JSON'));
     fs.writeFileSync(configFile, JSON.stringify(config));
     await click('#refreshAgentCapture');
-    await waitFor(() => run("document.querySelector('[data-agent-client=zcode][data-agent-capture=uninstall]') !== null"), 'manual status retry');
+    await waitFor(() => run("(() => { const b = document.querySelector('[data-agent-client=zcode][data-agent-capture=uninstall]'); return b !== null && !b.disabled; })()"), 'manual status retry');
     await click('[data-agent-client=zcode][data-agent-capture=uninstall]');
     await waitFor(() => run("!document.querySelector('[data-agent-client=zcode]').disabled && document.querySelector('[data-agent-client=zcode][data-agent-capture=uninstall]') === null"), 'removed capture status');
     assert.equal(JSON.parse(fs.readFileSync(configFile)).provider.name, 'retain');

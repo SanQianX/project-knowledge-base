@@ -604,8 +604,12 @@ class ModuleBridge {
 
   _supervisedSpecs() {
     const specs = [];
+    // C2 minimal wiring: the terminal service receives the non-secret product
+    // knowledge root via KB_KNOWLEDGE_DATA_DIR. Its own AGENT_TERMINAL_DATA_DIR
+    // stays the dedicated workbench subtree and is never widened.
+    const knowledgeDataDir = this.dataDir || require('./data-dir').getDataDir();
     if (process.env.KB_TERMINAL_COMMAND) {
-      specs.push({ name: 'terminal', command: process.env.KB_TERMINAL_COMMAND, url: this.terminalUrl, env: { KB_WORKBENCH_RUNTIME_TOKEN: this.runtimeToken, KB_KNOWLEDGE_ENGINE_URL: this.engineUrl, KB_EVENT_BRIDGE_URL: this.eventBridgeUrl } });
+      specs.push({ name: 'terminal', command: process.env.KB_TERMINAL_COMMAND, url: this.terminalUrl, env: { KB_KNOWLEDGE_DATA_DIR: knowledgeDataDir, KB_WORKBENCH_RUNTIME_TOKEN: this.runtimeToken, KB_KNOWLEDGE_ENGINE_URL: this.engineUrl, KB_EVENT_BRIDGE_URL: this.eventBridgeUrl } });
     } else {
       const terminalEntry = resolveModuleEntry('terminal');
       if (terminalEntry) {
@@ -613,7 +617,7 @@ class ModuleBridge {
           name: 'terminal',
           command: `node ${JSON.stringify(terminalEntry)}`,
           url: this.terminalUrl,
-          env: { AGENT_TERMINAL_DATA_DIR: path.join(this.dataDir || require('./data-dir').getDataDir(), 'workbench'), AGENT_TERMINAL_PORT: urlPort(this.terminalUrl, 5760), AGENT_TERMINAL_HOST: urlHost(this.terminalUrl), KB_WORKBENCH_RUNTIME_TOKEN: this.runtimeToken, KB_KNOWLEDGE_ENGINE_URL: this.engineUrl, KB_EVENT_BRIDGE_URL: this.eventBridgeUrl },
+          env: { AGENT_TERMINAL_DATA_DIR: path.join(knowledgeDataDir, 'workbench'), KB_KNOWLEDGE_DATA_DIR: knowledgeDataDir, AGENT_TERMINAL_PORT: urlPort(this.terminalUrl, 5760), AGENT_TERMINAL_HOST: urlHost(this.terminalUrl), KB_WORKBENCH_RUNTIME_TOKEN: this.runtimeToken, KB_KNOWLEDGE_ENGINE_URL: this.engineUrl, KB_EVENT_BRIDGE_URL: this.eventBridgeUrl },
         });
       } else {
         this.logger.warn('modules.supervisor', 'claude-ai-workbench runtime not installed; expecting an external service.', {});

@@ -23,7 +23,7 @@ async function main() {
       codexHookProbe: async () => ({ data: [{ cwd: root, errors: [], warnings: [], hooks: [{ eventName: 'userPromptSubmit', pluginId: 'project-knowledge@project-knowledge', command: hook.command, sourcePath: path.join(cache, 'hooks/codex.json'), enabled: true, trustStatus: trusted ? 'trusted' : 'untrusted' }] }] }),
       runner: (command, args) => {
         calls.push(args.join(' '));
-        if (args.join(' ') === 'plugin marketplace list') return { status: 0, stdout: 'project-knowledge marketplace' };
+        if (args.join(' ') === 'plugin marketplace list') return { status: 0, stdout: `project-knowledge ${path.resolve(plugin, '../..')}` };
         if (args.join(' ') === 'plugin marketplace upgrade project-knowledge' && marketplaceMode !== 'git') return { status: 1, stderr: marketplaceMode === 'local' ? 'Error: marketplace `project-knowledge` is not configured as a Git marketplace' : 'Git authentication failed' };
         if (args.join(' ') === 'plugin list --json') return { status: 0, stdout: JSON.stringify({ installed: [{ pluginId: 'project-knowledge@project-knowledge', version, enabled, source: { path: cache } }] }) };
         if (args.slice(0, 2).join(' ') === 'plugin add') { version = manager.version; fs.mkdirSync(cache, { recursive: true }); fs.cpSync(plugin, cache, { recursive: true }); }

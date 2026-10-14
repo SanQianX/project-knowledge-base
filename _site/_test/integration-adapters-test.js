@@ -37,7 +37,8 @@ async function main() {
   assert(claudeMarketplace.plugins[0].version === packageInfo.version, 'Claude marketplace version should match the npm package');
   assert(codexMarketplace.name === 'project-knowledge', 'Codex marketplace should have a stable public name');
   assert(codexMarketplace.plugins[0].source.path === './plugins/project-knowledge', 'Codex marketplace should point at the shared plugin');
-  assert(mcpManifest.mcpServers['project-knowledge'].args.includes(`${packageInfo.name}@${packageInfo.version}`), 'plugin MCP should pin the matching package name and version');
+  const mcpServer = mcpManifest.mcpServers['project-knowledge'];
+  assert(mcpServer.command === 'node' && mcpServer.args[0] === '-e' && mcpServer.cwd === undefined && String(mcpServer.args[1] || '').includes('mcp-launcher.cjs'), 'plugin MCP should launch the bundled local launcher instead of npx');
   assert(!skill.includes('[TODO:'), 'bundled Skill should not contain scaffold placeholders');
   assert(skill.includes('project_knowledge_resolve'), 'bundled Skill should teach the resolve-first workflow');
   assert(skill.includes('project_knowledge_record_requirement'), 'bundled Skill should document the explicit supplemental adapter');
@@ -98,6 +99,7 @@ async function main() {
   const claudeManager = new IntegrationManager({
     rootDir: ROOT,
     homeDir: claudeHome,
+    env: {},
     commandResolver: name => name,
     runner: (command, args) => {
       claudeCalls.push({ command, args });
@@ -117,6 +119,8 @@ async function main() {
   fs.mkdirSync(codexCache, { recursive: true }); fs.cpSync(pluginRoot, codexCache, { recursive: true });
   const codexManager = new IntegrationManager({
     rootDir: ROOT,
+    homeDir: path.join(TEMP, 'codex-home'),
+    env: {},
     commandResolver: name => name,
     runner: (command, args) => {
       codexCalls.push({ command, args });
@@ -218,6 +222,8 @@ async function main() {
   const integrationLogs = [];
   const failingManager = new IntegrationManager({
     rootDir: ROOT,
+    homeDir: path.join(TEMP, 'failing-home'),
+    env: {},
     commandResolver: name => name,
     runner: () => ({ status: 9, stdout: '', stderr: 'failure includes sk-do-not-log' }),
     logger: {
