@@ -50,6 +50,13 @@ function spawnServer({ root, port, host = '127.0.0.1', dataDir, extraEnv = {}, t
       // 测试隔离：禁止测试服务器向真实模块（terminal/vector-hub）登记项目
       KB_MODULES_REGISTER: '0',
       KB_MODULES_AUTOSTART: '0',
+      // Disabling registration does not disable status/profile reads. Never
+      // let an isolated legacy test consult the developer's live modules.
+      // A test needing real modules supplies its own URLs in extraEnv below.
+      KB_TERMINAL_URL: 'http://127.0.0.1:0',
+      KB_VECTORHUB_URL: 'http://127.0.0.1:0',
+      KB_EVENTBRIDGE_URL: 'http://127.0.0.1:0',
+      KB_KNOWLEDGE_ENGINE_URL: 'http://127.0.0.1:0',
       AI_CODING_EVENT_BRIDGE_HOME: bridgeHome,
       ...extraEnv,
     },
