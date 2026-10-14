@@ -339,6 +339,11 @@ and real-index smoke tests are reported separately. No mobile matrix or new
 Windows installer is claimed. Full crash-stage combinations and the final
 switch of a user's existing data require separate acceptance.
 
+See the [Leader / GLM Workbench playbook](docs/leader-glm-workbench-playbook.md)
+for task dispatch and independent review, and the
+[5.0.16 acceptance record](docs/release-5.0.16-acceptance.md) for this round's
+actual results and remaining gates. These documents are not a release approval.
+
 ## License
 
 [Apache-2.0](LICENSE). See [NOTICE](NOTICE).
