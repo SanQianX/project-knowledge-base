@@ -9,9 +9,9 @@
     "plugins/project-knowledge/hooks/codex.json": "216e03c07295606ef6ebb2c4f669ad0d790b5e7c4f3f34600488033db75e4239",
     "plugins/project-knowledge/scripts/context-hook.cjs": "da666153ad5723592cce42d25337ae649f7d93e43fab76b3c6d1263933de063f",
     "plugins/project-knowledge/scripts/mcp-launcher.cjs": "7c68830b5c73eb53ef030756a4de33987f7eab6b1a6cc15602835aac3f954893",
-    "plugins/project-knowledge/.claude-plugin/plugin.json": "bcacf4a357ffccee2300618f72debc931e65bb8c6ff2389cf75ebb0742082c82",
-    "plugins/project-knowledge/.codex-plugin/plugin.json": "f3f7f92007f3f6e7050e6a3aebace4601e98c707aa9257860dda322b85e2046c",
-    "plugins/project-knowledge/.mcp.json": "4001daa2be2bbc6d15ff31b2d42b7daff6b81845cca1ff234dedcf43a78b3fda"
+    "plugins/project-knowledge/.claude-plugin/plugin.json": "3316822d609f4a4db328596befcfc3c35c6dc2c289cacc80d8e0886db8f18b8c",
+    "plugins/project-knowledge/.codex-plugin/plugin.json": "828b77c3c5bd03ae3f8b2c2e9743d57a6ccabfd26056b61fdfad884570288ecd",
+    "plugins/project-knowledge/.mcp.json": "a987097f620b987223490012f6584a7fb66028026b5bc38431b31b296b6e76be"
   },
   "modules": {
     "terminal": {
@@ -120,18 +120,18 @@
     "vectorHub": {
       "name": "@sanqianx/vector-hub",
       "installName": "@sanqianx/vector-hub",
-      "version": "1.0.8-rc.7",
+      "version": "1.0.8-rc.8",
       "files": {
-        "README.md": "cb693c322cb67cdae42f68e3d57c52dddb8905287cee42d0ca70c28a409dfca2",
+        "README.md": "aae16972ce9a12cd87092d993c96c4a5ca0107f5f4076db02f268caaae013d19",
         "dist/cjs/bin.d.ts": "43e818adf60173644896298637f47b01d5819b17eda46eaa32d0c7d64724d012",
         "dist/cjs/bin.js": "8d0317ce087d22074b4ad350d63bf39cd6d218da565496621cd0daf4245cbdc4",
         "dist/cjs/bin.js.map": "818e872380d9c7ba045238ba65ce77111ba822b356be26327ed05936e5667e5e",
         "dist/cjs/core/embeddings.d.ts": "894ff983ac72f2360432098573f971370ebdbc99f7de791af0a3ee97af62a46a",
         "dist/cjs/core/embeddings.js": "5e199fd6e0de174aad1ba5440dd6358d9b180d4f82d62c7d8cd1fb8a17efb2d7",
         "dist/cjs/core/embeddings.js.map": "f1b9ec78274cdd7359a59e8a47af7c376de61587bc4b9fc78df970734169ee38",
-        "dist/cjs/core/hub.d.ts": "ac8d7b174812023995390324da95c8148c3f36e7dd4a3542439b6d3fd81189c4",
-        "dist/cjs/core/hub.js": "a9a5663b735d82fff4b81616b6ee6683795d8eedd8a4aa10c394888ee68e2cdb",
-        "dist/cjs/core/hub.js.map": "fa776d5f01bd12e711c0567585040cf15c2af498ded0a524748546ac6fd6a17d",
+        "dist/cjs/core/hub.d.ts": "69872cdc7a56a6e71d8ad53096e84c2ab4b73c67ba08525c069f87fb55d715ff",
+        "dist/cjs/core/hub.js": "b1ca20bb30e41aa0c68644d7ad11303e0a958da1c7b2d662555a249341a5f690",
+        "dist/cjs/core/hub.js.map": "0cc76d51458a743345e59db91cab1c59a5321971455116e362aff0d8c2582673",
         "dist/cjs/core/kb-sync.d.ts": "8290ae4c5840dcf98769cfec1734d5ebeb102020b348da2a8382b1cad057da1b",
         "dist/cjs/core/kb-sync.js": "b6bc7f11d3e63894fe8633151ac38c853f30d8675a15e57605bd8ff68bffd4b5",
         "dist/cjs/core/kb-sync.js.map": "687ce74cdf668c1b99809a23c078861e66dacd0050056ff0231d69c3d6e6b85a",
@@ -156,9 +156,9 @@
         "dist/esm/core/embeddings.d.ts": "894ff983ac72f2360432098573f971370ebdbc99f7de791af0a3ee97af62a46a",
         "dist/esm/core/embeddings.js": "b19e0cf42ca03e50644e39e39da4c003b9e273213c4532bd443c77085d2db521",
         "dist/esm/core/embeddings.js.map": "043aa6822e6b4a692be025d89efb5d7d44f4b6b39ce36bcfad2e64dde45589bb",
-        "dist/esm/core/hub.d.ts": "ac8d7b174812023995390324da95c8148c3f36e7dd4a3542439b6d3fd81189c4",
-        "dist/esm/core/hub.js": "ecf020e7af2f5ee0367fee05ed30a0ba8ecb6e17d41a1232eb8fccf460dce7e0",
-        "dist/esm/core/hub.js.map": "2d6ee5b9ad8473f79e9718304552c65010ad26cf69679e6838e9e47b2e603ccc",
+        "dist/esm/core/hub.d.ts": "69872cdc7a56a6e71d8ad53096e84c2ab4b73c67ba08525c069f87fb55d715ff",
+        "dist/esm/core/hub.js": "270e9937f0fc7dae5b8be90323ac2e3d65f441943b3d682dfa4670876b50859b",
+        "dist/esm/core/hub.js.map": "0ad67c0001a84226299775e3e7f81ad8ec44b7ac9f248f1300f90cec7e109b44",
         "dist/esm/core/kb-sync.d.ts": "8290ae4c5840dcf98769cfec1734d5ebeb102020b348da2a8382b1cad057da1b",
         "dist/esm/core/kb-sync.js": "cbdfab9fecbdd2d6996744ad0bf88f446012d5616f57fdc60f5a8e8d8c462c5f",
         "dist/esm/core/kb-sync.js.map": "e14d56e04a08642f6fb917310cf296ab2cf05c6a2fc6a2cab8ab929f50300843",
@@ -178,7 +178,7 @@
         "dist/esm/server/server.d.ts": "db01098f500fddc0a06c2e35cde258ce5adea800d8d071201c400a1bb737a455",
         "dist/esm/server/server.js": "f46bec4f1918acc409b6eab087dcefb1d28a1a5d00838a4d4ff5689a1b5f8d59",
         "dist/esm/server/server.js.map": "f56f9c2ca6b069c666a705d8e8707517eda448866e370802e69c06811d5eb23f",
-        "package.json": "1889fd53cbdd39d112be0e9943282b75482659f6cda73a34104d0c70e8866f03",
+        "package.json": "80a0292ce5d3893a1ea5c82c9558e66821acd785d118579c848ddbdf7607d52e",
         "ui/index.html": "9f6c7323661cfd692e0fbaf7d27f03f140a1b3fcfd12ea011f17e572a1255696",
         "ui/vendor/marked.min.js": "c68075672d976e4777390560baa112194855bd4404b13647da4855aae1f9360c"
       }

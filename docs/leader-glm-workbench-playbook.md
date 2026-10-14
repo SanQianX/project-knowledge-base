@@ -50,7 +50,7 @@ Leader 负责知识检索、接口决策、任务派发、代码审查、独立�
 
 先解析实际 Git 根目录并检索已有知识，再对照当前源码。知识文件只读；不手写最终知识、staging 或引擎状态。源文件修改使用 `apply_patch`，不得混入用户已有改动。
 
-派发前验证 GLM 的执行环境能调用补丁工具，不只写一句要求。Windows 可通过 `Get-Command apply_patch` 找到已安装入口，核对包装器实际指向的程序；用空补丁验证。若 GLM 没有可用入口，应交付补丁正文由 Leader 应用，而不是改用 `Write`、`Edit` 或 shell 写文件。发现违反方式时保留已有成果，显式中止并在同一会话纠正续跑，说明中止原因，不伪称运行超时。
+派发前验证 GLM 的执行环境能调用补丁工具，不只写一句要求。本机已验证的直接入口是隐藏运行标志 `C:/Users/SanQian/AppData/Local/OpenAI/Codex/bin/2e5e00daee91c61d/codex.exe --codex-run-as-apply-patch`：它不是可见子命令，`--help` 不列出，不能以“子命令不存在”判定入口缺失；用 Node `spawnSync(exe, ['--codex-run-as-apply-patch', patch], { encoding: 'utf8', windowsHide: true })` 传入完整 apply_patch 文本调用，证据 `glm-plan-5.0.16/P2/patch-entry-probe.txt`（真实 Add File 返回 0）。空补丁以 exit 1 结束且仅输出 `No files modified`，属正常空结果，不能据此判定入口不可用。绝不能用 `codex exec` 当补丁器——那会调用模型。也可通过 `Get-Command apply_patch` 找到包装器入口并核对实际指向的程序。若 GLM 没有可用入口，应交付补丁正文由 Leader 应用，而不是改用 `Write`、`Edit` 或 shell 写文件。发现违反方式时保留已有成果，显式中止并在同一会话纠正续跑，说明中止原因，不伪称运行超时。
 
 补丁方式约束包括报告和原生 Agent 的记忆文件，不只是仓库源码。任务经验写入指定验收目录；不得自行编辑用户 memory。若发现越界，先核对会话是否已经结束，再按实际编辑记录恢复自己造成的差异，不能删除或覆盖原有用户内容。任务合同同时给出已验证的 Node 二进制、npm-cli 与仓库外临时目录，避免重复下载运行时或让测试继承 Workbench 的服务配置。
 

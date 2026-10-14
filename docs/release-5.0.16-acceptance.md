@@ -8,6 +8,8 @@
 
 候选 `5.0.16-rc.2`（`21f67dc`）已发布 `next`，锁定 Workbench rc.11、引擎 rc.6、vector-hub rc.5。独立验收发现 vector-hub 公开 ESM 入口不能加载，因此本候选不能通过全部门禁，待修复后推进下一候选；本机仍运行 rc.1。
 
+候选 `5.0.16-rc.3`（`fb6dd299`）已发布 `next` 并通过官方下载与内容核对（收据 `kb-registry-product-wCnOJ2/registry-installation.json`；本轮验收报告一律绑定该官方安装身份，旧的同名 rc3 报告不计入本轮）。模块：Workbench `0.13.2-rc.11`、引擎 `0.2.7-rc.6`、vector-hub `1.0.8-rc.7`、bridge `0.7.2`。真实 fixture 多数门禁已通过，但两次真实向量性能复测失败（见下）；本机仍运行 rc.1，latest 仍为 `5.0.14`，未完成系统验收。
+
 基线源码：外壳 `669f9ea`，引擎 `41726f5`。用户已有 desktop、原型和其他未提交文件不属于本轮。
 
 ## 已有真实结果
@@ -35,19 +37,26 @@
 - E1 末尾使用原生 Edit 给 Claude 用户记忆追加了一句网络测试说明，超出限定范围。核对时会话已经 idle；Leader 仅通过补丁撤回该句，保留原内容，未中断其他会话。后续派发明确禁止编辑用户 memory，并继续审核实际文件操作。
 - GLM 首批新增测试使用原生 `Write`，不符合派发的补丁工具约束。Leader 显式中止两轮，保留文件和会话，并提供本机已有补丁工具路径；原会话续跑均收到 accepted 回执。此中止属于流程纠正，不是 runtime-timeout，也没有重启知识库或修改默认模型。
 - A1 测试因继承 `KB_DATA_DIR` 在用户 Workbench 数据目录误建一份 237 字节运行绑定。Leader 核对字段、创建时间、无链接及安装版不存在启动器后，只将该测试文件可恢复移动到 `glm-plan-5.0.16/A1/unintended-user-binding.json`，前后 SHA256 相同；知识、历史、凭据与客户端配置未改。A2 必须覆盖测试环境隔离与只读状态检查。
+- rc.3 官方下载整包核对通过（`retrieval-rc3-registry24-1791981966597`）；源码回归通过：外壳 Node 22、24 各 137/137，引擎各 155/155，vector-hub 各 64/64。绑定官方收据的安装版网页、故障、生命周期在 Node 22/24 通过；Workbench、UI/CLI/MCP 知识面、真实 1536 维索引、真实单提交与并发提交在 Node 24 通过。
+- rc.3 绑定收据的固定留出集真实质量复测：Recall@5 为 1、MRR 0.9667、无答案准确率 1（`retrieval-quality/real-vector-1791982365924.json`，合成标注语料加真实 embedding）。
+- 二次开发原任务：首失败 `retrieval-rc3-secondary24-1791983777400` 保留（验收解析器漏识中文“提交”引用标签，Agent 源实际引用真实条目与完整 SHA）。测试修复 `8297c6a` 仅改测试文件、对齐中英文引用标签且不放宽门禁；原任务 resume 通过：`retrieval-rc3-secondary24-1791985519158`，受控 fixture 提交 `1085ccde`，真实 Hook→分析→晋升（run-5d7d0ab0）→1536 索引→查询闭环，引用 `changes/6d195ab0b282.md`（commit `6d195ab0b282adf239aafe751b83bb0716864a65`），预编辑检索序 29→32、62→65、86→89。
+- rc.3 两次真实向量性能复测失败，待 P2 修复：热查询 P95 分别为 3068ms（`retrieval-quality/performance-1791982533367.json`）与 4829ms（`retrieval-quality/performance-1791983510836.json`），超 3000ms 门禁；不得以文本降级冒称向量性能。
+- P2 修复已发布 `next`：引擎 0.2.7-rc.7（`61e5205c8c7a37645fa2be8c9e3cb2d3c250cc31`）提供同一请求内读复用；vector-hub `1.0.8-rc.8`（`ebf6f586a534c4b851c919c53a5536671cc8bd12`）提供 10 分钟有界缓存与 promise 身份守卫。按红绿记录先复现失败再修复；两者 registry 完整 gitHead 与 integrity 均已独立核对通过。
+- P2 源码回归（Leader，Node 22 与 24）：引擎各 161 项通过、1 项符号链接跳过；vector-hub 各 73 项全部通过。同源码真实向量热查询 P95 复测为 1069ms，低于 3000ms 门禁；这是源码结果，不是 rc.4 安装版验收通过。
+- 候选 `5.0.16-rc.4` 已完成本地准备：vendored 引擎 rc.7 40 文件（sourceCommit `61e5205`）、vector-hub 精确锁 rc.8、Workbench `0.13.2-rc.11` 与 bridge `0.7.2` 不变；模块清单 96/59/38/40 与官方 tarball 双向逐字节一致，工作树模式 release:verify 链（sync --check --web-only、runtime --working-tree、product、integration-adapters）全部通过。rc.4 发布、latest 与冻结后源码全量验收待 Leader 执行；本机仍运行 rc.1。
 
 ## 执行与待验收矩阵
 
 | 项目 | 状态 |
 |---|---|
 | A1–A3：本地 MCP 入口、版本升级、独立启动/信任诊断 | A3 已交付探测脱敏、入口 realpath 校验、两终端分支知识根目录接线及发布同步契约；Leader Node 22、24 独立完整各 137/137（含桌面浏览器）通过。原生客户端仍待新包验收 |
-| B1–B5：向量范围候选、位置和占位校验 | 向量修复 `4aa4d49`、占位修复 `0218d55` 已提交并推送，引擎 `0.2.7-rc.6`（`bbb5ddd`）已发布 npm `next`；Leader 源码两版本各 118 项通过，独立 registry 下载的 40 文件逐字节与 integrity 校验、两版本启动及原 532 staging 只读校验通过。首次下载未可见失败保留；真实 532 重试须等整产品升级 |
-| `5c07a801` 重试与后续 FIFO | `5c07` 与 `7506` 已晋升、索引成功；`532d` 因合法 UI placeholder 术语误判失败。原产物已通过新引擎只读校验；整产品升级后只执行一次公开重试，再观察后续提交顺序恢复 |
+| B1–B5：向量范围候选、位置和占位校验 | 向量修复 `4aa4d49`、占位修复 `0218d55` 已提交并推送，引擎 `0.2.7-rc.6`（`bbb5ddd`）已发布 npm `next`；Leader 源码两版本各 118 项通过，独立 registry 下载的 40 文件逐字节与 integrity 校验、两版本启动及原 532 staging 只读校验通过。首次下载未可见失败保留；532 当前已成功，不再重试 |
+| `5c07a801` 重试与后续 FIFO | `5c07` 与 `7506` 已晋升、索引成功；`532d` 首次因合法 UI placeholder 术语误判失败（事实保留）。只读 live API 现显示完整 run `run-bb64179b-646e-4f15-beff-7b70e078293e` 已 succeeded/ready（promotedAt 2026-10-14T11:48:46.084Z、finishedAt 11:49:13.303Z）：不得对已成功 run 再次重试，任何操作必须用完整 run ID。另有 6 个 index-pending run，对应 commit `fb6dd299`、`c27066d`、`f9a736c`、`21f67dc`、`0218d55`、`4aa4d49`；公开错误详情均为向量上游 HTTP 500 / embedding fetch failed，尚未确定底层网络原因。后续只重试索引并核对晋升文件及分析调用不变 |
 | Claude/Codex/ZCode 原生知识与记忆送达 | 待新包实测；OpenCode 仅验证既有兼容能力 |
-| 固定留出集质量、真实向量性能 | 待新修复版本复测 |
+| 固定留出集质量、真实向量性能 | rc.3 官方收据质量通过（Recall@5=1、MRR 0.9667）；性能首失败 3068ms、4829ms 保留。P2 源码复测 1069ms 通过，rc.4 安装版待验收 |
 | Workbench 长历史压缩后的游标、增量与重连 | C5 已修复转换落盘后二次恢复遗失旧边界。Leader Node 22、24 完整各 352/352；rc.11 独立下载验证通过。保留 C3 临时文件锁首失败、C4 的 340 项部分回归及后续 343 项完整重跑；整产品浏览器实际刷新待验收 |
 | Workbench 开发 Agent 的知识库数据根目录 | C2 已交付四客户端 spawn 环境映射，Leader 在 Node 22、24 独立各 8/8（`plan16-workbench-c2-leader*`）；相关完整回归存在 EPERM 首失败，真实安装版仍待验收。外壳传根目录接线已纳入 A3；GLM 提及的 C2 独立证据目录未定位到，不以其口头路径作为通过证据 |
-| 网页、并发、故障、重启与二次开发闭环 | 待当前版本证据 |
+| 网页、并发、故障、重启与二次开发闭环 | rc.3 官方收据绑定下网页、故障、生命周期、Workbench、真实单/并发提交通过；二次开发原任务 resume 通过（首失败为验收解析器缺陷，已按 TDD 修复）；性能两次失败另列 |
 | 官方 npm 候选下载及现有 v5 保真升级 | 待新候选 |
 | 升级与汇总脚本的版本门禁 | D3 强制官方 identity、源码提交/引擎 40 文件绑定，支持正式包先验收 next 再更新 latest。Leader Node 22、24 各 144/144；保留 D1/D2 误判首失败，实际升级和汇总待执行 |
 | 原插件 MCP 验收脚本 | `f9a736c` 修复真实 manifest、环境透传、同版本定义核对、引用元数据及固定错误码。Leader 引擎全量 Node 22、24 各 155/155；实际客户端仍缺当前 rc.1 插件，报告 PLUGIN_MANIFEST_MISSING，不计为原生接入通过 |
