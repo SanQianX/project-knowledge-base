@@ -2,7 +2,31 @@
 
 ## 当前结论
 
-最新候选收敛到 `5.0.16-rc.6`，四模块仍锁定 Workbench rc.13、引擎 rc.7、vector-hub rc.8、bridge 0.7.2。修复限于 Codex 本地市场路径与关联日志；发布和安装版验收尚待执行，latest 仍为 5.0.14。
+`5.0.16-rc.6` 已发布 npm `next`、从官方 registry 独立下载，并保留现有 v5 数据升级到本机。四模块锁定 Workbench rc.13、引擎 rc.7、vector-hub rc.8、bridge 0.7.2。候选门禁为 **28/29**；剩余 Codex 原生 Hook 审核后的模型送达。正式包下载、正式升级和日常 `latest` 更新验收尚未完成，latest 仍为 5.0.14。
+
+本机运行 rc.6（PID 30924，5757），保真升级保留 7 个项目、既有历史、知识、记忆、配置及 D 盘索引，官方下载字节核对通过。实际“Agent 接入／修复”操作 `op-92a4925f9e904f7584fda255cf048a87` 成功接线四客户端。Codex 实际插件 MCP 已完成 initialize、版本与六工具检查；原生 Hook 为 modified，测试在模型调用之前停止，未代写信任记录。
+
+### rc.6 已核对结果
+
+| 范围 | 结果与证据 |
+|---|---|
+| 官方下载 | 收据 `kb-registry-product-pWscTw/registry-installation.json`；sourceCommit `0f052cf6d3e380dcc23a7bf6d8ec96daa4f7f7c4`；主包 305 文件；integrity `sha512-BsR64nrciugXOEkrnuXjG46ceX5kicqnHhjNZ6QbOTMZlamuF3SZvvhIEtcsCa30i9ToOreidigJMRMEkmTUbQ==` |
+| 冻结源码 | 外壳 Node 22/24 各 139/139；引擎各 169 通过、1 项 Windows 符号链接权限跳过；Workbench 365、vector-hub 73、bridge 30 的已锁定同提交源码结果保持有效 |
+| 安装版桌面 | 正常网页、一次 503 恢复、故障、生命周期共八项，Node 22/24，全部绑定 rc.6 收据；1920×1080 |
+| 真模型记忆 | MiniMax 真实提取、项目／领域／全局范围、确认编辑、1536 维向量、流式回答、单／并发提交及重启保真 10/10；`scoped-memories/run-1792021974460/report.json` |
+| 真向量质量与性能 | 固定合成留出集 Recall@5=1、MRR=0.9667；8 项目／1000 文档热查询 P95=669.0993ms，单独运行，四次查询 embedding；不等于另一台电脑私有语料验收 |
+| 二次开发 | 实际 search/get → 修改前引用 → 小改动与测试 → 真实 commit → 自动晋升与索引 → 再检索通过；`retrieval-rc6-secondary24-1792022320274.json` |
+| 真实页面与知识面 | UI 发送 → 真模型 → 28 条文本增量与引用 → 后端最终 turn；API／CLI／MCP 事实、引用一致；非空 embo-01 索引 1536 维 |
+| 原生客户端 | Claude Code、ZCode 首次普通开发请求自动收到当前事实与产品记忆，实际代码采用记忆；Claude 提交后维护及下次检索通过。现有真实 knowledge-engine 项目 Claude 只读上下文通过、工作树保持不变。OpenCode 实际知识 CLI 调用与引用通过，不宣称自动前置注入 |
+| Codex 安装器 | GLM 独立用 npm 包真实 installCodex 在隔离 CODEX_HOME 下验证 Node 22/24：scoped 路径、本地目录来源、幂等、版本及文件匹配通过；第三方与 trust 未改。该项不代替原生模型送达 |
+
+收据根为 `knowledge-engine/.agent-state/acceptance/system-regression/`，候选汇总为 `retrieval-release-5.0.16-rc.6.json`。原生 Codex 首失败 `retrieval-rc6-codex-real24-1792022749447.json` 明确为 modified 而非 trusted，模型尚未调用。
+
+OpenCode 首次失败保留：工具实际返回了权威的精确提交事实，但旧验收硬编码 `hybrid+markdown-truth`，并要求最新提交包含单写者规则。测试修正允许合法文本事实后端，改为摘要实际返回事实；同时加强 matching tool-id、顺序、项目、服务来源、完整 SHA 与路径检查。4000 字符显示截断仅接受已完整的第一条引用，不把文本检索称为向量成功；独立向量门禁不变。首次红测试与真实复测分别保存。
+
+Leader 另有一次补验参数错误：`--verify-only` 未配 `--resume`，重置了受控 fixture 的提交验收报告，未改用户数据或知识。保留事故记录，重新用唯一 `rc6-leader1` 轮次执行三次真实提交，不重造原成功报告。原十项记忆报告及 GLM 证据仍保留。详情见 `glm-plan-5.0.16/rc6-leader-harness-incident.json`。
+
+## 历史批次
 
 rc.5 官方安装收据 `kb-registry-product-2PqRja/registry-installation.json` 已验证。五仓库冻结回归在 Node 22/24 均通过：外壳 138、Workbench 365、vector-hub 73、bridge 30；引擎 169 通过、1 项 Windows 符号链接权限跳过。安装版正常页面、一次 503 恢复、故障和生命周期八项均通过。真实 MiniMax 记忆、流式、单/并发提交、1536 维索引及重启 10 项通过；固定留出集 Recall@5=1、MRR=0.9667，单独热查询 P95=692.9615ms。
 
@@ -18,7 +42,7 @@ rc.4 官方安装收据 `kb-registry-product-NPyWjR/registry-installation.json` 
 
 rc.4 首次 Node 22 网页失败的历史原因仍无法确定，后续正常路径重复通过。另以一次 `/profiles` HTTP 503 在真实 Workbench iframe 中稳定复现了「首次失败后模型列表一直为空且不再请求」；两次失败记录保留。Workbench rc.12 已修复这一缺陷类，Leader 冻结源码回归 Node 22/24 各 362/362；新整包必须通过同一故障注入用例才能计为恢复。
 
-用户当前仍运行 rc.1。其六条索引失败已通过公开索引阶段重试恢复，知识正文、晋升时间和分析运行 ID 不变；原 `532d` 运行在操作前已成功，未重复分析。候选安装、原生客户端、新版保真升级与正式发布门禁仍待完成。
+rc.4 阶段用户仍运行 rc.1。其六条索引失败已通过公开索引阶段重试恢复，知识正文、晋升时间和分析运行 ID 不变；原 `532d` 运行在操作前已成功，未重复分析。当时的候选安装、原生客户端、新版保真升级与正式发布门禁仍待完成。
 
 GLM 独立审查复现 rc.12 连续保存供应商时复用保存前快照，Leader 修复为保存后等待旧读取结束、再发起可共享的新读取；普通菜单仍 single-flight。两条新竞态测试先失败后修复。菜单异步重绘清空过滤词属于已记录的低风险体验限制，未作为核心修复扩展。
 
