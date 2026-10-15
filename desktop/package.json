@@ -1,63 +1,30 @@
 {
-  "name": "project-knowledge-desktop",
+  "name": "@sanqianx/project-knowledge-desktop",
   "productName": "Project Knowledge",
-  "version": "5.0.8",
+  "version": "5.0.17",
   "description": "Windows desktop application for project-knowledge",
   "main": "main.cjs",
+  "bin": {
+    "project-knowledge-desktop": "bin/project-knowledge-desktop.cjs"
+  },
   "author": "SanQianX",
   "license": "Apache-2.0",
   "private": true,
   "scripts": {
-    "prepare-core": "node scripts/prepare-core.cjs",
-    "start": "npm run prepare-core && electron-forge start",
-    "package": "npm run prepare-core && electron-forge package --arch=x64",
-    "make": "npm run prepare-core && electron-forge make --arch=x64",
-    "test": "node test/desktop-runtime-test.cjs && node test/app-updater-test.cjs && node test/core-replacement-test.cjs",
-    "test:packaged": "node test/packaged-smoke.cjs",
-    "test:packaged:model": "node test/packaged-model-smoke.cjs",
-    "audit:package": "node scripts/audit-package.cjs"
+    "start": "electron .",
+    "package": "electron-forge package --arch=x64",
+    "make": "electron-forge make --arch=x64",
+    "test": "node test/thin-package-test.cjs && node test/backend-runtime-test.cjs && node test/cli-args-test.cjs"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.141",
-    "@huggingface/transformers": "3.8.1",
-    "@img/sharp-win32-x64": "0.34.5",
-    "@lancedb/lancedb": "0.31.0",
-    "@lancedb/lancedb-win32-x64-msvc": "0.31.0",
-    "@modelcontextprotocol/sdk": "1.29.0",
-    "@sanqianx/ai-coding-event-bridge": "^0.1.2",
-    "apache-arrow": "18.1.0",
-    "cross-spawn": "7.0.6",
-    "electron-squirrel-startup": "1.0.1",
-    "http-proxy-agent": "7.0.2",
-    "https-proxy-agent": "7.0.6",
-    "jsonc-parser": "3.3.1",
-    "project-knowledge": "file:..",
-    "socks-proxy-agent": "8.0.5",
-    "ws": "^8.21.0",
-    "@grpc/grpc-js": "^1.14.5",
-    "@grpc/proto-loader": "^0.8.1",
-    "@sanqianx/ai-coding-event-bridge-console": "0.6.0",
-    "@sanqianx/vector-hub": "1.0.6",
-    "buffer": "^6.0.3",
-    "cheerio": "^1.2.0",
-    "claude-ai-workbench": "npm:@sanqianx/claude-ai-workbench@0.12.0",
-    "dotenv": "^17.4.2",
-    "gpt-tokenizer": "^3.4.0",
-    "json-colorizer": "^3.0.1",
-    "openai": "^6.49.0",
-    "turndown": "^7.2.4",
-    "uuid": "^13.0.2",
-    "wink-bm25-text-search": "^3.1.2",
-    "wink-nlp": "^2.4.0",
-    "yargs": "^18.1.0"
+    "@sanqianx/project-knowledge": "5.0.17",
+    "electron": "43.1.1",
+    "electron-squirrel-startup": "1.0.1"
   },
   "devDependencies": {
     "@electron-forge/cli": "7.11.2",
     "@electron-forge/maker-squirrel": "7.11.2",
-    "electron": "43.1.1",
     "electron-winstaller": "5.4.4",
-    "encoding": "0.1.13",
-    "png-to-ico": "3.0.1",
-    "sharp": "0.34.5"
+    "png-to-ico": "3.0.1"
   }
 }

@@ -1,6 +1,7 @@
-const path = require('path');
-const { pruneWindowsRuntime } = require('./scripts/prune-runtime.cjs');
+const path = require('node:path');
 
+// Thin-shell packaging. The core package and its module tree arrive via the
+// exact npm dependency in package.json — no vendoring, no prune scripts.
 const iconBase = path.join(__dirname, 'assets', 'icon');
 
 module.exports = {
@@ -11,19 +12,8 @@ module.exports = {
     executableName: 'Project Knowledge',
     icon: iconBase,
     ignore: [
-      /^\/\.core-package(?:\/|$)/,
       /^\/out(?:\/|$)/,
       /^\/test(?:\/|$)/,
-    ],
-    afterPrune: [
-      (buildPath, _electronVersion, platform, arch, done) => {
-        try {
-          pruneWindowsRuntime(buildPath, { platform, arch });
-          done();
-        } catch (error) {
-          done(error);
-        }
-      },
     ],
   },
   rebuildConfig: {},

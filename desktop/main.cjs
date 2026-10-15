@@ -1,7 +1,8 @@
-const path = require('path');
+'use strict';
+const path = require('node:path');
+const { spawn } = require('node:child_process');
 const {
   app,
-  autoUpdater,
   BrowserWindow,
   Menu,
   Tray,
@@ -13,39 +14,36 @@ const {
 } = require('electron');
 
 // Squirrel invokes the executable with install/update/uninstall arguments.
-// Handle those events before loading the knowledge backend so setup can create
-// shortcuts without accidentally starting LanceDB or showing the dashboard.
+// Exit before touching the backend so setup can create shortcuts without
+// starting LanceDB or showing a window.
 if (require('electron-squirrel-startup')) {
   app.quit();
 } else {
-const backendRuntime = require('./lib/backend-runtime.cjs');
-const folderPicker = require('./lib/folder-picker.cjs');
-const appUpdater = require('./lib/app-updater.cjs');
-const externalLink = require('./lib/external-link.cjs');
 
-const corePackagePath = require.resolve('project-knowledge/package.json');
-const coreRoot = path.dirname(corePackagePath);
-const { getDataDir } = require(path.join(coreRoot, '_site', 'lib', 'data-dir.js'));
-const runtimeEndpoint = require(path.join(coreRoot, '_site', 'lib', 'runtime-endpoint.js'));
+const runtime = require('./lib/backend-runtime.cjs');
+
+const coreRoot = runtime.resolveCoreRoot();
+const corePkg = require(path.join(coreRoot, 'package.json'));
+const coreCliPath = runtime.coreCliPath(coreRoot);
+const endpointStore = require(path.join(coreRoot, '_site', 'lib', 'runtime-endpoint.js'));
+const instances = require(path.join(coreRoot, '_site', 'lib', 'cli-instances.js'));
 
 let mainWindow = null;
 let tray = null;
 let ownedBackend = null;
+let ownedLogPath = null;
 let activeEndpoint = null;
 let isQuitting = false;
-let removeFolderPickerHandler = null;
-let removeAppUpdaterHandler = null;
-let removeExternalLinkHandler = null;
+let starting = false;
 
 app.setName('Project Knowledge');
-if (process.platform === 'win32') app.setAppUserModelId('com.sanqian.projectknowledge');
+if (process.platform === 'win32') app.setAppUserModelId('com.sanqian.projectknowledge.desktop');
 
 const singleInstance = app.requestSingleInstanceLock();
 if (!singleInstance) {
   app.quit();
 } else {
   app.on('second-instance', () => showMainWindow());
-}
 
 function showMainWindow() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -61,31 +59,41 @@ function createTray() {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: '打开 Project Knowledge', click: showMainWindow },
     { type: 'separator' },
-    {
-      label: '退出',
-      click: () => {
-        isQuitting = true;
-        app.quit();
-      },
-    },
+    { label: '退出', click: () => { isQuitting = true; app.quit(); } },
   ]));
   tray.on('double-click', showMainWindow);
 }
 
-function configureSecurity(endpoint) {
-  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+const SPLASH_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>
+body{margin:0;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0c1118;color:#e6edf3;font-family:system-ui,sans-serif;gap:14px}
+h1{font-size:18px;font-weight:600;margin:0}p{color:#8b98a5;font-size:13px;margin:0}
+.spin{width:26px;height:26px;border:3px solid #263041;border-top-color:#4f8cff;border-radius:50%;animation:r 1s linear infinite}@keyframes r{to{transform:rotate(360deg)}}
+</style></head><body><div class="spin"></div><h1>Project Knowledge 正在启动</h1><p>正在连接本机知识库服务…</p></body></html>`;
+
+function errorPage(message, logPath) {
+  return `<!doctype html><html><head><meta charset="utf-8"><style>
+body{margin:0;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0c1118;color:#e6edf3;font-family:system-ui,sans-serif;gap:12px;padding:24px}
+h1{font-size:18px;font-weight:600;margin:0}p{color:#8b98a5;font-size:13px;margin:0;max-width:560px;text-align:center;white-space:pre-wrap}
+button{margin-top:8px;padding:8px 22px;background:#1f6feb;border:0;border-radius:6px;color:#fff;font-size:14px;cursor:pointer}
+code{color:#6e7681;font-size:11px;word-break:break-all}
+</style></head><body><h1>后台连接失败</h1><p>${String(message).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))}</p>${logPath ? `<code>${logPath}</code>` : ''}<button onclick="desktopBridge.retry()">重试连接</button></body></html>`;
+}
+
+function configureSecurity() {
+  session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (backendRuntime.isAllowedExternalUrl(url)) shell.openExternal(url);
+    if (runtime.isAllowedExternalUrl(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (backendRuntime.isAllowedNavigation(url, endpoint)) return;
-    event.preventDefault();
-    if (backendRuntime.isAllowedExternalUrl(url)) shell.openExternal(url);
+    if (!activeEndpoint || !runtime.isAllowedNavigation(url, activeEndpoint)) {
+      event.preventDefault();
+      if (runtime.isAllowedExternalUrl(url)) shell.openExternal(url);
+    }
   });
 }
 
-function createWindow(endpoint) {
+function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 920,
@@ -103,135 +111,119 @@ function createWindow(endpoint) {
       devTools: !app.isPackaged,
     },
   });
-  configureSecurity(endpoint);
+  configureSecurity();
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.on('close', event => {
     if (isQuitting) return;
     event.preventDefault();
     mainWindow.hide();
   });
-  mainWindow.loadURL(backendRuntime.endpointUrl(endpoint));
+  mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(SPLASH_HTML));
+}
+
+function dataDir(override) {
+  return runtime.coreDataDir(coreRoot, override || process.env.KB_DATA_DIR_DESKTOP);
 }
 
 async function resolveBackend() {
-  const dataDir = getDataDir();
-  const existing = runtimeEndpoint.readLiveEndpoint(dataDir);
+  const dir = dataDir();
+  const existing = await instances.current(dir);
   if (existing) {
-    // A CLI instance may still be starting. Reuse it instead of opening a
-    // second LanceDB writer.
-    return backendRuntime.waitForBackend({
-      readLiveEndpoint: runtimeEndpoint.readLiveEndpoint,
-      dataDir,
-      timeoutMs: 60000,
-    });
+    const state = runtime.versionState(corePkg.version, existing.version);
+    if (state === 'mismatch') {
+      throw Object.assign(new Error(
+        `已有一个 ${existing.version} 版本的知识库后台正在运行（PID ${existing.pid}，端口 ${existing.port}）。` +
+        `桌面版内置核心为 ${corePkg.version}，为避免双写已拒绝启动第二个后台。` +
+        `请先停止旧实例（project-knowledge stop）或升级后再试。`
+      ), { code: 'DESKTOP_VERSION_MISMATCH' });
+    }
+    // Verified compatible instance (typically the web CLI): reuse it.
+    return { endpoint: { host: existing.host, port: existing.port }, owned: false };
   }
 
-  const port = await backendRuntime.findFreePort(Number(process.env.KB_SITE_PORT || 5757), 20);
-  const extraEnv = await resolveDesktopNetworkEnv();
-  const cliPath = path.join(coreRoot, 'bin', 'project-knowledge.js');
-  const started = backendRuntime.spawnBackend({
+  const started = runtime.spawnBackend({
     executable: process.execPath,
-    cliPath,
-    dataDir,
-    port,
+    cliPath: coreCliPath,
+    dataDir: dir,
     cwd: path.dirname(process.execPath),
-    extraEnv,
   });
   ownedBackend = started.child;
+  ownedLogPath = started.logPath;
   ownedBackend.once('exit', () => {
     if (!isQuitting && mainWindow && !mainWindow.isDestroyed()) {
-      dialog.showErrorBox(
-        'Project Knowledge 后端已停止',
-        `桌面后端意外退出。诊断日志：${started.logPath}`
-      );
+      dialog.showErrorBox('Project Knowledge 后端已停止', `桌面后端意外退出。诊断日志：${ownedLogPath}`);
     }
   });
-  return backendRuntime.waitForOwnedBackend({
-    child: ownedBackend,
-    readLiveEndpoint: runtimeEndpoint.readLiveEndpoint,
-    dataDir,
-    timeoutMs: 180000,
-    expectedPid: ownedBackend.pid,
+
+  const deadline = Date.now() + 180000;
+  let endpoint = null;
+  while (Date.now() < deadline && !endpoint) {
+    const found = endpointStore.readLiveEndpoint(dir, { removeStale: false });
+    if (found && found.pid === ownedBackend.pid) endpoint = found;
+    else await new Promise(resolve => setTimeout(resolve, 250));
+  }
+  if (!endpoint) throw Object.assign(new Error('后台进程未能发布运行端点。'), { code: 'DESKTOP_BACKEND_TIMEOUT' });
+  await runtime.waitForHttpReady({ host: endpoint.host, port: endpoint.port, timeoutMs: 120000 });
+  return { endpoint, owned: true };
+}
+
+async function boot() {
+  if (starting) return;
+  starting = true;
+  try {
+    const { endpoint, owned } = await resolveBackend();
+    activeEndpoint = endpoint;
+    if (owned) console.log(`[desktop] owned backend ready at ${runtime.endpointUrl(endpoint)} (log: ${ownedLogPath})`);
+    else console.log(`[desktop] reusing backend at ${runtime.endpointUrl(endpoint)}`);
+    if (!mainWindow || mainWindow.isDestroyed()) createWindow();
+    await mainWindow.loadURL(runtime.endpointUrl(endpoint));
+  } catch (error) {
+    if (error.code === 'DESKTOP_VERSION_MISMATCH') {
+      dialog.showErrorBox('版本不匹配', error.message);
+      isQuitting = true;
+      app.quit();
+      return;
+    }
+    if (!mainWindow || mainWindow.isDestroyed()) createWindow();
+    await mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(errorPage(error.message, ownedLogPath)));
+  } finally {
+    starting = false;
+  }
+}
+
+async function stopOwnedBackend() {
+  if (!ownedBackend || ownedBackend.exitCode !== null) return;
+  // Delegate to the core's verified stop protocol; the desktop never kills
+  // PIDs itself and never touches a backend it does not own.
+  await new Promise(resolve => {
+    const child = spawn(process.execPath, [coreCliPath, 'stop'], {
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', KB_DATA_DIR: dataDir() },
+      windowsHide: true,
+      stdio: 'ignore',
+    });
+    const timer = setTimeout(() => { child.kill(); resolve(); }, 45000);
+    child.once('exit', () => { clearTimeout(timer); resolve(); });
+    child.once('error', () => { clearTimeout(timer); resolve(); });
   });
 }
 
-async function resolveDesktopNetworkEnv() {
-  const result = {};
-  const targets = [
-    ['KB_GITHUB_WEB_PROXY', 'https://github.com/login/device'],
-    ['KB_GITHUB_API_PROXY', 'https://api.github.com/user'],
-  ];
-  await Promise.all(targets.map(async ([name, target]) => {
-    if (process.env[name] || process.env.KB_GITHUB_PROXY || process.env.KB_GIT_PROXY) return;
-    try {
-      const rules = await Promise.race([
-        session.defaultSession.resolveProxy(target),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('system proxy resolution timed out')), 3000)),
-      ]);
-      const proxyUrl = backendRuntime.proxyUrlFromElectronRules(rules);
-      if (proxyUrl) result[name] = proxyUrl;
-    } catch {}
-  }));
-  return result;
-}
-
-function stopOwnedBackend() {
-  if (!ownedBackend) return;
-  const pid = ownedBackend.pid;
-  try { ownedBackend.kill(); } catch {}
-  runtimeEndpoint.clearEndpoint(getDataDir(), { pid });
-  ownedBackend = null;
-}
-
-if (singleInstance) app.whenReady().then(async () => {
-  try {
-    removeExternalLinkHandler = externalLink.registerExternalLink({
-      ipcMain,
-      shell,
-      isAllowedUrl: backendRuntime.isAllowedExternalUrl,
-    });
-    removeFolderPickerHandler = folderPicker.registerFolderPicker({
-      ipcMain,
-      dialog,
-      getWindow: () => mainWindow,
-    });
-    removeAppUpdaterHandler = appUpdater.registerAppUpdater({
-      ipcMain,
-      autoUpdater,
-      app,
-      getWindow: () => mainWindow,
-      onBeforeInstall: () => {
-        isQuitting = true;
-        stopOwnedBackend();
-      },
-    });
-    activeEndpoint = await resolveBackend();
-    createTray();
-    createWindow(activeEndpoint);
-  } catch (error) {
-    dialog.showErrorBox(
-      'Project Knowledge 无法启动',
-      `${error.message}\n\n数据目录：${getDataDir()}\n请查看 desktop-backend.log。`
-    );
-    isQuitting = true;
-    stopOwnedBackend();
-    app.quit();
-  }
+app.whenReady().then(() => {
+  ipcMain.handle('desktop:retry', () => { boot(); return true; });
+  createWindow();
+  createTray();
+  boot();
 });
 
-app.on('activate', showMainWindow);
-app.on('window-all-closed', event => {
-  // Keep the backend and Git hooks alive in the tray on every platform.
+app.on('window-all-closed', () => {
+  // Tray keeps the app alive; knowledge maintenance continues.
+});
+
+app.on('before-quit', event => {
+  if (isQuitting) return;
   event.preventDefault();
-});
-app.on('before-quit', () => {
   isQuitting = true;
-  if (removeFolderPickerHandler) removeFolderPickerHandler();
-  removeFolderPickerHandler = null;
-  if (removeAppUpdaterHandler) removeAppUpdaterHandler();
-  removeAppUpdaterHandler = null;
-  if (removeExternalLinkHandler) removeExternalLinkHandler();
-  removeExternalLinkHandler = null;
-  stopOwnedBackend();
+  stopOwnedBackend().finally(() => app.quit());
 });
+
+}
 }

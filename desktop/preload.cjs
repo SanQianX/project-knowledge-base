@@ -1,24 +1,7 @@
+'use strict';
 const { contextBridge, ipcRenderer } = require('electron');
 
-const FOLDER_PICKER_CHANNEL = 'project-knowledge:pick-folder';
-const EXTERNAL_LINK_CHANNEL = 'project-knowledge:open-external';
-const UPDATE_CHANNELS = Object.freeze({
-  state: 'project-knowledge:update-state',
-  check: 'project-knowledge:check-for-updates',
-  install: 'project-knowledge:install-update',
-  changed: 'project-knowledge:update-state-changed',
+// Minimal bridge: only retry, nothing else leaks into the sandboxed page.
+contextBridge.exposeInMainWorld('desktopBridge', {
+  retry: () => ipcRenderer.invoke('desktop:retry'),
 });
-
-contextBridge.exposeInMainWorld('projectKnowledgeDesktop', Object.freeze({
-  pickFolder: () => ipcRenderer.invoke(FOLDER_PICKER_CHANNEL),
-  openExternal: url => ipcRenderer.invoke(EXTERNAL_LINK_CHANNEL, url),
-  getUpdateState: () => ipcRenderer.invoke(UPDATE_CHANNELS.state),
-  checkForUpdates: () => ipcRenderer.invoke(UPDATE_CHANNELS.check),
-  installUpdate: () => ipcRenderer.invoke(UPDATE_CHANNELS.install),
-  onUpdateState: callback => {
-    if (typeof callback !== 'function') return () => {};
-    const listener = (_event, state) => callback(state);
-    ipcRenderer.on(UPDATE_CHANNELS.changed, listener);
-    return () => ipcRenderer.removeListener(UPDATE_CHANNELS.changed, listener);
-  },
-}));
