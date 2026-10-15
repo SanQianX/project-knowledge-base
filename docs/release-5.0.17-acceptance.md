@@ -2,7 +2,7 @@
 
 ## 发布状态
 
-2026-10-15：候选验收和最终复核进行中，正式 `latest` 仍为 `5.0.16`。本文件不得被解读为正式版已发布。Electron、Windows 安装包和窄屏矩阵均不在本次范围；用户报告故障的另一台电脑尚需更新后回验。
+2026-10-15：最终候选 `5.0.17-rc.3` 验收通过，正在准备正式 `5.0.17` 的独立下载验收，`latest` 仍为 `5.0.16`。本文件不得被解读为正式版已放行。Electron、Windows 安装包和窄屏矩阵均不在本次范围；用户报告故障的另一台电脑尚需更新后回验。npm 内文档是打包时快照，正式包自己的验收结果在测试完成后追加到仓库当前文档。
 
 ## 交付范围
 
@@ -75,4 +75,25 @@ GLM 报告分别保存在两个仓库的 `.local-test-data/ui-refresh-2026-10-15
 
 ## 最终放行
 
-待补：最终候选的官方收据、正式包收据及安装版重测结果。未填写之前不报告正式交付完成。
+### 最终候选 5.0.17-rc.3
+
+官方独立缓存收据 `D:\SanQian.Xu\.pk-acceptance-temp\kb-registry-product-2nbfre\registry-installation.json`；主包提交 `81e91a94a42d909b54acd6115a261b6b95581afd`；integrity `sha512-6gXEgElgtcTsLwk58ObZNGF5xYu7XCyH7WBH3PV7j2hpWLiQMVB56dxUPjdOHCy9kOTP/Er9VV2De9RQnj25Jg==`。Workbench 精确版本为 `0.13.2-rc.17`（`1b028da`），其余模块与 rc.1 一致。
+
+| 门禁 | 结果 |
+|---|---|
+| 双 Node 源码 | Node 24：Workbench 405、外壳 134、引擎 185 通过/1 跳过；Node 22.23.3：Workbench 405、外壳 134、引擎 185 通过/1 跳过。外壳修正验收启动参数的全套为 221944ms，报告 `node22-final-pass.md` |
+| 官方安装 | 主包和四模块精确版本、官方 integrity、产品资源哈希、vendored 40 文件通过，无兄弟源码兜底 |
+| 生命周期 | `2nbfre/acceptance-data/installed-*-acceptance.json`：四模块守护重启、CLI 大写 STOP、全部受管子进程正常退出通过 |
+| 真实维护 | 隔离根 `智脑桌面验收-6rT60F`，`real-agent-rc3-refresh-acceptance.json`：单提交 `5c247b6b198ee6a8c9743553cf62daa93ae7353b`，双项目 `082da6fa`、`bc41d83d` 均完成晋升/索引/检索，分析区间真实重叠 |
+| 真向量 | 同一 npm 候选的实际语义查询返回 `hybrid+markdown-truth`，9 个校验向量片段，结果含 `index:vector-hub`；不是 SHA 文本命中冒充向量 |
+| 真实网页任务 | MiniMax-M3.1-Flash-Preview，两轮以上真实输出，完整 SHA 与策略原文均引用；中止后同会话立即继续并自然 idle，后端核验 246 个文本增量事件；`real-workbench-acceptance.json` |
+| 项目与刷新 | 真实任务中 A→B→A，B 无 A 会话，A 恢复原会话和未发送草稿；iframe 资源只加载一次，仍为 1 WebSocket/2 订阅，无横向溢出、控制台错误为空 |
+| 工作中滚轮 | 长回答中向上滚动，随后内容高度增长至 5000、阅读位置仍为 2316，距底部超过 2000；回到底部入口出现，不再反复拉到底 |
+| 完整历史 | 另一个明确的模型替身隔离环境 `智脑桌面验收-aKjUKi`：包内服务发送 25 轮，API 20+5，网页最终显示 01 至 25 全部记录；置顶自动补页先完成导致一次按钮定位失效，未冒称该次按钮点击成功；后台/DOM 结果均单独核验 |
+| 截图 | `.local-test-data/ui-refresh-2026-10-15/rc3-real-workbench.jpg`、`rc3-complete-history.jpg` |
+
+真实任务和替身长历史测试分开记录，不能将替身回答计入真实模型通过。原用户数据、供应商设置、5757 生产实例和第三方 Hook 未改动。
+
+### 正式包
+
+待补：正式包自己的官方收据、安装版重测及 latest 晋升结果。未填写之前不报告正式交付完成。
