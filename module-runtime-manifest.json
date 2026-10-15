@@ -9,9 +9,9 @@
     "plugins/project-knowledge/hooks/codex.json": "216e03c07295606ef6ebb2c4f669ad0d790b5e7c4f3f34600488033db75e4239",
     "plugins/project-knowledge/scripts/context-hook.cjs": "da666153ad5723592cce42d25337ae649f7d93e43fab76b3c6d1263933de063f",
     "plugins/project-knowledge/scripts/mcp-launcher.cjs": "7c68830b5c73eb53ef030756a4de33987f7eab6b1a6cc15602835aac3f954893",
-    "plugins/project-knowledge/.claude-plugin/plugin.json": "ad8cf459af8242236bb71c4a7e98a24b015415404bb44aedb920fbe0fef943ec",
-    "plugins/project-knowledge/.codex-plugin/plugin.json": "ee91251067ce65c54001e915c3960672a595045cf6db4f7c3d56ab7101eff4c0",
-    "plugins/project-knowledge/.mcp.json": "9bc8e766dbe8893726fef90e9f909cdc04ae22d25e85b26e517ead72ff69d771",
+    "plugins/project-knowledge/.claude-plugin/plugin.json": "e3855760567dfdc732a5870bad58f0891a69ae9af779386ab46fe319938ae62d",
+    "plugins/project-knowledge/.codex-plugin/plugin.json": "7f1e2d6c5394e7afea2d0dd6980bc153bc48a2aa41b694d17293017626a9bbe4",
+    "plugins/project-knowledge/.mcp.json": "f00694356eb9e260b10e9266316e449e0cc54f3e65352edc549113a7188d8fd7",
     "ui/live-client.js": "0d81fa894c629bb839e1931fc3c5ebad4d831aae8232d6ce8c0f542e9e3559e8"
   },
   "modules": {
