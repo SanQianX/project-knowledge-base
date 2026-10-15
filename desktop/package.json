@@ -1,7 +1,7 @@
 {
   "name": "@sanqianx/project-knowledge-desktop",
   "productName": "Project Knowledge",
-  "version": "5.0.17",
+  "version": "5.0.18-rc.1",
   "description": "Windows desktop application for project-knowledge",
   "main": "main.cjs",
   "bin": {
@@ -9,7 +9,6 @@
   },
   "author": "SanQianX",
   "license": "Apache-2.0",
-  "private": true,
   "scripts": {
     "start": "electron .",
     "package": "electron-forge package --arch=x64",
@@ -17,7 +16,7 @@
     "test": "node test/thin-package-test.cjs && node test/backend-runtime-test.cjs && node test/cli-args-test.cjs"
   },
   "dependencies": {
-    "@sanqianx/project-knowledge": "5.0.17",
+    "@sanqianx/project-knowledge": "5.0.18-rc.1",
     "electron": "43.1.1",
     "electron-squirrel-startup": "1.0.1"
   },
