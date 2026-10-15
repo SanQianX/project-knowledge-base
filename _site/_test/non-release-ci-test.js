@@ -8,7 +8,7 @@ const workflow = fs.readFileSync(workflowPath, 'utf8');
 
 assert.match(workflow, /^\s*push:/m, 'non-release CI must run for branch pushes');
 assert.match(workflow, /^\s*pull_request:/m, 'non-release CI must run for pull requests');
-assert.match(workflow, /node:\s*\['18\.x', '24\.x'\]/, 'Linux CI must cover Node 18 and 24');
+assert.match(workflow, /node:\s*\['22\.x', '24\.x'\]/, 'Linux CI must cover the declared Node >=22 contract (oldest supported 22.x plus current 24.x)');
 assert.match(workflow, /runs-on:\s*windows-latest/, 'CI must include a Windows job');
 assert.match(workflow, /npm test -- --no-report/, 'CI must run the core regression suite');
 assert.match(workflow, /npm pack --dry-run --json/, 'CI must audit the npm package contents');
