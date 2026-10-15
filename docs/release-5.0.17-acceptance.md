@@ -26,6 +26,7 @@
 | GLM-5.3 | Workbench 13 项定向审查；外壳 14 项当前通过，冻结基线 9 项预期失败。真实会话和报告位置见操作手册 |
 | 诊断补漏 | `98258aa`：runtime 改走异步解析，doctor 与扫描共用 ZCode 注册表后备发现；新增三项先红后绿，Workbench 全套 403 通过 |
 | 启动补漏 | `cbba73a`：GLM 同时指出任务与命令发现的同步 PATH 后备；改为一次异步解析，保留兼容同步导出，扫描中止信号传入子进程；新增先红后绿，Workbench 全套 404 通过 |
+| 中止竞态 | `1b028da`：稳定复现异步初始化中止后仍启动 SDK；增加代次、权限和迟到结果防护，四种初始化中止/替换场景通过；Workbench 全套 405 通过，GLM 另独立复核 7 项通过 |
 
 GLM 报告分别保存在两个仓库的 `.local-test-data/ui-refresh-2026-10-15/`，不是生产知识文档。Leader 独立执行安装、真实模型和浏览器验收。
 
@@ -52,12 +53,13 @@ GLM 报告分别保存在两个仓库的 `.local-test-data/ui-refresh-2026-10-15
 
 ### 桌面浏览器
 
-真实 Edge 正常桌面视口 1436×756，无尺寸覆盖、无横向溢出。
+真实 Edge 正常桌面视口：源码受控环境 1436×756、首个候选环境 1436×730，无尺寸覆盖、无横向溢出。
 
 - 源码受控五服务环境：八个真实标签页均加载工作台，每页 1 条 WebSocket / 2 个订阅；无同源六连接堵塞。
 - npm 候选真实模型环境：上下滚动、输出期间暂停跟随、切页保留草稿、断网恢复、引用保持、单连接复用通过。滚动后内容高度由 2233 增至 4495，阅读位置仍停留较早内容，而非被拉到底部。
 - 真实回答明确引用 `Knowledge has one writer: the engine promotion path. Preserve native workbench streaming and keep the product simple.`，不只匹配提交号。
 - 截图：`project-knowledge-base/.local-test-data/ui-refresh-2026-10-15/rc1-real-workbench.jpg`。
+- 候选页面 DOMContentLoaded 149.7ms；明确置于前台后 10 次切页的下一帧反馈为 2.7–8.6ms，P95 8.6ms；DOM 投影为 1.2–2.8ms。此前未显式置前的样本约 1 秒，不能混作前台性能结果。重复切页后工作台 iframe 资源只加载一次，仍为 1 WebSocket / 2 订阅。
 
 ## 性能与保留的首次失败
 
@@ -68,6 +70,8 @@ GLM 报告分别保存在两个仓库的 `.local-test-data/ui-refresh-2026-10-15
 - 原全套回归暴露配置同步过程中知识根变化未再次下发；已修复合并任务的 dirty 循环，重测通过。
 - GLM 的 TTL 20ms 墙钟测试在负载下偶发失效，改为注入时钟并全套复跑；不将测试竞态当产品回归。
 - 诊断复核发现 runtime 同步旁路与 registry-only ZCode 遗漏；首个候选不晋升 latest，补测试和修复后重新验收。
+- `5.0.17-rc.2` 已官方独立下载及哈希验证（收据 `kb-registry-product-DTTWep/registry-installation.json`），但后续中止竞态测试失败，因此不作为最终候选放行；未将 latest 指向该版本。
+- Node 22 的首次外壳回归为 133 通过、1 失败，控制台分段输出未保存完整失败详情。完整报告重跑仍为 133/1，稳定复现为 `package-boundary-test.js`：独立 Node 二进制旁没有 npm，未传 `npm_execpath` 时查找了不存在的 npm-cli.js。单独复现已确认，属验收启动环境而非产品启动失败；首失败报告保存在 `.local-test-data/ui-refresh-2026-10-15/node22-missing-npm-path-failure.md`。修正启动参数后再次全量验收，不将前两次算作通过。
 
 ## 最终放行
 
