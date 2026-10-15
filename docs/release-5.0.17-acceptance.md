@@ -2,7 +2,7 @@
 
 ## 发布状态
 
-2026-10-15：最终候选 `5.0.17-rc.3` 验收通过，正在准备正式 `5.0.17` 的独立下载验收，`latest` 仍为 `5.0.16`。本文件不得被解读为正式版已放行。Electron、Windows 安装包和窄屏矩阵均不在本次范围；用户报告故障的另一台电脑尚需更新后回验。npm 内文档是打包时快照，正式包自己的验收结果在测试完成后追加到仓库当前文档。
+2026-10-15：最终候选 `5.0.17-rc.3` 和正式 `5.0.17` 均已独立下载安装验收通过，官方 npm 的 `latest`、`next` 均为 `5.0.17`，`npm view ...@latest version --prefer-online` 已再次确认。Electron、Windows 安装包和窄屏矩阵不在本次范围；用户报告故障的另一台电脑尚需更新后回验。npm 内文档是打包时快照，正式包自己的验收结果在测试完成后追加到仓库当前文档，未重发或修改同版本 npm 包。
 
 ## 交付范围
 
@@ -96,4 +96,22 @@ GLM 报告分别保存在两个仓库的 `.local-test-data/ui-refresh-2026-10-15
 
 ### 正式包
 
-待补：正式包自己的官方收据、安装版重测及 latest 晋升结果。未填写之前不报告正式交付完成。
+官方全新安装收据：`D:\SanQian.Xu\.pk-acceptance-temp\kb-registry-product-Vn5JOh\registry-installation.json`，源码提交 `7fac75f63bca0ca9d4c125cff8029c6e8822a4c1`，integrity `sha512-HhFfsEDF4UbZlbSmPyBbnAgvKGd2tgXmhPDXW3H5VGNRGmiN7DfXA2fmwVvqOr/Fe59d4KoQsrdEsOIpsmNJ5Q==`。Workbench `0.13.2-rc.17`、vector-hub `1.0.8-rc.8`、bridge `0.7.2`、vendored engine `0.2.7-rc.10`；包内内容和官方模块 integrity 均核对通过。
+
+| 正式验收项 | 实际结果 |
+|---|---|
+| 源码冻结复跑 | 正式提交的 Node 24 外壳 134/134，215568ms；Node 22 134/134 记录保留。Workbench 双 Node 405，engine 双 Node 185 通过/1 跳过；未修改模块也补跑 vector-hub 73、bridge 30，均通过。浏览器自动脚本排除不计通过，真实浏览器另列 |
+| 真进程生命周期 | 正式安装目录 `acceptance-data` 下的 startup/restart/shutdown JSON：四模块启动、独立退出后的守护恢复、大写 STOP、四个子进程正常关闭均通过 |
+| 真实提交闭环 | `智脑桌面验收-E0OL29/real-agent-formal-refresh-acceptance.json`：单提交 `2769908ce00b6b8aeab178e83b6f1bbca0c16871`，双项目 `7f1c331d`、`f5870071` 均晋升、索引并可检索；并行分析区间实际重叠 |
+| 真实向量 | 正式引擎的语义查询包含 10 个校验向量片段、`index:vector-hub` 命中和对应正式提交，不以文本降级冒充向量成功 |
+| 真网页和模型 | 会话 `sess-001c5cbec432`，真实 MiniMax-M3.1-Flash-Preview，76 个文本增量，回答逐字引用新知识原文和完整提交；最后自然 idle、持久化 turn-end，通过后端独立核验 |
+| 刷新与滚轮 | 工作中向上滚动后切到活动页，活动自动显示真实维护“已更新·可检索”；返回工作台内容增长至 2075，阅读位置仍为 0，未发送草稿保留，iframe 只加载一次 |
+| 网络恢复 | 正式页面断网显示连接中断，恢复后重新读取状态，草稿、会话和引用仍存在；仍为 1 WebSocket / 2 订阅，桌面 1436×730、无横向溢出、浏览器控制台无错误 |
+| 完整历史 | 独立替身环境 `智脑桌面验收-TIFVtg`，正式包后端新建 25 轮，分页 20+5；真实网页向上翻阅后 DOM 同时包含第 01 与第 25 轮，共 25 轮。仅此长历史项使用替身，不混入真实模型结果 |
+| 正式发布 | 正式包先发 next，以上验收完成后才执行 dist-tag latest；第一次 npm view 仍命中旧元数据，保留该观察。dist-tag 官方端点随后已为 5.0.17，最后 npm view @latest 也确认为 5.0.17 |
+
+最终证据副本集中在 `project-knowledge-base/.local-test-data/ui-refresh-2026-10-15/`：`formal-registry-installation.json`、`formal-installed-{startup,restart,shutdown}.json`、`formal-real-commits.json`、`formal-real-workbench.json`、`formal-complete-history.json`、`node24-formal-source-pass.md`、`node22-final-pass.md` 与 `glm-final-review.md`。两张正式桌面截图为 `formal-real-workbench.jpg`、`formal-complete-history.jpg`。
+
+相关源码均已推送远程 Git；本轮未更新或重启原 5757 用户实例（仍为 5.0.16），没有修改用户知识、历史、凭据、原生 Hook 信任或第三方通知。请在实际出现故障的电脑按日常方式 stop、安装官方 @latest、检查版本并启动。Windows 若独立 IDE 的 MCP 持有原生库导致 EBUSY，应先退出相应会话后重试，不删除原生文件或清空数据。
+
+本轮网页范围验收完成，不等于对其他设备、私有语料或未保存过的旧历史作无缺陷保证。Electron 与 macOS 原生安装未实施、不计为通过。
