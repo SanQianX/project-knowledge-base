@@ -48,6 +48,24 @@ const intentPath = dataDir => path.join(dataDir, 'integration-intent.json');
   assert.deepEqual(created, { schema: SCHEMA, clients: { codex: 'disconnected' } });
   assert.deepEqual(readIntent(fresh), created, 'bootstrap creates the file when missing');
 }
+// B2 (real-env regression): a mid-flight scan must never be recorded as a
+// removal decision — unsettled clients stay absent so a later settled scan
+// can fill them correctly.
+{
+  const midFlight = tmpDataDir();
+  const unsettled = bootstrapIntent(midFlight, [
+    { client: 'claude', developmentCapture: { state: 'checking', installed: undefined } },
+    { client: 'codex', developmentCapture: {} },
+    { client: 'zcode', developmentCapture: { state: 'installed', installed: true } },
+  ]);
+  assert.deepEqual(unsettled, { schema: SCHEMA, clients: { zcode: 'connected' } }, 'checking/undefined entries must stay absent');
+  const settled = bootstrapIntent(midFlight, [
+    { client: 'claude', developmentCapture: { state: 'installed', installed: true } },
+    { client: 'codex', developmentCapture: { state: 'not-installed', installed: false } },
+  ]);
+  assert.equal(settled.clients.claude, 'connected', 'later settled scan fills the skipped client correctly');
+  assert.equal(settled.clients.codex, 'disconnected');
+}
 // C: summarizeClient covers all five states plus precedence rules.
 {
   const failedRepair = { claude: { state: 'failed', at: new Date().toISOString(), error: 'boom' } };

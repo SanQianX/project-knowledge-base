@@ -56,16 +56,19 @@ function markIntent(dataDir, client, state) {
   return writeIntent(dataDir, clients);
 }
 
-// Migration: fill entries only for clients the file has never seen. A client
-// whose hooks are already installed counts as connected (standalone install
-// or pre-upgrade state); absent hooks count as disconnected — the store is
-// never allowed to rewrite a decision the user already made.
+// Migration: fill entries only for clients the file has never seen AND whose
+// status scan has settled — a mid-flight scan reports installed as undefined,
+// which must never be recorded as a removal decision. A client whose hooks
+// are installed counts as connected (standalone install or pre-upgrade
+// state); settled-but-absent hooks count as disconnected — the store is never
+// allowed to rewrite a decision the user already made.
 function bootstrapIntent(dataDir, clientsStatus) {
   const current = readIntent(dataDir);
   const clients = { ...(current?.clients || {}) };
   let changed = false;
   for (const entry of clientsStatus || []) {
     if (!entry || !entry.client || entry.client in clients) continue;
+    if (entry.developmentCapture?.state === 'checking' || entry.developmentCapture?.installed === undefined) continue;
     clients[entry.client] = entry.developmentCapture?.installed === true ? 'connected' : 'disconnected';
     changed = true;
   }
