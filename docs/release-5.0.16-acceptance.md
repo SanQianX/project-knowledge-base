@@ -2,7 +2,30 @@
 
 ## 当前结论
 
-正在准备 `5.0.16-rc.8`，纳入引擎 `0.2.7-rc.9` 的短范围去重与有界完整提交证据修复，其他三个模块保持已锁定版本。源码修复已通过双 Node 回归；新安装包仍须复测，不能将 rc.6／rc.7 的结果记为 rc.8 通过。latest 仍为 5.0.14。
+`5.0.16-rc.8` 的 30/30 核心门禁及二次开发闭环已通过，现冻结正式包 `5.0.16`，仅发布 next 后重新下载验收；正式包尚未验收，不更新 latest（仍为 5.0.14）。保留 rc.6／rc.7 首失败，不用候选通过冒充正式通过。
+
+### rc.8 候选验收
+
+| 范围 | 实测结果 |
+|---|---|
+| 官方安装 | `kb-registry-product-0DPXUm/registry-installation.json`；5.0.16-rc.8，sourceCommit `2576e1f0b98fbfdd34183feeb01539a2024922fe`；305 个产品文件及包内四模块内容核对通过，独立缓存下载，无兄弟源码回退 |
+| 精确模块 | Workbench 0.13.2-rc.13、vector-hub 1.0.8-rc.8、bridge 0.7.2、引擎 0.2.7-rc.9（vendored commit `7c6812ffab8320c2d835e7825abe275507d6b960`） |
+| 源码 | Node 22/24：外壳各 139；引擎各 181 通过、1 项 Windows 符号链接权限跳过；未修改的已锁定 Workbench 365、vector 73、bridge 30 维持对应提交证据 |
+| 安装桌面及故障 | 两个 Node 版本的正常页面、首次 profiles 503 后恢复、故障与生命周期共八项通过，均绑定本次 receipt；仅 1920×1080 桌面 |
+| 真实模型 | MiniMax 真实提取、分级记忆确认编辑、实际流式、1536 维非空向量、单提交、双项目实际重叠和重启保真 10/10（Q22，fixture CiDegJ） |
+| 检索质量／性能 | 20 条固定留出问题 Recall@5=1、MRR=0.9667、拒答准确率=1；8 项目／1000 文档热查询 P95=679.7145ms，四次真实查询 embedding；不代表私有语料普遍保证 |
+| 原文送达 | npm 版 topic-context 与真实网页发送都包含策略原文及完整 SHA，真实回答引用原句；原始 9aec 失败语料另用官方安装包引擎库验证，知识不改写、两条记忆加事实 3601 字符，明确不将库级补验冒充原始 HTTP/UI 复测 |
+| 原生客户端 | Claude Code、Codex、ZCode 使用实际用户接线，首次模型请求含当前事实与已确认产品记忆；真实代码／回答采用记忆。Codex MCP 版本为 rc.8、Hook 原生 trusted；OpenCode 实际 CLI 搜索及引用通过，不宣称自动前置注入 |
+| 二次开发 | rc8-final-fixed：实际搜索和 get → 引用后写代码／运行测试 → commit `0ec95835f58b1a1b934955fb5cfaa1811fd3b817` → Hook／冻结对话／晋升／索引／再检索均通过；`retrieval-rc8-secondary24-1792037130380.json` |
+| 本机升级 | 受保护备份 `user-upgrade-1792037257474`，从官方 npm 升级 rc.8（PID 36460）；原有 7 项目、知识、历史、记忆、配置保留，587 个付费索引文件字节不变，实际仍位于 `D:\SanQian.Xu\knowledge\.indexes`；四客户端修复操作 `op-0d5a7b0ef39c46779432e73cbf357f25` 完成 |
+
+候选汇总为 `knowledge-engine/.agent-state/acceptance/system-regression/retrieval-release-5.0.16-rc.8.json`。源码、受控故障、真实模型和 npm 安装身份分别保留，非公开的凭据配置不进入交付记录。
+
+Q24 首次二次开发失败保留（`retrieval-rc8-secondary24-1792036733022.json`）：GLM 启动的验收进程继承宿主 `KB_KNOWLEDGE_DATA_DIR`，CLI 在另一登记层返回 PROJECT_NOT_FOUND，随后超时；不是产品门禁通过。生产 supervisor 已设置正确映射，验收启动器补同一映射及稳定红／绿回归（测试提交 b255f9d），重跑新的 rc8-final-fixed 轮次后通过；未修改产品包、未重造首次成功记录。
+
+用户首次口头回执与实际 trust 状态不符时暂停模型测试；用户实际审核后，rc.6 与 rc.8 原生哈希同为 a51a3b6f…，rc.8 保持 trusted，无需按版本号重复审核。信任是否失效以原生接口为准，不代写记录或使用绕过参数。
+
+### rc.8 修复过程与保留失败
 
 rc.7 已官方下载（`kb-registry-product-50eztE/registry-installation.json`，sourceCommit `043e7156fa55005e27f014e98179d5db110e59bf`），双 Node 外壳各 139 项、安装版八项和真实 MiniMax 记忆／并发十项通过。原始 `topic-context` 已通过，但加强的真实网页问法仍失败：返回了完整事实段落及其首句，随后交叉引用继续挤掉 Patch；失败收据 `retrieval-rc7-workbench24-1792024781524.json` 保留，不升级 latest。
 
