@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const asar = require('@electron/asar');
+const crypto = require('node:crypto');
 
 const desktopRoot = path.resolve(__dirname, '..');
 const bundleRoot = path.join(desktopRoot, 'out', 'Project Knowledge-win32-x64');
@@ -38,6 +39,21 @@ function findInstaller() {
 assert(fs.existsSync(asarPath), `packaged app not found: ${asarPath}`);
 const files = listAsarFiles();
 const contains = fragment => files.some(file => file.includes(fragment));
+const corePrefix = 'node_modules/project-knowledge/';
+const readPackaged = file => asar.extractFile(asarPath, file);
+const contentHash = file => crypto.createHash('sha256').update(readPackaged(file)).digest('hex');
+const moduleManifest = JSON.parse(readPackaged(corePrefix + 'module-runtime-manifest.json'));
+assert(moduleManifest.schema === 'project-knowledge/module-content/v1' && Object.keys(moduleManifest.modules).length === 3, 'four-module product manifest missing');
+for (const [relative, hash] of Object.entries(moduleManifest.productFiles)) assert(contentHash(corePrefix + relative) === hash, `stale packaged product UI: ${relative}`);
+for (const [key, module] of Object.entries(moduleManifest.modules)) {
+  const prefix = `node_modules/${module.installName}/`;
+  const pkg = JSON.parse(readPackaged(prefix + 'package.json'));
+  assert(pkg.name === module.name && pkg.version === module.version, `packaged module version mismatch: ${key}`);
+  for (const [relative, hash] of Object.entries(module.files)) assert(contentHash(prefix + relative) === hash, `stale packaged module content: ${key}/${relative}`);
+}
+const engineManifest = JSON.parse(readPackaged(corePrefix + 'vendor-manifest.json')).modules['knowledge-engine'];
+assert(engineManifest?.root === '_modules/knowledge-engine', 'packaged knowledge engine missing');
+for (const [relative, hash] of Object.entries(engineManifest.files)) assert(contentHash(corePrefix + engineManifest.root + '/' + relative) === hash, `packaged engine drift: ${relative}`);
 
 const forbidden = [
   'node_modules/@anthropic-ai/claude-agent-sdk-win32-x64/claude.exe',

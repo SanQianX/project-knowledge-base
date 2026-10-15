@@ -12,7 +12,7 @@
     "start": "npm run prepare-core && electron-forge start",
     "package": "npm run prepare-core && electron-forge package --arch=x64",
     "make": "npm run prepare-core && electron-forge make --arch=x64",
-    "test": "node test/desktop-runtime-test.cjs && node test/app-updater-test.cjs",
+    "test": "node test/desktop-runtime-test.cjs && node test/app-updater-test.cjs && node test/core-replacement-test.cjs",
     "test:packaged": "node test/packaged-smoke.cjs",
     "test:packaged:model": "node test/packaged-model-smoke.cjs",
     "audit:package": "node scripts/audit-package.cjs"
@@ -33,7 +33,23 @@
     "jsonc-parser": "3.3.1",
     "project-knowledge": "file:..",
     "socks-proxy-agent": "8.0.5",
-    "ws": "^8.21.0"
+    "ws": "^8.21.0",
+    "@grpc/grpc-js": "^1.14.5",
+    "@grpc/proto-loader": "^0.8.1",
+    "@sanqianx/ai-coding-event-bridge-console": "0.6.0",
+    "@sanqianx/vector-hub": "1.0.6",
+    "buffer": "^6.0.3",
+    "cheerio": "^1.2.0",
+    "claude-ai-workbench": "npm:@sanqianx/claude-ai-workbench@0.12.0",
+    "dotenv": "^17.4.2",
+    "gpt-tokenizer": "^3.4.0",
+    "json-colorizer": "^3.0.1",
+    "openai": "^6.49.0",
+    "turndown": "^7.2.4",
+    "uuid": "^13.0.2",
+    "wink-bm25-text-search": "^3.1.2",
+    "wink-nlp": "^2.4.0",
+    "yargs": "^18.1.0"
   },
   "devDependencies": {
     "@electron-forge/cli": "7.11.2",

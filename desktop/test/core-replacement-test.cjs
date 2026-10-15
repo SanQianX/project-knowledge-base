@@ -1,0 +1,17 @@
+'use strict';
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const assert = require('node:assert/strict');
+const { installPreparedCore } = require('../scripts/prepare-core.cjs');
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 'desktop-core-recovery-'));
+const modules = path.join(root, 'node_modules'); fs.mkdirSync(modules);
+const target = path.join(modules, 'project-knowledge'); fs.mkdirSync(target); fs.writeFileSync(path.join(target, 'old.txt'), 'preserved');
+const stage = fs.mkdtempSync(path.join(modules, '.pk-core-stage-')); fs.writeFileSync(path.join(stage, 'new.txt'), 'candidate');
+const cache = path.join(root, '.core-package', 'candidate'); fs.mkdirSync(cache, { recursive: true });
+const backup = path.join(cache, 'previous-core');
+assert.throws(() => installPreparedCore(stage, root, backup, root), /Unsafe/);
+installPreparedCore(stage, target, backup, root);
+assert.equal(fs.readFileSync(path.join(backup, 'old.txt'), 'utf8'), 'preserved');
+assert.equal(fs.readFileSync(path.join(target, 'new.txt'), 'utf8'), 'candidate');
+console.log('desktop core replacement test PASS (recoverable exact-target swap)');

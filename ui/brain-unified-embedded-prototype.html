@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Project Knowledge · 统一产品体验</title>
+  <style>
+
+    :root{--page:#f3f5f7;--surface:#fff;--surface2:#f8f9fb;--surface3:#edf1f4;--line:#dce2e8;--line2:#c9d2dc;--text:#17212d;--muted:#687587;--faint:#8e99a7;--nav:#eef1f4;--accent:#516f89;--accent2:#3f5d77;--accent-soft:#e6edf3;--good:#397761;--good-soft:#e8f2ee;--warn:#98722d;--warn-soft:#f7f0df;--bad:#a05252;--shadow:0 16px 48px rgba(23,33,45,.12)}
+    html[data-theme="dark"]{--page:#10151b;--surface:#171e26;--surface2:#1c252f;--surface3:#222d38;--line:#2d3946;--line2:#3a4857;--text:#e6ebf0;--muted:#9aa7b5;--faint:#758293;--nav:#0c1117;--accent:#809aaf;--accent2:#9fb4c5;--accent-soft:#222f3a;--good:#75ae97;--good-soft:#1b3029;--warn:#cfaa63;--warn-soft:#352d1e;--bad:#d18181;--shadow:0 16px 48px rgba(0,0,0,.3)}
+    *{box-sizing:border-box}[hidden]{display:none!important}html,body{height:100%}body{margin:0;overflow:hidden;background:var(--page);color:var(--text);font:13px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}
+    button,input,select,textarea{font:inherit;color:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+    svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+    .app{height:100%;display:grid;grid-template-columns:232px minmax(0,1fr)}
+    .sidebar{min-height:0;display:flex;flex-direction:column;border-right:1px solid var(--line);background:var(--nav)}
+    .brand{display:flex;align-items:center;gap:10px;padding:24px 20px 16px}.brand-mark{width:28px;height:28px;display:grid;place-items:center;border:1px solid var(--line2);border-radius:8px;background:var(--surface);color:var(--accent);font-weight:700}.brand h1{margin:0;font-size:15px}.brand p{margin:2px 0 0;color:var(--muted);font-size:11px}
+    .brain-title{margin:0 20px 16px;padding:10px 0;color:var(--muted);font-size:12px}
+    .nav{display:grid;gap:4px;padding:8px 12px}.nav-label{padding:16px 12px 8px;color:var(--faint);font-size:10px;font-weight:600}.nav button{width:100%;display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--muted);text-align:left;font-size:12px}.nav button span:nth-child(2){flex:1}.nav button:hover{background:var(--surface3);color:var(--text)}.nav button.active{border-color:var(--line);background:var(--surface);color:var(--text)}
+    .nav-badge{padding:1px 6px;border-radius:5px;background:var(--surface3);font-size:10px}.nav-badge.run{background:var(--warn-soft);color:var(--warn)}
+    .side-bottom{margin-top:auto;padding:12px;border-top:1px solid var(--line)}.system-button{width:100%;display:flex;align-items:center;gap:8px;padding:8px;border:0;border-radius:8px;background:transparent;text-align:left}.system-button:hover{background:var(--surface3)}.dot{width:7px;height:7px;border-radius:50%;background:var(--good)}.system-button span:nth-child(2){flex:1}.system-button b,.system-button small{display:block}.system-button b{font-size:11px}.system-button small{margin-top:2px;color:var(--muted);font-size:10px}
+    .main{min-width:0;min-height:0;display:flex;flex-direction:column}.topbar{height:64px;flex:none;display:flex;align-items:center;gap:12px;padding:0 24px;border-bottom:1px solid var(--line);background:var(--surface)}
+    .eyebrow{color:var(--muted);font-size:10px}.page-title{margin-top:1px;font-size:18px;font-weight:650}.spacer{flex:1}.context-select{max-width:230px;padding:7px 28px 7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-size:11px}
+    .button,.primary,.icon-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-size:11px}.button:hover,.icon-button:hover{background:var(--surface2);border-color:var(--line2)}.primary{border-color:var(--accent);background:var(--accent);color:#fff}.icon-button{width:34px;padding:0}
+    .content{min-height:0;flex:1;overflow:hidden;padding:24px}.content.module-content{padding:0;background:var(--surface)}
+    .view{display:none;height:100%;min-height:0;margin:0}.view.active{display:block}.view:not(.module-view){overflow:auto}.view.module-view.active{display:flex;flex-direction:column}
+    .frame-wrap{min-height:0;flex:1;overflow:hidden;background:var(--surface)}.frame-wrap iframe{display:block;width:100%;height:100%;border:0;background:var(--surface)}
+    .stack{display:grid;gap:16px}.grid2{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(300px,.6fr);gap:16px}
+    .panel{padding:20px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}.panel.soft{background:var(--surface2)}
+    .panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px}.panel-head h2,.panel-head h3{margin:0;font-size:14px}.panel-head p{margin:4px 0 0;color:var(--muted);font-size:11px}
+    .link{padding:2px;border:0;background:transparent;color:var(--accent2);font-size:11px}
+    .status{display:inline-flex;align-items:center;gap:5px;padding:2px 7px;border-radius:5px;background:var(--good-soft);color:var(--good);font-size:10px}.status.wait{background:var(--warn-soft);color:var(--warn)}
+    .welcome{display:flex;align-items:center;gap:24px;padding:24px}.welcome>div:first-child{flex:1}.welcome h2{margin:6px 0 8px;font-size:22px}.welcome p{margin:0;color:var(--muted);font-size:12px}.welcome-actions{display:flex;gap:8px}
+    .stats{display:grid;grid-template-columns:repeat(3,1fr);margin-top:20px;border-top:1px solid var(--line)}.stat{padding:12px 16px 0;border-right:1px solid var(--line)}.stat:first-child{padding-left:0}.stat:last-child{border-right:0}.stat b,.stat span{display:block}.stat b{font-size:13px}.stat span{margin-top:4px;color:var(--muted);font-size:10px}
+    .project-row{display:flex;align-items:center;gap:12px;width:100%;padding:14px 0;border:0;border-top:1px solid var(--line);background:transparent;text-align:left}.project-row:hover .project-copy b{color:var(--accent2)}.project-icon{width:32px;height:32px;display:grid;place-items:center;border-radius:8px;background:var(--accent-soft);color:var(--accent2);font-size:11px}.project-copy{min-width:0;flex:1}.project-copy b,.project-copy span{display:block}.project-copy b{font-size:12px}.project-copy span{margin-top:4px;color:var(--muted);font-size:11px}
+    .memory-row{padding:16px 0;border-top:1px solid var(--line)}.memory-row b{font-size:12px}.memory-row p{margin:8px 0 12px;color:var(--muted);font-size:11px;line-height:1.8}.memory-actions{display:flex;gap:6px}.mini{padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);font-size:10px}.mini.accept{border-color:var(--accent);background:var(--accent);color:#fff}
+    .activity-row{display:grid;grid-template-columns:60px 100px minmax(0,1fr);gap:12px;padding:12px 0;border-top:1px solid var(--line);font-size:11px}.activity-row time{color:var(--muted)}.activity-row span{overflow-wrap:anywhere}
+    .mem-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.mem-card{padding:20px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}.mem-card header{display:flex;align-items:center;gap:8px}.mem-card header b{flex:1;font-size:12px}.mem-card p{margin:12px 0 0;color:var(--muted);font-size:11px;line-height:1.8}.pill{padding:2px 6px;border-radius:5px;background:var(--accent-soft);color:var(--accent2);font-size:10px}.candidate-panel{margin-top:24px}
+    .hierarchy{display:grid;grid-template-columns:260px minmax(0,1fr);gap:16px}.tree-label{padding:8px 10px;color:var(--muted);font-size:12px}.tree button{display:flex;align-items:center;gap:8px;width:100%;padding:10px;border:0;border-radius:8px;background:transparent;text-align:left;font-size:12px}.tree button.active,.tree button:hover{background:var(--surface3)}.tree button span{flex:1}
+    .detail h2{margin:0;font-size:18px}.path-pair{display:grid;grid-template-columns:1fr 24px 1fr;align-items:center;gap:8px;margin-top:20px}.path-card{padding:16px;border:1px solid var(--line);border-radius:8px;background:var(--surface2)}.path-card span{display:block;color:var(--muted);font-size:11px}.path-card b{display:block;margin-top:8px;font:11px/1.7 ui-monospace,Consolas,monospace;overflow-wrap:anywhere}.arrow{text-align:center;color:var(--accent)}
+    .backdrop{position:fixed;inset:0;z-index:50;display:none;background:rgba(12,18,25,.4)}.backdrop.open{display:block}.drawer{position:absolute;inset:0 0 0 auto;width:min(840px,100%);display:flex;flex-direction:column;padding:24px;background:var(--surface);border-left:1px solid var(--line);box-shadow:var(--shadow)}
+    .drawer-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding-bottom:20px;border-bottom:1px solid var(--line)}.drawer-head h2{margin:0;font-size:16px}.drawer-head p{margin:4px 0 0;color:var(--muted);font-size:11px}
+    .service-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:20px 0}.service{padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--surface2)}.service b,.service span{display:block}.service b{font-size:11px}.service span{margin-top:6px;color:var(--muted);font-size:10px}.engine-frame{min-height:0;flex:1;overflow:hidden;border-top:1px solid var(--line)}.engine-frame iframe{width:100%;height:100%;border:0}
+    dialog{width:min(560px,90vw);padding:24px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--text);box-shadow:var(--shadow)}dialog::backdrop{background:rgba(12,18,25,.4)}dialog h2{margin:0 0 20px;font-size:16px}.field{display:block;margin-bottom:16px;font-size:12px;color:var(--muted)}.field input,.field textarea{display:block;width:100%;margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--text)}.field textarea{min-height:100px;resize:vertical}.dialog-actions{display:flex;justify-content:flex-end;gap:8px}
+    .toast{position:fixed;right:24px;bottom:24px;z-index:100;padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--surface);box-shadow:var(--shadow);opacity:0;pointer-events:none}.toast.show{opacity:1}
+  </style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar"><div class="brand"><div class="brand-mark">知</div><div><h1>Project Knowledge</h1><p>个人工程智脑</p></div></div><div class="brain-title">三千的智脑</div><nav class="nav"><div class="nav-label">智脑</div><button class="active" data-view="home" type="button"><svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5M5.5 10v10h13V10"/></svg><span>智脑首页</span></button><button data-view="work" type="button"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg><span>开始工作</span><span class="nav-badge" id="workBadge">就绪</span></button><button data-view="search" type="button"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></svg><span>知识检索</span></button><button data-view="memory" type="button"><svg viewBox="0 0 24 24"><path d="M6 4h12v16H6zM9 8h6M9 12h6"/></svg><span>长期记忆</span><span class="nav-badge" id="memoryCount">3</span></button><div class="nav-label">知识范围</div><button data-view="knowledge" type="button"><svg viewBox="0 0 24 24"><path d="M4 7h6l2 2h8v10H4z"/></svg><span>领域与项目</span></button><button data-view="activity" type="button"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg><span>活动记录</span></button></nav><div class="side-bottom"><button class="system-button" id="openSystem" type="button"><span class="dot"></span><span><b>系统运行正常</b><small>知识更新与检索正常</small></span><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></button></div></aside>
+  <main class="main"><header class="topbar"><div class="title-block"><div class="eyebrow" id="crumb">三千的智脑</div><div class="page-title" id="pageTitle">智脑首页</div></div><div class="spacer"></div><select class="context-select" id="projectSelect"></select><button class="icon-button" id="themeToggle" title="切换主题" type="button"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2"/></svg></button></header>
+    <div class="content">
+      <section class="view active" id="view-home"><div class="stack"><section class="panel welcome"><div><div class="eyebrow">工作概览</div><h2>三千的智脑</h2><p>你关注的项目、最新知识和待确认记忆，都在这里。选择一个项目，就可以继续工作。</p><div class="stats"><div class="stat"><b>5</b><span>关联项目</span></div><div class="stat"><b>Project Knowledge</b><span>当前关注领域</span></div><div class="stat"><b id="homeMemoryCount">3</b><span>待确认记忆</span></div></div></div><div class="welcome-actions"><button class="primary" data-go="work" type="button">开始工作</button><button class="button" data-go="search" type="button">查找知识</button></div></section><div class="grid2"><div class="stack"><section class="panel"><div class="panel-head"><div><h2>当前领域</h2><p>Project Knowledge 平台 · 项目知识分别保存，领域知识共享。</p></div><button class="link" data-go="knowledge" type="button">查看结构</button></div><div id="homeProjects"></div></section><section class="panel"><div class="panel-head"><div><h2>最近活动</h2><p>项目提交、知识更新与工作进展。</p></div><button class="link" data-go="activity" type="button">查看全部</button></div><div id="homeActivity"><div class="activity-row"><time>10:53</time><b>知识引擎</b><span>vector-hub revision 81 已可检索</span></div><div class="activity-row"><time>10:52</time><b>工作台</b><span>知识维护会话已完成</span></div><div class="activity-row"><time>10:51</time><b>事件入口</b><span>commit-boundary 81e7a64 已封存</span></div></div></section></div><aside class="panel"><div class="panel-head"><div><h2>待确认记忆</h2><p>项目行为不会直接成为你的长期偏好。</p></div><button class="link" data-go="memory" type="button">全部查看</button></div><div id="homeCandidates"></div></aside></div></div></section>
+
+      <section class="view module-view" id="view-work"><div class="frame-wrap"><iframe id="workFrame" title="Agent 工作台" sandbox="allow-scripts allow-forms"></iframe></div></section>
+
+      <section class="view module-view" id="view-search"><div class="frame-wrap"><iframe id="vectorFrame" title="知识检索" sandbox="allow-scripts allow-forms"></iframe></div></section>
+
+      <section class="view" id="view-memory"><div class="panel-head"><div><h2>长期记忆</h2><p>已确认的偏好与原则，持续用于你的项目工作。</p></div></div><div class="mem-grid"><article class="mem-card"><header><span class="pill">原则</span><b>模块之间保持解耦</b><span class="status">已确认</span></header><p>模块拥有自己的业务能力和复杂 UI，外壳只通过稳定契约连接。</p></article><article class="mem-card"><header><span class="pill">原则</span><b>非必要不增加实体</b><span class="status">已确认</span></header><p>只有具备独立生命周期或权限边界时才新增实体。</p></article><article class="mem-card"><header><span class="pill">偏好</span><b>用户操作保持简单</b><span class="status">已确认</span></header><p>复杂性留在模块内部，统一产品只呈现完成任务所需的入口。</p></article><article class="mem-card"><header><span class="pill">稳定</span><b>复用成熟的刷新逻辑</b><span class="status">已确认</span></header><p>不在外壳重写 Workbench 的流式消息和会话恢复。</p></article></div><section class="panel candidate-panel"><div class="panel-head"><div><h2>待确认记忆</h2><p>你确认后才会用于后续工作。</p></div></div><div id="memoryCandidates"></div></section></section>
+
+      <section class="view" id="view-knowledge"><div class="hierarchy"><aside class="panel tree"><div class="panel-head"><div><h2>知识结构</h2><p>智脑 → 领域 → 项目</p></div></div><div class="tree-label">Project Knowledge 平台</div><div id="treeProjects"></div></aside><section class="panel detail" id="projectDetail"></section></div></section>
+
+      <section class="view module-view" id="view-activity"><div class="frame-wrap"><iframe id="bridgeFrame" title="活动记录" sandbox="allow-scripts allow-forms"></iframe></div></section>
+    </div>
+  </main>
+</div>
+
+<div class="backdrop" id="systemBackdrop"><aside class="drawer"><header class="drawer-head"><div><h2>系统状态</h2><p>检查会话、检索、事件与知识更新是否正常。</p></div><button class="icon-button" id="closeSystem" type="button" aria-label="关闭系统状态">×</button></header><div class="service-grid"><div class="service"><b>Agent 工作台</b><span data-service="agent-terminal">载入中</span></div><div class="service"><b>知识检索</b><span data-service="vector-hub">载入中</span></div><div class="service"><b>事件入口</b><span data-service="event-bridge">载入中</span></div><div class="service"><b>知识引擎</b><span data-service="knowledge-engine">载入中</span></div></div><div class="engine-frame"><iframe id="engineFrame" title="知识更新状态" sandbox="allow-scripts allow-forms"></iframe></div></aside></div>
+<dialog id="memoryEditor"><form id="memoryForm"><h2>编辑候选记忆</h2><label class="field">记忆内容<input id="memoryTitle" required maxlength="120"></label><label class="field">依据与说明<textarea id="memoryDescription" required></textarea></label><div class="dialog-actions"><button class="button" id="cancelMemoryEdit" type="button">取消</button><button class="primary" type="submit">保存</button></div></form></dialog>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<template id="moduleStyleTemplate">
+
+*{box-sizing:border-box}[hidden]{display:none!important}html,body{height:100%}body{margin:0;overflow:hidden;background:var(--surface);color:var(--text);font:13px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}
+button,input,textarea,select{font:inherit;color:inherit}button{cursor:pointer;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-size:11px}button:hover{background:var(--surface2)}button:disabled{cursor:default;opacity:.5}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+input,textarea,select{border:1px solid var(--line);border-radius:8px;background:var(--surface)}input::placeholder,textarea::placeholder{color:var(--faint)}::selection{background:var(--accent-soft)}
+.app{height:100%;display:flex;min-width:0}.main{min-width:0;min-height:0;flex:1;display:flex;flex-direction:column}
+.side{flex:none;width:208px;display:flex;flex-direction:column;padding:20px 12px;border-right:1px solid var(--line);background:var(--surface2)}.side h2{margin:0 8px 16px;font-size:12px}.new{width:100%;margin-bottom:20px}.item{display:block;width:100%;margin:4px 0;padding:10px;border:1px solid transparent;background:transparent;color:var(--muted);text-align:left;font-size:11px}.item.on{border-color:var(--line);background:var(--surface);color:var(--text)}.item small{display:block;margin-top:4px;color:var(--faint);font-size:10px}
+.top{flex:none;display:flex;align-items:center;gap:12px;height:52px;padding:0 24px;border-bottom:1px solid var(--line)}.top b{font-size:12px;font-weight:600}.grow{flex:1}.tag,.scope{display:inline-flex;align-items:center;padding:2px 7px;border:1px solid var(--line);border-radius:5px;background:var(--surface2);color:var(--muted);font-size:10px}.success{border:0;background:var(--good-soft);color:var(--good)}.run{color:var(--good);font-size:10px}
+.stream{min-height:0;flex:1;overflow:auto;padding:20px 24px}.col{max-width:960px;margin:0 auto}.date-line{margin-bottom:16px;color:var(--faint);font-size:10px}.msg{margin-bottom:24px;white-space:pre-wrap;overflow-wrap:anywhere}.msg p{margin:0 0 10px}.msg.user{max-width:88%;margin-left:auto;padding:12px 16px;border:1px solid var(--line);border-radius:10px;background:var(--accent-soft)}
+.message-label{display:flex;align-items:center;gap:8px;margin-bottom:10px;color:var(--muted);font-size:11px}.message-mark{width:24px;height:24px;display:grid;place-items:center;border:1px solid var(--line);border-radius:6px;background:var(--surface2);color:var(--accent)}
+.context-note{padding:16px;border:1px solid var(--line);border-radius:8px;background:var(--surface2);color:var(--muted);font-size:12px}.context-note strong{display:block;margin-bottom:8px;color:var(--text)}.thinking{color:var(--muted);font-size:12px}
+.tool{margin:12px 0;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface2);color:var(--muted);font-size:11px}.citation{display:block;margin-top:12px;padding-top:10px;border-top:1px solid var(--line);color:var(--accent2);font-size:10px}
+.composer{flex:none;padding:16px 24px;border-top:1px solid var(--line)}.box{max-width:960px;margin:0 auto;padding:12px;border:1px solid var(--line2);border-radius:10px}.box:focus-within{border-color:var(--accent)}textarea{display:block;width:100%;min-height:52px;resize:none;padding:0;border:0;background:transparent;outline:0;font-size:12px}
+.bar{display:flex;align-items:center;gap:8px;margin-top:8px}.bar select{max-width:160px;padding:4px 8px;font-size:11px;color:var(--muted)}.bar .send{margin-left:auto;width:32px;height:32px;padding:0;background:var(--accent);color:#fff;font-size:16px}.composer-hint{max-width:960px;margin:8px auto 0;color:var(--faint);font-size:10px}
+.context{flex:none;width:256px;overflow:auto;padding:20px 16px;border-left:1px solid var(--line);background:var(--surface2)}.context h3{margin:0 0 4px;font-size:12px}.context>p{margin:0 0 16px;color:var(--muted);font-size:11px}
+.context details{margin:8px 0;border:1px solid var(--line);border-radius:8px;background:var(--surface)}.context summary{display:flex;align-items:center;gap:8px;padding:12px;list-style:none;cursor:pointer;font-size:11px}.context summary small{color:var(--faint);font-size:10px}.context summary::after{content:"+";margin-left:auto;color:var(--muted)}.context details[open] summary::after{content:"−"}
+.context-links{padding:0 12px 12px;color:var(--muted);font-size:11px}.context-links p{margin:0 0 8px}.context button{padding:0;border:0;background:transparent;color:var(--accent2);font-size:10px;text-align:left}
+.body{min-height:0;flex:1;overflow:auto;padding:24px}.search{display:flex;gap:8px}.search input{flex:1;min-width:0;padding:12px 14px;font-size:12px}.search button{min-width:80px;border-color:var(--accent);background:var(--accent);color:#fff}
+.filters{display:flex;gap:8px;margin:16px 0 24px}.chip{padding:6px 12px;border:1px solid transparent;background:transparent;color:var(--muted);font-size:11px}.chip.on{border-color:var(--line);background:var(--accent-soft);color:var(--accent2)}.search-meta{display:flex;justify-content:space-between;margin-bottom:12px;color:var(--muted);font-size:11px}
+.result{margin-bottom:12px;padding:18px 20px;border:1px solid var(--line);border-radius:8px;background:var(--surface);cursor:pointer}.result:hover{border-color:var(--line2)}.r1{display:flex;align-items:center;gap:8px}.r1 b{font-size:13px}.score{margin-left:auto;color:var(--faint);font-size:10px}
+.result p{margin:10px 0;color:var(--muted);font-size:12px}.result small{color:var(--faint);font:10px/1.7 ui-monospace,Consolas,monospace}.detail{display:none;margin-top:12px;padding:12px;border-radius:8px;background:var(--surface2);color:var(--muted);font-size:11px}.result.open .detail{display:block}
+.activity .main{overflow:auto;padding:24px}.event{margin-bottom:12px;padding:16px 20px;border:1px solid var(--line);border-radius:8px}.event.boundary{border-left:3px solid var(--accent);background:var(--surface2)}.event header{display:flex;align-items:center;gap:8px}.event b{font-size:12px}.event small{margin-left:auto;color:var(--faint);font-size:10px}.event p{margin:8px 0 0;color:var(--muted);font-size:12px}
+.engine .main{overflow:auto;padding:20px 0}.engine .top{height:32px;margin-bottom:16px;padding:0;border:0}.flow{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border:1px solid var(--line);border-radius:8px;background:var(--surface2)}.step{min-height:84px;padding:12px;border-right:1px solid var(--line)}.step:last-child{border-right:0}.step b,.step span{display:block;font-size:10px}.step span{margin-top:8px;color:var(--muted)}
+.grid{display:grid;gap:12px;margin-top:16px}.card{padding:16px;border:1px solid var(--line);border-radius:8px}.card>b{font-size:12px}.row{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);color:var(--muted);font-size:11px}.row:last-child{border-bottom:0;padding-bottom:0}.row span:last-child{margin-left:auto;text-align:right;color:var(--text)}.row .good{color:var(--good)}.row .wait{color:var(--warn)}
+</template>
+
+<template id="moduleRuntimeTemplate"><script>
+(() => {
+  window.addEventListener('message', event => {
+    if (event.source !== parent) return;
+    const packet = event.data || {};
+    if (packet.type === 'kb:theme') {
+      document.documentElement.dataset.theme = packet.theme;
+      document.documentElement.style.colorScheme = packet.theme;
+      Object.entries(packet.tokens || {}).forEach(([name, value]) => {
+        if (/^--[a-z][a-z0-9-]*$/.test(name) && typeof value === 'string') document.documentElement.style.setProperty(name, value);
+      });
+    }
+    if (packet.type === 'kb:project') {
+      document.documentElement.dataset.project = packet.project.id;
+      document.dispatchEvent(new CustomEvent('kb:project', {detail: packet.project}));
+    }
+    if (packet.type === 'kb:activity') document.dispatchEvent(new CustomEvent('kb:activity', {detail: packet}));
+  });
+  document.addEventListener('click', event => {
+    const button = event.target.closest('[data-go]');
+    if (button) parent.postMessage({type:'kb:navigate',view:button.dataset.go}, '*');
+  });
+})();
+</script></template>
+
+<template id="workbenchTemplate">
+<div class="app"><aside class="side" id="side"><h2>最近会话</h2><button class="new" id="newSession" type="button">＋ 新会话</button><div id="sessionList"></div></aside><main class="main"><header class="top"><b id="sessionTitle">设计智脑集成</b><span class="tag success">已引用 8 条知识</span><span class="grow"></span><span class="run" id="status">就绪</span></header><div class="stream" id="stream"><div class="col" id="col"><div class="date-line">今天 · 10:42</div><div class="msg user">统一知识库的页面应该如何设计，才能简单、稳定，模块之间保持解耦？</div><div class="msg"><div class="message-label"><span class="message-mark">知</span>知识分析</div><p>建议围绕你的日常工作组织页面：开始任务、查找知识、确认记忆，以及查看项目。</p><p>当前项目负责知识生成与检索。相关项目的经验可以通过领域知识共享，你的稳定偏好则由长期记忆提供。</p><span class="citation">引用：ARCHITECTURE.md · 模块职责　/　principles.md · 简单与稳定</span></div></div></div><div class="composer"><div class="box"><textarea id="input" placeholder="描述你要完成的任务，或继续这个会话">继续分析：怎样统一各个模块的界面风格？</textarea><div class="bar"><span class="tag">当前项目</span><select id="agentSelect" aria-label="选择编程工具"><option>Codex</option><option>Claude Code</option><option>OpenCode</option><option>ZCode</option></select><button class="send" id="send" title="发送消息" aria-label="发送消息">↑</button></div></div><div class="composer-hint">Enter 发送 · Shift + Enter 换行</div></div></main><aside class="context"><h3>本次知识上下文</h3><p>已为当前会话准备 8 条引用</p><details open><summary><span id="contextProject">项目知识</span> <small>4</small></summary><div class="context-links"><p>知识生成、内容校验与晋升职责。</p><button data-go="search" type="button">ARCHITECTURE.md ↗</button></div></details><details><summary>领域知识 <small>2</small></summary><div class="context-links"><p>五个模块共享的接线约定与设计规范。</p><button data-go="search" type="button">平台协作约定 ↗</button></div></details><details><summary>长期记忆 <small>2</small></summary><div class="context-links"><p>简单使用、稳定运行；非必要不增加实体。</p><button data-go="memory" type="button">查看已确认记忆 ↗</button></div></details></aside></div><script>
+
+(() => {
+  const $ = selector => document.querySelector(selector);
+  let running = false, activeId = 'design', projectName = 'knowledge-engine', nextId = 1;
+  const sessions = new Map([
+    ['design', {title:'设计智脑集成',content:$('#col').innerHTML,draft:$('#input').value,agent:'Codex'}],
+    ['refresh', {title:'检查刷新恢复',content:'<div class="msg user">开发会话在页面切换之后，能否继续接收消息？</div><div class="msg">会话的消息流与恢复逻辑由工作台管理，外壳同步项目与外观。<span class="citation">引用：ARCHITECTURE.md · 会话生命周期</span></div>',draft:'',agent:'Claude Code'}],
+    ['index', {title:'索引故障分析',content:'<div class="msg user">知识索引出现错误时，应该如何恢复？</div><div class="msg">知识文件是事实来源，向量索引可以重新生成。先确认知识文件，再检查索引状态。<span class="citation">引用：vector-hub / ARCHITECTURE.md</span></div>',draft:'',agent:'OpenCode'}]
+  ]);
+  function saveSession() {
+    Object.assign(sessions.get(activeId), {content:$('#col').innerHTML,draft:$('#input').value,agent:$('#agentSelect').value});
+  }
+  function renderSessions() {
+    const list = $('#sessionList'); list.replaceChildren();
+    sessions.forEach((session,id) => {
+      const button = document.createElement('button');
+      button.className = 'item' + (id === activeId ? ' on' : '');
+      button.textContent = session.title; button.disabled = running;
+      button.onclick = () => {if(!running){saveSession();activeId=id;restoreSession()}};
+      list.append(button);
+    });
+  }
+  function restoreSession() {
+    const session = sessions.get(activeId);
+    $('#sessionTitle').textContent = session.title;
+    $('#col').innerHTML = session.content;
+    $('#input').value = session.draft;
+    $('#agentSelect').value = session.agent;
+    $('#status').textContent = '就绪';
+    renderSessions();
+  }
+  function lock(working) {
+    running = working;
+    $('#send').disabled = working; $('#newSession').disabled = working; $('#agentSelect').disabled = working;
+    renderSessions();
+  }
+  function reply() {
+    const text = $('#input').value.trim(); if(running || !text) return;
+    const session = sessions.get(activeId), agent = $('#agentSelect').value, project = projectName;
+    const user = document.createElement('div'); user.className='msg user'; user.textContent=text;
+    const answer = document.createElement('div'); answer.className='msg';
+    answer.innerHTML='<span class="thinking">正在读取相关知识…</span>';
+    $('#col').append(user,answer); $('#input').value=''; lock(true); $('#status').textContent='工作中';
+    parent.postMessage({type:'kb:status',app:'agent-terminal',status:'running'},'*');
+    const parts = [
+      agent + ' 已读取 ' + project + ' 的项目知识。 ',
+      '本次分析结合了项目约束、所属领域的协作约定，以及你已确认的长期原则。',
+      '<div class="tool">已引用 8 条知识 · 项目 4 / 领域 2 / 长期记忆 2</div>',
+      '界面围绕任务、知识检索和记忆确认展开，详细引用可以在右侧查看。<span class="citation">引用：ARCHITECTURE.md · 模块职责 / principles.md · 简单与稳定</span>'
+    ];
+    let index=0; answer.innerHTML='';
+    const timer=setInterval(() => {
+      // Scroll the message pane only; the host page keeps its own layout and navigation.
+      answer.insertAdjacentHTML('beforeend',parts[index++]);
+      $('#stream').scrollTop=$('#stream').scrollHeight;
+      if(index===parts.length){
+        clearInterval(timer); session.content=$('#col').innerHTML; saveSession(); lock(false); $('#status').textContent='已完成';
+        parent.postMessage({type:'kb:status',app:'agent-terminal',status:'complete'},'*');
+        parent.postMessage({type:'kb:activity',actor:'Agent 工作台',projectId:project,text:session.title+'已完成'},'*');
+      }
+    },650);
+  }
+  $('#newSession').onclick=() => {
+    if(running) return;
+    saveSession(); activeId='new-'+nextId++;
+    sessions.set(activeId,{title:'新会话 '+(nextId-1),content:'<div class="context-note"><strong>新会话</strong>描述你的任务，工作台会先参考当前项目的知识。</div>',draft:'',agent:$('#agentSelect').value});
+    restoreSession(); $('#input').focus();
+  };
+  $('#send').onclick=reply;
+  $('#input').onkeydown=event => {if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();reply()}};
+  document.addEventListener('kb:project',event => {
+    projectName=event.detail.name; $('#contextProject').textContent=projectName+' 项目知识';
+  });
+  renderSessions();
+  parent.postMessage({type:'kb:ready',app:'agent-terminal'},'*');
+})();
+
+</script>
+
+</template>
+
+<template id="vectorTemplate">
+<div class="app"><main class="main"><div class="body"><div class="search"><input aria-label="搜索知识" id="query" placeholder="搜索项目知识、领域经验或长期记忆"><button id="search">检索</button></div><div class="filters"><button class="chip on" data-scope="智脑" type="button">整个智脑</button><button class="chip" data-scope="领域" type="button">所属领域</button><button class="chip" data-scope="项目" type="button">当前项目</button></div><div class="search-meta"><span id="resultCount">3 条相关知识</span><span>保留来源与提交依据</span></div><div class="results" id="results"><article class="result" tabindex="0" role="button" aria-expanded="false"><div class="r1"><span class="scope">项目</span><b>Workbench 嵌入契约</b><span class="score">0.96</span></div><p>iframe 只初始化一次，外壳切换页面时保持挂载，不重新设置 src。</p><small>claude-ai-workbench / ARCHITECTURE.md · commit 81e7a64</small><div class="detail">通过 kb:project 和 kb:sidebar 消息改变上下文，不重新加载模块页面。</div></article><article class="result" tabindex="0" role="button" aria-expanded="false"><div class="r1"><span class="scope">领域</span><b>统一外壳与模块边界</b><span class="score">0.91</span></div><p>模块拥有复杂状态 UI；外壳拥有用户导航、智脑范围和状态投影。</p><small>Project Knowledge 平台 / ARCHITECTURE.md</small><div class="detail">消息流、搜索分页和 journal 刷新都留在所属模块。</div></article><article class="result" tabindex="0" role="button" aria-expanded="false"><div class="r1"><span class="scope">智脑</span><b>复用成熟能力</b><span class="score">0.78</span></div><p>不在外壳重写已经稳定的消息刷新与恢复逻辑。</p><small>三千的智脑 / principles.md</small><div class="detail">长期原则不会覆盖项目中的明确实现约束。</div></article></div></div></main></div><script>
+
+(() => {
+  const $=selector=>document.querySelector(selector);
+  const results=[...document.querySelectorAll('.result')];
+  let scope='智脑';
+  const empty=document.createElement('p');empty.className='search-meta';empty.textContent='没有匹配的知识，可以更换关键词或检索范围。';empty.hidden=true;$('#results').append(empty);
+  function filterResults(){
+    const words=$('#query').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    let count=0;
+    results.forEach(result=>{
+      const level=result.querySelector('.scope').textContent;
+      const withinScope=scope==='智脑'||level==='项目'||(scope==='领域'&&level==='领域');
+      const matches=words.every(word=>result.textContent.toLowerCase().includes(word));
+      result.hidden=!(withinScope&&matches);if(!result.hidden)count++;
+    });
+    $('#resultCount').textContent=count+' 条相关知识';empty.hidden=count!==0;
+  }
+  results.forEach(result=>{
+    result.onclick=()=>{const open=result.classList.toggle('open');result.setAttribute('aria-expanded',open)};
+    result.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();result.click()}};
+  });
+  document.querySelectorAll('.chip').forEach(button=>button.onclick=()=>{
+    scope=button.dataset.scope;document.querySelectorAll('.chip').forEach(chip=>chip.classList.toggle('on',chip===button));filterResults();
+  });
+  $('#search').onclick=()=>{
+    filterResults();
+    parent.postMessage({type:'kb:activity',actor:'知识检索',projectId:document.documentElement.dataset.project,text:'已检索：'+($('#query').value.trim()||'全部相关知识')},'*');
+  };
+  $('#query').onkeydown=event=>{if(event.key==='Enter')$('#search').click()};
+  document.addEventListener('kb:project',event=>{
+    const project=event.detail,result=results[0];
+    result.querySelector('b').textContent=project.name+' 项目职责';
+    result.querySelector('p').textContent=project.summary;
+    result.querySelector('small').textContent=project.name+' / ARCHITECTURE.md · commit 81e7a64（示例）';
+    result.querySelector('.detail').textContent='知识来源：'+project.knowledge+'\\ARCHITECTURE.md';
+    filterResults();
+  });
+  filterResults();
+  parent.postMessage({type:'kb:ready',app:'vector-hub'},'*');
+})();
+
+</script>
+
+</template>
+
+<template id="bridgeTemplate">
+<div class="app"><main class="main"><div id="events"><article class="event"><header><b>任务开始</b><small>10:42:06 · Codex</small></header><p>“统一产品应该如何嵌入模块 UI，并保持模块刷新逻辑？”</p></article><article class="event"><header><b>任务完成</b><small>10:51:22 · Codex</small></header><p>完成嵌入式统一外壳方案。</p></article><article class="event boundary"><header><b>commit-boundary · 81e7a64</b><small>10:52:04 · 已封存</small></header><p>feat: add module embed contract</p></article></div></main></div><script>
+(() => {
+  const events=document.querySelector('#events');
+  let projectId='knowledge-engine';
+  [...events.children].forEach(event=>{event.dataset.project=projectId});
+  const empty=document.createElement('p');empty.className='search-meta';empty.textContent='当前项目还没有活动记录。';empty.hidden=true;events.after(empty);
+  function filterEvents(){
+    let count=0;
+    [...events.children].forEach(event=>{event.hidden=event.dataset.project!==projectId;if(!event.hidden)count++});
+    empty.hidden=count!==0;
+  }
+  document.addEventListener('kb:project',event=>{projectId=event.detail.id;filterEvents()});
+  document.addEventListener('kb:activity',event=>{
+    const packet=event.detail,article=document.createElement('article');article.className='event';article.dataset.project=packet.projectId;
+    const header=document.createElement('header'),actor=document.createElement('b'),time=document.createElement('small'),text=document.createElement('p');
+    actor.textContent=packet.actor;time.textContent='刚刚 · '+packet.projectId;text.textContent=packet.text;
+    header.append(actor,time);article.append(header,text);events.prepend(article);
+    if(events.children.length>50)events.lastElementChild.remove();filterEvents();
+  });
+  parent.postMessage({type:'kb:ready',app:'event-bridge'},'*');
+})();
+</script>
+
+</template>
+
+<template id="engineTemplate">
+<div class="app"><main class="main"><div class="top"><h2>知识脉搏</h2><span class="tag">知识更新正常</span></div><div class="flow"><div class="step"><b>event-bridge</b><span>cursor 142</span></div><div class="step"><b>提交认领</b><span>等待 boundary</span></div><div class="step"><b>Agent 分析</b><span>空闲</span></div><div class="step"><b>知识晋升</b><span>revision 81</span></div><div class="step"><b>检索就绪</b><span>4 个客户端</span></div></div><div class="grid"><div class="card"><b>最近知识变更</b><div class="row"><span>81e7a64 · index recovery</span><span class="good">已晋升</span></div><div class="row"><span>domain-candidate-14</span><span class="wait">待确认</span></div></div><div class="card"><b>当前范围</b><div class="row"><span>brainId</span><span>sanqian</span></div><div class="row"><span>domainId</span><span>project-knowledge-platform</span></div><div class="row"><span>projectId</span><span id="project">knowledge-engine</span></div></div></div></main></div><script>
+
+document.addEventListener('kb:project',event=>{document.querySelector('#project').textContent=event.detail.id});
+parent.postMessage({type:'kb:ready',app:'knowledge-engine'},'*');
+
+</script>
+
+</template>
+
+<script>
+
+(() => {
+  const $=selector=>document.querySelector(selector), $$=selector=>[...document.querySelectorAll(selector)];
+  const titles={home:'智脑首页',work:'开始工作',search:'知识检索',memory:'长期记忆',knowledge:'领域与项目',activity:'活动记录'};
+  const projects=[
+    {id:'knowledge-engine',name:'knowledge-engine',source:'D:\\SanQian.Xu\\knowledge-engine',knowledge:'D:\\SanQian.Xu\\knowledge\\brains\\sanqian\\domains\\project-knowledge-platform\\projects\\knowledge-engine',summary:'知识生成、晋升与多范围检索编排。'},
+    {id:'vector-hub',name:'vector-hub',source:'D:\\SanQian.Xu\\vector-hub',knowledge:'D:\\SanQian.Xu\\knowledge\\brains\\sanqian\\domains\\project-knowledge-platform\\projects\\vector-hub',summary:'从 Markdown 派生可重建的向量索引。'},
+    {id:'project-knowledge-base',name:'project-knowledge-base',source:'D:\\SanQian.Xu\\project-knowledge-base',knowledge:'D:\\SanQian.Xu\\knowledge\\brains\\sanqian\\domains\\project-knowledge-platform\\projects\\project-knowledge-base',summary:'统一产品外壳与模块接线。'},
+    {id:'ai-coding-event-bridge',name:'ai-coding-event-bridge',source:'D:\\SanQian.Xu\\ai-coding-event-bridge',knowledge:'D:\\SanQian.Xu\\knowledge\\brains\\sanqian\\domains\\project-knowledge-platform\\projects\\ai-coding-event-bridge',summary:'接收开发会话与 commit boundary。'},
+    {id:'claude-ai-workbench',name:'claude-ai-workbench',source:'D:\\SanQian.Xu\\claude-ai-workbench',knowledge:'D:\\SanQian.Xu\\knowledge\\brains\\sanqian\\domains\\project-knowledge-platform\\projects\\claude-ai-workbench',summary:'执行开发与知识维护 Agent 会话。'}
+  ];
+  const frames=[
+    {id:'workFrame',template:'workbenchTemplate',role:'workbench',app:'agent-terminal'},
+    {id:'vectorFrame',template:'vectorTemplate',role:'retrieval',app:'vector-hub'},
+    {id:'bridgeFrame',template:'bridgeTemplate',role:'activity',app:'event-bridge'},
+    {id:'engineFrame',template:'engineTemplate',role:'engine',app:'knowledge-engine'}
+  ];
+  const tokens=['--page','--surface','--surface2','--surface3','--line','--line2','--text','--muted','--faint','--nav','--accent','--accent2','--accent-soft','--good','--good-soft','--warn','--warn-soft','--bad'];
+  let activeProject=projects[0],editingMemory=null,toastTimer;
+  const ready=new Set();
+  const candidates=[
+    {id:0,title:'先做可点击原型再进入实现',description:'最近多个设计任务都先通过真实交互原型确认结构。',state:'candidate'},
+    {id:1,title:'控制台默认使用柔和浅色',description:'本次选择可能形成稳定的界面偏好。',state:'candidate'},
+    {id:2,title:'相关项目共享领域知识',description:'五个模块持续使用相同架构和术语。',state:'candidate'}
+  ];
+  const confirmedSeed=$('#view-memory .mem-grid').innerHTML;
+  function escapeHTML(value){return String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]))}
+  function themePayload(){
+    const computed=getComputedStyle(document.documentElement);
+    return {type:'kb:theme',theme:document.documentElement.dataset.theme,tokens:Object.fromEntries(tokens.map(name=>[name,computed.getPropertyValue(name).trim()]))};
+  }
+  function broadcast(packet){frames.forEach(frame=>$('#'+frame.id).contentWindow.postMessage(packet,'*'))}
+  function toast(message){$('#toast').textContent=message;$('#toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').classList.remove('show'),1800)}
+  function showView(name){
+    if(!titles[name])return;
+    $$('.view').forEach(view=>view.classList.toggle('active',view.id==='view-'+name));
+    $$('[data-view]').forEach(button=>button.classList.toggle('active',button.dataset.view===name));
+    $('#pageTitle').textContent=titles[name];
+    $('#crumb').textContent='三千的智脑 / Project Knowledge 平台';
+    $('.content').classList.toggle('module-content',['work','search','activity'].includes(name));
+  }
+  function renderProjects(){
+    $('#projectSelect').innerHTML=projects.map(project=>'<option value="'+project.id+'">'+escapeHTML(project.name)+'</option>').join('');
+    $('#homeProjects').innerHTML=projects.map(project=>'<button class="project-row" data-project="'+project.id+'"><span class="project-icon">'+project.name[0].toUpperCase()+'</span><span class="project-copy"><b>'+escapeHTML(project.name)+'</b><span>'+escapeHTML(project.summary)+'</span></span><span class="status">已同步</span></button>').join('');
+    $('#treeProjects').innerHTML=projects.map(project=>'<button data-project="'+project.id+'"><span>'+escapeHTML(project.name)+'</span></button>').join('');
+  }
+  function selectProject(id){
+    const project=projects.find(item=>item.id===id);if(!project)return;
+    activeProject=project;$('#projectSelect').value=id;
+    $$('#treeProjects [data-project]').forEach(button=>button.classList.toggle('active',button.dataset.project===id));
+    $('#projectDetail').innerHTML='<div class="panel-head"><div><h2>'+escapeHTML(project.name)+'</h2><p>Project Knowledge 平台</p></div><span class="status">已关联知识库</span></div><p>'+escapeHTML(project.summary)+'</p><div class="path-pair"><div class="path-card"><span>代码目录</span><b>'+escapeHTML(project.source)+'</b></div><span class="arrow">→</span><div class="path-card"><span>知识目录</span><b>'+escapeHTML(project.knowledge)+'</b></div></div><section class="panel soft candidate-panel"><div class="panel-head"><div><h3>知识作用范围</h3><p>先参考项目知识，再结合相关领域经验与长期记忆。</p></div></div><div class="activity-row"><time>智脑</time><b>三千的智脑</b><span>已确认的个人偏好与原则</span></div><div class="activity-row"><time>领域</time><b>Project Knowledge</b><span>相关项目的共享经验</span></div><div class="activity-row"><time>项目</time><b>'+escapeHTML(project.name)+'</b><span>当前项目的事实与提交依据</span></div></section>';
+    broadcast({type:'kb:project',project:activeProject});
+  }
+  function candidateMarkup(memory){
+    return '<div class="memory-row" data-memory="'+memory.id+'"><b>'+escapeHTML(memory.title)+'</b><p>'+escapeHTML(memory.description)+'</p><div class="memory-actions"><button class="mini accept" data-memory-action="accept">确认</button><button class="mini" data-memory-action="edit">编辑</button><button class="mini" data-memory-action="ignore">忽略</button></div></div>';
+  }
+  function renderMemory(){
+    const pending=candidates.filter(memory=>memory.state==='candidate');
+    const markup=pending.length?pending.map(candidateMarkup).join(''):'<p>没有待确认的记忆。</p>';
+    $('#homeCandidates').innerHTML=markup;$('#memoryCandidates').innerHTML=markup;
+    $('#memoryCount').textContent=pending.length;$('#homeMemoryCount').textContent=pending.length;
+    $('#view-memory .mem-grid').innerHTML=confirmedSeed+candidates.filter(memory=>memory.state==='accepted').map(memory=>'<article class="mem-card"><header><span class="pill">记忆</span><b>'+escapeHTML(memory.title)+'</b><span class="status">已确认</span></header><p>'+escapeHTML(memory.description)+'</p></article>').join('');
+  }
+  function handleMemory(button){
+    const memory=candidates.find(item=>item.id===Number(button.closest('[data-memory]').dataset.memory));
+    if(!memory)return;
+    const action=button.dataset.memoryAction;
+    if(action==='edit'){
+      editingMemory=memory;$('#memoryTitle').value=memory.title;$('#memoryDescription').value=memory.description;$('#memoryEditor').showModal();return;
+    }
+    memory.state=action==='accept'?'accepted':'ignored';renderMemory();
+    toast(action==='accept'?'已确认长期记忆':'已忽略候选记忆');
+  }
+  function updateSystem(){
+    const complete=ready.size===frames.length;
+    $('#openSystem b').textContent=complete?'系统运行正常':'系统载入中';
+    $('#openSystem small').textContent=complete?'知识更新与检索正常':'正在准备工作区';
+    $('#openSystem .dot').style.background=complete?'var(--good)':'var(--faint)';
+  }
+  window.addEventListener('message',event=>{
+    const frame=frames.find(item=>$('#'+item.id).contentWindow===event.source);if(!frame)return;
+    const packet=event.data||{};
+    if(packet.type==='kb:ready'&&packet.app===frame.app){
+      ready.add(frame.app);$('#'+frame.id).dataset.ready='true';
+      const label=$('[data-service="'+frame.app+'"]');label.textContent='已就绪';
+      event.source.postMessage(themePayload(),'*');
+      event.source.postMessage({type:'kb:project',project:activeProject},'*');updateSystem();
+    }
+    if(packet.type==='kb:navigate')showView(packet.view);
+    if(packet.type==='kb:status'&&frame.app==='agent-terminal'){
+      const working=packet.status==='running';
+      $('#workBadge').hidden=!working;$('#workBadge').textContent='运行中';$('#workBadge').classList.toggle('run',working);
+      $('[data-service="agent-terminal"]').textContent=working?'工作中':'已就绪';
+    }
+    if(packet.type==='kb:activity'){
+      $('#bridgeFrame').contentWindow.postMessage({...packet,projectId:packet.projectId||activeProject.id},'*');
+      const row=document.createElement('div');row.className='activity-row';
+      const time=document.createElement('time');time.textContent='刚刚';
+      const actor=document.createElement('b');actor.textContent=String(packet.actor||'工作进展');
+      const description=document.createElement('span');description.textContent=String(packet.text||'');
+      row.append(time,actor,description);$('#homeActivity').prepend(row);
+      if($('#homeActivity').children.length>12)$('#homeActivity').lastElementChild.remove();
+    }
+  });
+  document.addEventListener('click',event=>{
+    const button=event.target.closest('button');if(!button)return;
+    if(button.dataset.view)showView(button.dataset.view);
+    if(button.dataset.go)showView(button.dataset.go);
+    if(button.dataset.project){selectProject(button.dataset.project);showView('knowledge')}
+    if(button.dataset.memoryAction)handleMemory(button);
+  });
+  $('#projectSelect').onchange=event=>selectProject(event.target.value);
+  $('#themeToggle').onclick=()=>{
+    document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark';
+    document.documentElement.style.colorScheme=document.documentElement.dataset.theme;
+    broadcast(themePayload());
+  };
+  $('#openSystem').onclick=()=>$('#systemBackdrop').classList.add('open');
+  function closeSystem(){ $('#systemBackdrop').classList.remove('open');$('#openSystem').focus() }
+  $('#closeSystem').onclick=closeSystem;
+  $('#systemBackdrop').onclick=event=>{if(event.target.id==='systemBackdrop')closeSystem()};
+  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&$('#systemBackdrop').classList.contains('open'))closeSystem()});
+  $('#cancelMemoryEdit').onclick=()=>$('#memoryEditor').close();
+  $('#memoryForm').onsubmit=event=>{
+    event.preventDefault();if(!editingMemory)return;
+    const title=$('#memoryTitle').value.trim(),description=$('#memoryDescription').value.trim();
+    if(!title||!description){toast('请填写记忆内容和说明');return}
+    editingMemory.title=title;editingMemory.description=description;
+    renderMemory();$('#memoryEditor').close();toast('记忆内容已更新');
+  };
+  // Frames stay mounted for the whole shell session, including while their pages are hidden.
+  const theme=themePayload(),css=':root{'+Object.entries(theme.tokens).map(([name,value])=>name+':'+value).join(';')+';color-scheme:'+theme.theme+'}'+$('#moduleStyleTemplate').content.textContent;
+  const sharedRuntime=$('#moduleRuntimeTemplate').content.querySelector('script').textContent;
+  frames.forEach(frame=>{
+    const contents=$('#'+frame.template).innerHTML;
+    const runtime='<script>'+sharedRuntime+'<'+'/script>';
+    $('#'+frame.id).srcdoc='<!doctype html><html lang="zh-CN" data-theme="'+theme.theme+'"><head><meta charset="utf-8"><style>'+css+'</style>'+runtime+'</head><body class="'+frame.role+'">'+contents+'</body></html>';
+  });
+  $('#workBadge').hidden=true;updateSystem();renderProjects();renderMemory();selectProject(activeProject.id);showView('home');
+})();
+</script>
+</body>
+</html>
