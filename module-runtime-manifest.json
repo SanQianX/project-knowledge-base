@@ -1,9 +1,9 @@
 {
   "schema": "project-knowledge/module-content/v1",
   "productFiles": {
-    "ui/index.html": "1ad9cd83d1727e98b90391c1ab5ab9b99b5812d1ab9e9262bf1e8f3b49e3331d",
-    "ui/product.js": "1a5cee1cdebaffe097cef4f908bc7e595b16734a08f7495ed0d52b9b81137f5e",
-    "ui/product.css": "0c31d4937780b3a277689b4619208ad0e5dc59a84d7e27fc16b5f1815d59b47c",
+    "ui/index.html": "737b8f5c745270797950c5975f458a13ffe1ea738f921e814bfbbe5e56813fed",
+    "ui/product.js": "da7ea12a394212766cb0994fe0026ab2cccbba866063cdcc4c1662573e3c6dfa",
+    "ui/product.css": "4f300b08c086a939831d7ee69df01f23641457c0d606af29e9d4ce8a6d28bc9d",
     "ui/favicon.svg": "c48be946b224112ebb0238b44263f7a61bda31e531afa895c2e9801c0ff24f32",
     "plugins/project-knowledge/hooks/claude.json": "d61510327e3e1facbb4c645228e9f50cad05a88b33d80c4c22e5ba9f8b9f5359",
     "plugins/project-knowledge/hooks/codex.json": "216e03c07295606ef6ebb2c4f669ad0d790b5e7c4f3f34600488033db75e4239",
