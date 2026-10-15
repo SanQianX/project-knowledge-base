@@ -12,9 +12,14 @@
  *   - module removal with keepSessions semantics
  *
  * Configuration (env, loopback defaults):
- *   KB_TERMINAL_URL     default http://127.0.0.1:5760
- *   KB_VECTORHUB_URL    default http://127.0.0.1:8787
- *   KB_EVENTBRIDGE_URL  default http://127.0.0.1:8790
+ *   KB_TERMINAL_URL     default http://127.0.0.1:5760 (managed: dynamic when busy)
+ *   KB_VECTORHUB_URL    default http://127.0.0.1:8787 (managed: dynamic when busy)
+ *   KB_EVENTBRIDGE_URL  default http://127.0.0.1:8790 (managed: dynamic when busy)
+ *   KB_KNOWLEDGE_ENGINE_URL default http://127.0.0.1:5790 (managed: dynamic when busy)
+ *   An explicitly injected URL is treated as an external service and never
+ *   rewritten. Managed modules resolve a final URL before spawn: healthy
+ *   identity match reuses the port, otherwise the next free port from
+ *   preferred +0..+19 is taken; all busy fails loudly (NO_FREE_MODULE_PORT).
  *   KB_MODULES_AUTOSTART  '0' to stop spawning the vendored module services
  *                         (they start with the shell by default)
  *   KB_TERMINAL_COMMAND  explicit node command line for the terminal service
@@ -23,8 +28,10 @@
  */
 
 const { spawn, spawnSync } = require('child_process');
+const net = require('net');
 const path = require('path');
 const { StorageLayout } = require('./storage-layout');
+const { resolveModuleUrl } = require('./module-port-resolver');
 const fs = require('fs');
 const crypto = require('crypto');
 const { once } = require('events');
@@ -83,6 +90,40 @@ function defaultEventBridgeUrl() {
 
 function defaultEngineUrl() { return String(process.env.KB_KNOWLEDGE_ENGINE_URL || 'http://127.0.0.1:5790').replace(/\/+$/, ''); }
 
+// Health identity markers: an HTTP 200 alone can come from any foreign
+// service that grabbed the port. Only a body that matches the product
+// counts as "our module already running" (reuse); anything else is
+// foreign and the resolver moves to another port instead of crash-looping.
+const MODULE_IDENTITY = {
+  terminal: body => body && typeof body === 'object' && body.status === 'ok' && typeof body.apiVersion === 'string',
+  vectorHub: body => body && typeof body === 'object' && Array.isArray(body.projects),
+  eventBridge: body => body && typeof body === 'object' && typeof body.registeredProjects === 'number',
+  engine: body => body && typeof body === 'object' && body.name === 'knowledge-engine',
+};
+
+// kind -> bridge URL property, explicit env override, spawn spec name
+const MODULE_URL_TARGETS = [
+  { kind: 'terminal', prop: 'terminalUrl', env: 'KB_TERMINAL_URL', specName: 'terminal' },
+  { kind: 'vectorHub', prop: 'vectorHubUrl', env: 'KB_VECTORHUB_URL', specName: 'vector-hub' },
+  { kind: 'eventBridge', prop: 'eventBridgeUrl', env: 'KB_EVENTBRIDGE_URL', specName: 'event-bridge' },
+  { kind: 'engine', prop: 'engineUrl', env: 'KB_KNOWLEDGE_ENGINE_URL', specName: 'knowledge-engine' },
+];
+
+function specNameToKind(specName) {
+  return MODULE_URL_TARGETS.find(target => target.specName === specName)?.kind || null;
+}
+
+function tcpPortFree(host, port) {
+  return new Promise(resolve => {
+    const tester = net.createServer();
+    let done = false;
+    const finish = free => { if (done) return; done = true; tester.close(() => resolve(free)); };
+    tester.once('error', () => finish(false));
+    tester.once('listening', () => finish(true));
+    tester.listen(port, host);
+  });
+}
+
 class ModuleBridge {
   constructor(options = {}) {
     this.logger = options.logger || { info: () => {}, warn: () => {}, error: () => {} };
@@ -90,6 +131,15 @@ class ModuleBridge {
     this.vectorHubUrl = options.vectorHubUrl || defaultVectorHubUrl();
     this.eventBridgeUrl = options.eventBridgeUrl || defaultEventBridgeUrl();
     this.engineUrl = options.engineUrl || defaultEngineUrl();
+    // Explicitly injected URLs (option or env) mean an external service;
+    // only managed defaults participate in dynamic port resolution.
+    this.explicitModuleUrls = {
+      terminal: Boolean(options.terminalUrl || process.env.KB_TERMINAL_URL),
+      vectorHub: Boolean(options.vectorHubUrl || process.env.KB_VECTORHUB_URL),
+      eventBridge: Boolean(options.eventBridgeUrl || process.env.KB_EVENTBRIDGE_URL),
+      engine: Boolean(options.engineUrl || process.env.KB_KNOWLEDGE_ENGINE_URL),
+    };
+    this.moduleUrlSources = { terminal: 'pending', vectorHub: 'pending', eventBridge: 'pending', engine: 'pending' };
     this.runtimeToken = options.runtimeToken || crypto.randomBytes(32).toString('hex');
     this.registryStore = options.registryStore || null;
     this.projectStore = options.projectStore || null;
@@ -303,23 +353,43 @@ class ModuleBridge {
     };
   }
 
-  async _probe(base) {
-    const route = base === this.terminalUrl ? '/api/claude-workbench/v1/health' : '/api/health';
-    try { const response = await this._fetch(`${base}${route}`, { timeoutMs: 2000 }); return response.ok; } catch { return false; }
+  /**
+   * Classify what is listening on a module URL.
+   * 'module'     HTTP 2xx + product identity marker -> safe to reuse
+   * 'foreign'    HTTP responded but identity mismatch -> never reuse
+   * 'unreachable' no HTTP answer (free port or non-HTTP listener)
+   */
+  async _probeClass(base, kind) {
+    const route = kind === 'terminal' ? '/api/claude-workbench/v1/health' : '/api/health';
+    const marker = MODULE_IDENTITY[kind];
+    if (!marker) return 'unreachable';
+    try {
+      const response = await this._fetch(`${base}${route}`, { timeoutMs: 2000 });
+      if (!response.ok) return 'unreachable';
+      let body;
+      try { body = await response.json(); } catch { return 'foreign'; }
+      return marker(body) ? 'module' : 'foreign';
+    } catch { return 'unreachable'; }
+  }
+
+  async _probe(base, kind) {
+    const resolvedKind = kind || (base === this.terminalUrl ? 'terminal' : null);
+    if (!resolvedKind) return false;
+    return (await this._probeClass(base, resolvedKind)) === 'module';
   }
 
   async modulesHealth() {
     const [terminal, vectorHub, eventBridge, engine] = await Promise.all([
-      this._probe(this.terminalUrl),
-      this._probe(this.vectorHubUrl),
-      this._probe(this.eventBridgeUrl),
-      this._probe(this.engineUrl),
+      this._probe(this.terminalUrl, 'terminal'),
+      this._probe(this.vectorHubUrl, 'vectorHub'),
+      this._probe(this.eventBridgeUrl, 'eventBridge'),
+      this._probe(this.engineUrl, 'engine'),
     ]);
     return { ok: true, modules: {
-      terminal: { url: this.terminalUrl, up: terminal },
-      vectorHub: { url: this.vectorHubUrl, up: vectorHub },
-      eventBridge: { url: this.eventBridgeUrl, up: eventBridge },
-      engine: { url: this.engineUrl, up: engine },
+      terminal: { url: this.terminalUrl, up: terminal, source: this.moduleUrlSources.terminal },
+      vectorHub: { url: this.vectorHubUrl, up: vectorHub, source: this.moduleUrlSources.vectorHub },
+      eventBridge: { url: this.eventBridgeUrl, up: eventBridge, source: this.moduleUrlSources.eventBridge },
+      engine: { url: this.engineUrl, up: engine, source: this.moduleUrlSources.engine },
     } };
   }
 
@@ -617,13 +687,40 @@ class ModuleBridge {
    */
   async startSupervised() {
     if (String(process.env.KB_MODULES_AUTOSTART || '') === '0') return;
+    await this._resolveManagedUrls();
     await Promise.all(this._supervisedSpecs().map(async spec => {
-      if (await this._probe(spec.url)) {
+      const kind = specNameToKind(spec.name);
+      if (kind && await this._probeClass(spec.url, kind) === 'module') {
         this.logger.info('modules.supervisor', 'Module service already up; not spawning.', { context: { name: spec.name, url: spec.url } });
         this.onReady?.(spec.name); return;
       }
       this._spawnSupervised(spec);
     }));
+  }
+
+  /**
+   * Resolve final managed URLs BEFORE any spec is built or a process is
+   * spawned, so inter-module env wiring (engine URL, bridge URL, ...) uses
+   * the final dynamic ports. Sequential on purpose: parallel scans could
+   * race two kinds into the same overlapping candidate range
+   * (8787..8806 vs 8790..8809).
+   */
+  async _resolveManagedUrls() {
+    for (const target of MODULE_URL_TARGETS) {
+      const preferredUrl = this[target.prop];
+      const resolved = await resolveModuleUrl({
+        kind: target.kind,
+        preferredUrl,
+        explicit: this.explicitModuleUrls[target.kind],
+        portFree: port => tcpPortFree(urlHost(preferredUrl), port),
+        probe: url => this._probeClass(url, target.kind),
+      });
+      this[target.prop] = resolved.url;
+      this.moduleUrlSources[target.kind] = resolved.source;
+      if (resolved.source !== 'external') {
+        this.logger.info('modules.port_resolution', 'Module URL resolved.', { context: { kind: target.kind, source: resolved.source, url: resolved.url, port: resolved.port, offset: resolved.offset } });
+      }
+    }
   }
 
   _supervisedSpecs() {
@@ -740,7 +837,8 @@ class ModuleBridge {
     let attemptsReady = 0;
     const checkReady = async () => {
       if (this.stopped || child.exitCode !== null || ++attemptsReady > 20) return;
-      if (await this._probe(spec.url)) { this.resetRuntimeConfiguration(); this.onReady?.(spec.name); return; }
+      const kind = specNameToKind(spec.name);
+      if (kind && await this._probeClass(spec.url, kind) === 'module') { this.resetRuntimeConfiguration(); this.onReady?.(spec.name); return; }
       const timer = setTimeout(() => { this.restartTimers.delete(timer); checkReady(); }, 500);
       this.restartTimers ||= new Set(); this.restartTimers.add(timer);
     };

@@ -50,7 +50,9 @@ async function main() {
   const stub = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
     hits.push(`${req.method} ${url.pathname}${url.search}`);
-    if (url.pathname === '/api/health') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true })); return; }
+    // Real console health carries registeredProjects; the identity check
+    // rejects generic {"ok":true} bodies from foreign port squatters.
+    if (url.pathname === '/api/health') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, registeredProjects: registered.length })); return; }
     if (url.pathname === '/api/echo') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ echo: `${req.method} ${url.pathname}`, query: Object.fromEntries(url.searchParams) }));
