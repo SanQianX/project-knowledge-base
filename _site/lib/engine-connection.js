@@ -1,9 +1,17 @@
 const { DomainError } = require('./contracts');
 const { execGit } = require('./git-runner');
 
-async function connectEngine(runtime) {
-  if (runtime.analysisOwner === 'legacy' || runtime.engineConnecting) return;
-  runtime.engineConnecting = true;
+function connectEngine(runtime) {
+  if (runtime.analysisOwner === 'legacy') return Promise.resolve();
+  if (runtime.engineConnecting) { runtime.engineReconnectRequested = true; return runtime.engineConnecting; }
+  const job = connectEngineOnce(runtime).finally(() => {
+    runtime.engineConnecting = null;
+    if (runtime.engineReconnectRequested && !runtime.engineConnectionClosed) { runtime.engineReconnectRequested = false; void connectEngine(runtime); }
+  });
+  runtime.engineConnecting = job;
+  return job;
+}
+async function connectEngineOnce(runtime) {
   let step = 'engine-health';
   let projectId = '';
   let httpStatus = 0;
@@ -21,24 +29,36 @@ async function connectEngine(runtime) {
     httpStatus = auth.status;
     if (!auth.ok) throw new Error('RUNTIME_AUTH_REQUIRED');
     bridge.engineCompatible = true;
+    if (engine.executionEnabled === false) { bridge.resetRuntimeConfiguration?.(); runtime.projectConnections?.clear(); }
     step = 'project-wiring';
-    for (const id of runtime.registryStore.listIds()) {
-      projectId = id;
+    const remote = bridge._listEngineProjects ? await bridge._listEngineProjects() : [];
+    runtime.projectConnections ||= new Map();
+    const enabled = [], pending = [];
+    let cursor = 0;
+    const ids = runtime.registryStore.listIds();
+    const wire = async () => { while (cursor < ids.length) {
+      const id = ids[cursor++];
       if (!runtime.registryStore.readDisplaySnapshot(id)) continue;
       let config;
       try { config = runtime.projectStore.readConfig(id); }
-      catch (error) { if (!runtime.registryStore.readDisplaySnapshot(id)) continue; throw error; }
+      catch { pending.push({ projectId: id, code: 'PROJECT_CONFIG_UNAVAILABLE' }); continue; }
+      const fingerprint = JSON.stringify(config);
+      if (runtime.projectConnections.get(id) === fingerprint && remote.some(p => p.projectId === id && p.repoPath === config.repoPath && p.knowledgePath === config.knowledgePath)) { enabled.push(id); continue; }
+      try {
       const modules = await bridge.registerProjectLinks({ projectId: id, name: config.displayName, workspacePath: config.repoPath, knowledgePath: config.knowledgePath });
-      if (!modules.engine.ok || !modules.eventBridge.ok) throw new Error('PROJECT_WIRING_PENDING');
-    }
+      if (!modules.engine.ok || !modules.eventBridge.ok) { pending.push({ projectId: id, code: 'PROJECT_WIRING_PENDING' }); continue; }
+      runtime.projectConnections.set(id, fingerprint); enabled.push(id);
+      } catch { pending.push({ projectId: id, code: 'PROJECT_WIRING_PENDING' }); }
+    } };
+    await Promise.all([wire(), wire()]);
     projectId = '';
     step = 'runtime-configuration';
     await bridge.syncEngineConfiguration();
     step = 'engine-activation';
-    const activated = await bridge._fetch(`${bridge.engineUrl}/api/control`, { method: 'POST', headers, body: JSON.stringify({ enabled: true }) });
+    const activated = await bridge._fetch(`${bridge.engineUrl}/api/control`, { method: 'POST', headers, body: JSON.stringify({ enabled: true, projectIds: enabled }) });
     httpStatus = activated.status;
     if (!activated.ok) throw new Error(activated.status === 403 ? 'RUNTIME_AUTH_REQUIRED' : 'ENGINE_ACTIVATION_FAILED');
-    runtime.ownership = { owner: 'engine', ready: true };
+    runtime.ownership = { owner: 'engine', ready: true, ...(pending.length ? { pendingProjects: pending, message: '部分项目接线待恢复，其他已连接项目可正常维护。' } : {}) };
   } catch (error) {
     const codes = ['ENGINE_UNAVAILABLE', 'ENGINE_VERSION_MISMATCH', 'PROJECT_WIRING_PENDING', 'RUNTIME_AUTH_REQUIRED', 'ENGINE_ACTIVATION_FAILED'];
     const code = codes.includes(error.message) ? error.message : 'ENGINE_CONNECTION_FAILED';
@@ -52,7 +72,7 @@ async function connectEngine(runtime) {
     const previous = runtime.ownership?.error;
     runtime.ownership = { owner: 'engine', ready: false, message, error: { code, step, httpStatus, ...(projectId ? { projectId } : {}) } };
     if (previous?.code !== code || previous?.step !== step || (previous?.projectId || '') !== projectId) await runtime.logger.warn('engine.connection_pending', message, { component: 'engine-connection', phase: step, projectId, context: { code, httpStatus } });
-  } finally { runtime.engineConnecting = false; }
+  }
 }
 
 async function forwardCommitToBridge(runtime, event) {

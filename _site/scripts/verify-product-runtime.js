@@ -9,6 +9,7 @@ function verifyProductRuntime(coreRoot, resolveFrom = path.join(coreRoot, 'packa
   if (manifest.schema !== 'project-knowledge/module-content/v1' || Object.keys(manifest.modules).length !== 3) throw new Error('Incomplete module content manifest');
   for (const file of ['ui/index.html', 'ui/product.js', 'ui/product.css', 'ui/favicon.svg', 'plugins/project-knowledge/hooks/claude.json', 'plugins/project-knowledge/hooks/codex.json', 'plugins/project-knowledge/scripts/context-hook.cjs', 'plugins/project-knowledge/scripts/mcp-launcher.cjs', 'plugins/project-knowledge/.claude-plugin/plugin.json', 'plugins/project-knowledge/.codex-plugin/plugin.json', 'plugins/project-knowledge/.mcp.json']) if (!manifest.productFiles?.[file]) throw new Error(`Product asset missing from content manifest: ${file}`);
   const resolve = createRequire(resolveFrom);
+  if (!manifest.productFiles['ui/live-client.js']) throw new Error('Product live transport missing from content manifest');
   for (const [relative, expected] of Object.entries(manifest.productFiles || {})) {
     if (!safeRelative(relative) || crypto.createHash('sha256').update(fs.readFileSync(path.join(coreRoot, relative))).digest('hex') !== expected) throw new Error(`Product UI content mismatch: ${relative}`);
   }

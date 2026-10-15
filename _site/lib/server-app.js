@@ -916,8 +916,10 @@ function createRequestHandler(runtime, options = {}) {
       }
       if (method === 'POST' && pathname === '/api/modules/configure') {
         await readJsonBody(req);
+        runtime.moduleBridge.resetRuntimeConfiguration();
+        runtime.projectConnections?.clear();
         await connectEngine(runtime);
-        return send(res, 200, { ok: true, configuration: await runtime.moduleBridge.syncEngineConfiguration() });
+        return send(res, 200, { ok: true, configuration: await runtime.moduleBridge.syncEngineConfiguration({ force: true }) });
       }
       if (method === 'GET' && pathname === '/api/brain') {
         const settings = runtime.settingsStore.read();
@@ -986,6 +988,7 @@ function createRequestHandler(runtime, options = {}) {
         return send(res, 200, { ok: true, settings: { ...settings, ai: publicAiProfilesConfig(settings.ai) }, configuration });
       }
 
+      if (method === 'GET' && pathname === '/api/projects/projection') return send(res, 200, { ok: true, projects: listProjectViews(runtime.registryStore, runtime.projectStore).map(p => ({ projectId: p.projectId, name: p.config.displayName, workspacePath: p.config.repoPath, knowledgePath: p.config.knowledgePath, brainId: p.config.brainId, domainId: p.config.domainId, modules: Object.fromEntries(['terminal', 'vectorHub', 'eventBridge', 'engine'].map(key => { const module = p.state.modules?.[key] || {}; return [key, { projectId: module.projectId, projectName: module.projectName, status: module.status, registered: module.ok === true && module.status === 'registered' }]; })) })) });
       if (method === 'GET' && pathname === '/api/projects') return send(res, 200, { ok: true, projects: listProjectViews(runtime.registryStore, runtime.projectStore) });
       // T06: pure preflight endpoint — never mutates state. The UI calls
       // this on path pick / language change / profile change to keep the
@@ -1011,6 +1014,7 @@ function createRequestHandler(runtime, options = {}) {
           workspacePath: String(config.repoPath || body.path || ''),
           knowledgePath: String(body.knowledgePath || config.knowledgePath || ''),
         });
+        void connectEngine(runtime);
         return send(res, 201, { ...result, modules: moduleResult, project: projectPublicView(result.projectId, runtime.projectStore) });
       }
       const projectMatch = pathname.match(/^\/api\/projects\/([^/]+)$/);
@@ -1486,6 +1490,8 @@ async function startServer(options = {}) {
     startup = await initializeRuntime(runtime);
     const handler = createRequestHandler(runtime, { ...options, port, host });
     server = http.createServer(handler);
+    runtime.liveGateway = require('./live-gateway').attachLiveGateway(server, runtime);
+    runtime.liveAddress = `${host}:${port}`;
     await new Promise((resolve, reject) => {
       server.once('error', reject);
       server.listen(port, host, resolve);
@@ -1513,7 +1519,8 @@ async function startServer(options = {}) {
   maintenanceTimer.unref?.();
   const configurationTimer = setInterval(() => { connectEngine(runtime).catch(() => {}); }, 30000);
   configurationTimer.unref?.();
-  runtime.moduleBridge.syncEngineConfiguration().catch(() => {});
+  let readyTimer;
+  runtime.moduleBridge.onReady = () => { clearTimeout(readyTimer); readyTimer = setTimeout(() => { runtime.projectConnections?.clear(); connectEngine(runtime).catch(() => {}); }, 100); };
   connectEngine(runtime).catch(() => {});
 
   // T3.5 进程编排：拉起包内自带的模块服务并守护（默认开启，KB_MODULES_AUTOSTART=0 关闭）
@@ -1532,6 +1539,9 @@ async function startServer(options = {}) {
       runtime.integrationStatusScan?.close();
       clearInterval(maintenanceTimer);
       clearInterval(configurationTimer);
+      clearTimeout(readyTimer); runtime.moduleBridge.onReady = null;
+      runtime.engineConnectionClosed = true;
+      runtime.liveGateway?.close();
       await runtime.logger.info('server.shutdown_started', 'Server shutdown started.', { phase: 'shutdown', context: { reason } });
       const forceConnections = setTimeout(() => server.closeAllConnections?.(), Number(process.env.KB_SERVER_CLOSE_GRACE_MS || 2000));
       await new Promise(resolve => server.close(resolve));

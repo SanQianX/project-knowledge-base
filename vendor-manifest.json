@@ -3,18 +3,18 @@
   "modules": {
     "knowledge-engine": {
       "name": "@sanqianx/ai-coding-knowledge-engine",
-      "version": "0.2.7-rc.9",
+      "version": "0.2.7-rc.10",
       "root": "_modules/knowledge-engine",
       "files": {
-        "README.md": "64eceeb733f9d00a400f1ba60278ef812540e82a29ee5f7577785214918e30b9",
-        "package.json": "78bc5a7db01570757e76f2c7308deabe68263e98a8804df2a56eb573f58f7a94",
+        "README.md": "677a7aaf8f6ae06477423be871306297ccfe9c3a39fa71d87cbfdbb3b83f5b7e",
+        "package.json": "2e24f8fc1ac3269bdcbd9b7179edf3eff31758545e970c689ab5ae3cb1c49c41",
         "src/analysis-contract.js": "913a63b63fb4a4a9df071f95bbeb8f8c40ef87e2f8445ab0742086ced70ffbf7",
         "src/analysis-output.js": "95a3c19dcc9ab85d1dba7fee5b9aec80f9c000dfba89da3fd0be25a81e2fb680",
         "src/analysis-worker.js": "a105cabe6e1573b2d986b1e7a5aaf615e2fb53524156fc8e4e2c0a71f2c97e55",
         "src/bin.js": "22208907431d0f3a971a669c7e5eb44b3b7af9bbb36fd7ba17c3b90c4288bd70",
         "src/bridge-client.js": "ae0dba21e4286694bcd9e064ca36564ec997969ae1eb1ce4f8a6665e447cbffe",
         "src/context.js": "edd9d4942f6039dd4aaadec88533042ae130f1b80d935d87f61b071904a6688c",
-        "src/coordinator.js": "8b9a572f415844db6c34dd62e485fb2c2ff50b655ff662802c5cab6207c2c8f0",
+        "src/coordinator.js": "55cff6959c7ba068ea8f81dd26b57dd16ec72b7b91856a56b7fa07daea9a3c26",
         "src/diagnostics.js": "f7b516ace61a1e9faaa6876930b9e2e258499a25857d1203f4e53d28bfd0fa1a",
         "src/headless-analyzer.js": "e01f81b8f24a4423c19dd8893be8c702a85edbdbb644322e3acab96c3ebaac7d",
         "src/index-request.js": "78f26b872299005499fff4f2d1f9e8f986784f2ff36a5cf2be2b1e7b7c7d9378",
@@ -36,18 +36,18 @@
         "src/runtime/conversation-store.js": "644318f9c04376a3317ced240dd94afa99a79631f0ecc394c5aa298ae2bc0474",
         "src/runtime/evidence-bundle.js": "33d4614849d5e1d69aba8b75c3a43c18b7b6f94e5c78654c82ef631331cc94cc",
         "src/runtime/git-runner.js": "b74fe197bd4dcf3e70635ef7b1f2615edf965c1d9a3ffe5406aabd41b76d74a9",
-        "src/runtime/knowledge-promotion.js": "e064f1e07d615adb755fbbcc89d67dcb783b355b47878f7d229b79ef93cfdba4",
+        "src/runtime/knowledge-promotion.js": "62fbd8282f83d666f0cae9c39c97a9a9b0175473356a0da0aa3805c757b0a9c1",
         "src/runtime/knowledge-retrieval-service.js": "161917638f518d9436024c7a0960a5b38619e397af91099c01a0232bbd6b6a43",
         "src/runtime/layout.js": "e47fe54c605218493ce46f6289798d9db2a3ecec95089d288ed03d3b75cf871a",
         "src/runtime/markdown-knowledge-indexer.js": "f771afcc1a08bf0c6456d6756c8e04885fac15bc700a86ab0114853ac662727e",
         "src/runtime/scanner.js": "d99fa8d74a6fbbaae75ca49f62127e14cf9e48b1404e4b4d597ef39df5441410",
-        "src/server.js": "3aa7b6b3aec141f3d1fde63fbbd4ee8b3c95a92c851726a56717c3537fe4954b",
-        "src/store.js": "cd147926dc7744d4a4691c2facb5e99b611e7e400beaed7377ae5a69e41bb39f",
+        "src/server.js": "07ecdf2bc8edc2535f185eaedd932ce3e1d18f1a1e54eed4ba36c9060874a902",
+        "src/store.js": "8fe9c415c845feefab3e2129b5850686747a880c827189026e3eb6295b158c0a",
         "ui/app.css": "7ad370c269e60a7b5ec907d81a607b2d16bd07b2d7c22a81f102dab51eeb2889",
         "ui/app.js": "33a2ba38f0dafbbb2e30a1eb3fc93476bfcaf528e124e1a9b2edd2fb69221e9e",
         "ui/index.html": "ce3565cfefd4838b11d37a91a906ef26ca5a1834844fe3f7c897b56851a3c418"
       },
-      "sourceCommit": "7c6812ffab8320c2d835e7825abe275507d6b960"
+      "sourceCommit": "10c940a2425daaf27d24500c6f2ba21b79cb91d4"
     }
   }
 }

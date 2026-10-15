@@ -218,7 +218,7 @@ class ModuleBridge {
 
   async _listTerminalProjects() {
     try {
-      const response = await this._fetch(`${this.terminalUrl}/api/claude-workbench/v1/projects`);
+      const response = await this._fetch(`${this.terminalUrl}/api/claude-workbench/v1/projects`, { timeoutMs: 2500 });
       if (!response.ok) return [];
       const payload = await response.json();
       const list = Array.isArray(payload) ? payload : payload.projects;
@@ -228,7 +228,7 @@ class ModuleBridge {
 
   async _listVectorHubProjects() {
     try {
-      const response = await this._fetch(`${this.vectorHubUrl}/api/projects`);
+      const response = await this._fetch(`${this.vectorHubUrl}/api/projects`, { timeoutMs: 2500 });
       if (!response.ok) return [];
       const payload = await response.json();
       return Array.isArray(payload.projects) ? payload.projects : [];
@@ -237,7 +237,7 @@ class ModuleBridge {
 
   async _listEventBridgeProjects() {
     try {
-      const response = await this._fetch(`${this.eventBridgeUrl}/api/projects`);
+      const response = await this._fetch(`${this.eventBridgeUrl}/api/projects`, { timeoutMs: 2500 });
       if (!response.ok) return [];
       const payload = await response.json();
       return Array.isArray(payload.projects) ? payload.projects : [];
@@ -247,7 +247,7 @@ class ModuleBridge {
   async _listEngineProjects() {
     if (this.engineCompatible === false) return [];
     try {
-      const response = await this._fetch(`${this.engineUrl}/api/projects`);
+      const response = await this._fetch(`${this.engineUrl}/api/projects`, { timeoutMs: 2500 });
       if (!response.ok) return [];
       const payload = await response.json();
       return Array.isArray(payload.projects) ? payload.projects : [];
@@ -256,6 +256,7 @@ class ModuleBridge {
 
   /** Aggregated projection for the shell sidebar: pkb registry is the spine. */
   async aggregatedProjects() {
+    const healthJob = this.modulesHealth();
     const [terminalProjects, vectorHubProjects, eventBridgeProjects, engineProjects] = await Promise.all([
       this._listTerminalProjects(),
       this._listVectorHubProjects(),
@@ -295,12 +296,10 @@ class ModuleBridge {
         },
       };
     });
+    const health = (await healthJob).modules;
     return {
       projects,
-      terminalAvailable: terminalProjects.length > 0 || await this._probe(this.terminalUrl),
-      vectorHubAvailable: vectorHubProjects.length > 0 || await this._probe(this.vectorHubUrl),
-      eventBridgeAvailable: eventBridgeProjects.length > 0 || await this._probe(this.eventBridgeUrl),
-      engineAvailable: engineProjects.length > 0 || await this._probe(this.engineUrl),
+      terminalAvailable: health.terminal.up, vectorHubAvailable: health.vectorHub.up, eventBridgeAvailable: health.eventBridge.up, engineAvailable: health.engine.up,
     };
   }
 
@@ -324,14 +323,39 @@ class ModuleBridge {
     } };
   }
 
-  syncEngineConfiguration() {
-    if (this.configSyncPromise) return this.configSyncPromise.catch(() => undefined).then(() => this.syncEngineConfiguration());
-    const pending = this._syncEngineConfiguration().finally(() => { if (this.configSyncPromise === pending) this.configSyncPromise = null; });
+  syncEngineConfiguration({ force = false } = {}) {
+    const signature = () => { try { return crypto.createHash('sha256').update(JSON.stringify(this.settingsStore?.read() || {})).digest('hex'); } catch { return ''; } };
+    if (this.configSyncPromise) {
+      if (force || signature() !== this.configSyncSettings) this.configSyncDirty = true;
+      return this.configSyncPromise;
+    }
+    const pending = (async () => {
+      let result;
+      do { this.configSyncDirty = false; this.configSyncSettings = signature(); result = await this._syncEngineConfiguration(); } while (this.configSyncDirty && !this.stopped);
+      return result;
+    })().finally(() => { if (this.configSyncPromise === pending) this.configSyncPromise = null; });
     this.configSyncPromise = pending;
     return pending;
   }
 
+  resetRuntimeConfiguration() {
+    this.configFingerprints = {};
+    this.configGeneration = (this.configGeneration || 0) + 1;
+    if (this.configSyncPromise) this.configSyncDirty = true;
+  }
+
   async _syncEngineConfiguration() {
+    const applyConfiguration = async (key, url, body) => {
+      this.configFingerprints ||= {};
+      const generation = this.configGeneration;
+      const fingerprint = crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
+      if (this.configFingerprints[key]?.fingerprint === fingerprint) return this.configFingerprints[key].result;
+      const response = await this._fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.runtimeToken}` }, body: JSON.stringify(body) });
+      const result = { ok: response.ok, data: response.ok ? await response.json().catch(() => ({})) : null };
+      if (result.ok && this.configGeneration === generation) this.configFingerprints[key] = { fingerprint, result };
+      else delete this.configFingerprints[key];
+      return result;
+    };
     const dataDir = this.dataDir || require('./data-dir').getDataDir();
     let indexPath = null;
     try { indexPath = new StorageLayout({ dataDir }).getVectorRootPath(this.settingsStore?.read()); }
@@ -344,7 +368,7 @@ class ModuleBridge {
         if (settings.knowledge.rootPath) {
           const brain = settings.brain;
           const root = path.join(settings.knowledge.rootPath, '_shared');
-          const response = await this._fetch(`${this.engineUrl}/api/snapshot`);
+          const response = await this._fetch(`${this.engineUrl}/api/snapshot?summary=1&limit=1`);
           if (!response.ok) throw new DomainError('ENGINE_UNAVAILABLE', '共享知识接线暂时不可用。');
           const prior = (await response.json()).sharedScopes || [];
           // Root settings govern new directories and derived indexes, never move
@@ -355,7 +379,7 @@ class ModuleBridge {
             return item.knowledgePath || existing?.knowledgePath || path.join(root, item.id);
           };
           const scopes = [{ id: brain.id, kind: 'brain', brainId: brain.id, name: brain.name, knowledgePath: binding(brain, 'brain') }, ...brain.domains.map(d => ({ id: d.id, kind: 'domain', brainId: brain.id, domainId: d.id, name: d.name, knowledgePath: binding(d, 'domain') }))];
-          const applied = await this._fetch(`${this.engineUrl}/api/scopes`, { method: 'POST', headers, body: JSON.stringify({ scopes }) });
+          const applied = await applyConfiguration('scopes', `${this.engineUrl}/api/scopes`, { scopes });
           if (!applied.ok) throw new DomainError('SHARED_SCOPE_APPLY_FAILED', '共享目录接线未完成。');
           await this.settingsStore.bindSharedKnowledgePaths?.(scopes);
           status.scopes = true; status.scopeStatus = { status: 'ready' };
@@ -372,7 +396,7 @@ class ModuleBridge {
         const response = await this._fetch(`${this.terminalUrl}/api/claude-workbench/v1/internal/maintenance-config`, { method: 'POST', headers, body: '{}' });
         if (response.ok) profile = await response.json();
       } catch { /* Missing configuration must clear a previously resolved key. */ }
-      const response = await this._fetch(`${this.engineUrl}/api/runtime-config`, { method: 'POST', headers, body: JSON.stringify({ projectId: 'default', profile }) });
+      const response = await applyConfiguration('model', `${this.engineUrl}/api/runtime-config`, { projectId: 'default', profile });
       status.model = response.ok && !!profile;
     } catch { /* Status projection only: never log resolved profiles or raw errors. */ }
     try {
@@ -381,10 +405,10 @@ class ModuleBridge {
         const resolved = await this._fetch(`${this.terminalUrl}/api/claude-workbench/v1/internal/embedding-config`, { method: 'POST', headers, body: '{}' });
         if (resolved.ok) settings = await resolved.json();
       } catch { /* Revocation wins over a previously cached runtime key. */ }
-      const applied = await this._fetch(`${this.vectorHubUrl}/api/internal/runtime-config`, { method: 'POST', headers, body: JSON.stringify({ settings, ...(indexPath ? { storageRoot: indexPath } : {}) }) });
+      const applied = await applyConfiguration('embedding', `${this.vectorHubUrl}/api/internal/runtime-config`, { settings, ...(indexPath ? { storageRoot: indexPath } : {}) });
       status.embedding = applied.ok && !!settings;
       if (applied.ok) {
-        const result = await applied.json();
+        const result = applied.data;
         status.indexStorage.actualPath = result.rootPath || null;
         status.indexStorage.status = result.rootPath && path.resolve(result.rootPath) === indexPath ? 'ready' : 'pending';
       }
@@ -593,13 +617,13 @@ class ModuleBridge {
    */
   async startSupervised() {
     if (String(process.env.KB_MODULES_AUTOSTART || '') === '0') return;
-    for (const spec of this._supervisedSpecs()) {
+    await Promise.all(this._supervisedSpecs().map(async spec => {
       if (await this._probe(spec.url)) {
         this.logger.info('modules.supervisor', 'Module service already up; not spawning.', { context: { name: spec.name, url: spec.url } });
-        continue;
+        this.onReady?.(spec.name); return;
       }
       this._spawnSupervised(spec);
-    }
+    }));
   }
 
   _supervisedSpecs() {
@@ -713,6 +737,14 @@ class ModuleBridge {
     });
     this.supervised.push(child);
     this.logger.info('modules.supervisor', 'Module service spawned.', { context: { name: spec.name, pid: child.pid } });
+    let attemptsReady = 0;
+    const checkReady = async () => {
+      if (this.stopped || child.exitCode !== null || ++attemptsReady > 20) return;
+      if (await this._probe(spec.url)) { this.resetRuntimeConfiguration(); this.onReady?.(spec.name); return; }
+      const timer = setTimeout(() => { this.restartTimers.delete(timer); checkReady(); }, 500);
+      this.restartTimers ||= new Set(); this.restartTimers.add(timer);
+    };
+    void checkReady();
   }
 
   async stopSupervised() {

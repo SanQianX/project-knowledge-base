@@ -1,11 +1,12 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
+  const ProgressSource = window.KnowledgeLive?.EventSource || EventSource;
   const all = selector => [...document.querySelectorAll(selector)];
   const titles = { home: '智脑首页', work: '开始工作', search: '知识检索', memory: '长期记忆', projects: '领域与项目', activity: '活动记录' };
   const modules = { terminal: 'Agent 工作台', vectorHub: '知识索引', eventBridge: '开发事件', engine: '知识引擎' };
   const frames = {
-    terminal: { id: 'workFrame', url: '/modules/terminal/agent-terminal/?embed=1&apiBase=/api/terminal', view: 'work', ready: false },
+    terminal: { id: 'workFrame', url: '/modules/terminal/agent-terminal/?embed=1&apiBase=/api/terminal&transport=live', view: 'work', ready: false },
     vectorHub: { id: 'vectorFrame', url: '/modules/vectorhub/?embed=1&apiBase=/api/vectorhub&engineBase=/api/engine', view: 'search', ready: false },
     eventBridge: { id: 'bridgeFrame', url: '/modules/eventbridge/?embed=1&apiBase=/api/eventbridge', view: 'activity', ready: false },
     engine: { id: 'engineFrame', url: '/modules/engine/?embed=1&apiBase=/api/engine', ready: false },
@@ -21,13 +22,18 @@
   let toastTimer, refreshTimer, preflightTimer, editingMemoryId, logStream, logEpoch = 0, referenceEpoch = 0, snapshotEpoch = 0, registryEpoch = 0, registryPromise = null, resumeImport = false, unbindProjectId = '', unbinding = false;
   let captureEpoch = 0, captureBusy = false;
   async function api(url, options = {}) {
-    const { allowNotReady, ...init } = options;
+    const { allowNotReady, timeoutMs = (options.method || 'GET') === 'GET' && !url.includes('pick-folder') ? 3000 : 0, ...init } = options;
     if (init.body && typeof init.body !== 'string') init.body = JSON.stringify(init.body);
     if (init.body) init.headers = { 'Content-Type': 'application/json', ...init.headers };
-    const response = await fetch(url, init);
+    const controller = new AbortController();
+    const timer = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : null;
+    try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
     const data = await response.json();
     if (!response.ok || data.ok === false && !allowNotReady) throw Object.assign(new Error(data.error?.message || data.message || (typeof data.error === 'string' ? data.error : `请求失败 (${response.status})`)), { code: data.error?.code || data.error, operationId: data.error?.operationId || response.headers.get('X-Operation-Id') || '' });
     return data;
+    } catch (error) { if (controller.signal.aborted) throw new Error('状态读取超时，保留上次内容，请稍后重试。'); throw error; }
+    finally { clearTimeout(timer); }
   }
   function toast(text) { $('toast').textContent = text; $('toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('toast').hidden = true; }, 4000); }
   function on(id, event, callback) { $(id).addEventListener(event, e => Promise.resolve(callback(e)).catch(error => toast(error.message))); }
@@ -47,6 +53,7 @@
   }
   function setView(view) {
     if (!titles[view]) view = 'home';
+    const changed = state.view !== view;
     state.view = view;
     history.replaceState(null, '', `#${view}`);
     all('[data-view]').forEach(button => button.classList.toggle('active', button.dataset.view === view));
@@ -57,10 +64,14 @@
     if (view === 'activity' && state.activityTab === 'sessions' && activeProject()) initializeFrame('eventBridge');
     Object.keys(frames).forEach(key => post(key, { type: 'kb:visibility', visible: frameVisible(key) }));
     render();
+    if (view === 'activity' && (changed || state.activityProject !== state.projectId)) void loadActivityPage();
   }
   function selectProject(id) {
     if (id === state.projectId && activeProject()) return;
     state.projectId = id; state.epoch++;
+    state.snapshot.runs = []; state.snapshot.nextCursor = null;
+    state.activityProject = null; state.activityBefore = null; state.runDetails = new Map();
+    void refreshSnapshot();
     referenceEpoch++; $('referenceDialog').close();
     if ($('logsDialog').open) loadLogs().catch(error => toast(error.message));
     if (!$('systemDrawer').hidden) loadAgentCapture().catch(error => toast(error.message));
@@ -89,6 +100,7 @@
     renderContext();
   }
   function renderHome(candidates) {
+    if (!state.projectsLoaded) { $('homeContent').innerHTML = state.projectsError ? '<div class="empty">项目登记读取失败，未把失败当作空知识库。<button data-action="refresh">重试读取</button></div>' : '<div class="empty">正在读取项目登记…</div>'; return; }
     if (!state.projects.length) { $('homeContent').innerHTML = '<div class="empty"><h2>从第一个项目开始</h2><p>选择代码目录和知识目录，保留项目原有文件。</p><button class="primary" data-action="import">导入第一个项目</button></div>'; return; }
     const runs = state.snapshot.runs.filter(r => !state.projectId || r.projectId === state.projectId);
     const issues = runs.filter(r => ['failed', 'index-pending'].includes(r.state));
@@ -159,10 +171,37 @@
   function renderActivity() {
     all('[data-activity-tab]').forEach(button => button.classList.toggle('active', button.dataset.activityTab === state.activityTab));
     $('activityUpdates').hidden = state.activityTab !== 'updates'; $('activitySessions').hidden = state.activityTab !== 'sessions';
-    const runs = state.snapshot.runs.filter(r => r.projectId === state.projectId);
+    const runs = (state.activityProject === state.projectId ? state.activityPage?.runs || [] : state.snapshot.runs).filter(r => r.projectId === state.projectId).map(r => ({ ...state.runDetails?.get(r.runId), ...r }));
     const open = new Set(all('.run[open]').map(d => d.dataset.runId));
     $('activityUpdates').innerHTML = state.engineAvailable ? runs.map(r => `<details class="run" data-run-id="${esc(r.runId)}" ${open.has(r.runId) ? 'open' : ''}><summary><time>${time(r.startedAt)}</time><strong>${esc(projectName(r.projectId))} · ${esc(r.commitSha.slice(0, 8))}</strong>${badge(label(r), ['failed', 'index-pending'].includes(r.state) ? 'issue' : r.state === 'succeeded' ? 'up' : '')}</summary><div><p>提交：${esc(r.commitSha)}<br>阶段：${esc(r.phase)} · 入口：${esc(r.trigger)}<br>知识晋升：${time(r.promotedAt)} · 索引：${esc(r.indexState)}</p>${r.memoryCapture?.rejected?.length ? `<p>记忆候选：${esc(r.memoryCapture.rejected.length)} 条依据无效，未纳入候选箱；有效知识已保留。可在诊断日志中查看原因。</p>` : ''}${r.error ? `<p class="error">${esc(r.error.message)} (${esc(r.error.code)})</p>${r.error.details ? `<p>失败原因：${esc(r.error.details.upstreamMessage)}<br>类别：${esc(r.error.details.failureKind)} · HTTP：${esc(r.error.details.httpStatus ?? '—')} · 上游代码：${esc(r.error.details.upstreamCode)}<br>请求标识：${esc(r.error.details.requestId || '—')} · 尝试：${esc(r.error.details.attempt)} · 耗时：${esc(r.error.details.durationMs ?? '—')} ms</p>` : ''}` : ''}${(r.staging?.operations || []).map(op => `<div class="operation">${esc(op.operation)} · ${esc(op.path)}<br>${esc(op.reason)}</div>`).join('')}${['failed', 'index-pending'].includes(r.state) ? `<button data-retry-run="${esc(r.runId)}">重试失败阶段</button>` : ''}</div></details>`).join('') || '<div class="empty">当前项目还没有知识维护记录。</div>' : '<div class="empty">知识引擎离线。记录仍保留在本机，连接恢复后自动读取。</div>';
   }
+  function renderActivityNavigation() {
+    if (state.activityProject !== state.projectId || !state.engineAvailable) return;
+    const nav = document.createElement('div'); nav.className = 'actions';
+    nav.innerHTML = `${state.activityBefore ? '<button data-run-page="">回到最新记录</button>' : ''}${state.activityPage?.nextCursor ? `<button data-run-page="${esc(state.activityPage.nextCursor)}">更早的记录</button>` : ''}`;
+    $('activityUpdates').append(nav);
+  }
+  let activityEpoch = 0;
+  async function loadActivityPage(before = state.activityBefore) {
+    const epoch = ++activityEpoch, projectId = state.projectId;
+    if (!projectId) return;
+    try {
+      const result = await api(`/api/engine/runs?summary=1&limit=50&projectId=${encodeURIComponent(projectId)}${before ? `&before=${encodeURIComponent(before)}` : ''}`);
+      if (epoch !== activityEpoch || projectId !== state.projectId) return;
+      state.activityProject = projectId; state.activityPage = result; state.activityBefore = before;
+      if (state.view === 'activity') { renderActivity(); renderActivityNavigation(); }
+    } catch { if (epoch === activityEpoch) toast('运行列表刷新失败，保留已有记录。'); }
+  }
+  document.addEventListener('toggle', async event => {
+    const node = event.target;
+    if (!node.matches?.('.run[open]') || !node.dataset.runId || node.dataset.loading) return;
+    const id = node.dataset.runId, projectId = state.projectId;
+    state.runDetails ||= new Map(); if (state.runDetails.has(id)) return;
+    node.dataset.loading = '1';
+    try { const result = await api(`/api/engine/runs/${encodeURIComponent(id)}`); if (projectId !== state.projectId || result.run.projectId !== projectId) return; state.runDetails.set(id, result.run); renderActivity(); renderActivityNavigation(); }
+    catch { if (projectId === state.projectId) toast('运行详情读取失败，请重新展开重试。'); }
+    finally { delete node.dataset.loading; }
+  }, true);
   function renderContext() {
     const saved = state.contexts.get(state.projectId);
     const context = saved?.status === 'not-retrieved' ? null : saved;
@@ -186,14 +225,16 @@
   }
   async function refreshSnapshot() {
     const epoch = ++snapshotEpoch;
-    try { const snapshot = await api('/api/engine/snapshot'); if (epoch !== snapshotEpoch || !navigator.onLine) return; state.snapshot = snapshot; state.engineAvailable = true; }
-    catch { if (epoch !== snapshotEpoch) return; state.engineAvailable = false; }
+    const projectId = state.projectId;
+    try { const snapshot = await api(`/api/engine/snapshot?summary=1&limit=50${projectId ? `&projectId=${encodeURIComponent(projectId)}` : ''}`); if (epoch !== snapshotEpoch || projectId !== state.projectId || !navigator.onLine) return; state.snapshot = snapshot; state.engineAvailable = true; state.snapshotStale = false; }
+    catch { if (epoch !== snapshotEpoch) return; state.snapshotStale = true; }
     render();
+    if (state.view === 'activity') void loadActivityPage();
   }
   function scheduleRefresh() { if (!navigator.onLine) return; clearTimeout(refreshTimer); refreshTimer = setTimeout(() => { refreshSnapshot(); post('eventBridge', { type: 'kb:refresh' }); }, 160); }
   function connectProgress() {
     if (!navigator.onLine || !state.health.engine?.up || state.stream) return;
-    const stream = new EventSource('/api/engine/progress'); state.stream = stream;
+    const stream = new ProgressSource('/api/engine/progress?summary=1'); state.stream = stream;
     stream.addEventListener('snapshot', () => { if (state.stream !== stream) return; $('activityConnection').textContent = '已连接实时更新'; scheduleRefresh(); });
     stream.addEventListener('progress', () => { if (state.stream === stream) scheduleRefresh(); });
     stream.onerror = () => { if (state.stream === stream) $('activityConnection').textContent = '连接中断，正在恢复快照'; };
@@ -204,13 +245,21 @@
     const epoch = ++registryEpoch;
     const job = (async () => {
     try {
-      const [brain, projects, health] = await Promise.all([api('/api/brain'), api('/api/projects/aggregated'), api('/api/modules/health')]);
-      if (epoch !== registryEpoch) return;
-      state.brain = brain.brain; state.root = brain.knowledgeRoot; state.projects = projects.projects; state.health = health.modules; state.ownership = health.ownership;
-      state.indexStorage = { path: brain.indexStoragePath, ...brain.configuration?.indexStorage };
-      state.scopeStatus = brain.configuration?.scopeStatus;
-      if (!activeProject()) { state.projectId = state.projects[0]?.projectId || ''; state.epoch++; Object.keys(frames).forEach(frameContext); }
-      renderProjectOptions(); renderSystem(); connectProgress(); await refreshSnapshot(); updateMemoryFilter(); setView(state.view);
+      const apply = () => { if (epoch !== registryEpoch) return; renderProjectOptions(); renderSystem(); updateMemoryFilter(); setView(state.view); };
+      const projects = api('/api/projects/projection').then(result => {
+        if (epoch !== registryEpoch) return;
+        state.projects = result.projects; state.projectsLoaded = true; state.projectsError = null;
+        if (!activeProject()) { state.projectId = state.projects[0]?.projectId || ''; state.epoch++; }
+        Object.keys(frames).forEach(frameContext); apply();
+      }).catch(error => { if (epoch === registryEpoch) { state.projectsError = error.message; render(); } throw error; });
+      const brain = api('/api/brain').then(brain => {
+        if (epoch !== registryEpoch) return;
+        state.brain = brain.brain; state.root = brain.knowledgeRoot;
+        state.indexStorage = { path: brain.indexStoragePath, ...brain.configuration?.indexStorage }; state.scopeStatus = brain.configuration?.scopeStatus; apply();
+      });
+      const health = api('/api/modules/health').then(health => { if (epoch !== registryEpoch) return; state.health = health.modules; state.ownership = health.ownership; apply(); connectProgress(); });
+      const results = await Promise.allSettled([projects, brain, health, refreshSnapshot()]);
+      if (epoch === registryEpoch && results.some(r => r.status === 'rejected')) toast('部分状态暂未刷新，已有内容已保留。');
     } catch (error) { toast(error.message); }
     finally { if (epoch === registryEpoch) { registryPromise = null; connectProgress(); } }
     })();
@@ -225,6 +274,8 @@
     $('systemDot').className = `dot ${down.length || pending ? 'issue' : 'up'}`;
     $('systemTitle').textContent = pending ? '知识引擎连接待恢复' : down.length ? '部分服务需要处理' : '系统连接正常';
     $('systemDetail').textContent = pending ? `${state.ownership.message || '服务恢复后自动重试。'}${state.ownership.error ? ` · ${state.ownership.error.step} (${state.ownership.error.code})` : ''}` : down.length ? down.map(k => modules[k]).join('、') : '本机知识服务已连接';
+    if (!pending && state.ownership?.pendingProjects?.length) { $('systemDot').className = 'dot issue'; $('systemTitle').textContent = '部分项目接线待恢复'; $('systemDetail').textContent = state.ownership.message; }
+    if (state.snapshotStale) { $('systemDot').className = 'dot issue'; $('systemTitle').textContent = '知识状态刷新未完成'; $('systemDetail').textContent = '保留上次有效内容，连接恢复后自动更新。'; }
     if (storagePending && !pending && !down.length) { $('systemDot').className = 'dot issue'; $('systemTitle').textContent = '索引目录接线待恢复'; $('systemDetail').textContent = `目标目录：${state.indexStorage.expectedPath}。请在系统状态中修复接线。`; }
     if (state.root && state.scopeStatus?.status === 'pending' && !pending && !down.length) { $('systemDot').className = 'dot issue'; $('systemTitle').textContent = '共享知识接线待恢复'; $('systemDetail').textContent = '已有知识与长期记忆保留，请在系统状态中修复接线。'; }
     $('moduleHealth').innerHTML = Object.entries(modules).map(([key, name]) => `<div class="row"><div><b>${esc(name)}</b><small>${esc(state.health[key]?.url || '')}</small></div>${badge(state.health[key]?.up ? '在线' : '离线', state.health[key]?.up ? 'up' : 'issue')}</div>`).join('');
@@ -312,7 +363,7 @@
     if (!$('logsSearch').value.trim()) {
       const streamParams = new URLSearchParams({ streamCursor: result.streamCursor || '' });
       if (projectOnly) streamParams.set('projectId', state.projectId);
-      logStream = new EventSource(`/api/logs/stream?${streamParams}`);
+      logStream = new ProgressSource(`/api/logs/stream?${streamParams}`);
       logStream.addEventListener('logs/appended', event => { if (epoch === logEpoch && $('logsDialog').open) appendLog(JSON.parse(event.data).record); });
     }
   }
@@ -419,12 +470,14 @@
       if (button.dataset.memoryTab) { state.memoryTab = button.dataset.memoryTab; renderMemories(); }
       if (button.dataset.activityTab) { state.activityTab = button.dataset.activityTab; setView('activity'); post('eventBridge', { type: 'kb:visibility', visible: state.activityTab === 'sessions' }); post('eventBridge', { type: 'kb:refresh' }); }
       if (button.dataset.action === 'import') openImport();
+      if (button.dataset.action === 'refresh') await refreshRegistry(true);
       if (button.dataset.action === 'repair') await repair();
       if (button.dataset.action === 'system') await openSystem();
       if (button.dataset.agentCapture) await changeAgentCapture(button.dataset.agentClient, button.dataset.agentCapture);
       if (button.dataset.agentKnowledge) await repairAgentKnowledge(button.dataset.agentClient);
       if (button.dataset.action === 'unbind') { const p = activeProject(); if (p && !unbinding) { unbindProjectId = p.projectId; $('unbindProjectName').textContent = `解绑「${p.name}」？`; $('unbindFeedback').textContent = ''; $('unbindDialog').showModal(); } }
       if (button.dataset.retryRun) { await api(`/api/engine/runs/${encodeURIComponent(button.dataset.retryRun)}/retry`, { method: 'POST', body: {} }); await refreshSnapshot(); }
+      if (button.dataset.runPage !== undefined) await loadActivityPage(button.dataset.runPage || null);
       if (button.dataset.contextIndex !== undefined) await openReference(state.contexts.get(state.projectId).references[Number(button.dataset.contextIndex)]);
       if (button.dataset.memoryAction) {
         const memory = state.snapshot.memories.find(m => m.id === button.dataset.memoryId); if (!memory) return;
