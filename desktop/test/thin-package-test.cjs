@@ -12,7 +12,7 @@ const allowedDevDependencies = new Set([
 ]);
 
 assert.equal(pkg.name, '@sanqianx/project-knowledge-desktop');
-assert.equal(pkg.version, '5.0.18-rc.1');
+assert.equal(pkg.version, '5.0.18');
 assert.equal(pkg.main, 'main.cjs');
 
 assert.deepEqual(
@@ -20,7 +20,7 @@ assert.deepEqual(
   ['@sanqianx/project-knowledge', 'electron', 'electron-squirrel-startup'],
   'runtime dependencies must be exactly the thin trio',
 );
-assert.equal(pkg.dependencies['@sanqianx/project-knowledge'], '5.0.18-rc.1', 'core dependency must be an exact pin');
+assert.equal(pkg.dependencies['@sanqianx/project-knowledge'], '5.0.18', 'core dependency must be an exact pin');
 assert.equal(pkg.private, undefined, 'the desktop candidate must be publishable');
 assert.match(pkg.dependencies.electron, /^\d+\.\d+\.\d+$/, 'electron must be an exact numeric three-segment version');
 assert.equal(pkg.dependencies['electron-squirrel-startup'], '1.0.1');

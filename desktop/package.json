@@ -1,7 +1,7 @@
 {
   "name": "@sanqianx/project-knowledge-desktop",
   "productName": "Project Knowledge",
-  "version": "5.0.18-rc.1",
+  "version": "5.0.18",
   "description": "Windows desktop application for project-knowledge",
   "main": "main.cjs",
   "bin": {
@@ -16,7 +16,7 @@
     "test": "node test/thin-package-test.cjs && node test/backend-runtime-test.cjs && node test/cli-args-test.cjs"
   },
   "dependencies": {
-    "@sanqianx/project-knowledge": "5.0.18-rc.1",
+    "@sanqianx/project-knowledge": "5.0.18",
     "electron": "43.1.1",
     "electron-squirrel-startup": "1.0.1"
   },
