@@ -25,9 +25,16 @@ assert.equal(tools.resolveProject({ projectId: 'project-storage' }).indexPath, p
 knowledgeRoot = '';
 assert.equal(tools.resolveProject({ projectId: 'project-storage' }).indexPath, path.join(layout.getDataDir(), 'vectorhub'));
 const bridge = new ModuleBridge({ settingsStore, dataDir: layout.getDataDir() });
-const spec = bridge._supervisedSpecs().find(spec => spec.name === 'vector-hub');
-assert.equal(spec.env.VECTOR_HUB_ROOT, path.join(root, '.indexes'));
-assert.equal(spec.env.VECTOR_HUB_CONFIG, path.join(layout.getDataDir(), 'vectorhub', 'config.json'));
+// The supervisor refuses to spawn the vendored vector-hub on Node < 22
+// (module-bridge: "vector-hub declares engines >= 22"), so its supervised
+// spec — and these env assertions — only exist on qualifying runtimes.
+const vectorHubSpec = bridge._supervisedSpecs().find(spec => spec.name === 'vector-hub');
+if (parseInt(process.versions.node, 10) >= 22) {
+  assert.equal(vectorHubSpec.env.VECTOR_HUB_ROOT, path.join(root, '.indexes'));
+  assert.equal(vectorHubSpec.env.VECTOR_HUB_CONFIG, path.join(layout.getDataDir(), 'vectorhub', 'config.json'));
+} else {
+  assert.equal(vectorHubSpec, undefined, 'vector-hub must not be supervised on Node < 22');
+}
 const calls = [];
 bridge._fetch = async (url, init) => { const body = JSON.parse(init.body); calls.push({ url, body }); return { ok: true, json: async () => url.includes('/api/internal/runtime-config') ? { ok: true, rootPath: path.join(root, '.indexes') } : {} }; };
 bridge.syncEngineConfiguration().then(async status => {

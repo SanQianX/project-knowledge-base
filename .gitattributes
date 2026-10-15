@@ -1,2 +1,6 @@
 # Runtime manifests bind exact packaged bytes; Git must not rewrite newlines.
+# GitHub's Windows runners default to core.autocrlf=true, which would convert
+# these files to CRLF on checkout and break the sha256 content gate.
 /_modules/knowledge-engine/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+/ui/** -text
+/plugins/** -text

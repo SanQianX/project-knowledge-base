@@ -15,17 +15,20 @@ async function main() {
   let connections = 0, snapshots = 0, healthRequests = 0;
   const streams = new Set();
   const upstream = http.createServer((req, res) => {
-    if (req.url === '/api/progress') {
+    // The product sends the progress/snapshot reads with query parameters
+    // (e.g. /api/progress?summary=1), so route on the pathname only.
+    const cleanPath = req.url.split('?')[0];
+    if (cleanPath === '/api/progress') {
       connections++; streams.add(res); res.on('close', () => streams.delete(res));
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
       res.write(`event: snapshot\ndata: ${JSON.stringify(snapshot)}\n\n`);
       return;
     }
     req.resume();
-    if (req.url === '/api/snapshot') snapshots++;
-    if (req.url.includes('/health')) healthRequests++;
+    if (cleanPath === '/api/snapshot') snapshots++;
+    if (cleanPath.includes('/health')) healthRequests++;
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(req.url === '/api/snapshot' ? snapshot : req.url === '/api/projects' ? { projects: [] } : { ok: true, name: 'knowledge-engine', dataSchemaVersion: 3 }));
+    res.end(JSON.stringify(cleanPath === '/api/snapshot' ? snapshot : cleanPath === '/api/projects' ? { projects: [] } : { ok: true, name: 'knowledge-engine', dataSchemaVersion: 3 }));
   });
   await new Promise(resolve => upstream.listen(0, '127.0.0.1', resolve));
   const moduleUrl = `http://127.0.0.1:${upstream.address().port}`;
