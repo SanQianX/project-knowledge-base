@@ -87,6 +87,9 @@ async function expectLaunchFailure(scenario) {
       profileDir,
       url: 'http://127.0.0.1:1/',
       launchTimeoutMs: 1500,
+      // Single attempt keeps this scenario a bounded fast-failure check; the
+      // production default retries transient stalls (see launchCdpBrowser).
+      launchAttempts: 1,
     }),
     assertions(message, durationMs) {
       assert(message.includes('DevToolsActivePort'), `hang-timeout: error must mention DevToolsActivePort wait, got: ${message}`);

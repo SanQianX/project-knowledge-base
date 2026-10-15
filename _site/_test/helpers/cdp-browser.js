@@ -6,7 +6,11 @@ const WebSocket = require('ws');
 
 const MAX_STREAM_TAIL_BYTES = 32 * 1024;
 const DEFAULT_HTTP_TIMEOUT_MS = 1000;
-const DEFAULT_LAUNCH_TIMEOUT_MS = Number(process.env.KB_CDP_LAUNCH_TIMEOUT_MS || (process.platform === 'linux' ? 30000 : 20000));
+// Hosted-runner cold starts (first Chrome launch of a suite, antivirus scan,
+// dbus stalls) can exceed a single budget window; launch stalls are transient,
+// so retry instead of failing the whole test run.
+const DEFAULT_LAUNCH_TIMEOUT_MS = Number(process.env.KB_CDP_LAUNCH_TIMEOUT_MS || 30000);
+const DEFAULT_LAUNCH_ATTEMPTS = Math.max(1, Number(process.env.KB_CDP_LAUNCH_ATTEMPTS || 3));
 
 function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -162,6 +166,7 @@ function enrichBrowserLaunchError(error, diagnostics) {
   if (error) {
     enriched.cause = error;
     if (error.code) enriched.code = error.code;
+    if (error.fatal) enriched.fatal = true;
   }
   enriched.diagnostics = diagnostics;
   return enriched;
@@ -190,7 +195,7 @@ async function waitForDevToolsPort(profileDir, state, timeoutMs, tolerateLaunche
   }, "DevToolsActivePort file", timeoutMs);
 }
 
-async function launchCdpBrowser(options) {
+async function launchBrowserAttempt(options) {
   const chrome = options.chrome;
   const profileDir = path.resolve(options.profileDir);
   const launchTimeoutMs = Number(options.launchTimeoutMs || DEFAULT_LAUNCH_TIMEOUT_MS);
@@ -353,6 +358,23 @@ async function launchCdpBrowser(options) {
   } catch (error) {
     await failLaunch(error);
   }
+}
+
+async function launchCdpBrowser(options) {
+  const attempts = Math.max(1, Number(options.launchAttempts || DEFAULT_LAUNCH_ATTEMPTS));
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await launchBrowserAttempt(options);
+    } catch (error) {
+      lastError = error;
+      // Fatal failures (missing executable, deterministic early crash) never
+      // recover; only transient launch stalls get another attempt.
+      if (error && error.fatal) throw error;
+      if (attempt < attempts) console.log(`[cdp-browser] launch attempt ${attempt}/${attempts} failed (${String(error && error.message).split("\n")[0]}); retrying`);
+    }
+  }
+  throw lastError;
 }
 
 module.exports = { isWindowsChromeLauncher, platformLaunchArgs, launchCdpBrowser, requestJson, waitFor, wait };
