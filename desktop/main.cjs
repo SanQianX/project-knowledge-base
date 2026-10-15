@@ -209,6 +209,10 @@ async function stopOwnedBackend() {
 
 app.whenReady().then(() => {
   ipcMain.handle('desktop:retry', () => { boot(); return true; });
+  ipcMain.handle('project-knowledge:open-external', (_event, url) => {
+    if (runtime.isAllowedExternalUrl(url)) shell.openExternal(url);
+    return true;
+  });
   createWindow();
   createTray();
   boot();

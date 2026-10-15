@@ -289,7 +289,10 @@
     $('systemDrawer').hidden = false; $('drawerBackdrop').hidden = false;
     $('brainName').value = state.brain.name; $('knowledgeRoot').value = state.root;
     renderStorageInfo();
-    await Promise.all([loadMaintenance(), loadAgentCapture()]);
+    // Opening the drawer is the explicit refresh point (the manual status
+    // button is gone): force a fresh scan so externally changed client
+    // configs are reflected instead of serving the 30s cache.
+    await Promise.all([loadMaintenance(), loadAgentCapture(true)]);
   }
   function renderStorageInfo() {
     $('indexStoragePath').textContent = state.indexStorage?.actualPath || state.indexStorage?.path || '设置知识根目录后自动确定';
@@ -307,45 +310,58 @@
       const result = await api('/api/integrations/status?' + params);
       if (projectId !== state.projectId) return;
       if (epoch !== captureEpoch) return;
+      const badgeState = { connected: 'up', error: 'issue' };
+      const badgeText = { checking: '检测中', connected: '已接入', disconnected: '未接入', error: '异常', 'not-detected': '未检测到' };
       $('agentCaptureList').innerHTML = result.clients.map(agent => {
         const capture = agent.developmentCapture;
         const found = agent.available || agent.configFound;
         const software = agent.available ? '检测到命令' : agent.configFound ? '检测到配置' : capture.state === 'checking' ? '正在检测客户端' : '未检测到';
-        const status = capture.state === 'checking' ? '检查中' : !capture.ok ? '检查或接线异常' : capture.installed ? '已配置采集' : '未接入';
         const auto = agent.automaticContext;
         const mcp = agent.mcpStartup;
-        const mcpLine = mcp ? `<small>MCP ${mcp.state === 'ready' ? '已通过' : '未通过'}${mcp.code ? `（${esc(mcp.code)}）` : ''}${mcp.detail ? ` · ${esc(mcp.detail)}` : ''}</small>` : '';
-        return `<div class="agent-capture-row"><div><b>${esc(agent.label)}</b><small>${esc(software)} · ${esc(status)}</small><small>${esc(capture.detail)}</small>${auto ? `<small>开发前知识：${esc(auto.detail)}</small>` : ''}${mcpLine}</div><div class="actions">${auto?.supported ? `<button data-agent-knowledge="install" data-agent-client="${esc(agent.client)}" ${!found || captureBusy ? 'disabled' : ''}>${auto.configured ? '检查/修复知识接入' : '接入/修复知识读取'}</button>` : ''}<button data-agent-capture="install" data-agent-client="${esc(agent.client)}" ${!found || captureBusy ? 'disabled' : ''}>${capture.installed ? '修复采集' : '接入采集'}</button>${capture.installed ? `<button data-agent-capture="uninstall" data-agent-client="${esc(agent.client)}" ${captureBusy ? 'disabled' : ''}>移除采集</button>` : ''}</div></div>`;
+        const mcpLine = mcp ? `MCP ${mcp.state === 'ready' ? '已通过' : '未通过'}${mcp.code ? `（${esc(mcp.code)}）` : ''}${mcp.detail ? ` · ${esc(mcp.detail)}` : ''}` : '';
+        const repairLine = agent.repair ? `启动自动修复：${agent.repair.state === 'repaired' ? '成功' : `失败${agent.repair.error ? ` · ${esc(agent.repair.error)}` : ''}`}` : '';
+        const summary = agent.summary || 'checking';
+        const switchOn = summary === 'connected';
+        const details = [
+          `<small>${esc(software)} · ${esc(capture.detail || '')}</small>`,
+          auto ? `<small>开发前知识：${esc(auto.detail)}</small>` : '',
+          mcpLine ? `<small>${mcpLine}</small>` : '',
+          repairLine ? `<small>${repairLine}</small>` : '',
+          summary === 'error' ? `<div class="actions"><button data-agent-retry="1" data-agent-client="${esc(agent.client)}" ${captureBusy ? 'disabled' : ''}>重试修复</button></div>` : '',
+        ].filter(Boolean).join('');
+        return `<div class="agent-capture-row"><div><b>${esc(agent.label)}</b> ${badge(badgeText[summary] || summary, badgeState[summary] || '')}<details class="agent-detail"><summary>详情</summary>${details}</details></div><div class="actions"><button data-agent-switch="${switchOn ? 'uninstall' : 'install'}" data-agent-client="${esc(agent.client)}" ${!found || captureBusy ? 'disabled' : ''}>${switchOn ? '移除' : '接入'}</button></div></div>`;
       }).join('');
-      if (['checking', 'refreshing'].includes(result.scan?.state)) captureScanTimer = setTimeout(() => {
+      const pendingScan = ['checking', 'refreshing'].includes(result.scan?.state)
+        || (result.clients || []).some(client => client.developmentCapture?.state === 'checking' || client.knowledgeIntegration?.state === 'checking' || client.summary === 'checking');
+      if (pendingScan) captureScanTimer = setTimeout(() => {
         if (epoch === captureEpoch && !$('systemDrawer').hidden) loadAgentCapture().catch(error => toast(error.message));
       }, 1500);
     } catch (error) { if (epoch === captureEpoch) $('agentCaptureList').textContent = `无法检查采集状态：${error.message}`; }
   }
-  async function repairAgentKnowledge(client) {
+  async function changeAgentAccess(client, operation) {
     if (captureBusy) return;
     captureBusy = true; captureEpoch++;
-    $('agentCaptureFeedback').textContent = '正在检查并更新知识插件，保留第三方配置…';
+    all('[data-agent-switch]').forEach(button => { button.disabled = true; });
+    $('agentCaptureFeedback').textContent = operation === 'install' ? '正在接入，保留第三方配置…' : '正在移除，已有记录保留…';
     try {
-      const result = await api('/api/integrations/install', { method: 'POST', body: { clients: [client], knowledgeOnly: true } });
-      const capability = result.clients[0]?.knowledgeIntegration;
-      $('agentCaptureFeedback').textContent = result.complete && capability?.ok ? '知识接线操作已完成。请重新打开客户端；如客户端要求信任 Hook，请按原生提示确认，再检查前置读取状态。' : `知识接线未完成：${capability?.detail || '请查看系统诊断。'}\n操作 ID：${result.operationId || '—'}`;
-      $('agentCaptureFeedback').classList.toggle('issue', !result.complete);
-    } catch (error) { $('agentCaptureFeedback').textContent = `知识接线操作失败：${error.message}`; $('agentCaptureFeedback').classList.add('issue'); }
-    finally { captureBusy = false; await loadAgentCapture(true); }
-  }
-  async function changeAgentCapture(client, operation) {
-    if (captureBusy) return;
-    captureBusy = true; captureEpoch++;
-    all('[data-agent-capture]').forEach(button => { button.disabled = true; });
-    $('agentCaptureFeedback').textContent = operation === 'install' ? '正在配置采集 Hook…' : '正在移除托管采集，已有记录保留…';
-    try {
-      const result = await api(`/api/integrations/${operation}`, { method: 'POST', body: { clients: [client], captureOnly: true } });
-      const capture = operation === 'install' ? result.clients[0]?.developmentCapture : result.capture[0];
-      const success = result.complete === true && capture?.ok;
-      $('agentCaptureFeedback').textContent = success ? operation === 'install' ? '采集配置已保存。请重新打开外部 Agent 会话，实际记录可在活动页面查看。' : '已移除托管采集，第三方配置与已有记录保留。' : `接入操作未完成：${capture?.detail || result.bridge?.detail || '请检查系统诊断记录。'}\n操作 ID：${result.operationId || '—'}`;
+      const result = await api(`/api/integrations/${operation}`, { method: 'POST', body: { clients: [client] } });
+      const success = result.complete === true;
+      $('agentCaptureFeedback').textContent = success
+        ? operation === 'install' ? '已接入。重新打开客户端后生效，实际记录可在活动页面查看。' : '已移除，第三方配置与已有记录保留。'
+        : `操作未完成，展开详情查看原因；更多请查系统诊断记录（操作 ID：${result.operationId || '—'}）。`;
       $('agentCaptureFeedback').classList.toggle('issue', !success);
     } catch (error) { $('agentCaptureFeedback').textContent = `操作失败：${error.message}`; $('agentCaptureFeedback').classList.add('issue'); }
+    finally { captureBusy = false; await loadAgentCapture(); post('eventBridge', { type: 'kb:refresh-agents' }); }
+  }
+  async function retryAgentRepair(client) {
+    if (captureBusy) return;
+    captureBusy = true; captureEpoch++;
+    $('agentCaptureFeedback').textContent = '正在重试修复…';
+    try {
+      const result = await api('/api/integrations/install', { method: 'POST', body: { clients: [client] } });
+      $('agentCaptureFeedback').textContent = result.complete === true ? '修复成功，重新打开客户端后生效。' : `修复未完成，详情见系统诊断记录（操作 ID：${result.operationId || '—'}）。`;
+      $('agentCaptureFeedback').classList.toggle('issue', result.complete !== true);
+    } catch (error) { $('agentCaptureFeedback').textContent = `修复失败：${error.message}`; $('agentCaptureFeedback').classList.add('issue'); }
     finally { captureBusy = false; await loadAgentCapture(); post('eventBridge', { type: 'kb:refresh-agents' }); }
   }
   async function loadLogs() {
@@ -473,8 +489,8 @@
       if (button.dataset.action === 'refresh') await refreshRegistry(true);
       if (button.dataset.action === 'repair') await repair();
       if (button.dataset.action === 'system') await openSystem();
-      if (button.dataset.agentCapture) await changeAgentCapture(button.dataset.agentClient, button.dataset.agentCapture);
-      if (button.dataset.agentKnowledge) await repairAgentKnowledge(button.dataset.agentClient);
+      if (button.dataset.agentSwitch) await changeAgentAccess(button.dataset.agentClient, button.dataset.agentSwitch);
+      if (button.dataset.agentRetry) await retryAgentRepair(button.dataset.agentClient);
       if (button.dataset.action === 'unbind') { const p = activeProject(); if (p && !unbinding) { unbindProjectId = p.projectId; $('unbindProjectName').textContent = `解绑「${p.name}」？`; $('unbindFeedback').textContent = ''; $('unbindDialog').showModal(); } }
       if (button.dataset.retryRun) { await api(`/api/engine/runs/${encodeURIComponent(button.dataset.retryRun)}/retry`, { method: 'POST', body: {} }); await refreshSnapshot(); }
       if (button.dataset.runPage !== undefined) await loadActivityPage(button.dataset.runPage || null);
@@ -506,7 +522,6 @@
   on('themeToggle', 'click', () => { document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('kb.theme', document.documentElement.dataset.theme); Object.keys(frames).forEach(key => post(key, { type: 'kb:theme', theme: document.documentElement.dataset.theme })); });
   on('openSystem', 'click', openSystem); on('closeSystem', 'click', closeSystem); on('drawerBackdrop', 'click', closeSystem);
   on('repairWiring', 'click', repair);
-  on('refreshAgentCapture', 'click', () => captureBusy ? undefined : loadAgentCapture(true));
   on('configureProviders', 'click', () => { closeSystem(); setView('work'); initializeFrame('terminal'); if (frames.terminal.ready) post('terminal', { type: 'kb:open-settings' }); else frames.terminal.openSettings = true; });
   on('saveMaintenance', 'click', async () => { await api('/api/terminal/maintenance-default', { method: 'PUT', body: { profileId: $('maintenanceModel').value || null } }); const result = await api('/api/modules/configure', { method: 'POST', body: {} }); $('configurationStatus').textContent = result.configuration.model ? '后台默认模型已保存并同步。' : '配置已保存，后台运行配置尚未同步，请检查模块连接。'; });
   on('openEmbedding', 'click', openEmbedding);

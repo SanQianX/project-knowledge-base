@@ -2,7 +2,7 @@
 
 保存日期：2026-10-15。
 
-状态：待执行。回退锚点（执行前检查点）：主仓库 `e9c18f7`、knowledge-engine `b400072`、vector-hub `b6dce20`；ai-coding-event-bridge `0ada7ac` 与 claude-ai-workbench `1b028da` 无待提交改动。后续每阶段独立提交，可按提交粒度回退；整体回退到上述检查点即回到本计划开始前状态。
+状态（2026-10-16）：目标 A 与目标 B 均已实施并通过验收——阶段一提交 `c4afa63`（动态端口四场景 + 137 项后端回归全过），阶段二提交 `6ea83d5`（薄壳依赖白名单、CLI/main 重写、生命周期验收：复用/自有后台/单实例/无孤儿进程）。执行前检查点：主仓库 `e9c18f7`、knowledge-engine `b400072`、vector-hub `b6dce20`；ai-coding-event-bridge `0ada7ac` 与 claude-ai-workbench `1b028da`。验收证据在仓库外 `D:\SanQian.Xu\.glm-plan-evidence\`。
 
 ## 一、背景与已核实事实
 

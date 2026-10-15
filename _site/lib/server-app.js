@@ -1304,6 +1304,7 @@ function createRequestHandler(runtime, options = {}) {
       // Integration and Development Capture per client, with separate status.
       if (method === 'GET' && pathname === '/api/integrations/status') {
         runtime.integrationStatusScan ||= new (require('./integration-status-scan').IntegrationStatusScan)();
+        const intentStore = require('./integration-intent');
         const managerOptions = { ...options.integrationOptions, rootDir: runtime.rootDir, logger: runtime.logger, operationId: requestOperationId, bridgeHomeDir: runtime.bridgeAdapter.hookBinding().bridgeHomeDir };
         const projectId = url.searchParams.get('projectId');
         if (projectId && !runtime.registryStore.listIds().includes(projectId)) throw new DomainError('PROJECT_NOT_FOUND', '当前项目尚未登记。', { status: 404 });
@@ -1311,6 +1312,14 @@ function createRequestHandler(runtime, options = {}) {
         const requested = url.searchParams.get('clients');
         const clients = requested ? requested.split(',').filter(Boolean).map(require('./integration-installer').normalizeClient) : undefined;
         const summary = await runtime.integrationStatusScan.read(managerOptions, { captureOnly: url.searchParams.get('captureOnly') === '1', cwd, clients }, { force: url.searchParams.get('refresh') === '1' });
+        const repair = runtime.integrationAutoRepair?.status() || null;
+        const intent = intentStore.bootstrapIntent(runtime.dataPath, summary.clients);
+        summary.clients = summary.clients.map(entry => ({
+          ...entry,
+          intent: intent.clients[entry.client] || 'disconnected',
+          summary: intentStore.summarizeClient(entry, repair),
+          repair: repair?.[entry.client] || null,
+        }));
         return send(res, 200, { ok: true, ...summary });
       }
       if (method === 'POST' && pathname === '/api/integrations/install') {
@@ -1327,6 +1336,13 @@ function createRequestHandler(runtime, options = {}) {
           scope: body.scope || 'user',
         });
         const complete = summary.bridge.ok && summary.clients.every(entry => (!entry.knowledgeIntegration || entry.knowledgeIntegration.ok) && (!entry.developmentCapture || entry.developmentCapture.ok));
+        if (complete) {
+          const intentStore = require('./integration-intent');
+          for (const entry of summary.clients) {
+            if (entry.developmentCapture?.ok || entry.knowledgeIntegration?.ok) intentStore.markIntent(runtime.dataPath, entry.client, 'connected');
+          }
+          runtime.integrationAutoRepair?.markSucceeded?.(summary.clients.map(entry => entry.client));
+        }
         await runtime.logger[complete ? 'info' : 'error'](`integrations.install_${complete ? 'completed' : 'failed'}`, complete ? 'Agent 接入完成。' : 'Agent 接入未完成，请查看各工具的失败原因。', { operationId: requestOperationId, context: { clients: summary.clients.map(entry => entry.client) } });
         return send(res, 200, { ok: true, complete, operationId: requestOperationId, ...summary });
       }
@@ -1342,7 +1358,13 @@ function createRequestHandler(runtime, options = {}) {
           : undefined;
         const knowledgeResults = body.captureOnly === true ? [] : await manager.operate('uninstall', clients && clients.length ? clients : manager.detectClients(), { scope: body.scope || 'user' });
         const captureResults = body.knowledgeOnly === true ? [] : await manager.operateCapture('uninstall', clients && clients.length ? clients : manager.detectClients(), {});
-        return send(res, 200, { ok: true, complete: [...knowledgeResults, ...captureResults].every(entry => entry.ok), operationId: requestOperationId, clients: knowledgeResults, capture: captureResults });
+        const complete = [...knowledgeResults, ...captureResults].every(entry => entry.ok);
+        if (complete) {
+          const intentStore = require('./integration-intent');
+          const removed = new Set([...knowledgeResults, ...captureResults].map(entry => entry.client));
+          for (const client of removed) intentStore.markIntent(runtime.dataPath, client, 'disconnected');
+        }
+        return send(res, 200, { ok: true, complete, operationId: requestOperationId, clients: knowledgeResults, capture: captureResults });
       }
 
       if (method === 'GET' && pathname === '/api/ai-profiles') {
@@ -1530,6 +1552,26 @@ async function startServer(options = {}) {
     });
   } catch (error) {
     runtime.logger.warn('modules.supervisor_failed', 'Module supervisor failed to start.', { error });
+  }
+
+  // Startup-event integration repair: one attempt per connected-but-broken
+  // client, failures surfaced and never retried in this run. No timers.
+  try {
+    runtime.integrationAutoRepair = new (require('./integration-auto-repair').IntegrationAutoRepair)({
+      dataDir: runtime.dataPath,
+      logger: runtime.logger,
+      createManager: () => new IntegrationManager({
+        ...options.integrationOptions,
+        rootDir: runtime.rootDir,
+        logger: runtime.logger,
+        bridgeHomeDir: runtime.bridgeAdapter.hookBinding().bridgeHomeDir,
+      }),
+    });
+    runtime.integrationAutoRepair.runOnce().catch(error => {
+      runtime.logger.warn('integrations.auto_repair_skipped', '启动自动修复未完成。', { error });
+    });
+  } catch (error) {
+    runtime.logger.warn('integrations.auto_repair_unavailable', '启动自动修复不可用。', { error });
   }
 
   let stopping = null;
