@@ -3,11 +3,11 @@
   "modules": {
     "knowledge-engine": {
       "name": "@sanqianx/ai-coding-knowledge-engine",
-      "version": "0.2.7-rc.7",
+      "version": "0.2.7-rc.8",
       "root": "_modules/knowledge-engine",
       "files": {
-        "README.md": "399d94bdb9b6844b9c1965799400212c99bcbbf872cdec953fba09ba4eea7acd",
-        "package.json": "576b6b849d4fecec421c639fa7a3c84ce6b9ee70686baaad48d0153300b113f1",
+        "README.md": "3cb4388840732e3ceba3e7ab027248815387cdd35f8ca1e515c38038a7aef710",
+        "package.json": "f1386b7d2d7bc3c26130ba55ffffd9ba4626b718b3317c0f9f8bb911db1fcdb0",
         "src/analysis-contract.js": "913a63b63fb4a4a9df071f95bbeb8f8c40ef87e2f8445ab0742086ced70ffbf7",
         "src/analysis-output.js": "95a3c19dcc9ab85d1dba7fee5b9aec80f9c000dfba89da3fd0be25a81e2fb680",
         "src/analysis-worker.js": "a105cabe6e1573b2d986b1e7a5aaf615e2fb53524156fc8e4e2c0a71f2c97e55",
@@ -21,8 +21,8 @@
         "src/knowledge-targets.js": "aa44ec285d16d7b1c0b63bf084058a1d6f867fa9929c753b6b0cbb24f7b20ee2",
         "src/memories.js": "bba8e19380e906a80fd3e5d2a7f809d940466924578c8187d1f376f906f10f2b",
         "src/retrieval-policy.json": "3205fb4eb114a839a74f902e6fae6a61e1460958e5a9d7e29add32b60ba4e05a",
-        "src/retrieval-ranking.js": "422c068ea995d4f8c7e1ffb64b4b72921017862add74da8996b1827c6c64c23d",
-        "src/retrieval.js": "341c558ffd53873744cfb36139c84b92775886c0e41804e85f93aa9004d91bd9",
+        "src/retrieval-ranking.js": "e27a869a3b2f3dc96763f6a12c988b42098e461362b456f8cbe26ef5e37c3d21",
+        "src/retrieval.js": "32f17494eb838cc6b209df35dbe33a155c1728420c9e501a4974c4f2a1b33ceb",
         "src/runtime/README.md": "9be676eca76a7857b34d7357194e6f0ee733c22e61d962d53984715dbec7f673",
         "src/runtime/atomic-file.js": "9846b4b69db5ded811acf19a1181ef93615d93efaa542b858e552a7f3124ad23",
         "src/runtime/automation-config.js": "6498c5397be12b155829740595a1553d4dcd6eaa7db6ced3ef88fdc60218f00e",
@@ -47,7 +47,7 @@
         "ui/app.js": "33a2ba38f0dafbbb2e30a1eb3fc93476bfcaf528e124e1a9b2edd2fb69221e9e",
         "ui/index.html": "ce3565cfefd4838b11d37a91a906ef26ca5a1834844fe3f7c897b56851a3c418"
       },
-      "sourceCommit": "61e5205c8c7a37645fa2be8c9e3cb2d3c250cc31"
+      "sourceCommit": "dcdeb3d1589cae2baf9a3445261acc990a5b0702"
     }
   }
 }
