@@ -269,14 +269,15 @@ class ModuleBridge {
     return this.proxy(req, res, target.href);
   }
 
-  async _listTerminalProjects() {
+  async _listTerminalProjects({ requireAvailable = false } = {}) {
     try {
       const response = await this._fetch(`${this.terminalUrl}/api/claude-workbench/v1/projects`, { timeoutMs: 2500 });
-      if (!response.ok) return [];
+      if (!response.ok) throw new Error('TERMINAL_REGISTRY_UNAVAILABLE');
       const payload = await response.json();
       const list = Array.isArray(payload) ? payload : payload.projects;
-      return Array.isArray(list) ? list : [];
-    } catch { return []; }
+      if (!Array.isArray(list)) throw new Error('TERMINAL_REGISTRY_INVALID');
+      return list;
+    } catch { return requireAvailable ? null : []; }
   }
 
   async _listVectorHubProjects() {
@@ -326,8 +327,8 @@ class ModuleBridge {
       const knowledgePath = String(config.knowledgePath || '');
       const state = this.projectStore ? this.projectStore.readState(projectId) : {};
       const wiring = state.modules || {};
-      const terminal = byWorkspace.get(workspacePath.toLowerCase())
-        || (wiring.terminal && wiring.terminal.projectId ? terminalProjects.find(p => p.id === wiring.terminal.projectId) : null)
+      const terminal = (wiring.terminal && wiring.terminal.projectId ? terminalProjects.find(p => p.id === wiring.terminal.projectId) : null)
+        || byWorkspace.get(workspacePath.toLowerCase())
         || null;
       const vectorHubName = (wiring.vectorHub && wiring.vectorHub.projectName) || projectId;
       const vectorHub = byName.get(vectorHubName) || null;
@@ -523,9 +524,13 @@ class ModuleBridge {
       return result;
     }
     // 幂等登记：终端已有同 rootPath 的项目时复用，绝不重复创建
-    const existingTerminal = (await this._listTerminalProjects())
-      .find(p => String(p.rootPath || '').toLowerCase() === String(workspacePath || '').toLowerCase());
-    if (existingTerminal) {
+    const terminalProjects = await this._listTerminalProjects({ requireAvailable: true });
+    const existingTerminal = terminalProjects?.find(p => String(p.rootPath || '').toLowerCase() === String(workspacePath || '').toLowerCase());
+    if (terminalProjects === null) {
+      // Startup/reconnect failures do not prove the workspace is absent. Keep
+      // its saved context so a retry cannot strand existing sessions/drafts.
+      result.terminal = { ok: false, status: 'pending' };
+    } else if (existingTerminal) {
       result.terminal = { ok: true, projectId: existingTerminal.id, status: 'registered', reused: true };
     } else {
       try {
