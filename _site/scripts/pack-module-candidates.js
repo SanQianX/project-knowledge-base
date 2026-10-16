@@ -19,6 +19,14 @@ function run(command, args, cwd) {
   return result.stdout;
 }
 function safeRelative(file) { return typeof file === 'string' && !path.isAbsolute(file) && !/[\\\x00-\x1f]/.test(file) && !file.split('/').some(p => p === '..' || p === '.'); }
+function installedFileBytes(pkg, relative, bytes) {
+  const bins = typeof pkg.bin === 'string' ? [pkg.bin] : Object.values(pkg.bin || {});
+  const isBin = bins.some(file => String(file).replace(/\\/g, '/').replace(/^\.\//, '') === relative);
+  // npm bin-links removes CRLF from the shebang only, on every platform.
+  // Hash the installed bytes; keep body line endings and ordinary files exact.
+  if (isBin && /^#![^\n]+\r\n/.test(bytes.subarray(0, 2048).toString('utf8'))) return Buffer.from(bytes.toString('utf8').replace(/^(#![^\n]+)\r\n/, '$1\n'));
+  return bytes;
+}
 function productFiles(directory) {
   const previous = JSON.parse(fs.readFileSync(path.join(directory, 'module-runtime-manifest.json'), 'utf8'));
   const files = new Set(['ui/index.html', 'ui/product.js', 'ui/live-client.js', 'ui/product.css', 'ui/favicon.svg', ...Object.keys(previous.productFiles || {})]);
@@ -56,7 +64,7 @@ function pack(sources) {
       if (!safeRelative(entry.path)) throw new Error('Unsafe npm package path');
       const file = path.join(source, entry.path);
       if (fs.lstatSync(file).isSymbolicLink()) throw new Error(`Symlink in module package: ${key}/${entry.path}`);
-      files[entry.path] = hash(fs.readFileSync(file));
+      files[entry.path] = hash(installedFileBytes(pkg, entry.path, fs.readFileSync(file)));
     }
     if (definition.required.some(file => !files[file])) throw new Error(`Incomplete module runtime: ${key}`);
     manifest.modules[key] = { name: pkg.name, installName: definition.installName, version: pkg.version, tarball: result.filename, sha256: hash(fs.readFileSync(path.join(output, result.filename))), files };
@@ -78,4 +86,4 @@ if (require.main === module) {
     }
   } catch (error) { process.stderr.write(`${error.message}\n`); process.exitCode = 1; }
 }
-module.exports = { verifyInstalled, safeRelative, productFiles };
+module.exports = { verifyInstalled, safeRelative, productFiles, installedFileBytes };
