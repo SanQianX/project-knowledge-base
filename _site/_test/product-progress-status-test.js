@@ -47,6 +47,17 @@ async function main() {
     const status = () => run("document.getElementById('activityConnection').textContent");
     await waitFor(async () => await status() === '已连接实时更新', 'initial SSE snapshot');
     assert.equal(connections, 1);
+    await run("document.querySelector('[data-view=activity]').click()");
+    await waitFor(() => run("document.getElementById('activityUpdates').textContent.includes('没有知识维护记录')"), 'genuine empty history');
+    const maintenance = journal => { snapshot.maintenance = { executionEnabled: true, consuming: true, journal }; for (const stream of streams) stream.write('event: progress\ndata: {"type":"knowledge.journal"}\n\n'); };
+    maintenance({ error: '事件消费异常', failures: [{ journalId: 'test-journal', sequence: 7, code: 'INVALID_ARGUMENT', message: '<img src=x onerror=window.__quotaXss=1>' }] });
+    await waitFor(() => run("document.getElementById('activityUpdates').textContent.includes('事件消费受阻')"), 'pre-queue failure must be visible without a run');
+    assert.equal(await run("document.getElementById('activityUpdates').textContent.includes('没有知识维护记录')"), false, 'blocked consumption cannot masquerade as an empty history');
+    assert.equal(await run("document.querySelectorAll('#activityUpdates img').length"), 0);
+    assert.equal(await run('window.__quotaXss'), undefined);
+    assert.equal(await run("document.getElementById('systemTitle').textContent"), '提交事件消费受阻');
+    maintenance({ error: null, failures: [] });
+    await waitFor(() => run("document.getElementById('activityUpdates').textContent.includes('没有知识维护记录')"), 'consumption recovery clears the warning');
     for (let attempt = 0; attempt < 2; attempt++) {
       const beforeHealth = healthRequests, beforeSnapshot = snapshots;
       await run("window.dispatchEvent(new Event('online'))");
@@ -67,7 +78,7 @@ async function main() {
     await browser?.close(); await server.cleanup();
     upstream.closeAllConnections(); await new Promise(resolve => upstream.close(resolve));
     assert.equal(path.dirname(fixture), path.resolve(os.tmpdir())); assert.ok(path.basename(fixture).startsWith('pk-product-progress-'));
-    fs.rmSync(fixture, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    await fs.promises.rm(fixture, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 }
 main().catch(error => { console.error(error.stack || error.message); process.exitCode = 1; });

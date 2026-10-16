@@ -17,7 +17,7 @@
   const domainName = id => state.brain.domains.find(d => d.id === id)?.name || '未分组';
   const projectName = id => state.projects.find(p => p.projectId === id)?.name || id;
   const time = value => value ? new Date(value).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
-  const label = run => ({ queued: '排队', running: '维护中', succeeded: '已更新 · 可检索', 'index-pending': '知识已更新 · 索引待修复', failed: '维护失败', cancelled: '已取消' })[run.state] || run.state;
+  const label = run => run.state === 'failed' && run.error?.code === 'MODEL_QUOTA_EXHAUSTED' ? '额度不足 · 待重试' : run.state === 'queued' && run.phase === 'waiting-previous' ? '等待前一条提交恢复' : ({ queued: '排队', running: '维护中', succeeded: '已更新 · 可检索', 'index-pending': '知识已更新 · 索引待修复', failed: '维护失败', cancelled: '已取消' })[run.state] || run.state;
   const badge = (text, status = '') => `<span class="status ${esc(status)}">${esc(text)}</span>`;
   let toastTimer, refreshTimer, preflightTimer, editingMemoryId, logStream, logEpoch = 0, referenceEpoch = 0, snapshotEpoch = 0, registryEpoch = 0, registryPromise = null, resumeImport = false, unbindProjectId = '', unbinding = false;
   let captureEpoch = 0, captureBusy = false;
@@ -103,6 +103,7 @@
     if (state.view === 'memory') renderMemories();
     if (state.view === 'activity') renderActivity();
     renderContext();
+    renderSystem();
   }
   function renderHome(candidates) {
     if (!state.projectsLoaded) { $('homeContent').innerHTML = state.projectsError ? '<div class="empty">项目登记读取失败，未把失败当作空知识库。<button data-action="refresh">重试读取</button></div>' : '<div class="empty">正在读取项目登记…</div>'; return; }
@@ -176,12 +177,37 @@
     $('memoryFeedback').hidden = true; $('saveMemoryCandidate').hidden = true; $('confirmMemory').textContent = '确认并保存';
     $('memoryDialog').showModal(); $('memoryText').focus();
   }
+  function maintenanceWarning() {
+    const status = state.snapshot.maintenance;
+    if (!status || !state.engineAvailable) return null;
+    if (Object.hasOwn(status, 'projectId') && status.projectId !== (state.projectId || null)) return null;
+    if (status.journal?.error) return { title: '提交事件消费受阻', message: '部分提交可能尚未生成分析任务，请查看诊断日志并恢复事件消费。', failures: status.journal.failures || [] };
+    if (status.executionEnabled === false || status.consuming === false) return { title: '提交维护尚未启用', message: '请在系统状态中检查项目接线；事件消费恢复后，已捕获的提交才能进入分析队列。', failures: [] };
+    return null;
+  }
   function renderActivity() {
     all('[data-activity-tab]').forEach(button => button.classList.toggle('active', button.dataset.activityTab === state.activityTab));
     $('activityUpdates').hidden = state.activityTab !== 'updates'; $('activitySessions').hidden = state.activityTab !== 'sessions';
     const runs = (state.activityProject === state.projectId ? state.activityPage?.runs || [] : state.snapshot.runs).filter(r => r.projectId === state.projectId).map(r => ({ ...state.runDetails?.get(r.runId), ...r }));
     const open = new Set(all('.run[open]').map(d => d.dataset.runId));
     $('activityUpdates').innerHTML = state.engineAvailable ? runs.map(r => `<details class="run" data-run-id="${esc(r.runId)}" ${open.has(r.runId) ? 'open' : ''}><summary><time>${time(r.startedAt)}</time><strong>${esc(projectName(r.projectId))} · ${esc(r.commitSha.slice(0, 8))}</strong>${badge(label(r), ['failed', 'index-pending'].includes(r.state) ? 'issue' : r.state === 'succeeded' ? 'up' : '')}</summary><div><p>提交：${esc(r.commitSha)}<br>阶段：${esc(r.phase)} · 入口：${esc(r.trigger)}<br>知识晋升：${time(r.promotedAt)} · 索引：${esc(r.indexState)}</p>${r.memoryCapture?.rejected?.length ? `<p>记忆候选：${esc(r.memoryCapture.rejected.length)} 条依据无效，未纳入候选箱；有效知识已保留。可在诊断日志中查看原因。</p>` : ''}${r.error ? `<p class="error">${esc(r.error.message)} (${esc(r.error.code)})</p>${r.error.details ? `<p>失败原因：${esc(r.error.details.upstreamMessage)}<br>类别：${esc(r.error.details.failureKind)} · HTTP：${esc(r.error.details.httpStatus ?? '—')} · 上游代码：${esc(r.error.details.upstreamCode)}<br>请求标识：${esc(r.error.details.requestId || '—')} · 尝试：${esc(r.error.details.attempt)} · 耗时：${esc(r.error.details.durationMs ?? '—')} ms</p>` : ''}` : ''}${(r.staging?.operations || []).map(op => `<div class="operation">${esc(op.operation)} · ${esc(op.path)}<br>${esc(op.reason)}</div>`).join('')}${['failed', 'index-pending'].includes(r.state) ? `<button data-retry-run="${esc(r.runId)}">重试失败阶段</button>` : ''}</div></details>`).join('') || '<div class="empty">当前项目还没有知识维护记录。</div>' : '<div class="empty">知识引擎离线。记录仍保留在本机，连接恢复后自动读取。</div>';
+    renderMaintenanceWarning();
+  }
+  function renderMaintenanceWarning() {
+    const warning = maintenanceWarning();
+    if (warning) {
+      if (!all('#activityUpdates .run').length) $('activityUpdates').replaceChildren();
+      const notice = document.createElement('div'); notice.className = 'empty error';
+      const title = document.createElement('strong'); title.textContent = warning.title;
+      const message = document.createElement('p'); message.textContent = warning.message;
+      notice.append(title, message);
+      for (const failure of warning.failures) {
+        const detail = document.createElement('small');
+        detail.textContent = `${failure.code} · ${failure.journalId}${failure.sequence === null ? '' : ` · 事件 ${failure.sequence}`}`;
+        notice.append(detail);
+      }
+      $('activityUpdates').prepend(notice);
+    }
   }
   function renderActivityNavigation() {
     if (state.activityProject !== state.projectId || !state.engineAvailable) return;
@@ -301,6 +327,8 @@
     if (state.snapshotStale) { $('systemDot').className = 'dot issue'; $('systemTitle').textContent = '知识状态刷新未完成'; $('systemDetail').textContent = '保留上次有效内容，连接恢复后自动更新。'; }
     if (storagePending && !pending && !down.length) { $('systemDot').className = 'dot issue'; $('systemTitle').textContent = '索引目录接线待恢复'; $('systemDetail').textContent = `目标目录：${state.indexStorage.expectedPath}。请在系统状态中修复接线。`; }
     if (state.root && state.scopeStatus?.status === 'pending' && !pending && !down.length) { $('systemDot').className = 'dot issue'; $('systemTitle').textContent = '共享知识接线待恢复'; $('systemDetail').textContent = '已有知识与长期记忆保留，请在系统状态中修复接线。'; }
+    const maintenance = maintenanceWarning();
+    if (maintenance && state.health.engine?.up && !pending) { $('systemDot').className = 'dot issue'; $('systemTitle').textContent = maintenance.title; $('systemDetail').textContent = maintenance.message; }
     $('moduleHealth').innerHTML = Object.entries(modules).map(([key, name]) => `<div class="row"><div><b>${esc(name)}</b><small>${esc(state.health[key]?.url || '')}</small></div>${badge(state.health[key]?.up ? '在线' : '离线', state.health[key]?.up ? 'up' : 'issue')}</div>`).join('');
     if (!navigator.onLine) {
       $('systemDot').className = 'dot issue'; $('systemTitle').textContent = '网页连接中断';
