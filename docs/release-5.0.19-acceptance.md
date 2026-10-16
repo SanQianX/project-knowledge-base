@@ -23,3 +23,17 @@
 原始证据保存在本工作站 `D:/SanQian.Xu/.glm-plan-evidence/workbench-2026-10-16/`。该目录包含隔离运行配置，不作为 npm 内容；交付 ZIP 仅选择制品与证据，不含凭据。原 Workbench 6 个未提交文件完整保留，新版发布在独立工作树同步版本。
 
 npm 发布流程为先上传 next，再从官方 registry 使用独立安装与缓存复验依赖版本、制品 integrity、模块和产品文件哈希、CLI 及真实页面，成功后将主包 latest 指向 5.0.19。此文档在 npm 包中是打包时快照，正式 registry 安装收据在完成后追加到仓库当前文档，不修改已发布版本制品。
+
+2026-10-16 正式 registry 安装及放行已完成。主包 `latest`、`next` 均为 `5.0.19`，配套 Workbench `next` 为 `0.13.2-rc.21`，其独立稳定标签保持 `0.13.1`。主包制品对应源码提交 `606e679a2674c847956f8e18baf2768cd0d08107`；发布后只追加验收文档，不修改或重发同版本 TGZ。
+
+| 正式放行门禁 | 结果 |
+|---|---|
+| 本地最终完整回归 | Node 24：152/152，283587ms；Node 22.23.3：152/152，316999ms，均显式使用官方 registry 并冻结依赖 |
+| GitHub | [38879216326](https://github.com/SanQianX/project-knowledge-base/actions/runs/38879216326)：Linux Node 22/24、Windows 全部成功 |
+| 官方独立安装 | 新目录 `kb-npm-5.0.19-HIzBgX`、全新 npm 缓存，主包及 Workbench/vector-hub/bridge 四个包的官方 integrity 和解析地址一致；模块、产品文件、vendored 引擎哈希、CLI 帮助通过 |
+| 制品一致性 | 官方主包 integrity 与实际上传 TGZ 一致：`sha512-PkoKje2jD20GR3i8m/Q4GP5LxnEY25veyIzGmN1s2hTWD4JKqvBmyNjHRnHHe/X9PgrlTPkZNUi872F/kL8jxw==` |
+| 真实安装版运行 | 四个模块均为本轮受管动态服务，正式包真实 GLM-5.3 会话 `sess-ee96f6a3c430` 返回 `NPM_5_0_19_OK`，自然 idle；未用本地 TGZ 覆盖官方依赖 |
+| 正式安装版页面 | B 最初为空，A/B 分别输入 1111/2222；刷新、切换后各自恢复，真实回复只展示一次 |
+| 数据保护 | 原 Workbench 6 个未提交 diff、三个仓库 Hook 字节、生产 engine-state 哈希均未变化；旧候选未修改 |
+
+正式安装、浏览器、模型及原始失败记录在 `D:/SanQian.Xu/.glm-plan-evidence/release-2026-10-16/`，其中 `registry-installation.json`、`official-runtime-acceptance.json`、`official-browser-proof.json` 和 `official-npm-5.0.19.jpg` 是正式包证据。该目录中的 `official-data` 含隔离凭据，不应整体归档或上传。旧的 5767 本地候选验收服务已在空闲时停止；正式 npm 隔离验收页为 http://127.0.0.1:5768/#work，生产数据与全局安装未升级。
