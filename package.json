@@ -1,6 +1,6 @@
 {
   "name": "@sanqianx/project-knowledge",
-  "version": "5.0.18",
+  "version": "5.0.19",
   "description": "Knowledge base manager with Git integration, AI-driven analysis, and bilingual (zh-CN/en-US) knowledge output",
   "main": "_site/server.js",
   "scripts": {
@@ -53,6 +53,7 @@
     "docs/leader-glm-workbench-playbook.md",
     "docs/release-5.0.16-acceptance.md",
     "docs/release-5.0.17-acceptance.md",
+    "docs/release-5.0.19-acceptance.md",
     "docs/fresh-v5-start.md",
     "README.md",
     "NOTICE",
@@ -88,7 +89,7 @@
     "@sanqianx/vector-hub": "1.0.8-rc.8",
     "buffer": "^6.0.3",
     "cheerio": "^1.2.0",
-    "claude-ai-workbench": "npm:@sanqianx/claude-ai-workbench@0.13.2-rc.20",
+    "claude-ai-workbench": "npm:@sanqianx/claude-ai-workbench@0.13.2-rc.21",
     "cross-spawn": "7.0.6",
     "dotenv": "^17.4.2",
     "gpt-tokenizer": "^3.4.0",
