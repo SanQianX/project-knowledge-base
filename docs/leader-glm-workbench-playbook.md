@@ -26,6 +26,7 @@ Leader 负责知识检索、关键开发、接口决策、打包升级和最终�
   "aiProfileId": "glm",
   "model": "glm-5.3",
   "agentId": "claude-code",
+  "inputOrigin": "agent-delegation",
   "permissionMode": "bypassPermissions"
 }
 ```
@@ -56,12 +57,14 @@ Leader 负责知识检索、关键开发、接口决策、打包升级和最终�
 
 补丁方式约束包括报告和原生 Agent 的记忆文件，不只是仓库源码。任务经验写入指定验收目录；不得自行编辑用户 memory。若发现越界，先核对会话是否已经结束，再按实际编辑记录恢复自己造成的差异，不能删除或覆盖原有用户内容。任务合同同时给出已验证的 Node 二进制、npm-cli 与仓库外临时目录，避免重复下载运行时或让测试继承 Workbench 的服务配置。
 
-`POST /api/terminal/sessions/<id>/input` 的正文为 `{"text":"<任务合同>"}`。保存 accepted 回执及 sessionId。返回忙碌或网络异常时，先读快照确认是否已接受，不盲目重发。相同批次只有一次有效派发。
+`POST /api/terminal/sessions/<id>/input` 的正文为 `{"text":"<任务合同>","options":{"inputOrigin":"agent-delegation","effort":"low"}}`。Leader 派单必须标明来源，不能因为接口消息角色为 user 就当作真人长期偏好。旧来源不明的记录不自动推荐为长期记忆。保存 accepted 回执及 sessionId。返回忙碌或网络异常时，先读快照确认是否已接受，不盲目重发。相同批次只有一次有效派发。
 
 ## 跟踪、断线与长任务
 
 - 执行中优先 `GET /api/terminal/sessions?contextId=<项目 ID>` 读取轻量状态，不反复加载数千条事件；终态或诊断时再用 `GET /api/terminal/sessions/<id>` 读取快照、权限与相关事件。
 - `GET /api/terminal/sessions/<id>/events?after=<sequence>` 续接 SSE；保存已处理序号，重连不得重复消费。
+- 会话列表使用 `/api/terminal/sessions/changes?contextId=<项目 ID>` 订阅摘要变更；独立 Workbench 使用一个 `contextId=*` SSE 覆盖全部项目。静置时不轮询列表，游标失效只补读一次快照。
+- 主回复的 `claude/turn-end` 与后台任务状态分开判断。真实 GLM 的 SDK 总 result 可能等待后台任务结束，不能据此锁住已经结束主回复的输入框。任务卡片只使用实际任务事件和快照，不能从代理的文字声明推断任务已经启动。
 - `GET /api/terminal/sessions/<id>/knowledge` 查看本次知识上下文。准备/输出日志不等于模型实际收到，原生送达仍需独立证据。
 - 事件类型带驱动前缀，例如 `claude/tool-use`、`claude/result`、`claude/error`；不能只匹配无前缀的 `result`。
 - 断线后先恢复快照，再续接事件；事件缺口不以空数组冒充完成。不得重复创建会话或发送已接受的任务。

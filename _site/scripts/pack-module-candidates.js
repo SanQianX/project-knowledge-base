@@ -19,6 +19,16 @@ function run(command, args, cwd) {
   return result.stdout;
 }
 function safeRelative(file) { return typeof file === 'string' && !path.isAbsolute(file) && !/[\\\x00-\x1f]/.test(file) && !file.split('/').some(p => p === '..' || p === '.'); }
+function productFiles(directory) {
+  const previous = JSON.parse(fs.readFileSync(path.join(directory, 'module-runtime-manifest.json'), 'utf8'));
+  const files = new Set(['ui/index.html', 'ui/product.js', 'ui/live-client.js', 'ui/product.css', 'ui/favicon.svg', ...Object.keys(previous.productFiles || {})]);
+  return Object.fromEntries([...files].map(file => {
+    if (!safeRelative(file)) throw new Error('Unsafe product asset path');
+    const target = path.join(directory, file);
+    if (fs.lstatSync(target).isSymbolicLink()) throw new Error('Symlink in product assets');
+    return [file, hash(fs.readFileSync(target))];
+  }));
+}
 function verifyInstalled(manifest, installedRoot) {
   for (const [key, module] of Object.entries(manifest.modules)) {
     const directory = path.join(installedRoot, 'node_modules', module.installName);
@@ -53,8 +63,7 @@ function pack(sources) {
     process.stdout.write(`Packed ${key} ${pkg.version}: ${result.files.length} files\n`);
   }
   const manifestPath = path.join(output, 'module-candidates.json'); AtomicFile.writeJsonAtomic(manifestPath, manifest);
-  const productFiles = Object.fromEntries(['ui/index.html', 'ui/product.js', 'ui/live-client.js', 'ui/product.css', 'ui/favicon.svg'].map(file => [file, hash(fs.readFileSync(path.join(root, file)))]));
-  AtomicFile.writeJsonAtomic(path.join(root, 'module-runtime-manifest.json'), { schema: 'project-knowledge/module-content/v1', productFiles, modules: Object.fromEntries(Object.entries(manifest.modules).map(([key, module]) => [key, { name: module.name, installName: module.installName, version: module.version, files: module.files }])) });
+  AtomicFile.writeJsonAtomic(path.join(root, 'module-runtime-manifest.json'), { schema: 'project-knowledge/module-content/v1', productFiles: productFiles(root), modules: Object.fromEntries(Object.entries(manifest.modules).map(([key, module]) => [key, { name: module.name, installName: module.installName, version: module.version, files: module.files }])) });
   process.stdout.write(`MODULE_CANDIDATES ${manifestPath}\n`);
   return manifestPath;
 }
@@ -69,4 +78,4 @@ if (require.main === module) {
     }
   } catch (error) { process.stderr.write(`${error.message}\n`); process.exitCode = 1; }
 }
-module.exports = { verifyInstalled, safeRelative };
+module.exports = { verifyInstalled, safeRelative, productFiles };

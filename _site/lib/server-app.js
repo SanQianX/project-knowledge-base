@@ -512,6 +512,7 @@ function createRuntime(options = {}) {
     analysisOwner: options.analysisOwner || 'legacy', ownership: { owner: options.analysisOwner || 'legacy', ready: false },
     rootDir, dataPath, layout, settingsStore, registryStore, projectStore, logger, logRepository,
     activeTasks, bridgeAdapter, bridgeConsumerService, conversationStore, conversationQuery, indexAdapter, indexService, promotionService, reconciler, lifecycleService, requirementRecorder, knowledgeRuntime, moduleBridge,
+    registryEvents: new (require('./registry-events').RegistryEvents)(),
   };
 }
 
@@ -867,6 +868,9 @@ function createRequestHandler(runtime, options = {}) {
     res.setHeader('X-Operation-Id', requestOperationId);
     res.once('finish', () => {
       if (requestFailed || res.statusCode >= 400) return;
+      if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method)
+        && /^\/api\/(?:projects(?:\/|$)|domains(?:\/|$)|brain$|settings$|modules\/configure$)/.test(requestPathname)
+        && requestPathname !== '/api/projects/preflight-import') runtime.registryEvents?.publish();
       Promise.resolve(runtime.logger.info('http.request_completed', 'HTTP request completed.', {
         operationId: requestOperationId,
         phase: 'completed',
@@ -890,6 +894,9 @@ function createRequestHandler(runtime, options = {}) {
       const url = new URL(req.url, `http://${req.headers.host || `${host}:${port}`}`);
       const method = req.method || 'GET';
       const pathname = url.pathname;
+      if (method === 'GET' && pathname === '/api/registry/events') {
+        return streamSse(res, write => runtime.registryEvents.subscribe(write));
+      }
 
       const moduleUi = pathname.match(/^\/modules\/(terminal|vectorhub|eventbridge|engine)\/(.*)$/);
       if (moduleUi && method === 'GET') return runtime.moduleBridge.proxyModuleUi(req, res, moduleUi[1], moduleUi[2], url.search);
@@ -1542,7 +1549,8 @@ async function startServer(options = {}) {
   const configurationTimer = setInterval(() => { connectEngine(runtime).catch(() => {}); }, 30000);
   configurationTimer.unref?.();
   let readyTimer;
-  runtime.moduleBridge.onReady = () => { clearTimeout(readyTimer); readyTimer = setTimeout(() => { runtime.projectConnections?.clear(); connectEngine(runtime).catch(() => {}); }, 100); };
+  runtime.moduleBridge.onReady = () => { runtime.registryEvents?.publish(['health', 'projects']); clearTimeout(readyTimer); readyTimer = setTimeout(() => { runtime.projectConnections?.clear(); connectEngine(runtime).catch(() => {}); }, 100); };
+  runtime.moduleBridge.onStateChange = () => runtime.registryEvents?.publish(['health']);
   connectEngine(runtime).catch(() => {});
 
   // T3.5 进程编排：拉起包内自带的模块服务并守护（默认开启，KB_MODULES_AUTOSTART=0 关闭）
@@ -1582,6 +1590,7 @@ async function startServer(options = {}) {
       clearInterval(maintenanceTimer);
       clearInterval(configurationTimer);
       clearTimeout(readyTimer); runtime.moduleBridge.onReady = null;
+      runtime.moduleBridge.onStateChange = null;
       runtime.engineConnectionClosed = true;
       runtime.liveGateway?.close();
       await runtime.logger.info('server.shutdown_started', 'Server shutdown started.', { phase: 'shutdown', context: { reason } });

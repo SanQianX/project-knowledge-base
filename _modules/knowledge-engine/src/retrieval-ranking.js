@@ -47,7 +47,8 @@ function intent(query) {
   const text = String(query || '').trim();
   if (/^(?:hello|hi|hey|你好|您好|早上好|晚上好|在吗)[\s!！。?？]*$/i.test(text)) return 'greeting';
   if (/^(?:为什么|怎么回事|这是什么意思|继续|然后呢|展开说说|why|continue|tell me more)[\s!！。?？]*$/i.test(text)) return 'followup';
-  if (/(你|本轮|本次|刚才|上一条|这段).*(知识|记忆|上下文|context|memory).*(来源|哪里|什么地方|收到|读取|获取|from|received)/i.test(text)) return 'followup';
+  const concreteTask = /(修复|实现|新增|设计|为什么|为何|如何|怎样|避免|并发|草稿|implement|fix|design|why|how)/i.test(text);
+  if (!concreteTask && /(你|本轮|本次|刚才|上一条|这段).*(知识|记忆|上下文|context|memory).*(来源|哪里|什么地方|收到|读取|获取|from|received)/i.test(text)) return 'followup';
   if (/(最近|最新|上次|上一[次回]|recent|latest|last)/i.test(text) && /(进度|开发|提交|修改|更新|改动|progress|commit|develop|change|update)/i.test(text)) return 'recent';
   return 'search';
 }
@@ -80,6 +81,23 @@ function lexical(candidates, query, ignoredTerms = []) {
 }
 
 function rank(candidates, query, scoreIdentity, options = {}) {
+  // Named technologies select evidence, not merely a similar subject. A
+  // calibrated embedding can place an unrelated document nearby; it cannot
+  // establish that PostgreSQL/OpenTelemetry exists in the current knowledge.
+  // Filenames are excluded because new files legitimately seek analogies.
+  const topicQuery = String(query).replace(/[A-Za-z0-9_./\\-]+\.[A-Za-z0-9]{1,8}\b/g, '');
+  const named = [...new Set((topicQuery.match(/\b[A-Z][A-Za-z0-9]*[a-z][A-Z][A-Za-z0-9]*\b/g) || []).map(name => name.toLowerCase()))];
+  if (named.length) {
+    const documented = new Map();
+    for (const c of candidates) {
+      const key = `${c.spaceId}:${c.entryId}`;
+      const text = `${c.title}\n${c.chunkText}`.toLowerCase();
+      const found = documented.get(key) || new Set();
+      for (const name of named) if (text.includes(name)) found.add(name);
+      documented.set(key, found);
+    }
+    candidates = candidates.filter(c => named.every(name => documented.get(`${c.spaceId}:${c.entryId}`)?.has(name)));
+  }
   // A resolved commit already constrains provenance. Repeated SHA text in a
   // heading is not evidence for the topic asked about within that commit.
   lexical(candidates, query, options.commitPrefixes || []);

@@ -21,6 +21,7 @@
   const badge = (text, status = '') => `<span class="status ${esc(status)}">${esc(text)}</span>`;
   let toastTimer, refreshTimer, preflightTimer, editingMemoryId, logStream, logEpoch = 0, referenceEpoch = 0, snapshotEpoch = 0, registryEpoch = 0, registryPromise = null, resumeImport = false, unbindProjectId = '', unbinding = false;
   let captureEpoch = 0, captureBusy = false;
+  let registryStream = null, registryReceipt = null, registryRefreshTimer;
   async function api(url, options = {}) {
     const { allowNotReady, timeoutMs = (options.method || 'GET') === 'GET' && !url.includes('pick-folder') ? 3000 : 0, ...init } = options;
     if (init.body && typeof init.body !== 'string') init.body = JSON.stringify(init.body);
@@ -43,8 +44,12 @@
   function frameContext(key) {
     const project = activeProject();
     const frame = frames[key];
+    if (!frame.ready) return;
     const ref = key === 'terminal' ? project?.modules.terminal.projectId || project?.workspacePath : key === 'eventBridge' ? project?.modules.eventBridge.projectId || project?.workspacePath : project?.projectId;
     frame.requestId = `${state.epoch}:${key}`;
+    const signature = JSON.stringify([state.epoch, ref || '', state.scope, document.documentElement.dataset.theme, frameVisible(key)]);
+    if (frame.contextSignature === signature) return;
+    frame.contextSignature = signature;
     post(key, { type: 'kb:theme', theme: document.documentElement.dataset.theme });
     post(key, { type: 'kb:scope', scope: state.scope });
     post(key, { type: 'kb:sidebar', visible: key === 'terminal' });
@@ -148,7 +153,10 @@
     $('memoryText').value = memory.text; $('memoryScope').value = memory.scopeType || 'global';
     updateMemoryTarget($('memoryScope').value, memory.scopeId || memory.brainId);
     $('memoryOriginal').textContent = `原始总结：${memory.originalText || memory.text}`;
-    $('memoryEvidence').textContent = memory.evidence ? `${projectName(memory.evidence.projectId)} · ${memory.evidence.commitSha} / ${memory.evidence.entryId}` : '';
+    $('memoryEvidence').textContent = memory.evidence ? `${projectName(memory.evidence.projectId)} · ${memory.evidence.commitSha} / ${memory.evidence.entryId}${memory.sourceEventId || memory.evidence.sourceEventId ? ` · 用户事件 ${memory.sourceEventId || memory.evidence.sourceEventId}` : ''}` : '';
+    let eligibility = $('memoryEligibility');
+    if (!eligibility) { eligibility = document.createElement('p'); eligibility.id = 'memoryEligibility'; $('memoryEvidenceDetails').append(eligibility); }
+    eligibility.textContent = memory.eligibility ? `推荐理由：${memory.eligibility.reason || ''}\n范围依据：${memory.eligibility.scopeReason || ''}` : memory.status === 'candidate' ? '旧候选尚未按跨项目长期共识标准复核。' : '';
     $('memoryQuote').textContent = memory.evidence?.quote || '';
     $('memoryEvidenceDetails').hidden = memory.sourceType === 'manual'; $('manualMemoryHint').hidden = memory.sourceType !== 'manual';
     $('memoryFeedback').hidden = true; $('saveMemoryCandidate').hidden = memory.status !== 'candidate';
@@ -238,6 +246,21 @@
     stream.addEventListener('snapshot', () => { if (state.stream !== stream) return; $('activityConnection').textContent = '已连接实时更新'; scheduleRefresh(); });
     stream.addEventListener('progress', () => { if (state.stream === stream) scheduleRefresh(); });
     stream.onerror = () => { if (state.stream === stream) $('activityConnection').textContent = '连接中断，正在恢复快照'; };
+  }
+  function connectRegistryEvents() {
+    if (registryStream || !navigator.onLine) return;
+    const stream = registryStream = new ProgressSource('/api/registry/events');
+    const changed = event => {
+      if (registryStream !== stream) return;
+      let receipt; try { receipt = JSON.parse(event.data); } catch { return; }
+      const signature = `${receipt.instanceId}:${receipt.revision}`;
+      const previous = registryReceipt; registryReceipt = signature;
+      if (!previous || previous === signature) return;
+      clearTimeout(registryRefreshTimer);
+      registryRefreshTimer = setTimeout(() => { if (!document.hidden) void refreshRegistry(); }, 100);
+    };
+    stream.addEventListener('registry-snapshot', changed);
+    stream.addEventListener('registry-changed', changed);
   }
   function refreshRegistry(force = false) {
     if (!navigator.onLine) return Promise.resolve();
@@ -612,19 +635,21 @@
   window.addEventListener('hashchange', () => setView(location.hash.slice(1)));
   window.addEventListener('offline', () => {
     snapshotEpoch++; clearTimeout(refreshTimer);
-    state.stream?.close(); state.stream = null; logStream?.close(); logStream = null; logEpoch++;
+    state.stream?.close(); state.stream = null; registryStream?.close(); registryStream = null; logStream?.close(); logStream = null; logEpoch++;
     state.engineAvailable = false; $('activityConnection').textContent = '连接中断，恢复后自动读取快照';
     renderSystem(); render();
   });
   window.addEventListener('online', () => {
+    connectRegistryEvents();
     $('activityConnection').textContent = state.engineAvailable && state.stream?.readyState === EventSource.OPEN ? '已连接实时更新' : '正在恢复快照'; refreshRegistry();
     if ($('logsDialog').open) loadLogs().catch(error => toast(error.message));
   });
-  window.addEventListener('beforeunload', () => { state.stream?.close(); logStream?.close(); });
+  window.addEventListener('beforeunload', () => { state.stream?.close(); registryStream?.close(); clearTimeout(registryRefreshTimer); logStream?.close(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { connectRegistryEvents(); void refreshRegistry(); } });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSystem(); });
   document.documentElement.dataset.theme = localStorage.getItem('kb.theme') === 'dark' ? 'dark' : 'light';
   all('[data-scope]').forEach(button => button.classList.toggle('active', button.dataset.scope === state.scope));
   state.view = titles[location.hash.slice(1)] ? location.hash.slice(1) : 'home';
   setView(state.view); refreshRegistry();
-  setInterval(() => { if (!document.hidden) refreshRegistry(); }, 30000);
+  connectRegistryEvents();
 })();

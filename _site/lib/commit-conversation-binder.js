@@ -10,6 +10,7 @@ function projectEvent(event) {
     sequence: event.sequence,
     content: event.content,
     contentHash: event.contentHash,
+    inputOrigin: event.inputOrigin || 'unknown',
     capturedAt: event.capturedAt,
   };
 }

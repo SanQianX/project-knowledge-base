@@ -7,13 +7,15 @@ function attachLiveGateway(server, runtime) {
   function target(route) {
     const url = new URL(route, 'http://local');
     if (url.origin !== 'http://local' || !route.startsWith('/') || route.length > 2048) throw new Error('INVALID_ROUTE');
-    if ([...url.searchParams.keys()].some(k => !['after', 'projectId', 'level', 'component', 'event', 'q', 'operationId', 'runId', 'commitSha', 'limit', 'summary', 'jobId', 'since', 'streamCursor'].includes(k))) throw new Error('INVALID_QUERY');
+    if ([...url.searchParams.keys()].some(k => !['after', 'projectId', 'contextId', 'level', 'component', 'event', 'q', 'operationId', 'runId', 'commitSha', 'limit', 'summary', 'jobId', 'since', 'streamCursor'].includes(k))) throw new Error('INVALID_QUERY');
     const bridge = runtime.moduleBridge;
     if (url.pathname === '/api/engine/progress') {
       if (bridge.engineCompatible === false) throw new Error('ENGINE_CONNECTION_PENDING');
       return `${bridge.engineUrl}/api/progress${url.search}`;
     }
     if (/^\/api\/terminal\/sessions\/[a-zA-Z0-9_-]+\/events$/.test(url.pathname)) return bridge._terminalApi(url.pathname) + url.search;
+    if (url.pathname === '/api/terminal/sessions/changes') return bridge._terminalApi(url.pathname) + url.search;
+    if (url.pathname === '/api/registry/events') return `http://${runtime.liveAddress}${route}`;
     if (url.pathname === '/api/logs/stream') return `http://${runtime.liveAddress}${route}`;
     throw new Error('INVALID_ROUTE');
   }

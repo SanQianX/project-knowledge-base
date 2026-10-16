@@ -44,6 +44,8 @@ const AGENT_START_TIMEOUT_MS = 90000;
 // Registration drives a full embedding pass in vector-hub (remote API); a
 // fresh knowledge folder can easily exceed the interactive proxy budget.
 const REGISTER_TIMEOUT_MS = 60000;
+// Match knowledge-engine's index request budget for synchronous embedding.
+const INDEX_TIMEOUT_MS = 120000;
 // Native folder dialogs wait for the user without a bound.
 const PICKER_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -188,7 +190,8 @@ class ModuleBridge {
     const targetUrl = new URL(target);
     const pathname = targetUrl.pathname;
     const isAgentStart = req.method === 'POST' && /^\/api\/claude-workbench\/v1\/sessions(?:\/[^/]+\/input)?\/?$/.test(pathname);
-    const timeoutMs = isPicker ? PICKER_TIMEOUT_MS : isAgentStart ? AGENT_START_TIMEOUT_MS : PROXY_TIMEOUT_MS;
+    const isIndex = req.method === 'POST' && pathname === '/api/sync' && targetUrl.origin === new URL(this.vectorHubUrl).origin;
+    const timeoutMs = isPicker ? PICKER_TIMEOUT_MS : isAgentStart ? AGENT_START_TIMEOUT_MS : isIndex ? INDEX_TIMEOUT_MS : PROXY_TIMEOUT_MS;
     const startedAt = Date.now();
     let upstream;
     const controller = new AbortController();
@@ -821,6 +824,7 @@ class ModuleBridge {
       this.logger.warn('modules.supervisor', 'Module process could not start.', { context: { name: spec.name, code: error.code || 'SPAWN_FAILED' } });
     });
     child.on('exit', code => {
+      this.onStateChange?.(spec.name);
       this.supervised = this.supervised.filter(existing => existing !== child);
       attempts += 1;
       if (attempts > 5 || this.stopped) {
