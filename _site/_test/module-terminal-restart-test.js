@@ -1,6 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 const { ModuleBridge } = require('../lib/module-bridge');
+const { connectEngine } = require('../lib/engine-connection');
 
 async function main() {
   const state = { modules: { terminal: { projectId: 'terminal-original' } } };
@@ -39,6 +40,24 @@ async function main() {
   const projection = await bridge.aggregatedProjects();
   assert.equal(projection.projects[0].modules.terminal.projectId, 'terminal-original', 'saved binding wins over duplicate path entries');
   assert.equal(creations, 0);
+  let wiringCalls = 0;
+  const runtime = {
+    registryStore: bridge.registryStore, projectStore: bridge.projectStore,
+    moduleBridge: {
+      engineUrl: 'http://engine.test', runtimeToken: 'fixture',
+      _fetch: async () => ({ ok: true, status: 200, json: async () => ({ name: 'knowledge-engine', dataSchemaVersion: 3 }) }),
+      _listEngineProjects: async () => [{ projectId: 'project-restart', ...config }],
+      registerProjectLinks: async () => ({ engine: { ok: true }, eventBridge: { ok: true }, terminal: { ok: ++wiringCalls > 1 } }),
+      syncEngineConfiguration: async () => ({}),
+    },
+    logger: { warn: async () => {} },
+  };
+  await connectEngine(runtime);
+  assert.equal(runtime.ownership.ready, true, 'terminal recovery does not block the knowledge engine');
+  assert.equal(runtime.projectConnections.has('project-restart'), false, 'incomplete terminal wiring must remain retryable');
+  await connectEngine(runtime);
+  assert.equal(wiringCalls, 2, 'the next connection pass retries incomplete terminal wiring');
+  assert.equal(runtime.projectConnections.has('project-restart'), true);
   console.log('module-terminal-restart-test PASS');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

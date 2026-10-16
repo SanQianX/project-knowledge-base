@@ -47,7 +47,10 @@ async function connectEngineOnce(runtime) {
       try {
       const modules = await bridge.registerProjectLinks({ projectId: id, name: config.displayName, workspacePath: config.repoPath, knowledgePath: config.knowledgePath });
       if (!modules.engine.ok || !modules.eventBridge.ok) { pending.push({ projectId: id, code: 'PROJECT_WIRING_PENDING' }); continue; }
-      runtime.projectConnections.set(id, fingerprint); enabled.push(id);
+      // Engine activation can proceed while the terminal starts, but caching
+      // that partial wiring would prevent subsequent readiness passes repairing it.
+      if (modules.terminal?.ok !== false) runtime.projectConnections.set(id, fingerprint);
+      enabled.push(id);
       } catch { pending.push({ projectId: id, code: 'PROJECT_WIRING_PENDING' }); }
     } };
     await Promise.all([wire(), wire()]);
