@@ -26,6 +26,7 @@
   "files": [
     "_site/server.js",
     "ui/index.html",
+    "ui/knowledge-panel.html",
     "ui/product.css",
     "ui/product.js",
     "ui/live-client.js",

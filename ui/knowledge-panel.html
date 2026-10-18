@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>本次知识引用</title>
+<style>
+:root{color-scheme:light dark;font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+body{margin:0;padding:16px 12px;background:#f7f7f5;color:#1f2328;font-size:13px;line-height:1.6}
+h1{font-size:13px;margin:0 0 4px}
+#panelStatus{margin:0 0 12px;color:#5a6069}
+#panelProject{display:block;margin:0 0 12px;color:#5a6069;font-size:12px}
+.reference{border:1px solid #e3e4e8;border-radius:8px;background:#fff;padding:10px 12px;margin:0 0 8px}
+.reference h2{font-size:13px;margin:0 0 4px}
+.reference small{display:block;color:#5a6069;overflow-wrap:anywhere}
+.reference code{display:block;color:#5a6069;font-size:11px;margin-top:4px;overflow-wrap:anywhere}
+.reference p{margin:6px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.kb-empty{color:#5a6069}
+#panelMarker{display:block;margin-top:16px;color:#9aa0a8;font-size:11px;letter-spacing:.04em}
+@media (prefers-color-scheme:dark){body{background:#14161a;color:#e6e8eb}.reference{background:#1c1f24;border-color:#2c3038}#panelStatus,#panelProject,.reference small,.reference code,.kb-empty{color:#9aa0a8}}
+</style>
+</head>
+<body>
+<h1 id="panelTitle">本次知识引用</h1>
+<small id="panelProject"></small>
+<p id="panelStatus">等待知识内容…</p>
+<div id="panelReferences"><p class="kb-empty">面板就绪后显示实际检索到的项目事实、领域经验和已确认记忆。</p></div>
+<footer id="panelMarker">KB-K1-KNOWLEDGE-PANEL-v1</footer>
+<script>
+(function () {
+  'use strict';
+  // This page runs inside the Workbench right dock in a scripts-only sandbox
+  // (opaque origin). The ONLY inbound channel is kb:panel/content from the
+  // workbench parent window, matched by source identity - an origin string is
+  // meaningless for an opaque-origin frame. Everything renders through
+  // textContent/createElement; external strings stay inert text forever.
+  var STATUS_LABELS = {
+    ready: '已检索知识',
+    'file-fallback': '索引暂不可用，已检索原文件',
+    unavailable: '知识服务不可用，未注入上下文',
+    unregistered: '项目尚未登记知识库',
+    disabled: '未启用知识连接',
+    'not-retrieved': '任务发送前自动检索'
+  };
+  var titleNode = document.getElementById('panelTitle');
+  var projectNode = document.getElementById('panelProject');
+  var statusNode = document.getElementById('panelStatus');
+  var refsNode = document.getElementById('panelReferences');
+
+  function acknowledge(panelId, version, ok, error) {
+    try {
+      window.parent.postMessage({
+        type: 'kb:panel/content-ack',
+        panelId: String(panelId == null ? '' : panelId),
+        version: version === undefined ? null : version,
+        ok: ok === true,
+        error: error ? String(error).slice(0, 200) : null
+      }, '*');
+    } catch (failure) { /* a broken parent channel never breaks rendering */ }
+  }
+
+  function renderReference(entry) {
+    var item = document.createElement('article');
+    item.className = 'reference';
+    var heading = document.createElement('h2');
+    heading.textContent = String(entry.title || entry.entryId || '知识引用');
+    var source = document.createElement('small');
+    source.textContent = String(entry.source || '');
+    var entryId = document.createElement('code');
+    entryId.textContent = String(entry.entryId || '');
+    var text = document.createElement('p');
+    text.textContent = String(entry.text || '').slice(0, 800);
+    item.append(heading, source, text, entryId);
+    return item;
+  }
+
+  function render(data) {
+    var content = data.content;
+    if (content === null || typeof content !== 'object' || Array.isArray(content)) {
+      throw new Error('内容必须是普通对象');
+    }
+    titleNode.textContent = String(content.title || '本次知识引用');
+    projectNode.textContent = String(content.projectId || '');
+    statusNode.textContent = STATUS_LABELS[String(content.status || '')] || '本次任务上下文';
+    refsNode.replaceChildren();
+    var references = Array.isArray(content.references) ? content.references : [];
+    var rendered = 0;
+    for (var i = 0; i < references.length && rendered < 100; i += 1) {
+      var entry = references[i];
+      if (entry === null || typeof entry !== 'object') continue;
+      refsNode.append(renderReference(entry));
+      rendered += 1;
+    }
+    if (!rendered) {
+      var empty = document.createElement('p');
+      empty.className = 'kb-empty';
+      empty.textContent = content.status === 'ready' ? '本次任务未找到可引用的知识。' : '发送任务后显示实际检索到的项目事实、领域经验和已确认记忆。';
+      refsNode.append(empty);
+    }
+  }
+
+  window.addEventListener('message', function (event) {
+    if (event.source !== window.parent) return;
+    var data = event.data;
+    if (data === null || typeof data !== 'object' || data.type !== 'kb:panel/content') return;
+    try {
+      render(data);
+      acknowledge(data.panelId, data.version, true, null);
+    } catch (error) {
+      statusNode.textContent = '知识内容渲染失败，已通知工作台恢复固定知识栏。';
+      acknowledge(data.panelId, data.version, false, error && error.message ? error.message : 'render failed');
+    }
+  });
+})();
+</script>
+</body>
+</html>

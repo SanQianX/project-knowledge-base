@@ -7,7 +7,7 @@ const { safeRelative } = require('./pack-module-candidates');
 function verifyProductRuntime(coreRoot, resolveFrom = path.join(coreRoot, 'package.json')) {
   const manifest = JSON.parse(fs.readFileSync(path.join(coreRoot, 'module-runtime-manifest.json')));
   if (manifest.schema !== 'project-knowledge/module-content/v1' || Object.keys(manifest.modules).length !== 3) throw new Error('Incomplete module content manifest');
-  for (const file of ['ui/index.html', 'ui/product.js', 'ui/product.css', 'ui/favicon.svg', 'plugins/project-knowledge/hooks/claude.json', 'plugins/project-knowledge/hooks/codex.json', 'plugins/project-knowledge/scripts/context-hook.cjs', 'plugins/project-knowledge/scripts/mcp-launcher.cjs', 'plugins/project-knowledge/.claude-plugin/plugin.json', 'plugins/project-knowledge/.codex-plugin/plugin.json', 'plugins/project-knowledge/.mcp.json']) if (!manifest.productFiles?.[file]) throw new Error(`Product asset missing from content manifest: ${file}`);
+  for (const file of ['ui/index.html', 'ui/knowledge-panel.html', 'ui/product.js', 'ui/product.css', 'ui/favicon.svg', 'plugins/project-knowledge/hooks/claude.json', 'plugins/project-knowledge/hooks/codex.json', 'plugins/project-knowledge/scripts/context-hook.cjs', 'plugins/project-knowledge/scripts/mcp-launcher.cjs', 'plugins/project-knowledge/.claude-plugin/plugin.json', 'plugins/project-knowledge/.codex-plugin/plugin.json', 'plugins/project-knowledge/.mcp.json']) if (!manifest.productFiles?.[file]) throw new Error(`Product asset missing from content manifest: ${file}`);
   const resolve = createRequire(resolveFrom);
   if (!manifest.productFiles['ui/live-client.js']) throw new Error('Product live transport missing from content manifest');
   for (const [relative, expected] of Object.entries(manifest.productFiles || {})) {
@@ -26,7 +26,7 @@ function verifyProductRuntime(coreRoot, resolveFrom = path.join(coreRoot, 'packa
     }
     modules[key] = { directory, version: pkg.version };
   }
-  for (const file of ['ui/index.html', 'ui/product.js', 'ui/product.css', '_modules/knowledge-engine/src/bin.js', '_modules/knowledge-engine/src/coordinator.js']) if (!fs.existsSync(path.join(coreRoot, file))) throw new Error(`Product runtime missing: ${file}`);
+  for (const file of ['ui/index.html', 'ui/knowledge-panel.html', 'ui/product.js', 'ui/product.css', '_modules/knowledge-engine/src/bin.js', '_modules/knowledge-engine/src/coordinator.js']) if (!fs.existsSync(path.join(coreRoot, file))) throw new Error(`Product runtime missing: ${file}`);
   return modules;
 }
 if (require.main === module) {

@@ -1,10 +1,10 @@
 {
   "schema": "project-knowledge/module-content/v1",
   "productFiles": {
-    "ui/index.html": "737b8f5c745270797950c5975f458a13ffe1ea738f921e814bfbbe5e56813fed",
-    "ui/product.js": "8bcee5d749a7798740e619279eb8b196202a554380023aa78e84b54391b0c7ad",
+    "ui/index.html": "3d7ae2f0e514393a50e2643949e6836a3089b0d9a5dd00185db66b939a486600",
+    "ui/product.js": "00c0b0afbed8f835b29e42ffd049715b458d8b5e2eb11acea2aaac1de1ac44ad",
     "ui/live-client.js": "0d81fa894c629bb839e1931fc3c5ebad4d831aae8232d6ce8c0f542e9e3559e8",
-    "ui/product.css": "4f300b08c086a939831d7ee69df01f23641457c0d606af29e9d4ce8a6d28bc9d",
+    "ui/product.css": "e7e7847ab538cc115e9a07ee159fbefc002cab4f2c3d827b59ce2c5dc8b0b75d",
     "ui/favicon.svg": "c48be946b224112ebb0238b44263f7a61bda31e531afa895c2e9801c0ff24f32",
     "plugins/project-knowledge/hooks/claude.json": "d61510327e3e1facbb4c645228e9f50cad05a88b33d80c4c22e5ba9f8b9f5359",
     "plugins/project-knowledge/hooks/codex.json": "216e03c07295606ef6ebb2c4f669ad0d790b5e7c4f3f34600488033db75e4239",
@@ -12,7 +12,8 @@
     "plugins/project-knowledge/scripts/mcp-launcher.cjs": "7c68830b5c73eb53ef030756a4de33987f7eab6b1a6cc15602835aac3f954893",
     "plugins/project-knowledge/.claude-plugin/plugin.json": "71a2693a98a05bef7290c4dcc8020745057b36045cfd93540dae70e4bde0a018",
     "plugins/project-knowledge/.codex-plugin/plugin.json": "b87bdcd44f5e3a5c7a5f44e4f4bc9c77dd28ee9080a0e54a7445316b1f0d534f",
-    "plugins/project-knowledge/.mcp.json": "0714e6a89f92eaf93508e08ad1aa3917982bf3cfea3969aabef27cf518e0a795"
+    "plugins/project-knowledge/.mcp.json": "0714e6a89f92eaf93508e08ad1aa3917982bf3cfea3969aabef27cf518e0a795",
+    "ui/knowledge-panel.html": "13280b1e55545f09623daed7ae52a67b4c87d3ad0abaccf0bcee4d5ac5201626"
   },
   "modules": {
     "terminal": {

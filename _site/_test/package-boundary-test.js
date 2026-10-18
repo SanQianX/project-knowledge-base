@@ -28,6 +28,7 @@ for (const candidate of forbidden) {
 }
 assert(files.includes('docs/README.zh-CN.md'));
 assert(files.includes('ui/index.html'));
+assert(files.includes('ui/knowledge-panel.html'), 'K1 knowledge panel page must ship in the npm package');
 
 // Every local asset referenced by the packaged HTML must be present in the
 // tarball. This is deliberately derived from index.html so adding a future

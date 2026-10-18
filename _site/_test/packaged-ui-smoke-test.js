@@ -53,7 +53,7 @@ function buildAndInstallPackage() {
   let browser;
   try {
     const packagedRoot = buildAndInstallPackage();
-    for (const file of ['index.html', 'product.js', 'product.css']) assert(fs.existsSync(path.join(packagedRoot, 'ui', file)), `packed UI must include ${file}`);
+    for (const file of ['index.html', 'knowledge-panel.html', 'product.js', 'product.css']) assert(fs.existsSync(path.join(packagedRoot, 'ui', file)), `packed UI must include ${file}`);
     for (const file of ['app.js', 'app.css', 'i18n.js']) assert(!fs.existsSync(path.join(packagedRoot, 'ui', file)), `obsolete shell resource must not be shipped: ${file}`);
 
     server = spawnServer({ root: packagedRoot, port: PORT, dataDir: path.join(tempRoot, 'data'), tag: 'packaged-ui', analysisOwner: 'engine', stdio: 'ignore' });

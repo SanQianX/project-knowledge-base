@@ -10,5 +10,5 @@ for (const name of ['claude-ai-workbench', '@sanqianx/vector-hub', '@sanqianx/ai
 assert.ok(isPinnedModuleVersion('claude-ai-workbench', 'npm:@sanqianx/claude-ai-workbench@0.13.2-rc.1'));
 assert.equal(isPinnedModuleVersion('@sanqianx/vector-hub', 'npm:@sanqianx/claude-ai-workbench@0.13.2-rc.1'), false);
 const manifest = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../module-runtime-manifest.json')));
-for (const file of ['ui/index.html', 'ui/product.js', 'ui/product.css', 'ui/favicon.svg']) assert.match(manifest.productFiles[file], /^[a-f0-9]{64}$/);
+for (const file of ['ui/index.html', 'ui/knowledge-panel.html', 'ui/product.js', 'ui/product.css', 'ui/favicon.svg']) assert.match(manifest.productFiles[file], /^[a-f0-9]{64}$/);
 console.log('candidate-release-contract-test PASS');
