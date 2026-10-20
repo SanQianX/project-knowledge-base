@@ -58,10 +58,11 @@ async function main() {
     assert.equal(browser.exceptions.length, 0, JSON.stringify(browser.exceptions));
     console.log('agent-capture-mcp-ui-test PASS (MCP line rendered separately; hostile detail escaped; no XSS execution)');
   } finally {
+    runtime.integrationStatusScan?.close();
     await browser?.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
     offline.closeAllConnections(); await new Promise(resolve => offline.close(resolve)); await runtime.logger.close();
     assert.equal(path.dirname(temp), path.resolve(os.tmpdir())); assert.ok(path.basename(temp).startsWith('kb-agent-mcp-ui-'));
-    fs.rmSync(temp, { recursive: true, force: true, maxRetries: 12, retryDelay: 200 });
+    await fs.promises.rm(temp, { recursive: true, force: true, maxRetries: 12, retryDelay: 200 });
   }
 }
 main().catch(error => { console.error(error.stack); process.exitCode = 1; });
