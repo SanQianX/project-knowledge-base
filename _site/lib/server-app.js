@@ -1332,6 +1332,7 @@ function createRequestHandler(runtime, options = {}) {
       if (method === 'POST' && pathname === '/api/integrations/install') {
         runtime.integrationStatusScan?.invalidate();
         const body = await readJsonBody(req);
+        await runtime.integrationAutoRepair?.close();
         const manager = new IntegrationManager({ ...options.integrationOptions, rootDir: runtime.rootDir, logger: runtime.logger, operationId: requestOperationId, bridgeHomeDir: runtime.bridgeAdapter.hookBinding().bridgeHomeDir });
         const clients = Array.isArray(body.clients) && body.clients.length
           ? body.clients.map(client => String(client))
@@ -1355,6 +1356,7 @@ function createRequestHandler(runtime, options = {}) {
       }
       if (method === 'POST' && pathname === '/api/integrations/uninstall') {
         const body = await readJsonBody(req);
+        await runtime.integrationAutoRepair?.close();
         const manager = new IntegrationManager({ ...options.integrationOptions, rootDir: runtime.rootDir, logger: runtime.logger, operationId: requestOperationId, bridgeHomeDir: runtime.bridgeAdapter.hookBinding().bridgeHomeDir });
         if (body.disableAllCapture === true) {
           const summary = await manager.disableAllCapture({});
@@ -1563,17 +1565,17 @@ async function startServer(options = {}) {
   }
 
   // Startup-event integration repair: one attempt per connected-but-broken
-  // client, failures surfaced and never retried in this run. No timers.
+  // client, failures surfaced and never retried in this run. Native checks
+  // run in an owned worker so they cannot block HTTP or launcher readiness.
   try {
-    runtime.integrationAutoRepair = new (require('./integration-auto-repair').IntegrationAutoRepair)({
+    runtime.integrationAutoRepair = new (require('./startup-integration-repair').StartupIntegrationRepair)({
       dataDir: runtime.dataPath,
       logger: runtime.logger,
-      createManager: () => new IntegrationManager({
+      managerOptions: {
         ...options.integrationOptions,
         rootDir: runtime.rootDir,
-        logger: runtime.logger,
         bridgeHomeDir: runtime.bridgeAdapter.hookBinding().bridgeHomeDir,
-      }),
+      },
     });
     runtime.integrationAutoRepair.runOnce().catch(error => {
       runtime.logger.warn('integrations.auto_repair_skipped', '启动自动修复未完成。', { error });
@@ -1587,6 +1589,7 @@ async function startServer(options = {}) {
     if (stopping) return stopping;
     stopping = (async () => {
       runtime.integrationStatusScan?.close();
+      await runtime.integrationAutoRepair?.close();
       clearInterval(maintenanceTimer);
       clearInterval(configurationTimer);
       clearTimeout(readyTimer); runtime.moduleBridge.onReady = null;

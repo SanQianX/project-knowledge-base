@@ -88,5 +88,26 @@ const makeManager = ({ statusClients, onInstall }) => {
     snapshot.claude = { state: 'tampered' };
     assert.equal(repair.status().claude.state, 'repaired', 'status() returns a copy');
   }
+  {
+    const dir = tmpDataDir();
+    markIntent(dir, 'codex', 'disconnected');
+    const manager = makeManager({ statusClients: [], onInstall: () => { throw new Error('must not repair'); } });
+    const repair = new IntegrationAutoRepair({ dataDir: dir, createManager: () => manager });
+    await repair.runOnce();
+    assert.equal(manager.calls.statusAll, 0, 'disconnected clients must not run native startup probes');
+    markIntent(dir, 'codex', 'connected');
+    manager.statusAll = async options => {
+      assert.deepEqual(options.clients, ['codex']);
+      return { clients: [{ client: 'codex', developmentCapture: { state: 'check-failed' } }] };
+    };
+    await repair.runOnce();
+    assert.equal(manager.calls.installAll.length, 0, 'an unknown status must not be treated as an absent integration');
+    manager.statusAll = async () => {
+      markIntent(dir, 'codex', 'disconnected');
+      return { clients: [{ client: 'codex', developmentCapture: { installed: false } }] };
+    };
+    await repair.runOnce();
+    assert.equal(manager.calls.installAll.length, 0, 'a user disconnect during status scanning must cancel the repair');
+  }
   console.log('integration auto repair test PASS');
 })().catch(error => { console.error(error); process.exitCode = 1; });

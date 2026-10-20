@@ -11,9 +11,9 @@
     "plugins/project-knowledge/hooks/codex.json": "216e03c07295606ef6ebb2c4f669ad0d790b5e7c4f3f34600488033db75e4239",
     "plugins/project-knowledge/scripts/context-hook.cjs": "da666153ad5723592cce42d25337ae649f7d93e43fab76b3c6d1263933de063f",
     "plugins/project-knowledge/scripts/mcp-launcher.cjs": "7c68830b5c73eb53ef030756a4de33987f7eab6b1a6cc15602835aac3f954893",
-    "plugins/project-knowledge/.claude-plugin/plugin.json": "c4069b87a8f1364bd6732fe9ec03b581bef06c14e80f910b550ec81ef6a0f00f",
-    "plugins/project-knowledge/.codex-plugin/plugin.json": "caa287c40fe42fae5a9e2faaae3ff4e0ff7fab64a45a27bd7a1193e429a175a9",
-    "plugins/project-knowledge/.mcp.json": "01edf4f4b4fc1db43fbe59892120f15b32d38e4b1460c431a454e5a4cdff70ef"
+    "plugins/project-knowledge/.claude-plugin/plugin.json": "acdbc819e7e3949a2b8e01380f3e8811d06f74e5578cc872d736faa0db4e2106",
+    "plugins/project-knowledge/.codex-plugin/plugin.json": "915cae73db9f32bbbcf9c5aee24aca9356bf730914489c8611f734616f1e4b6c",
+    "plugins/project-knowledge/.mcp.json": "9c493221141723265d80ebff5e68029e159d1688a8bfb121678ad93bf78ff6d8"
   },
   "modules": {
     "terminal": {
