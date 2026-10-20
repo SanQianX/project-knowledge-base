@@ -11,11 +11,9 @@
     eventBridge: { id: 'bridgeFrame', url: '/modules/eventbridge/?embed=1&apiBase=/api/eventbridge', view: 'activity', ready: false },
     engine: { id: 'engineFrame', url: '/modules/engine/?embed=1&apiBase=/api/engine', ready: false },
   };
-  // K1 knowledge panel: once the terminal reports kb:ready, the shell registers
-  // a same-origin iframe provider and streams structured references into it.
-  // The fixed knowledge column stays the fallback - it folds only after the
-  // workbench confirms the panel rendered the matching content version.
-  const knowledgePanel = { providerId: 'kb.knowledge.references', version: 0, registered: false, registering: false, failed: false, panelId: '', pending: null, collapsed: false };
+  // Register knowledge as an optional dock tab. Cached retrieval updates
+  // never open a tab or expand the dock; only user navigation does that.
+  const knowledgePanel = { providerId: 'kb.knowledge.references', version: 0, registered: false, registering: false, failed: false, error: null, panelId: '', pending: null, sending: null, queued: false, deliveredPanelId: '' };
   const panelRequests = new Map();
   let panelRequestSeq = 0;
   const state = { brain: { id: 'brain-default', name: '我的智脑', domains: [] }, root: '', projects: [], projectId: localStorage.getItem('kb.project') || '', view: 'home', scope: 'project', memoryTab: 'confirmed', activityTab: 'updates', health: {}, snapshot: { projects: [], runs: [], events: [], memories: [] }, engineAvailable: false, epoch: 0, contexts: new Map(), stream: null, refreshing: false, importId: '', preflight: null, preflightEpoch: 0 };
@@ -63,19 +61,13 @@
     post(key, { type: 'kb:select-project', project: ref || '', projectId: project?.projectId || '', requestId: frame.requestId });
     post(key, { type: 'kb:visibility', visible: frameVisible(key) });
   }
-  function panelNotice(text) { $('panelNotice').textContent = text; $('panelNotice').hidden = !text; }
-  function setKnowledgeCollapsed(collapsed) {
-    knowledgePanel.collapsed = collapsed;
-    $('workLayout').classList.toggle('kb-panel-collapsed', collapsed);
-  }
-  // Any failure (register/open/relay/ack) restores the original full-width
-  // column with a non-blocking notice; drafts, events and tasks are untouched.
   function knowledgePanelFailed(reason) {
+    if (knowledgePanel.failed) return;
     if (knowledgePanel.pending) { clearTimeout(knowledgePanel.pending.timer); knowledgePanel.pending = null; }
     knowledgePanel.failed = true;
-    knowledgePanel.registered = false;
-    setKnowledgeCollapsed(false);
-    panelNotice(`知识面板不可用（${reason}），已恢复固定知识栏。`);
+    knowledgePanel.error = reason;
+    knowledgePanel.sending = null; knowledgePanel.queued = false;
+    if (knowledgePanel.panelId) toast('知识引用暂时无法加载，请关闭引用标签后重试。');
   }
   function panelRequest(type, payload, timeoutMs = 6000) {
     if (!frames.terminal.ready) return Promise.resolve({ ok: false, code: 'NOT_READY', error: '终端尚未就绪' });
@@ -91,7 +83,8 @@
   function knowledgePayload(projectId) {
     const context = state.contexts.get(projectId);
     return {
-      title: '本次知识引用', projectId: String(projectId || ''),
+      title: '本次知识引用', projectId: String(projectId || ''), projectName: state.projects.find(project => project.projectId === projectId)?.name || '',
+      theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
       status: context?.status || 'not-retrieved',
       references: (context?.references || []).slice(0, 50).map(r => ({
         entryId: String(r.entryId || ''), title: String(r.title || r.entryId || ''),
@@ -104,53 +97,92 @@
   async function resetKnowledgePanel() {
     if (knowledgePanel.registering) return;
     knowledgePanel.registering = true;
-    knowledgePanel.registered = false; knowledgePanel.failed = false;
+    knowledgePanel.registered = false; knowledgePanel.failed = false; knowledgePanel.error = null;
     knowledgePanel.panelId = ''; knowledgePanel.version = 0;
+    knowledgePanel.ready = false;
+    knowledgePanel.sending = null; knowledgePanel.queued = false; knowledgePanel.deliveredPanelId = '';
     if (knowledgePanel.pending) { clearTimeout(knowledgePanel.pending.timer); knowledgePanel.pending = null; }
-    setKnowledgeCollapsed(false);
     try {
       const reply = await panelRequest('kb:panel/register', { panel: {
         providerId: knowledgePanel.providerId, panelType: 'knowledge', title: '本次知识引用',
         url: '/knowledge-panel.html', capabilities: ['read-only'], multiInstance: 'single', appliesTo: { projects: '*' },
       } });
-      if (reply.ok) { knowledgePanel.registered = true; panelNotice(''); void pushKnowledgeToPanel(); }
+      if (reply.ok) { knowledgePanel.registered = true; if (knowledgePanel.panelId) void pushKnowledgeToPanel(); }
       else if (!knowledgePanel.failed) knowledgePanelFailed('注册被拒绝');
     } catch (error) { if (!knowledgePanel.failed) knowledgePanelFailed(error.message); }
     finally { knowledgePanel.registering = false; }
   }
-  async function pushKnowledgeToPanel(projectId = state.projectId) {
-    if (!knowledgePanel.registered || knowledgePanel.failed || !projectId) return;
-    const opened = await panelRequest('kb:panel/open', { providerId: knowledgePanel.providerId });
-    if (!opened.ok) { knowledgePanelFailed('面板无法打开'); return; }
-    if (opened.panelId) knowledgePanel.panelId = opened.panelId;
-    const version = ++knowledgePanel.version;
-    const relayed = await panelRequest('kb:panel/content', { panelId: knowledgePanel.panelId, providerId: knowledgePanel.providerId, version, content: knowledgePayload(projectId) });
-    if (!relayed.ok) { knowledgePanelFailed('内容投递失败'); return; }
-    const timer = setTimeout(() => {
-      if (knowledgePanel.pending && knowledgePanel.pending.version === version) {
-        knowledgePanel.pending = null; knowledgePanelFailed('面板未确认内容');
+  async function pushKnowledgeToPanel(projectId = state.projectId, panelId = knowledgePanel.panelId) {
+    if (!knowledgePanel.registered || knowledgePanel.failed || !projectId || !panelId) return;
+    if (knowledgePanel.ready === false) return;
+    if (knowledgePanel.sending) { knowledgePanel.queued = true; return; }
+    const transfer = { projectId, epoch: state.epoch };
+    knowledgePanel.sending = transfer;
+    const current = () => knowledgePanel.sending === transfer && state.epoch === transfer.epoch && state.projectId === projectId && knowledgePanel.registered && !knowledgePanel.failed;
+    try {
+      if (!current() || !panelId) return;
+      knowledgePanel.panelId = panelId;
+      const version = ++knowledgePanel.version;
+      if (knowledgePanel.pending) clearTimeout(knowledgePanel.pending.timer);
+      const timer = setTimeout(() => {
+        if (knowledgePanel.pending && knowledgePanel.pending.version === version) knowledgePanelFailed('面板未确认内容');
+      }, 8000);
+      // Install before posting: a fast frame can acknowledge before the
+      // relay response reaches the host.
+      knowledgePanel.pending = { version, projectId, panelId, timer };
+      const relayed = await panelRequest('kb:panel/content', { panelId: knowledgePanel.panelId, providerId: knowledgePanel.providerId, version, content: knowledgePayload(projectId) });
+      if (current() && !relayed.ok) knowledgePanelFailed('内容投递失败');
+    } finally {
+      if (knowledgePanel.sending === transfer) {
+        knowledgePanel.sending = null;
+        if (knowledgePanel.queued) { knowledgePanel.queued = false; void pushKnowledgeToPanel(); }
       }
-    }, 8000);
-    knowledgePanel.pending = { version, projectId, timer };
+    }
   }
   function handlePanelState(message) {
     const panel = (message.panels || []).find(p => p.providerId === knowledgePanel.providerId);
     if (!panel) {
-      // The panel view was closed or the provider unregistered: the fixed
-      // column is the only knowledge surface again and must come back.
-      if (knowledgePanel.collapsed) setKnowledgeCollapsed(false);
+      // Closing the view only cancels delivery. Knowledge remains cached
+      // without creating another surface or reopening the user's dock.
       if (knowledgePanel.pending) { clearTimeout(knowledgePanel.pending.timer); knowledgePanel.pending = null; }
+      knowledgePanel.panelId = ''; knowledgePanel.deliveredPanelId = '';
+      knowledgePanel.ready = false;
+      knowledgePanel.failed = false; knowledgePanel.error = null;
+      knowledgePanel.sending = null; knowledgePanel.queued = false;
       return;
     }
-    if (!knowledgePanel.pending) return;
+    if (panel.panelId !== knowledgePanel.panelId) {
+      knowledgePanel.failed = false; knowledgePanel.error = null;
+      knowledgePanel.deliveredPanelId = '';
+    }
     if (panel.panelId) knowledgePanel.panelId = panel.panelId;
+    knowledgePanel.ready = panel.ready !== false;
+    if (!knowledgePanel.ready) {
+      if (knowledgePanel.pending) { clearTimeout(knowledgePanel.pending.timer); knowledgePanel.pending = null; }
+      knowledgePanel.deliveredPanelId = '';
+      return;
+    }
+    if (panel.error && panel.error !== 'CONTENT_ACK_ERROR') { knowledgePanelFailed('面板加载失败'); return; }
+    if (!knowledgePanel.pending) {
+      if (!knowledgePanel.sending && knowledgePanel.deliveredPanelId !== panel.panelId) void pushKnowledgeToPanel(state.projectId, panel.panelId);
+      return;
+    }
     const pending = knowledgePanel.pending;
+    if (pending.projectId !== state.projectId) {
+      clearTimeout(pending.timer); knowledgePanel.pending = null;
+      if (!knowledgePanel.sending) void pushKnowledgeToPanel(state.projectId, panel.panelId);
+      return;
+    }
+    if (pending.panelId !== panel.panelId) {
+      clearTimeout(pending.timer); knowledgePanel.pending = null;
+      if (!knowledgePanel.sending) void pushKnowledgeToPanel(state.projectId, panel.panelId);
+      return;
+    }
     const ack = panel.content?.ack;
     if (ack && String(ack.version) === String(pending.version)) {
       clearTimeout(pending.timer);
       knowledgePanel.pending = null;
-      // Fold the fallback column only for a version-matched, error-free ack.
-      if (ack.ok && !panel.error) { setKnowledgeCollapsed(true); panelNotice(''); }
+      if (ack.ok && !panel.error) { knowledgePanel.deliveredPanelId = panel.panelId; }
       else knowledgePanelFailed(ack.error || '面板渲染失败');
     } else if (panel.error && panel.error !== 'CONTENT_ACK_ERROR') {
       clearTimeout(pending.timer);
@@ -185,9 +217,6 @@
     localStorage.setItem('kb.project', id);
     $('projectSelect').value = id;
     Object.keys(frames).forEach(frameContext);
-    // A project switch re-scopes both surfaces: the fixed column expands again
-    // and the panel re-receives the new project's content before folding.
-    setKnowledgeCollapsed(false);
     if (knowledgePanel.registered && !knowledgePanel.failed && frames.terminal.ready) void pushKnowledgeToPanel(id);
     render(); setView(state.view);
   }
@@ -208,7 +237,6 @@
     if (state.view === 'projects') renderProjects();
     if (state.view === 'memory') renderMemories();
     if (state.view === 'activity') renderActivity();
-    renderContext();
     renderSystem();
   }
   function renderHome(candidates) {
@@ -342,16 +370,6 @@
     catch { if (projectId === state.projectId) toast('运行详情读取失败，请重新展开重试。'); }
     finally { delete node.dataset.loading; }
   }, true);
-  function renderContext() {
-    const saved = state.contexts.get(state.projectId);
-    const context = saved?.status === 'not-retrieved' ? null : saved;
-    $('contextScope').textContent = context ? ({ ready: '已检索知识', 'file-fallback': '索引暂不可用，已检索原文件', unavailable: '知识服务不可用，未注入上下文', unregistered: '项目尚未登记知识库', disabled: '未启用知识连接' })[context.status] || '本次任务上下文' : '任务发送前自动检索';
-    $('contextContent').classList.toggle('small-empty', !context?.references?.length);
-    const seen = new Set();
-    const references = (context?.references || []).map((r, index) => ({ ...r, index })).filter(r => { const key = `${r.spaceId}:${r.projectId}:${r.entryId}:${r.commitSha || ''}`; if (seen.has(key)) return false; seen.add(key); return true; });
-    $('contextContent').classList.toggle('empty', !references.length);
-    $('contextContent').innerHTML = references.length ? references.map(r => `<button class="reference" data-context-index="${r.index}"><b>${esc(r.title)}</b><small>${esc(projectName(r.projectId))} / ${esc(r.entryId)}${r.commitSha ? ` · ${esc(r.commitSha.slice(0, 8))}` : ''}</small><p>${esc(r.text.slice(0, 180))}</p></button>`).join('') : context ? '本次任务未找到可引用的知识。' : '发送任务后显示实际检索到的项目事实、领域经验和已确认记忆。';
-  }
   async function openReference(reference) {
     const id = state.projectId;
     const epoch = ++referenceEpoch;
@@ -651,7 +669,6 @@
       if (button.dataset.action === 'unbind') { const p = activeProject(); if (p && !unbinding) { unbindProjectId = p.projectId; $('unbindProjectName').textContent = `解绑「${p.name}」？`; $('unbindFeedback').textContent = ''; $('unbindDialog').showModal(); } }
       if (button.dataset.retryRun) { await api(`/api/engine/runs/${encodeURIComponent(button.dataset.retryRun)}/retry`, { method: 'POST', body: {} }); await refreshSnapshot(); }
       if (button.dataset.runPage !== undefined) await loadActivityPage(button.dataset.runPage || null);
-      if (button.dataset.contextIndex !== undefined) await openReference(state.contexts.get(state.projectId).references[Number(button.dataset.contextIndex)]);
       if (button.dataset.memoryAction) {
         const memory = state.snapshot.memories.find(m => m.id === button.dataset.memoryId); if (!memory) return;
         const action = button.dataset.memoryAction;
@@ -680,11 +697,11 @@
     if (message.requestId && message.requestId !== frames[key].requestId) return;
     if (message.type === 'kb:knowledge' && key === 'terminal') {
       const project = state.projects.find(p => p.modules.terminal.projectId === message.projectId);
-      if (project) { state.contexts.set(project.projectId, message.knowledge); if (project.projectId === state.projectId) { renderContext(); void pushKnowledgeToPanel(project.projectId); } }
+      if (project) { state.contexts.set(project.projectId, message.knowledge); if (project.projectId === state.projectId) { void pushKnowledgeToPanel(project.projectId); } }
     }
   });
   on('projectSelect', 'change', e => selectProject(e.target.value));
-  on('themeToggle', 'click', () => { document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('kb.theme', document.documentElement.dataset.theme); Object.keys(frames).forEach(key => post(key, { type: 'kb:theme', theme: document.documentElement.dataset.theme })); });
+  on('themeToggle', 'click', () => { document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('kb.theme', document.documentElement.dataset.theme); Object.keys(frames).forEach(key => post(key, { type: 'kb:theme', theme: document.documentElement.dataset.theme })); void pushKnowledgeToPanel(); });
   on('openSystem', 'click', openSystem); on('closeSystem', 'click', closeSystem); on('drawerBackdrop', 'click', closeSystem);
   on('repairWiring', 'click', repair);
   on('configureProviders', 'click', () => { closeSystem(); setView('work'); initializeFrame('terminal'); if (frames.terminal.ready) post('terminal', { type: 'kb:open-settings' }); else frames.terminal.openSettings = true; });
@@ -747,7 +764,7 @@
       state.contexts.delete(projectId);
       state.projects = state.projects.filter(project => project.projectId !== projectId);
       if (state.projectId === projectId) { state.projectId = state.projects[0]?.projectId || ''; state.epoch++; }
-      renderProjectOptions(); setKnowledgeCollapsed(false); render(); Object.keys(frames).forEach(frameContext);
+      renderProjectOptions(); render(); Object.keys(frames).forEach(frameContext);
       $('unbindDialog').close(); unbindProjectId = '';
       // A late read started before DELETE cannot restore the removed project.
       await refreshRegistry(true); localStorage.setItem('kb.project', state.projectId);

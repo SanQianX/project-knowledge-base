@@ -21,7 +21,7 @@ assert.ok(script.includes('event.origin !== location.origin') && script.includes
 assert.ok(script.includes('state.epoch++') && script.includes('referenceEpoch') && script.includes('logEpoch'), 'late project/reference/log feedback must be isolated');
 assert.match(script, /on\('domainForm'[\s\S]*?await refreshRegistry\(true\)/, 'domain writes must invalidate pre-mutation reads');
 assert.match(script, /registered = true;[\s\S]*?await refreshRegistry\(true\)/, 'import must not reuse a pre-import snapshot');
-assert.ok(script.includes('esc(r.title)') && script.includes('esc(m.text)') && script.includes('esc(project.name)'));
+assert.ok(script.includes("title: String(r.title || r.entryId || '')") && script.includes('esc(m.text)') && script.includes('esc(project.name)'));
 assert.ok(script.includes('text.textContent = record.message') && script.includes("'logs/appended'"), 'diagnostics stay inert and stream live');
 assert.ok(script.includes('URL.revokeObjectURL(url)') && script.includes('logStream?.close()'));
 assert.ok(script.includes('resumeImport = true') && script.includes("$('importDialog').showModal()") && script.includes("p.code === 'KNOWLEDGE_ROOT_MISSING'"), 'first import can return from setup without resetting its input');

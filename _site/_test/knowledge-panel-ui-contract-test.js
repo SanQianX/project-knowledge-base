@@ -1,7 +1,7 @@
 'use strict';
 // K1 knowledge panel contract: the shell registers a same-origin provider with
-// the workbench, streams structured references, folds the fixed column only
-// after a version-matched panel ack, restores it on any failure, and the panel
+// the workbench, streams structured references only to user-added tabs,
+// validates matching receipts, never renders an outside column, and the panel
 // page itself renders external strings through textContent only.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -14,7 +14,7 @@ const panelPath = path.join(root, 'ui/knowledge-panel.html');
 const panelHtml = fs.readFileSync(panelPath, 'utf8');
 
 /* ===================== panel page source contract ===================== */
-assert.ok(panelHtml.includes('KB-K1-KNOWLEDGE-PANEL-v1'), 'the panel page shows the stable marker');
+assert.ok(!panelHtml.includes('KB-K1-KNOWLEDGE-PANEL-v1'), 'test contract markers never enter customer markup');
 assert.ok(panelHtml.includes('event.source !== window.parent'), 'the panel only accepts its Workbench parent as the message source');
 assert.ok(panelHtml.includes("data.type !== 'kb:panel/content'"), 'kb:panel/content is the only inbound verb');
 assert.ok(panelHtml.includes("'kb:panel/content-ack'"), 'the panel answers with a content ack');
@@ -34,19 +34,20 @@ function runPanelPage() {
   const parent = { postMessage(message) { acks.push(message); } };
   const fakeWindow = { parent, addEventListener(type, fn) { if (type === 'message') listener = fn; } };
   const fakeDocument = {
+    documentElement: { dataset: {} },
     getElementById: id => elements[id] || null,
     createElement: () => node(),
   };
   new Function('window', 'document', panelScriptMatch[1])(fakeWindow, fakeDocument);
   assert.equal(typeof listener, 'function', 'the panel registers a message listener');
   const deliver = (data, source = parent) => listener({ source, data });
-  return { acks, elements, deliver };
+  return { acks, elements, deliver, document: fakeDocument };
 }
 
 {
   const page = runPanelPage();
   page.deliver({ type: 'kb:panel/content', panelId: 'tab-1', version: 3, content: {
-    title: '本次知识引用', projectId: 'proj-a', status: 'ready',
+    title: '本次知识引用', projectId: 'proj-a', projectName: '项目 A', status: 'ready', theme: 'dark',
     references: [{ entryId: 'docs/a.md', title: 'T', text: '<img src=x onerror=alert(1)>', source: 'proj / docs/a.md' }],
   } });
   const ack = page.acks[page.acks.length - 1];
@@ -55,9 +56,11 @@ function runPanelPage() {
   assert.equal(ack.version, 3);
   assert.equal(ack.ok, true);
   assert.equal(page.elements.panelTitle.textContent, '本次知识引用');
-  assert.equal(page.elements.panelProject.textContent, 'proj-a');
+  assert.equal(page.elements.panelProject.textContent, '项目 A');
+  assert.equal(page.document.documentElement.dataset.theme, 'dark', 'the reference page follows the host theme');
   const reference = page.elements.panelReferences.children[0];
   assert.ok(reference, 'one reference card rendered');
+  assert.equal(reference.children.length, 3, 'reference cards show title, source and excerpt without a repeated internal entry identifier');
   const text = reference.children.find(child => child.textContent.includes('<img'));
   assert.ok(text, 'the reference body exists');
   assert.equal(text.textContent, '<img src=x onerror=alert(1)>', 'markup-looking strings stay inert text');
@@ -82,18 +85,17 @@ assert.match(script, /panelType: 'knowledge', title: '本次知识引用'/, 'pan
 assert.match(script, /capabilities: \['read-only'\]/, 'the panel declares itself read-only');
 assert.match(script, /multiInstance: 'single'/, 'the provider is single-instance');
 assert.match(script, /if \(message\.type === 'kb:ready'\)[\s\S]*?if \(key === 'terminal'\) void resetKnowledgePanel\(\)/, 'registration starts from the terminal kb:ready');
-assert.ok(script.includes("'kb:panel/register'") && script.includes("'kb:panel/open'") && script.includes("'kb:panel/content'"), 'the shell uses the W3 verbs');
-assert.match(script, /if \(message\.type === 'kb:knowledge' && key === 'terminal'\)[\s\S]*?renderContext\(\); void pushKnowledgeToPanel/, 'kb:knowledge still refreshes the fixed column first, then streams the panel');
-assert.match(script, /const ack = panel\.content\?\.ack;[\s\S]*?if \(ack && String\(ack\.version\) === String\(pending\.version\)\)/, 'collapse waits for the version-matched ack');
-assert.match(script, /if \(ack\.ok && !panel\.error\) \{ setKnowledgeCollapsed\(true\)/, 'folding requires an error-free ack');
-assert.match(script, /if \(!panel\) \{[\s\S]*?if \(knowledgePanel\.collapsed\) setKnowledgeCollapsed\(false\);[\s\S]*?return;/, 'closing the dock panel unfolds the fixed column again');
-assert.match(script, /function knowledgePanelFailed\(reason\)[\s\S]*?setKnowledgeCollapsed\(false\);[\s\S]*?panelNotice\(/, 'every failure path restores the full column with a non-blocking notice');
-assert.match(script, /function selectProject\(id\)[\s\S]*?setKnowledgeCollapsed\(false\);[\s\S]*?pushKnowledgeToPanel\(id\)/, 'a project switch re-scopes the panel to the new project before folding again');
-assert.match(script, /renderProjectOptions\(\); setKnowledgeCollapsed\(false\); render\(\)/, 'unbinding a project also restores the fixed column');
+assert.ok(script.includes("'kb:panel/register'") && script.includes("'kb:panel/content'"), 'the host registers the page and supplies its content');
+assert.ok(!script.includes("'kb:panel/open'"), 'registration and retrieval cannot open a page');
+assert.match(script, /if \(message\.type === 'kb:knowledge' && key === 'terminal'\)[\s\S]*?state\.contexts\.set[\s\S]*?void pushKnowledgeToPanel/, 'retrieved knowledge stays cached and updates existing pages only');
+assert.match(script, /const ack = panel\.content\?\.ack;[\s\S]*?if \(ack && String\(ack\.version\) === String\(pending\.version\)\)/, 'receipts match the currently pending content');
+assert.match(script, /if \(ack\.ok && !panel\.error\) \{ knowledgePanel\.deliveredPanelId = panel\.panelId;/, 'delivery is confirmed only by an error-free acknowledgement');
+assert.match(script, /if \(!panel\) \{[\s\S]*?knowledgePanel\.panelId = '';[\s\S]*?return;/, 'closing a page cancels its delivery');
+assert.match(script, /if \(!knowledgePanel\.registered \|\| knowledgePanel\.failed \|\| !projectId \|\| !panelId\) return;/, 'closed pages cannot be opened by background updates');
+assert.ok(!/setKnowledgeCollapsed|panelNotice|contextContent|knowledge-context/.test(script), 'the old outside-column paths are removed');
 assert.match(script, /\.slice\(0, 50\)\.map\(r => \(\{/, 'the payload bounds the reference count');
 assert.match(script, /text: String\(r\.text \|\| ''\)\.slice\(0, 800\)/, 'the payload bounds reference text');
 assert.match(script, /knowledgePayload\(projectId\)[\s\S]*?entryId: String\(/, 'payload fields are coerced to plain strings');
-assert.equal((script.match(/classList\.toggle\('kb-panel-collapsed'/g) || []).length, 1, 'collapse is driven only through the work-layout class');
 assert.ok(!/data-action="collapse|toggle-context|折叠知识栏/.test(script + html), 'no duplicate column control button is introduced');
 assert.match(script, /panelRequest\('kb:panel\/content', \{ panelId: knowledgePanel\.panelId, providerId: knowledgePanel\.providerId, version, content: knowledgePayload\(projectId\) \}\)/, 'content carries panelId, providerId and version');
 assert.match(script, /message\.type\.startsWith\('kb:panel\/'\)/, 'panel replies are routed before the frame-context staleness drop');
@@ -101,12 +103,8 @@ assert.match(script, /if \(message\.requestId && message\.requestId !== frames\[
 assert.doesNotThrow(() => new Function(script));
 
 /* ===================== markup and css contract ===================== */
-assert.equal((html.match(/id="panelNotice"/g) || []).length, 1, 'exactly one non-blocking panel notice exists');
-assert.ok(html.includes('knowledge-context') && html.includes('id="contextContent"'), 'the fixed knowledge column markup is untouched');
-assert.ok(css.includes('.work-layout.kb-panel-collapsed{grid-template-columns:minmax(0,1fr) 0px}'), 'the fold animates the grid track instead of removing the column');
-assert.match(css, /\.work-layout\{[^}]*transition:grid-template-columns/, 'the fold is a smooth transition');
-assert.match(css, /@media \(prefers-reduced-motion: reduce\)\{\.work-layout,\.knowledge-context\{transition:none\}\}/, 'reduced-motion users get no animation');
-assert.ok(css.includes('.panel-notice'), 'the notice has styling');
-assert.match(css, /\.work-layout\{display:grid;grid-template-columns:minmax\(0,1fr\) 288px/, 'the default full-width column is unchanged');
+assert.ok(!/knowledge-context|contextContent|contextScope|panelNotice/.test(html), 'there is no outside knowledge column, including hidden markup');
+assert.ok(!/knowledge-context|kb-panel-collapsed|panel-notice/.test(css), 'no space or fallback layout is reserved for a second column');
+assert.match(css, /\.work-layout\{display:grid;grid-template-columns:minmax\(0,1fr\);/, 'the host gives the whole workspace to the conversation and its dock');
 
 console.log('knowledge panel UI contract test PASS (source contract + sandboxed render behavior; not browser acceptance)');

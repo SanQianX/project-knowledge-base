@@ -6,19 +6,18 @@
 <meta name="color-scheme" content="light dark">
 <title>本次知识引用</title>
 <style>
-:root{color-scheme:light dark;font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
-body{margin:0;padding:16px 12px;background:#f7f7f5;color:#1f2328;font-size:13px;line-height:1.6}
-h1{font-size:13px;margin:0 0 4px}
+:root{color-scheme:light;font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;--page:#fff;--text:#202733;--muted:#687587;--line:#dce2e8}
+:root[data-theme="dark"]{color-scheme:dark;--page:#20252d;--text:#e6ebf0;--muted:#a0aaba;--line:#39424f}
+body{margin:0;padding:24px;background:var(--page);color:var(--text);font-size:14px;line-height:1.65}
+h1{font-size:14px;margin:0 0 4px}
 #panelStatus{margin:0 0 12px;color:#5a6069}
 #panelProject{display:block;margin:0 0 12px;color:#5a6069;font-size:12px}
-.reference{border:1px solid #e3e4e8;border-radius:8px;background:#fff;padding:10px 12px;margin:0 0 8px}
-.reference h2{font-size:13px;margin:0 0 4px}
+.reference{border:1px solid var(--line);border-radius:10px;padding:14px;margin:0 0 12px}
+.reference h2{font-size:14px;margin:0 0 4px}
 .reference small{display:block;color:#5a6069;overflow-wrap:anywhere}
-.reference code{display:block;color:#5a6069;font-size:11px;margin-top:4px;overflow-wrap:anywhere}
 .reference p{margin:6px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
 .kb-empty{color:#5a6069}
-#panelMarker{display:block;margin-top:16px;color:#9aa0a8;font-size:11px;letter-spacing:.04em}
-@media (prefers-color-scheme:dark){body{background:#14161a;color:#e6e8eb}.reference{background:#1c1f24;border-color:#2c3038}#panelStatus,#panelProject,.reference small,.reference code,.kb-empty{color:#9aa0a8}}
+#panelStatus,#panelProject,.reference small,.kb-empty{color:var(--muted);font-size:12px}
 </style>
 </head>
 <body>
@@ -26,7 +25,6 @@ h1{font-size:13px;margin:0 0 4px}
 <small id="panelProject"></small>
 <p id="panelStatus">等待知识内容…</p>
 <div id="panelReferences"><p class="kb-empty">面板就绪后显示实际检索到的项目事实、领域经验和已确认记忆。</p></div>
-<footer id="panelMarker">KB-K1-KNOWLEDGE-PANEL-v1</footer>
 <script>
 (function () {
   'use strict';
@@ -67,11 +65,9 @@ h1{font-size:13px;margin:0 0 4px}
     heading.textContent = String(entry.title || entry.entryId || '知识引用');
     var source = document.createElement('small');
     source.textContent = String(entry.source || '');
-    var entryId = document.createElement('code');
-    entryId.textContent = String(entry.entryId || '');
     var text = document.createElement('p');
     text.textContent = String(entry.text || '').slice(0, 800);
-    item.append(heading, source, text, entryId);
+    item.append(heading, source, text);
     return item;
   }
 
@@ -80,8 +76,9 @@ h1{font-size:13px;margin:0 0 4px}
     if (content === null || typeof content !== 'object' || Array.isArray(content)) {
       throw new Error('内容必须是普通对象');
     }
+    document.documentElement.dataset.theme = content.theme === 'dark' ? 'dark' : 'light';
     titleNode.textContent = String(content.title || '本次知识引用');
-    projectNode.textContent = String(content.projectId || '');
+    projectNode.textContent = String(content.projectName || '');
     statusNode.textContent = STATUS_LABELS[String(content.status || '')] || '本次任务上下文';
     refsNode.replaceChildren();
     var references = Array.isArray(content.references) ? content.references : [];
@@ -108,7 +105,7 @@ h1{font-size:13px;margin:0 0 4px}
       render(data);
       acknowledge(data.panelId, data.version, true, null);
     } catch (error) {
-      statusNode.textContent = '知识内容渲染失败，已通知工作台恢复固定知识栏。';
+      statusNode.textContent = '知识引用暂时无法显示，请稍后重试。';
       acknowledge(data.panelId, data.version, false, error && error.message ? error.message : 'render failed');
     }
   });
