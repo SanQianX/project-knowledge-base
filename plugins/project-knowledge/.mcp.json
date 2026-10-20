@@ -8,7 +8,7 @@
         "const fs=require('fs'),path=require('path'),os=require('os');const PKG='@sanqianx/project-knowledge',SC='project-knowledge/integration-runtime/v1';let f='';const root=process.env.CLAUDE_PLUGIN_ROOT||process.env.PLUGIN_ROOT;if(root){f=path.join(root,'scripts','mcp-launcher.cjs');if(!fs.existsSync(f))f=''}if(!f){const dd=process.env.KB_DATA_DIR||path.join(os.homedir(),'.project-knowledge-v5');try{const bp=path.join(dd,'integration-runtime.json');const st=fs.statSync(bp);if(st.isFile()&&st.size<=32768){const b=JSON.parse(fs.readFileSync(bp,'utf8'));if(b&&b.schema===SC&&b.packageName===PKG&&typeof b.packageRoot==='string'&&path.isAbsolute(b.packageRoot)){const c=path.join(b.packageRoot,'plugins','project-knowledge','scripts','mcp-launcher.cjs');const rr=fs.realpathSync(b.packageRoot),cr=fs.realpathSync(c);const rel=path.relative(rr,cr);if(rel&&rel!=='..'&&!rel.startsWith('..'+path.sep)&&!path.isAbsolute(rel)&&fs.statSync(cr).isFile())f=cr}}}catch(e){}}if(!f){console.error('[project-knowledge-mcp] 未能通过受信任插件根或已验证的安装绑定定位启动器，已停止；不访问网络，也不加载工作目录源码。');process.exit(127)}require(f);"
       ],
       "env": {
-        "KB_PLUGIN_VERSION": "5.0.23"
+        "KB_PLUGIN_VERSION": "5.0.24"
       }
     }
   }
