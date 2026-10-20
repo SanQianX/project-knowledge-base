@@ -1,0 +1,110 @@
+{
+  "schema": 1,
+  "phases": [
+    {
+      "id": "T00",
+      "title": "环境与只读审计",
+      "action": "配置真实路径/工具；读取当前HEAD、远程main、用户修改、模块版本和浏览器。",
+      "entry": "node scripts/qa.cjs audit --config config/local.json",
+      "exit": "不修改生产；所有未知项有明确阻断代码。"
+    },
+    {
+      "id": "T01",
+      "title": "基准冻结",
+      "action": "确认当前已提交基准；创建独立clone和非v tag/QA分支。",
+      "entry": "node scripts/qa.cjs baseline --config config/local.json",
+      "exit": "dry-run审核→单次授权apply→远程SHA确认；未提交内容不进入tag。"
+    },
+    {
+      "id": "T02",
+      "title": "QA归档与初始工具提交",
+      "action": "校验交付hash；向隔离clone复制审核过的QA源文件，不拷state/运行产物。",
+      "entry": "node tools/install-control-copy.cjs config/local.json",
+      "exit": "工具自检通过；bootstrap为独立chore提交并push，用户工作区不变。"
+    },
+    {
+      "id": "T03",
+      "title": "实际Agent与额度通道接线",
+      "action": "订阅账户核对→CLI JSON→单请求网关→真实worker适配器→Windows监督。",
+      "entry": "npm test",
+      "exit": "假额度闭环通过且真实单次调用有本地回执；未验证不能开无人值守。"
+    },
+    {
+      "id": "T04",
+      "title": "候选发布保护",
+      "action": "受保护环境/发布身份审核；替换发布模板到同文件名；禁止stable。",
+      "entry": "node --test tests/workflow.test.cjs",
+      "exit": "纯tag路由反例通过；实际npm身份单独确认，无发布还未调用。"
+    },
+    {
+      "id": "T05",
+      "title": "行为合同及来源冲突",
+      "action": "按实际源码扩充清单，解决C01及模块source-matching。",
+      "entry": "node scripts/qa.cjs inventory --config config/local.json",
+      "exit": "需求/实现/未知分列，不让Agent以现状给Bug背书。"
+    },
+    {
+      "id": "T06",
+      "title": "UI与测试体系接线",
+      "action": "原生单测、pointer UI脚本、截图基线、全模块真实E2E适配。",
+      "entry": "node tools/browser-shell.cjs config/local.json",
+      "exit": "低层通过不能代替四模块；缺能力精确BLOCKED。"
+    },
+    {
+      "id": "T07",
+      "title": "初始扫描问题池",
+      "action": "分层跑现有全部测试，采集失败及环境问题，建立Bug合同。",
+      "entry": "node scripts/qa.cjs run-suite --suite all --contract templates/task-contract.example.json",
+      "exit": "实际运行文件数/退出码/skip全记录；不从静态猜测造Bug。"
+    },
+    {
+      "id": "T08",
+      "title": "逐Bug修复",
+      "action": "复现→允许文件→最小patch→目标回归→远程push→CI。",
+      "entry": "node tools/supervisor.cjs config/local.json --once",
+      "exit": "适配完成才可执行；模型退出0不代表PASS；失败先保留现场。"
+    },
+    {
+      "id": "T09",
+      "title": "工程清理",
+      "action": "独立清理候选队列、所有权与动态入口证据、单独提交。",
+      "entry": "node scripts/qa.cjs cleanup-plan --hours 24",
+      "exit": "代码删除与临时清理不同；不为数量指标删除文件。"
+    },
+    {
+      "id": "T10",
+      "title": "全面与性能验收",
+      "action": "同环境基线/候选交替测量；原生客户端、真实模型与故障恢复。",
+      "entry": "node tools/performance.cjs config/performance.local.json artifacts/performance.json",
+      "exit": "阈值经确认；未测/跳过不能纳入PASS。"
+    },
+    {
+      "id": "T11",
+      "title": "RC准备和真实发布",
+      "action": "版本/锁/manifest独立release提交，针对最终SHA补齐门禁与CI。",
+      "entry": "node scripts/qa.cjs rc-plan --config config/local.json",
+      "exit": "固定RC、不可变远程tag、6类真实gate；只next。"
+    },
+    {
+      "id": "T12",
+      "title": "独立RC安装迭代",
+      "action": "官方源固定版本新prefix安装；以真实安装入口运行全套验收。",
+      "entry": "node scripts/qa.cjs rc-install --version 5.0.25-rc.1 --config config/local.json",
+      "exit": "版本是示例需按当前Registry选择；安装和runtime分开。"
+    },
+    {
+      "id": "T13",
+      "title": "质量收敛",
+      "action": "最终同一制品两轮核心全验；P0/P1零、其余签收、无flaky。",
+      "entry": "node scripts/qa.cjs report --config config/local.json",
+      "exit": "输出READY建议而非自行签发授权。"
+    },
+    {
+      "id": "T14",
+      "title": "等待正式授权",
+      "action": "保留证据、候选receipt、变更/回退表；停止自动修改。",
+      "entry": "无stable发布命令",
+      "exit": "用户批准前绝不更新latest。"
+    }
+  ]
+}

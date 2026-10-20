@@ -1,0 +1,53 @@
+# REVIEW TEMPLATE ONLY. Install as .github/workflows/publish.yml after T04 approval.
+# RC_ONLY_DURING_QA: no stable trigger and no latest command exists here.
+name: Publish reviewed QA candidate
+on:
+  push:
+    tags:
+      - 'qa-rc/*'
+permissions:
+  contents: read
+concurrency:
+  group: npm-project-knowledge-rc
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'SanQianX/project-knowledge-base'
+    runs-on: ubuntu-latest
+    # Configure protected reviewers and matching npm OIDC identity FIRST.
+    environment: npm-rc-gate
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.x'
+      - name: Verify candidate identity before lifecycle scripts
+        run: node qa-autopilot/tools/ci-rc-guard.cjs pre
+      - run: npm ci
+      - run: npm run release:verify
+      - run: node _site/scripts/sync-release-version.js --check --web-only
+      - run: npm test -- --no-report
+      - name: Select reviewed npm major and record actual version
+        run: npm install -g npm@11 && npm --version
+      - name: Pack once and inspect exact artifact
+        id: package
+        run: |
+          mkdir -p "$RUNNER_TEMP/qa-rc"
+          npm pack --json --pack-destination "$RUNNER_TEMP/qa-rc" > "$RUNNER_TEMP/qa-rc/pack.json"
+          node qa-autopilot/tools/ci-rc-guard.cjs pack "$RUNNER_TEMP/qa-rc/pack.json"
+      - name: Publish only next using the inspected tarball
+        run: npm publish "${{ steps.package.outputs.tarball }}" --tag next --access public --provenance
+      - name: Verify immutable registry receipt and unchanged latest
+        run: node qa-autopilot/tools/ci-rc-guard.cjs post "$RUNNER_TEMP/qa-rc/pack.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qa-rc-receipt
+          path: ${{ runner.temp }}/qa-rc
+          if-no-files-found: warn

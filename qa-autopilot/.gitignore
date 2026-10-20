@@ -1,0 +1,11 @@
+/node_modules/
+/config/local.json
+/config/approval*.json
+/config/*secret*
+/state/*
+/artifacts/*
+/.runtime/*
+/reports/runs/
+*.tmp
+*.log
+.env*
