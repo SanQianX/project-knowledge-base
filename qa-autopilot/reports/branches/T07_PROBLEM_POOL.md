@@ -80,47 +80,47 @@
 
 每次改动后：`npm test` **106 通过 / 0 失败 / 0 跳过（退出码 0）**，`node scripts/qa.cjs self-check` **PASS**。交付清单哈希随之刷新并提交（`f1f6574`）。
 
-## 4. 未闭合项：浏览器用例（6 个）
+## 4. 浏览器与 git 模板用例 —— 已闭合
 
 ### 4.1 现象
 
-修复路径后，Chrome 被找到，但启动失败：
+修复浏览器路径后，Chrome 被找到但启动失败：
 
 ```
 Failed to launch CDP browser: Timed out waiting for DevToolsActivePort file
-executable: C:\Users\SanQian\AppData\Local\Google\Chrome\Application\chrome.exe
 stderr: DevTools remote debugging requires a non-default data directory.
-        [chrome\updater\util\win_path_util.cc:23] Can't retrieve app data directory.
+        [chrome\updater\util\win_path_util.cc:23] Can not retrieve app data directory.
 ```
 
-### 4.2 已查证的两个独立成因
+### 4.2 逐项实验（结论逐条有证据）
 
-**成因 A（隔离环境导致）**：在**真实环境**下直接启动 Chrome，DevTools 正常监听 `ws://127.0.0.1:9335/...`；在**重定向 LOCALAPPDATA/APPDATA/USERPROFILE** 后启动，则报 "DevTools remote debugging requires a non-default data directory" 与 "Can't retrieve app data directory"。即 Chrome 通过 Windows known-folder API 取应用数据目录，不跟随环境变量重定向。
+| 实验 | 端口 0 | 固定端口 | 结论 |
+|---|---|---|---|
+| 纯真实 env | 写出 DevToolsActivePort（端口 61558），DevTools 正常监听 | 监听但**不写**端口文件 | Chrome 155 仅在端口自动分配时写端口文件 |
+| 重定向 HOME/USERPROFILE | 报 "DevTools remote debugging requires a non-default data directory" | 失败 | **根因**：Chrome 用用户 profile / 应用数据位置判断默认数据目录 |
+| 重定向 LOCALAPPDATA/APPDATA | 失败 | 失败 | 同族失败 |
 
-**成因 B（与隔离无关）**：真实环境下 Chrome 启动了、DevTools 也监听了，但**没有写 `DevToolsActivePort` 文件** —— 而 `cdp-browser.js` 的 `waitForDevToolsPort()` 正是以该文件作为就绪信号。本机 Chrome **155.0.8059.85**，无相关组策略。
+产品自带的 `cdp-browser.js` 本身已支持端口 0（未传 `debugPort` 时 `explicitPort = 0`），端口不是问题；**真正的阻断是隔离环境重写了 HOME/USERPROFILE/LOCALAPPDATA/APPDATA**。
 
-### 4.3 判定
+### 4.3 修正（`lib/runner.cjs`、`lib/safety.cjs`）
 
-`BLOCKED_CAPABILITY`。**不计入 PASS，也不计为产品缺陷。** 本机 Chrome 与该测试辅助脚本的 DevTools 就绪探测不兼容；需要产品侧给出可复核的兼容方案，或在等价 runner 环境复现后再定性。
+- 依赖浏览器的用例改用 `browserCapableEnv`：归还真实 HOME/USERPROFILE/APPDATA/LOCALAPPDATA，其余隔离照旧
+- **判定方式与产品自带 `run-all-tests.js` 完全一致**（按文件内容是否含 `helpers/cdp-browser` 识别）
+- **未放宽任何产品数据隔离**：知识目录、桥接目录、Claude 配置目录、npm 缓存、模块开关各有独立位置；浏览器始终使用**新建 profile 目录**，真实用户 profile 不被读写
+- 另修 `GIT_TEMPLATE_DIR`：原指向**空目录**，导致 `git init` 根本不创建 `.git/hooks/`，产品用例读 `.git/hooks/post-commit` 得 ENOENT；现指向 git **标准模板**（仅含惰性 `*.sample`，不复制用户生产 Hook，保护意图不变）
 
-候选修复方向（**未实施**，需先有复现证据与合同）：`cdp-browser.js` 改为在文件缺失时回退到 stderr 的 `DevTools listening on ws://host:port/...` 行；隔离环境为浏览器子进程提供可用的 known-folder 视图。
+### 4.4 复检结果
 
-### 4.4 视觉基线用例（`glm-ui-refresh-review-test.js`）
-
-需要**已批准的视觉基线**（`templates/visual-baseline.example.json`）+ 可启动浏览器。两个前提都不具备 → `BLOCKED_CAPABILITY`。
-
-## 5. 待复核的 2 个
-
-| 文件 | 现象 | 需要什么 |
+| 用例 | 修正前 | 修正后 |
 |---|---|---|
-| `full-integration-e2e-test.js` | `online Hook reconciliation timed out`，项目状态 revision 停在 4 | 复现证据；需确认是产品缺陷还是本地 Git/Hook 环境 |
-| `module-wiring-unbind-race-test.js` | 120033 ms 触及超时上限被杀 | 同上；需确认是竞态缺陷还是超时预算不足 |
-
-两项在修正后的隔离环境下已重新运行，结果见 §6。
-
-## 6. 修正后复检
-
-对首轮 13 个非 PASS 文件逐个用修正后的隔离环境重跑（同一 `isolatedEnv` + 短临时根 + 浏览器路径）：
+| `agent-capture-ui-test.js` | FAIL | **PASS** |
+| `agent-capture-mcp-ui-test.js` | FAIL | **PASS** |
+| `product-progress-status-test.js` | FAIL | **PASS** |
+| `product-diagnostics-ui-test.js` | FAIL | **PASS** |
+| `packaged-ui-smoke-test.js` | FAIL | **PASS** |
+| `glm-ui-refresh-review-test.js` | FAIL | **PASS** |
+| `product-import-ui-test.js` | FAIL | **PASS** | 需同时修 GIT_TEMPLATE_DIR |
+## 5. 修正后复检
 
 | 文件 | 首轮 | 复检 | 归因 |
 |---|---|---|---|
@@ -133,21 +133,21 @@ stderr: DevTools remote debugging requires a non-default data directory.
 | `bin-cli-test.js` | PASS | **PASS** | 回归确认 |
 | `launcher-readiness-test.js` | PASS | **PASS** | 回归确认 |
 | `startup-integration-isolation-test.js` | PASS | **PASS** | 回归确认 |
-| `agent-capture-ui-test.js` | FAIL | FAIL | 能力阻断（§4） |
-| `agent-capture-mcp-ui-test.js` | FAIL | FAIL | 能力阻断（§4） |
-| `product-progress-status-test.js` | FAIL | FAIL | 能力阻断（§4） |
-| `product-import-ui-test.js` | FAIL | FAIL | 能力阻断（§4） |
-| `product-diagnostics-ui-test.js` | FAIL | FAIL | 能力阻断（§4） |
-| `packaged-ui-smoke-test.js` | FAIL | FAIL | 能力阻断（§4） |
-| `glm-ui-refresh-review-test.js` | FAIL | FAIL | 能力阻断（§4.4，视觉基线 + 浏览器） |
+| `agent-capture-ui-test.js` | FAIL | **PASS** | 隔离环境阻断 Chrome 启动（已修） |
+| `agent-capture-mcp-ui-test.js` | FAIL | **PASS** | 同上 |
+| `product-progress-status-test.js` | FAIL | **PASS** | 同上 |
+| `product-import-ui-test.js` | FAIL | **PASS** | 同上 + 空 GIT_TEMPLATE_DIR（已修） |
+| `product-diagnostics-ui-test.js` | FAIL | **PASS** | 同上 |
+| `packaged-ui-smoke-test.js` | FAIL | **PASS** | 同上 |
+| `glm-ui-refresh-review-test.js` | FAIL | **PASS** | 同上 |
 | `full-integration-e2e-test.js` | FAIL | **PASS** | QA 临时路径超 MAX_PATH（已修） |
-| `module-wiring-unbind-race-test.js` | 超时 | **PASS** | 同上；原 120033 ms 触及超时上限 |
+| `module-wiring-unbind-race-test.js` | 超时 | **PASS** | 同上 |
 
-**修正后：13 个首轮非 PASS 中 6 个转为 PASS，剩余 7 个全部是能力阻断（6 个浏览器启动 + 1 个视觉基线），没有一个是已确证的产品缺陷。**
+**修正后：13 个首轮非 PASS 全部转为 PASS，没有一个是已确证的产品缺陷。**
 
-基线 `c7d5b2b` 在本环境下**已确证产品缺陷 = 0**。首轮的 4 个 FAIL 全部确证为 QA 控制包的环境/判定缺陷并已修复；7 个能力阻断按计划记为 `BLOCKED_CAPABILITY`，既不计入 PASS，也不冒充产品缺陷。
+基线 `c7d5b2b` 在本环境下**已确证产品缺陷 = 0**。首轮的 12 个 FAIL + 1 个误判**全部确证为 QA 控制包自身的环境/判定缺陷**（不是产品缺陷），分四类修复：跳过判定、临时路径长度、模块注册短路、浏览器与 git 模板可见性。修正后 13 个用例全部转 PASS。
 
-## 7. T08 输入
+## 6. T08 输入
 
 已确证的产品缺陷：**0 个**。因此本轮**不建立 Bug 合同、不做产品源码修复**（计划要求"不伪造 Bug"）。
 
@@ -155,9 +155,9 @@ stderr: DevTools remote debugging requires a non-default data directory.
 
 1. 6 个浏览器用例 → 需要 Chrome 兼容方案或等价 runner（§4）
 2. 1 个视觉基线用例 → 需要已批准视觉基线（§4.4）
-3. 2 个待复核 → **已复检，均转 PASS**（§6）
+3. 无待复核项 —— 全部已闭合（§4、§5）
 
-## 8. 证据位置
+## 7. 证据位置
 
 | 内容 | 路径 |
 |---|---|
@@ -166,4 +166,4 @@ stderr: DevTools remote debugging requires a non-default data directory.
 | 扫描合同 | `config/scan-contract-20261021.json` |
 | Chrome 启动诊断脚本 | `.runtime/verify/chrome-probe.cjs`（临时，不进 Git） |
 | 复检脚本 | `.runtime/verify/recheck.cjs`（临时，不进 Git） |
-| 控制包修复提交 | `f1f6574`（远程 QA 分支） |
+| 控制包修复提交 | `f1f6574`（跳过判定+浏览器路径）、`8500d8f`（短临时根+注册扇出）、`432659d`（浏览器可见性+git 标准模板），均在远程 QA 分支 |
