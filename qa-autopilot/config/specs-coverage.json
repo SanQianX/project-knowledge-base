@@ -1,0 +1,746 @@
+{
+  "note": "覆盖关系登记：specId -> 实施该规格的测试文件或工具。COVERED 仅在见到具体断言时成立；PARTIAL 写明缺失的期望；BLOCKED 写明阻断原因。",
+  "generatedAt": "2026-10-21T15:47:54.629Z",
+  "sources": {
+    "BROWSER-SHELL": "qa-autopilot/tools/browser-shell.cjs（真实 Chrome + 真实输入事件 + 4 分辨率矩阵）",
+    "qa-autopilot:*": "qa-autopilot 自身的 npm test / 工具（额度、基准、发布、清理门禁）"
+  },
+  "specs": {
+    "NAV-001": {
+      "implementedBy": "product-import-ui-test.js",
+      "verdict": "PARTIAL",
+      "note": "已断言六视图 active 与无水平溢出；未断言 hash、标题与选中导航三者一致"
+    },
+    "NAV-002": {
+      "implementedBy": "product-import-ui-test.js",
+      "verdict": "PARTIAL",
+      "note": "已断言主题切换为 dark；未断言持久化、iframe 收到 kb:theme、切换不重建任务"
+    },
+    "NAV-003": {
+      "implementedBy": "product-import-ui-test.js",
+      "verdict": "PARTIAL",
+      "note": "已断言空态可见与导入按钮禁用；未断言读取失败不等于空库、不创建占位项目"
+    },
+    "NAV-004": {
+      "implementedBy": "product-progress-status-test.js",
+      "verdict": "COVERED",
+      "note": "断言受阻消费不得伪装空历史、恢复后清警告、错误可见且旧列表不清空"
+    },
+    "NAV-005": {
+      "implementedBy": "workspace-ui-contract-test.js",
+      "verdict": "PARTIAL",
+      "note": "已断言迟到反馈按项目隔离；未断言只展示当前项目与 contextId 映射"
+    },
+    "NAV-006": {
+      "implementedBy": "BROWSER-SHELL",
+      "verdict": "COVERED",
+      "note": "browser-shell 使用真实 Input.dispatchMouseEvent 并做 elementFromPoint 遮挡检查，未使用 DOM.click"
+    },
+    "NAV-007": {
+      "implementedBy": "BROWSER-SHELL",
+      "verdict": "PARTIAL",
+      "note": "已覆盖 4 分辨率 × 2 主题 × 6 视图无水平溢出并逐帧截图；无已批准视觉基线，未做像素比对"
+    },
+    "NAV-008": {
+      "implementedBy": "product-progress-status-test.js",
+      "verdict": "COVERED",
+      "note": "断言离线关闭上游流、重连后新快照与新流、不重复订阅"
+    },
+    "PRJ-001": {
+      "implementedBy": "product-import-ui-test.js",
+      "verdict": "PARTIAL",
+      "note": "已断言领域创建并持久化到项目树；未断言空名称拒绝与不创建新 Git 项目"
+    },
+    "PRJ-002": {
+      "implementedBy": "product-import-ui-test.js",
+      "verdict": "COVERED",
+      "note": "断言预检未就绪时确认按钮禁用、源码 HEAD 不变、历史不分析"
+    },
+    "PRJ-003": {
+      "implementedBy": "product-import-ui-test.js",
+      "verdict": "COVERED",
+      "note": "断言补知识根后返回导入表单时 importCode/importKnowledge/importName/importDomain 原值保留"
+    },
+    "PRJ-004": {
+      "implementedBy": "product-import-ui-test.js",
+      "verdict": "COVERED",
+      "note": "断言仓库与知识路径用含空格路径、绝对路径一致、Hook 已安装"
+    },
+    "PRJ-005": {
+      "implementedBy": "product-import-ui-test.js",
+      "verdict": "COVERED",
+      "note": "断言重复导入被拒、确认按钮禁用、项目数仍为 1"
+    },
+    "PRJ-006": {
+      "implementedBy": "product-import-ui-test.js",
+      "verdict": "COVERED",
+      "note": "断言 HOOK_CONFLICT、第三方 Hook 字节保持、UI operationId 可查到持久化失败日志"
+    },
+    "PRJ-007": {
+      "implementedBy": "product-import-ui-test.js",
+      "verdict": "COVERED",
+      "note": "断言离线模块下登记保留、modules 全部未 registered、提示部分接线待恢复"
+    },
+    "PRJ-008": {
+      "implementedBy": "import-preflight-api-test.js",
+      "verdict": "COVERED",
+      "note": "断言非 Git 目录在计划自动初始化时可导入、空仓可导入"
+    },
+    "PRJ-009": {
+      "implementedBy": "project-remove-running-guard-test.js",
+      "verdict": "COVERED",
+      "note": "断言 PROJECT_BUSY 阻断解绑、Hook 失败保留登记、外部知识默认保留"
+    },
+    "PRJ-010": {
+      "implementedBy": "project-delete-recovery-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言删除每步持久化终态与故障点重试恢复；未断言迟到读不复活项目"
+    },
+    "PRJ-011": {
+      "implementedBy": "project-lifecycle-transaction-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言导入不需 AI profile、冻结 Bridge 游标为会话基线；未断言领域变更后作用范围更新"
+    },
+    "PRJ-012": {
+      "implementedBy": "project-lifecycle-transaction-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言 Hook 卸载失败保留登记、默认删除保留外部知识目录；未断言导入失败重试不重复建项目"
+    },
+    "ENG-001": {
+      "implementedBy": "product-import-ui-test.js",
+      "verdict": "COVERED",
+      "note": "断言导入不提交、不分析历史、只建基线"
+    },
+    "ENG-002": {
+      "implementedBy": "commit-evidence-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言按完整 SHA 绑定证据、二进制/重命名/合并证据保留；未断言 Markdown 与检索引用一致"
+    },
+    "ENG-003": {
+      "implementedBy": "startup-analysis-disabled-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言无 HEAD 阶段不假装已有分析；未断言第一次后续提交可处理"
+    },
+    "ENG-004": {
+      "implementedBy": "commit-boundary-freeze-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言提交边界冻结；未断言重复事件只产生一次有效分析"
+    },
+    "ENG-005": {
+      "implementedBy": "commit-boundary-freeze-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言边界顺序；未断言 A 成功 B 失败 C 等待的串行不越序"
+    },
+    "ENG-006": {
+      "implementedBy": "commit-evidence-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言批量上限与续取、逆拓扑序含分支与合并提交；未断言跨项目并发无文件串写"
+    },
+    "ENG-007": {
+      "implementedBy": "orphaned-claim-recovery-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言孤儿 claim 恢复；未断言离线提交补偿与已完成 SHA 不重跑"
+    },
+    "ENG-008": {
+      "implementedBy": "knowledge-promotion-recovery-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言晋升恢复；未断言 staging 越界拒绝与源码哈希不变"
+    },
+    "ENG-009": {
+      "implementedBy": "knowledge-promotion-recovery-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言晋升中断恢复；未断言 pointer 顺序正确"
+    },
+    "ENG-010": {
+      "implementedBy": "index-error-display-contract-test.js",
+      "verdict": "COVERED",
+      "note": "断言索引失败与知识更新分离呈现，不回滚 Markdown"
+    },
+    "ENG-011": {
+      "implementedBy": "orphaned-claim-recovery-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言 claim 恢复；未断言同一意图不重复派发与未知结果先查询"
+    },
+    "ENG-012": {
+      "implementedBy": "project-lifecycle-transaction-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言导入不创建 TODO 知识文件；未断言维护/委派不成为人类长期偏好"
+    },
+    "WB-001": {
+      "implementedBy": "claude-workbench-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言会话可启动与状态正确；未断言每文件所有权可追溯与 BLOCKED_SOURCE_MATCH"
+    },
+    "WB-002": {
+      "implementedBy": "claude-workbench-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言模块不依赖知识库业务对象；未断言集成上下文单独验证"
+    },
+    "WB-003": {
+      "implementedBy": "claude-workbench-test.js",
+      "verdict": "BLOCKED",
+      "note": "需要真实 MiniMax-M3.1-Flash 抽测：T03 额度通道未接线，无真实模型回执，不得以替身冒充"
+    },
+    "WB-004": {
+      "implementedBy": "claude-workbench-test.js",
+      "verdict": "COVERED",
+      "note": "断言会话在用户输入前保持 idle 且不启动 turn、回复次序不重复"
+    },
+    "WB-005": {
+      "implementedBy": "claude-workbench-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言切换 profile 重置上游会话并清 claudeSessionId；未断言草稿按会话隔离"
+    },
+    "WB-006": {
+      "implementedBy": "workbench-permission-test.js",
+      "verdict": "COVERED",
+      "note": "断言权限模式被真实拒绝（unexpected status）、Bridge 游标为 0"
+    },
+    "WB-007": {
+      "implementedBy": "claude-workbench-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言 SDK 模式不弹权限提示、自动化保留 bypassPermissions；未断言用户问题必须真实选择"
+    },
+    "WB-008": {
+      "implementedBy": "claude-workbench-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言中止与持久化失败不打断会话；未断言不得停止未知服务或进程"
+    },
+    "WB-009": {
+      "implementedBy": "module-stream-proxy-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言模块流代理；未断言重连无重复正文与不重发已接受输入"
+    },
+    "WB-010": {
+      "implementedBy": "workspace-ui-contract-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言帧只初始化一次、不随项目/主题/页面变化重建；未断言长历史阅读与焦点不丢失"
+    },
+    "WB-011": {
+      "implementedBy": "claude-workbench-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言自动化会话标记 automation=true；未断言后台卡片真实运行"
+    },
+    "WB-012": {
+      "implementedBy": "module-stream-proxy-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言流代理与模块隔离；未断言停止服务后会话 ID 与事件序号归属"
+    },
+    "DOCK-001": {
+      "implementedBy": "knowledge-panel-ui-contract-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言面板为只读、单一实例、由父 frame 驱动；未断言右上角显示隐藏按钮可点"
+    },
+    "DOCK-002": {
+      "implementedBy": "knowledge-panel-lifecycle-test.js",
+      "verdict": "COVERED",
+      "note": "断言按 panelId 隔离状态、关闭释放监听、不创建额外视图"
+    },
+    "DOCK-003": {
+      "implementedBy": "knowledge-panel-lifecycle-test.js",
+      "verdict": "COVERED",
+      "note": "断言关闭或收到知识不创建新视图、更新在关闭时不投递"
+    },
+    "DOCK-004": {
+      "implementedBy": "knowledge-panel-ui-contract-test.js",
+      "verdict": "COVERED",
+      "note": "断言 kb:panel/content 是唯一入站动词、注册从 terminal kb:ready 开始、provider id 稳定"
+    },
+    "DOCK-005": {
+      "implementedBy": "knowledge-panel-ui-contract-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言非父来源被忽略、非法内容拒绝并带回执；未断言 epoch 与 projectId 匹配"
+    },
+    "DOCK-006": {
+      "implementedBy": "knowledge-panel-lifecycle-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言焦点与重复回执不形成投递环；未断言子代理控制台显示真实事件"
+    },
+    "DOCK-007": {
+      "implementedBy": "knowledge-panel-lifecycle-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言内容确认错误与恢复；未断言异常后主聊天继续与不持续重建 iframe"
+    },
+    "DOCK-008": {
+      "implementedBy": "knowledge-panel-ui-contract-test.js",
+      "verdict": "COVERED",
+      "note": "断言面板只接受其 Workbench 父来源、拒绝非内容动词、页面不加载外部资源、不直连 API"
+    },
+    "DOCK-009": {
+      "implementedBy": "knowledge-panel-ui-contract-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言测试契约标记不进客户标记、仅源码证据；规划功能差异标注需另核"
+    },
+    "DOCK-010": {
+      "implementedBy": "knowledge-panel-lifecycle-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言关闭后资源释放相关行为；真实浏览器连接上限需单独验收"
+    },
+    "RET-001": {
+      "implementedBy": "knowledge-query-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言检索命中与真实引用；未断言模板占位不当事实"
+    },
+    "RET-002": {
+      "implementedBy": "knowledge-scopes-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言项目/领域/全局范围隔离；未断言范围切换结果归属"
+    },
+    "RET-003": {
+      "implementedBy": "knowledge-retrieval-service-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言检索服务；未断言空结果与失败不伪装命中"
+    },
+    "RET-004": {
+      "implementedBy": "vector-storage-root-test.js",
+      "verdict": "COVERED",
+      "note": "断言向量存储根与索引位置契约"
+    },
+    "RET-005": {
+      "implementedBy": "vector-storage-root-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言存储根；未断言索引重建与旧索引保留"
+    },
+    "RET-006": {
+      "implementedBy": "knowledge-query-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言查询路径；未断言引用可回溯到知识文件"
+    },
+    "RET-007": {
+      "implementedBy": "knowledge-scopes-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言范围隔离；未断言共享目录绑定在根变更后保留"
+    },
+    "RET-008": {
+      "implementedBy": "knowledge-retrieval-service-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言检索服务行为；未断言降级路径"
+    },
+    "MEM-001": {
+      "implementedBy": "knowledge-scopes-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言范围与记忆存储；未断言手动添加记忆"
+    },
+    "MEM-002": {
+      "implementedBy": "knowledge-scopes-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言记忆范围；未断言候选与已确认分离"
+    },
+    "MEM-003": {
+      "implementedBy": "knowledge-scopes-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言记忆作用域；未断言确认后生效"
+    },
+    "MEM-004": {
+      "implementedBy": "knowledge-scopes-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言记忆隔离；未断言项目间不泄漏"
+    },
+    "MEM-005": {
+      "implementedBy": "knowledge-scopes-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言记忆范围；未断言指纹与去重"
+    },
+    "MEM-006": {
+      "implementedBy": "knowledge-scopes-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言记忆持久；未断言更新后检索命中"
+    },
+    "MEM-007": {
+      "implementedBy": "knowledge-scopes-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言记忆读取；未断言删除与来源标记"
+    },
+    "MEM-008": {
+      "implementedBy": "knowledge-scopes-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言记忆范围与归属；未断言维护/委派不自动成为人类偏好"
+    },
+    "CAP-001": {
+      "implementedBy": "native-context-integrations-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言检测到命令不等于已安装、等待信任、保留组元数据；未逐项现场验证三能力"
+    },
+    "CAP-002": {
+      "implementedBy": "conversation-origin-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言会话来源区分；未断言仅新会话事件按真实 Git 目录归属"
+    },
+    "CAP-003": {
+      "implementedBy": "client-capture-restart-e2e-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言客户端采集与 codex 游标；未断言跨项目归属"
+    },
+    "CAP-004": {
+      "implementedBy": "integration-capture-setup-test.js",
+      "verdict": "COVERED",
+      "note": "断言安装冲突被拒、第三方 Hook 保持、不覆盖未知命令"
+    },
+    "CAP-005": {
+      "implementedBy": "cross-repo-isolation-e2e-test.js",
+      "verdict": "COVERED",
+      "note": "断言跨仓库隔离与不产生新的 user_prompt"
+    },
+    "CAP-006": {
+      "implementedBy": "cross-repo-isolation-e2e-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言隔离；未断言消费者 ACK 后的正确消费"
+    },
+    "CAP-007": {
+      "implementedBy": "client-capture-restart-e2e-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言重启后采集续接；未断言会话基线不被伪造"
+    },
+    "CAP-008": {
+      "implementedBy": "integration-capture-setup-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言安装与冲突；未断言修复后恢复"
+    },
+    "CAP-009": {
+      "implementedBy": "native-context-integrations-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言 UserPromptSubmit 钩子契约；未断言真实客户端逐项现场"
+    },
+    "CAP-010": {
+      "implementedBy": "conversation-origin-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言来源判定；未断言长期偏好只来自确认"
+    },
+    "LOG-001": {
+      "implementedBy": "log-redaction-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言日志脱敏；未断言导出脱敏"
+    },
+    "LOG-002": {
+      "implementedBy": "logging-api-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言日志 API；未断言游标分页"
+    },
+    "LOG-003": {
+      "implementedBy": "logging-sse-no-gap-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言 SSE 无缺口；未断言不重复"
+    },
+    "LOG-004": {
+      "implementedBy": "product-diagnostics-ui-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言诊断 UI 不成为另一个主产品；未断言查看器与筛选"
+    },
+    "LOG-005": {
+      "implementedBy": "logging-api-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言日志查询；未断言操作流与结构化错误详情"
+    },
+    "LOG-006": {
+      "implementedBy": "log-redaction-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言脱敏；未断言错误栈中的凭据"
+    },
+    "LOG-007": {
+      "implementedBy": "product-diagnostics-ui-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言诊断惰性；未断言实时流"
+    },
+    "LOG-008": {
+      "implementedBy": "logging-sse-no-gap-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言流式无缺口；未断言容量与保留策略"
+    },
+    "SYS-001": {
+      "implementedBy": "cli-instance-management-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言实例身份校验；未断言多实例隔离"
+    },
+    "SYS-002": {
+      "implementedBy": "module-process-lifecycle-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言模块进程生命周期；未断言停止后端不误杀他人进程"
+    },
+    "SYS-003": {
+      "implementedBy": "module-dynamic-port-test.js",
+      "verdict": "COVERED",
+      "note": "断言动态端口与占用后退避，不把占用端口误读为模块"
+    },
+    "SYS-004": {
+      "implementedBy": "test-server-module-isolation-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言测试服务器与模块隔离；未断言端口选择不撞生产端口"
+    },
+    "SYS-005": {
+      "implementedBy": "cli-instance-management-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言 CLI 实例管理；未断言旧端点拒绝"
+    },
+    "SYS-006": {
+      "implementedBy": "module-process-lifecycle-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言进程守护；未断言异常退出诊断"
+    },
+    "SYS-007": {
+      "implementedBy": "cli-instance-management-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言启停；未断言版本不匹配拒绝启动第二后台"
+    },
+    "SYS-008": {
+      "implementedBy": "module-dynamic-port-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言端口分配；未断言终端默认端口不被误读"
+    },
+    "SYS-009": {
+      "implementedBy": "workspace-ui-contract-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言领域写入使前置读失效；未断言配置持久化"
+    },
+    "SYS-010": {
+      "implementedBy": "test-server-module-isolation-test.js",
+      "verdict": "PARTIAL",
+      "note": "断言隔离；未断言数据目录与知识根分离"
+    },
+    "QTA-001": {
+      "implementedBy": [
+        "account balance not quota",
+        "ambiguous usage never inferred"
+      ],
+      "verdict": "BLOCKED",
+      "note": "自检以合成数据覆盖了\"账户余额不是额度\"与\"usage 歧义不推断\"；但真实订阅账户 schema 未验证（T03 未接线），该项不构成 PASS。"
+    },
+    "QTA-002": {
+      "implementedBy": [
+        "ambiguous usage never inferred",
+        "duplicate model rows block"
+      ],
+      "verdict": "BLOCKED",
+      "note": "合成数据覆盖了字段歧义与重复行阻断；真实账户 usage 口径未验证。"
+    },
+    "QTA-003": {
+      "implementedBy": [
+        "quota thresholds 10",
+        "stale quota blocks"
+      ],
+      "verdict": "BLOCKED",
+      "note": "阈值与陈旧额度阻断已用合成数据验证；真实低额度场景未观察。"
+    },
+    "QTA-004": {
+      "implementedBy": [
+        "recovery requires two samples",
+        "recovery hysteresis"
+      ],
+      "verdict": "BLOCKED",
+      "note": "恢复需连续两次采样与迟滞已用合成数据验证；真实额度恢复未观察。"
+    },
+    "QTA-005": {
+      "implementedBy": [
+        "upstream application failure blocks"
+      ],
+      "verdict": "BLOCKED",
+      "note": "上游故障即阻断已用合成数据验证；真实查询故障未注入。"
+    },
+    "QTA-006": {
+      "implementedBy": [
+        "duplicate model rows block"
+      ],
+      "verdict": "BLOCKED",
+      "note": "多模型行歧义阻断已用合成数据验证；真实共享消耗未观察。"
+    },
+    "QTA-007": {
+      "implementedBy": [
+        "supervisor controlled quota pause resumes the same task without new Git commits"
+      ],
+      "verdict": "BLOCKED",
+      "note": "受控暂停/恢复不产生新提交已用假 worker 验证；真实 worker 适配器未验收。"
+    },
+    "QTA-008": {
+      "implementedBy": [
+        "gateway exhaustion blocks actual next upstream call",
+        "gateway unauthorized blocked"
+      ],
+      "verdict": "BLOCKED",
+      "note": "网关耗尽后阻断下一次真实上游调用已验证；真实账户绕过防护反例未执行。"
+    },
+    "GIT-001": {
+      "implementedBy": [
+        "controller commit does not run a configured production-like hook",
+        "out of scope change blocks"
+      ],
+      "verdict": "COVERED",
+      "note": "控制端提交不触发生产式 Hook；越界改动被阻断。T01 实测：原工作区未提交修改未进入基准。"
+    },
+    "GIT-002": {
+      "implementedBy": [
+        "release baseline tag rejected",
+        "release exact RC tag accepted",
+        "QA branch accepted",
+        "origin exact ownership"
+      ],
+      "verdict": "COVERED",
+      "note": "非 v 基准 tag 与 RC tag 路由规则；QA 分支命名与 origin 归属校验。T01 实测远程解引用一致。"
+    },
+    "GIT-003": {
+      "implementedBy": [
+        "actual local Git fingerprint invalidates stale proof"
+      ],
+      "verdict": "COVERED",
+      "note": "本地 Git 指纹变化会使旧证明失效。"
+    },
+    "GIT-004": {
+      "implementedBy": [
+        "package leak credentials.json",
+        "package leak .env",
+        "package leak artifacts/trace.zip"
+      ],
+      "verdict": "COVERED",
+      "note": "新增/未跟踪文件也扫描凭据与生成数据。"
+    },
+    "GIT-005": {
+      "implementedBy": [
+        "ref parsing rejects malformed SHA",
+        "no empty successful change",
+        "out of scope change blocks"
+      ],
+      "verdict": "COVERED",
+      "note": "SHA 解析、空成功、越界改动三类拒绝。"
+    },
+    "GIT-006": {
+      "implementedBy": [
+        "RC without complete release gates blocks",
+        "fixed RC accepts"
+      ],
+      "verdict": "COVERED",
+      "note": "发布门禁不完整时拒绝；固定 RC 版本才接受。"
+    },
+    "GIT-007": {
+      "implementedBy": [
+        "state illegal transition blocks",
+        "state stale revision blocks",
+        "operation idempotence",
+        "journal recovers checkpoint gap without replaying action",
+        "resume requires actual reconciliation"
+      ],
+      "verdict": "COVERED",
+      "note": "INTENT 状态机、幂等、journal 恢复与对账要求。"
+    },
+    "GIT-008": {
+      "implementedBy": [
+        "cleanup removes only old successful owned files",
+        "cleanup excludes active failed retained runs"
+      ],
+      "verdict": "COVERED",
+      "note": "只清理拥有标记且已过期的成功运行；失败现场保留。"
+    },
+    "REL-001": {
+      "implementedBy": [
+        "reject nonfixed RC 1.2.3",
+        "reject nonfixed RC v1.2.3-rc.1",
+        "reject nonfixed RC 1.2.3-beta.1"
+      ],
+      "verdict": "COVERED",
+      "note": "非固定 RC 版本一律拒绝。"
+    },
+    "REL-002": {
+      "implementedBy": [
+        "fixed RC accepts",
+        "reject nonfixed RC latest",
+        "reject nonfixed RC next"
+      ],
+      "verdict": "COVERED",
+      "note": "只有固定 RC 版本被接受，latest/next 不是合法触发。"
+    },
+    "REL-003": {
+      "implementedBy": [
+        "RC without complete release gates blocks"
+      ],
+      "verdict": "BLOCKED",
+      "note": "受保护环境 npm-rc-gate 实测 total_count=0，npm Trusted Publisher 未核对；需管理员配置后才能验收。"
+    },
+    "REL-004": {
+      "implementedBy": null,
+      "verdict": "BLOCKED",
+      "note": "依赖 REL-003 的真实候选与受保护环境。"
+    },
+    "REL-005": {
+      "implementedBy": null,
+      "verdict": "BLOCKED",
+      "note": "依赖真实 next 候选发布后才有独立安装可验。"
+    },
+    "REL-006": {
+      "implementedBy": [
+        "package runtime allowlist",
+        "missing engine blocks",
+        "empty package blocks"
+      ],
+      "verdict": "COVERED",
+      "note": "运行时文件白名单与包结构校验。"
+    },
+    "REL-007": {
+      "implementedBy": [
+        "release stable tag rejected",
+        "release baseline tag rejected"
+      ],
+      "verdict": "COVERED",
+      "note": "stable tag 与 v* 基准 tag 均被发布路径拒绝。"
+    },
+    "REL-008": {
+      "implementedBy": null,
+      "verdict": "BLOCKED",
+      "note": "依赖 REL-003/REL-004 的真实 next 候选。"
+    },
+    "CLN-001": {
+      "implementedBy": [
+        "cleanup removes only old successful owned files"
+      ],
+      "verdict": "COVERED",
+      "note": "清理计划只列拥有标记且已过期的目录。"
+    },
+    "CLN-002": {
+      "implementedBy": [
+        "cleanup excludes active failed retained runs",
+        "cleanup dry-run hash mismatch blocks"
+      ],
+      "verdict": "COVERED",
+      "note": "失败现场保留；清单哈希不符时阻断执行。"
+    },
+    "CLN-003": {
+      "implementedBy": [
+        "package leak artifacts/trace.zip",
+        "cleanup removes only old successful owned files"
+      ],
+      "verdict": "COVERED",
+      "note": "临时清理与代码删除分离：运行产物不进入包，代码删除独立审批。"
+    },
+    "CLN-004": {
+      "implementedBy": [
+        "cleanup removes only old successful owned files"
+      ],
+      "verdict": "COVERED",
+      "note": "需过期且 PASSED 才进入候选。"
+    },
+    "CLN-005": {
+      "implementedBy": null,
+      "verdict": "PARTIAL",
+      "note": "超容量报警与停止新大任务的门禁在 lib/cleanupPlan 内，但自检无用例覆盖：缺口，需补一个自检用例。"
+    },
+    "CLN-006": {
+      "implementedBy": [
+        "cleanup removes only old successful owned files"
+      ],
+      "verdict": "COVERED",
+      "note": "安装依赖与工作 clone 不归普通临时删除器处理。"
+    },
+    "CLN-007": {
+      "implementedBy": [
+        "cleanup dry-run hash mismatch blocks",
+        "atomic state update and exclusive collision"
+      ],
+      "verdict": "COVERED",
+      "note": "删除前校验清单归属与哈希，独占锁防止并发。"
+    },
+    "CLN-008": {
+      "implementedBy": [
+        "root requires explicit approval",
+        "cleanup dry-run hash mismatch blocks"
+      ],
+      "verdict": "COVERED",
+      "note": "清理需显式批准（cleanupEnabled 默认 false），未批准时拒绝。"
+    }
+  }
+}

@@ -125,7 +125,7 @@ async function main() {
     const run = ownedRun(cfg.qaRoot, 'browser-' + Date.now()), evidence = path.join(cfg.qaRoot, 'artifacts', path.basename(run));
     fs.mkdirSync(evidence, { recursive: true });
     const before = snapshot(cfg);
-    const result = await runLogged(cfg.tools.node, [__filename, process.argv[2], '--child', run, evidence], { cwd: cfg.repoRoot, env: isolatedEnv(run, require("../lib/runner.cjs").browserEnv(cfg)), logDir: evidence, timeoutMs: 300000 });
+    const result = await runLogged(cfg.tools.node, [__filename, process.argv[2], '--child', run, evidence], { cwd: cfg.repoRoot, env: require("../lib/runner.cjs").browserCapableEnv(cfg, run), logDir: evidence, timeoutMs: 300000 });
     const after = snapshot(cfg);
     const status = result.code === 0 && !result.timedOut && before.fingerprint === after.fingerprint ? 'PASS' : 'FAIL';
     const receipt = { schema: 1, kind: 'browser-shell', status, head: before.head, fingerprint: before.fingerprint, mode: 'REAL_BROWSER_SHELL_MOCK_MODULES', realModel: false, visualApproval: false, details: path.join(evidence, 'browser-result.json'), exitCode: result.code };

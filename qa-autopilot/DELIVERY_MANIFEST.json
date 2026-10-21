@@ -36,6 +36,11 @@
       "sha256": "44a77477372444d48711cde08fa4d745899e23bcfcbc3a47b53d02cba51d6a54"
     },
     {
+      "path": "config/specs-coverage.json",
+      "bytes": 28502,
+      "sha256": "f396dcc3ca545ed4b05545c4fc651d99faef666814180e34a02634acf899823c"
+    },
+    {
       "path": "config/suites.json",
       "bytes": 1759,
       "sha256": "fa0efb5be0d6a50f17c20ac08f954379ced701d06af540b71e84ab5a439cbc00"
@@ -246,6 +251,21 @@
       "sha256": "9f61b5e0b5dd41e8e73a6dac8cea38566342d5fc63c475e6a08f2b4d4b17c70e"
     },
     {
+      "path": "reports/branches/T07B_LEDGER.json",
+      "bytes": 143900,
+      "sha256": "c66a09b7d1cbfc93d77038f58ff52c72245a3dd008abc6705b00e83b8c45f89c"
+    },
+    {
+      "path": "reports/branches/T07B_LEDGER.md",
+      "bytes": 22333,
+      "sha256": "ebf5ff3d5a1a2787aa091121ed0edb0b7da01a17d152caaccc85724126cd1929"
+    },
+    {
+      "path": "reports/branches/T07B_STATUS.md",
+      "bytes": 7710,
+      "sha256": "9a9c6b3211aac5cb9c7e7121f5463dc91186ded73565289ea15865c165c19a80"
+    },
+    {
       "path": "reports/delivery/CAPABILITY_MATRIX.md",
       "bytes": 2377,
       "sha256": "307d0facbacc55abdd186665359be4c4dc84ac8531549f208b5742c544f2a360"
@@ -362,8 +382,8 @@
     },
     {
       "path": "tools/browser-shell.cjs",
-      "bytes": 9712,
-      "sha256": "02109eaf93aafd584c86bb3efc82b43303b028b59319b3180cc40aef7ad1c899"
+      "bytes": 9706,
+      "sha256": "cc022fd11213e421cfecd9918212b99ed2c6934d91f8a6bebdf87c5cd96d2763"
     },
     {
       "path": "tools/ci-rc-guard.cjs",
@@ -401,6 +421,11 @@
       "sha256": "6ba9be6a5b1dd6e6db6fe3563341c0179e6aa69558ca896e5bb37e3023b66a85"
     },
     {
+      "path": "tools/qa-selftest-receipt.cjs",
+      "bytes": 2897,
+      "sha256": "0883273a190b1d6d3e5ecf50879276700bf0ed836509a7e99bb366d1bae1166a"
+    },
+    {
       "path": "tools/quota-gateway.cjs",
       "bytes": 6910,
       "sha256": "adca635ab114a2bfe2fb2c2fa95a00b7746292bf0964572dba5d515db746e867"
@@ -409,6 +434,11 @@
       "path": "tools/report.cjs",
       "bytes": 1253,
       "sha256": "15c1a7bbec546d2d39a852f9ab4d937e794541ceb5b4a51db3bcc3e9fa5a1f42"
+    },
+    {
+      "path": "tools/spec-ledger.cjs",
+      "bytes": 8060,
+      "sha256": "05f6c1cc7cdac685e4374885a7c436cf983c0b4b59ceb9db6bdab246bc785ea2"
     },
     {
       "path": "tools/supervisor.cjs",
