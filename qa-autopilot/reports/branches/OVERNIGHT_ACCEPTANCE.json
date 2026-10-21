@@ -1,0 +1,302 @@
+{
+  "schema": "qa-autopilot/overnight-acceptance/v1",
+  "at": "2026-10-21T17:40:15.992Z",
+  "simulated": [
+    {
+      "id": "A",
+      "title": "Worker 完成任务后自动领取下一项",
+      "kind": "SIMULATED",
+      "ok": true,
+      "detail": "任务1=CI_PENDING（已提交 12c94c39），随即自动领取任务2=CI_PENDING",
+      "evidence": {
+        "t1": {
+          "status": "CI_PENDING",
+          "sha": "12c94c395fde269366abf738c4d0ba32830f4271"
+        },
+        "t2": {
+          "status": "CI_PENDING"
+        }
+      }
+    },
+    {
+      "id": "B",
+      "title": "模拟额度耗尽暂停，恢复后自动继续",
+      "kind": "SIMULATED",
+      "ok": true,
+      "detail": "15% 时状态=DRAINING（不领新任务），恢复到 50% 后任务1=CI_PENDING",
+      "evidence": {
+        "pausedState": "DRAINING",
+        "afterRecovery": "CI_PENDING"
+      }
+    },
+    {
+      "id": "C",
+      "title": "Supervisor 重启后正确恢复检查点",
+      "kind": "SIMULATED",
+      "ok": true,
+      "detail": "第一次 revision=11，重启后 revision=13（单调递增），任务状态保留=CI_PENDING",
+      "evidence": {
+        "revisionBefore": 11,
+        "revisionAfter": 13
+      }
+    },
+    {
+      "id": "D",
+      "title": "Agent 意外退出后不重复 Git 提交",
+      "kind": "SIMULATED",
+      "ok": true,
+      "detail": "远程提交数 3 → Worker 崩溃后 3 → Supervisor 重启后 3（均未增长，无重复推送、无半成品提交）；任务1=CI_PENDING",
+      "evidence": {
+        "afterTask1": "3",
+        "afterCrash": "3",
+        "afterRestart": "3",
+        "t1": "CI_PENDING",
+        "t2": "CI_PENDING",
+        "remoteSha": "053136a1bc1373fb5507aba77c8d0410d8b842c8"
+      }
+    }
+  ],
+  "real": [
+    {
+      "id": "E",
+      "title": "实际订阅额度可查询且与 Worker 同一订阅",
+      "kind": "REAL",
+      "ok": true,
+      "detail": "真实额度：五小时 38% / 周 100%，池=general，来源=explicit_percent",
+      "evidence": {
+        "quota": {
+          "state": "KNOWN",
+          "model": "general",
+          "remainingPercent": 38,
+          "fiveHourRemainingPercent": 38,
+          "weeklyRemainingPercent": 100,
+          "source": "explicit_percent",
+          "checkedAt": 1792604332457
+        },
+        "endpoint": "https://api.minimax.cn/v1/token_plan/remains",
+        "keySource": "config.providerConfigRules.providerRules[providerId=minimax].config.access.apiKey",
+        "sameKeyAsWorker": true
+      }
+    },
+    {
+      "id": "F",
+      "title": "ZCode 无人工输入完成真实 CLI 任务",
+      "kind": "REAL",
+      "ok": true,
+      "detail": "退出码=0，sessionId=sess_a3ff8d75-f4bf-4a73-af82-f5664378169f，模型=[\"MiniMax-M3.1-Flash\"]，产物内容=REAL_CLI_NO_HUMAN",
+      "evidence": {
+        "sessionId": "sess_a3ff8d75-f4bf-4a73-af82-f5664378169f",
+        "modelObserved": [
+          "MiniMax-M3.1-Flash"
+        ],
+        "usage": {
+          "source": "provider",
+          "modelRequestCount": 5,
+          "inputTokens": 79490,
+          "outputTokens": 2190,
+          "totalTokens": 81680,
+          "cacheReadTokens": 62974,
+          "cacheWriteTokens": 0,
+          "reasoningTokens": 0,
+          "webFetchRequests": 0,
+          "webSearchRequests": 0
+        },
+        "artifact": "REAL_CLI_NO_HUMAN"
+      }
+    },
+    {
+      "id": "G",
+      "title": "开发知识库始终正常运行且不被 QA 写入",
+      "kind": "REAL",
+      "ok": true,
+      "detail": "健康 10/10 → 10/10；开发库 journal 字节与 mtime 未变（396955 B）",
+      "evidence": {
+        "before": {
+          "ok": true,
+          "passed": 10,
+          "total": 10
+        },
+        "after": {
+          "ok": true,
+          "passed": 10,
+          "total": 10
+        },
+        "journalBytesBefore": 396955,
+        "journalBytesAfter": 396955,
+        "journalUnchanged": true
+      }
+    },
+    {
+      "id": "H",
+      "title": "锁屏后非交互测试仍可执行；交互式测试已单独标注",
+      "kind": "REAL",
+      "ok": true,
+      "detail": "非交互套件实跑通过（exit=0）；当前会话锁定=false；标注为需交互桌面的浏览器用例 6 个",
+      "evidence": {
+        "sessionLockedNow": false,
+        "nonInteractiveSuite": {
+          "exitCode": 0,
+          "timedOut": false
+        },
+        "requiresInteractiveDesktop": [
+          "_site/_test/product-import-ui-test.js",
+          "_site/_test/product-progress-status-test.js",
+          "_site/_test/product-diagnostics-ui-test.js",
+          "_site/_test/agent-capture-ui-test.js",
+          "_site/_test/agent-capture-mcp-ui-test.js",
+          "_site/_test/packaged-ui-smoke-test.js"
+        ],
+        "note": "真实 Chrome 需要交互式桌面会话；锁屏时这些用例应跳过并记录为 BLOCKED_CAPABILITY"
+      }
+    }
+  ],
+  "results": [
+    {
+      "id": "A",
+      "title": "Worker 完成任务后自动领取下一项",
+      "kind": "SIMULATED",
+      "ok": true,
+      "detail": "任务1=CI_PENDING（已提交 12c94c39），随即自动领取任务2=CI_PENDING",
+      "evidence": {
+        "t1": {
+          "status": "CI_PENDING",
+          "sha": "12c94c395fde269366abf738c4d0ba32830f4271"
+        },
+        "t2": {
+          "status": "CI_PENDING"
+        }
+      }
+    },
+    {
+      "id": "B",
+      "title": "模拟额度耗尽暂停，恢复后自动继续",
+      "kind": "SIMULATED",
+      "ok": true,
+      "detail": "15% 时状态=DRAINING（不领新任务），恢复到 50% 后任务1=CI_PENDING",
+      "evidence": {
+        "pausedState": "DRAINING",
+        "afterRecovery": "CI_PENDING"
+      }
+    },
+    {
+      "id": "C",
+      "title": "Supervisor 重启后正确恢复检查点",
+      "kind": "SIMULATED",
+      "ok": true,
+      "detail": "第一次 revision=11，重启后 revision=13（单调递增），任务状态保留=CI_PENDING",
+      "evidence": {
+        "revisionBefore": 11,
+        "revisionAfter": 13
+      }
+    },
+    {
+      "id": "D",
+      "title": "Agent 意外退出后不重复 Git 提交",
+      "kind": "SIMULATED",
+      "ok": true,
+      "detail": "远程提交数 3 → Worker 崩溃后 3 → Supervisor 重启后 3（均未增长，无重复推送、无半成品提交）；任务1=CI_PENDING",
+      "evidence": {
+        "afterTask1": "3",
+        "afterCrash": "3",
+        "afterRestart": "3",
+        "t1": "CI_PENDING",
+        "t2": "CI_PENDING",
+        "remoteSha": "053136a1bc1373fb5507aba77c8d0410d8b842c8"
+      }
+    },
+    {
+      "id": "E",
+      "title": "实际订阅额度可查询且与 Worker 同一订阅",
+      "kind": "REAL",
+      "ok": true,
+      "detail": "真实额度：五小时 38% / 周 100%，池=general，来源=explicit_percent",
+      "evidence": {
+        "quota": {
+          "state": "KNOWN",
+          "model": "general",
+          "remainingPercent": 38,
+          "fiveHourRemainingPercent": 38,
+          "weeklyRemainingPercent": 100,
+          "source": "explicit_percent",
+          "checkedAt": 1792604332457
+        },
+        "endpoint": "https://api.minimax.cn/v1/token_plan/remains",
+        "keySource": "config.providerConfigRules.providerRules[providerId=minimax].config.access.apiKey",
+        "sameKeyAsWorker": true
+      }
+    },
+    {
+      "id": "F",
+      "title": "ZCode 无人工输入完成真实 CLI 任务",
+      "kind": "REAL",
+      "ok": true,
+      "detail": "退出码=0，sessionId=sess_a3ff8d75-f4bf-4a73-af82-f5664378169f，模型=[\"MiniMax-M3.1-Flash\"]，产物内容=REAL_CLI_NO_HUMAN",
+      "evidence": {
+        "sessionId": "sess_a3ff8d75-f4bf-4a73-af82-f5664378169f",
+        "modelObserved": [
+          "MiniMax-M3.1-Flash"
+        ],
+        "usage": {
+          "source": "provider",
+          "modelRequestCount": 5,
+          "inputTokens": 79490,
+          "outputTokens": 2190,
+          "totalTokens": 81680,
+          "cacheReadTokens": 62974,
+          "cacheWriteTokens": 0,
+          "reasoningTokens": 0,
+          "webFetchRequests": 0,
+          "webSearchRequests": 0
+        },
+        "artifact": "REAL_CLI_NO_HUMAN"
+      }
+    },
+    {
+      "id": "G",
+      "title": "开发知识库始终正常运行且不被 QA 写入",
+      "kind": "REAL",
+      "ok": true,
+      "detail": "健康 10/10 → 10/10；开发库 journal 字节与 mtime 未变（396955 B）",
+      "evidence": {
+        "before": {
+          "ok": true,
+          "passed": 10,
+          "total": 10
+        },
+        "after": {
+          "ok": true,
+          "passed": 10,
+          "total": 10
+        },
+        "journalBytesBefore": 396955,
+        "journalBytesAfter": 396955,
+        "journalUnchanged": true
+      }
+    },
+    {
+      "id": "H",
+      "title": "锁屏后非交互测试仍可执行；交互式测试已单独标注",
+      "kind": "REAL",
+      "ok": true,
+      "detail": "非交互套件实跑通过（exit=0）；当前会话锁定=false；标注为需交互桌面的浏览器用例 6 个",
+      "evidence": {
+        "sessionLockedNow": false,
+        "nonInteractiveSuite": {
+          "exitCode": 0,
+          "timedOut": false
+        },
+        "requiresInteractiveDesktop": [
+          "_site/_test/product-import-ui-test.js",
+          "_site/_test/product-progress-status-test.js",
+          "_site/_test/product-diagnostics-ui-test.js",
+          "_site/_test/agent-capture-ui-test.js",
+          "_site/_test/agent-capture-mcp-ui-test.js",
+          "_site/_test/packaged-ui-smoke-test.js"
+        ],
+        "note": "真实 Chrome 需要交互式桌面会话；锁屏时这些用例应跳过并记录为 BLOCKED_CAPABILITY"
+      }
+    }
+  ],
+  "failed": 0,
+  "verdict": "READY"
+}

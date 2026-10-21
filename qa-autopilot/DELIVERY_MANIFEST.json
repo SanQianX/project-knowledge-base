@@ -77,8 +77,8 @@
     },
     {
       "path": "lib/safety.cjs",
-      "bytes": 13344,
-      "sha256": "e338eac3912d42f84b1a280c88d9bba31936aa3938afe3d0203cb9bc07227637"
+      "bytes": 14686,
+      "sha256": "f69c2ab70804e560235060a3258b14726f08a4e7d333d9493b5588d4bd6624b7"
     },
     {
       "path": "lib/state.cjs",
@@ -241,6 +241,11 @@
       "sha256": "161dacbd36a0d7404e758bd516dad0538e0fc73fd971019096765e6d9a446e18"
     },
     {
+      "path": "reports/branches/OVERNIGHT_ACCEPTANCE.json",
+      "bytes": 9748,
+      "sha256": "c02ec1e33bdf83f1811777198b4772eef6d6c7e837b3aa56394d118b8dd8d82b"
+    },
+    {
       "path": "reports/branches/PROTECTED_DEV_KB.md",
       "bytes": 15919,
       "sha256": "f6aaef5064ad78d1273408df6df10b9fb5aaa21fa39c9c58d62f3b5b71f1e308"
@@ -324,6 +329,11 @@
       "path": "scripts/resume-controller.ps1",
       "bytes": 647,
       "sha256": "bc2850fbdfd4a9a9ed5f89b31b521d97f4a6324ddfbf577627ea9a429c3059e1"
+    },
+    {
+      "path": "scripts/start-overnight.ps1",
+      "bytes": 9540,
+      "sha256": "6aaba763b283ce000797166e67e9ab2b4a9c2521afeb85b9a2f1c227fa5d4388"
     },
     {
       "path": "templates/BUG_REPORT.md",
@@ -411,6 +421,16 @@
       "sha256": "9ae5b0ecdcedeb9617803b0ad72b8db6000facde11e6c46233a3b35037073512"
     },
     {
+      "path": "tools/overnight-acceptance.cjs",
+      "bytes": 21706,
+      "sha256": "821f75c2a961827039e58743834fdc5fef95ba9a4dfbddc0b6ee88e11d3e039a"
+    },
+    {
+      "path": "tools/overnight-supervisor.cjs",
+      "bytes": 24960,
+      "sha256": "127ce147884a3fb6ab91b7486837987ce70c48a3fbee66340d79d18a46b0f498"
+    },
+    {
       "path": "tools/performance.cjs",
       "bytes": 3400,
       "sha256": "d60f7e51360c9734dbe46866127d56e17ed1d01efa3b8598f03989e527aa6549"
@@ -449,6 +469,11 @@
       "path": "tools/visual-compare.cjs",
       "bytes": 1570,
       "sha256": "49f1665a329c81a6fd7f49bf3bca7f3cd85e9d974e5b3db42e4f0165b0f2b2ce"
+    },
+    {
+      "path": "tools/zcode-worker.cjs",
+      "bytes": 12393,
+      "sha256": "460703b11e5f68219363793ab79ab9a9cd88f50669853a3c5f780c9b167f74ab"
     }
   ],
   "note": "Manifest integrity detects changes, not trust. No credentials or runtime data. Manifest excludes itself. | 2026-10-21 刷新：3 项过期哈希按已提交状态重算；新增 10 项 B00 计划/工具/审计报告。原清单见 artifacts/branch-archives/DELIVERY_MANIFEST.json.before-refresh-20261021"
