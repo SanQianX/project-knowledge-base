@@ -281,6 +281,7 @@ async function tick(cfg, state) {
   const next = queue.tasks.find(t => !state.tasks[t.id] || ['PENDING', 'RETRY'].includes(state.tasks[t.id].status));
   if (!next) { state.phase = 'ALL_EXECUTABLE_TASKS_DONE'; saveState(state); return state; }
   const task = state.tasks[next.id] || (state.tasks[next.id] = { id: next.id, status: 'PENDING', attempts: 0 });
+  if (!state.order.includes(next.id)) state.order.push(next.id);   // order 是 CI 待定扫描与状态统计的唯一索引
   task.status = 'DISPATCHING';
   task.attempts = (task.attempts || 0) + 1;
   task.contract = task.contract || makeContract(next, cfg);

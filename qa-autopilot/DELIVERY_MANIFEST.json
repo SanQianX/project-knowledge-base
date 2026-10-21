@@ -432,8 +432,8 @@
     },
     {
       "path": "tools/overnight-supervisor.cjs",
-      "bytes": 24960,
-      "sha256": "127ce147884a3fb6ab91b7486837987ce70c48a3fbee66340d79d18a46b0f498"
+      "bytes": 25086,
+      "sha256": "0c344d3c9718174ffad8ebc2148fef6e1d41b45a11d52577be95116f0d54a7e9"
     },
     {
       "path": "tools/performance.cjs",
