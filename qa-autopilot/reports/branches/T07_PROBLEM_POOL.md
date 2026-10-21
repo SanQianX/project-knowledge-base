@@ -157,11 +157,47 @@ stderr: DevTools remote debugging requires a non-default data directory.
 2. 1 个视觉基线用例 → 需要已批准视觉基线（§4.4）
 3. 无待复核项 —— 全部已闭合（§4、§5）
 
-## 7. 证据位置
+
+## 7. 最终全量复扫（含指纹说明）
+
+首轮修正后的全量复扫结果为 **156/156 PASS、skipped 0、timedOut false**，但该次收据状态仍为 FAIL：
+
+```
+状态: FAIL  执行: 156  跳过: 0  超时: false  源码未变: false
+分布: {"PASS":156}
+```
+
+**`sourceUnchanged: false` 是 QA 执行方自身造成的**：扫描进行期间，向被测 clone `qa-autopilot/.runtime/workspaces/repair` 提交了 3 个文档/清单提交（`ee52eed`、`e66fdc4`、`1557c44`），被测仓库指纹因此变化。收据正确地检测到"测试期间源码变了"并拒绝判定 PASS —— 这正是 `verifyReceipt` 的 `STALE_TESTS` 语义在起作用。
+
+处理方式：**不修改被测仓库，重新跑一次权威全量扫描**（收据文件 `artifacts/scan-all-20261021-authoritative.json`）。文档与清单更新一律只写中央 `qa-autopilot/`，与被测 clone 分离。
+### 7.1 权威全量收据
+
+在**不再触碰被测 clone** 的前提下重跑一次全量扫描：
+
+```
+状态: PASS   退出码: 0
+执行: 156   跳过: 0   超时: false   flaky: false
+源码未变: true   head: 1557c44c99acffdd6e79fdf61fbfaef2a256e886
+分布: {"PASS":156}
+总耗时: 287.1 秒
+```
+
+收据路径：`artifacts/test-all-1792578702586/receipt.json`（副本 `artifacts/scan-all-20261021-authoritative.json`）。
+
+**T07 出口条件满足**：全部 156 个规范测试文件在冻结基线 `c7d5b2b` 上真实执行、全部 PASS、无跳过、无超时、无 flaky，扫描期间被测源码未变。
+
+最慢的三个用例（均为真实浏览器/端到端场景，非挂起）：`packaged-ui-smoke-test.js` 58.7s、`glm-ui-refresh-review-test.js` 27.0s、`full-integration-e2e-test.js` 11.5s。
+
+### 7.2 收据与分支头的绑定
+
+该收据绑定 head `1557c44`。此后若再向 QA 分支推送任何提交，该收据对**新的** head 即为过期（`verifyReceipt` 的 `STALE_TESTS` 语义）；本轮之后只有文档与清单提交，产品源码未再变动，因此产品状态与收据一致。
+## 8. 证据位置
 
 | 内容 | 路径 |
 |---|---|
-| 首轮收据（156 文件全量） | `artifacts/test-all-1792575132715/receipt.json` |
+| 首轮收据（156 文件全量，12 FAIL） | `artifacts/test-all-1792575132715/receipt.json` |
+| **权威收据（156/156 PASS，exit 0）** | `artifacts/test-all-1792578702586/receipt.json` |
+| T03 / T11 门禁与阻断状态 | `reports/branches/T03_T11_GATE_STATUS.md` |
 | 每个测试的 stdout/stderr | `artifacts/test-all-1792575132715/<file>/` |
 | 扫描合同 | `config/scan-contract-20261021.json` |
 | Chrome 启动诊断脚本 | `.runtime/verify/chrome-probe.cjs`（临时，不进 Git） |
