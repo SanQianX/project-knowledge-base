@@ -283,7 +283,6 @@ async function tick(cfg, state) {
   const task = state.tasks[next.id] || (state.tasks[next.id] = { id: next.id, status: 'PENDING', attempts: 0 });
   if (!state.order.includes(next.id)) state.order.push(next.id);   // order 是 CI 待定扫描与状态统计的唯一索引
   task.status = 'DISPATCHING';
-  task.attempts = (task.attempts || 0) + 1;
   task.contract = task.contract || makeContract(next, cfg);
   task.specIds = next.specIds;
   task.module = next.module;
@@ -302,6 +301,8 @@ async function tick(cfg, state) {
   }
   // 4) 派发
   task.status = 'AGENT_RUNNING';
+  task.attempts = (task.attempts || 0) + 1;   // 只在真正派发时计数：额度挡住时不算重试
+  if (task.attempts > (task.contract.maxAttempts || 2)) { task.status = 'FAILED'; task.failureReason = 'MAX_ATTEMPTS'; saveState(state); return state; }
   task.startedAt = new Date().toISOString();
   saveState(state);
   const d = await dispatch(cfg, state, task);
