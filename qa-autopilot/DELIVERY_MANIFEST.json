@@ -226,9 +226,19 @@
       "sha256": "e7fd62eebe74588c9a8b9a1333d1922e7674bd75244666e585f64bc6849d7acf"
     },
     {
+      "path": "reports/branches/ISOLATION_PROOF.md",
+      "bytes": 4900,
+      "sha256": "30abefaa585d37bc767437d3fa49687a34cda47ceb93aae5e961cd8964747cad"
+    },
+    {
       "path": "reports/branches/MODULE_SOURCE_MATCH.json",
       "bytes": 78087,
       "sha256": "161dacbd36a0d7404e758bd516dad0538e0fc73fd971019096765e6d9a446e18"
+    },
+    {
+      "path": "reports/branches/PROTECTED_DEV_KB.md",
+      "bytes": 15919,
+      "sha256": "f6aaef5064ad78d1273408df6df10b9fb5aaa21fa39c9c58d62f3b5b71f1e308"
     },
     {
       "path": "reports/branches/T03_T11_GATE_STATUS.md",
@@ -282,8 +292,8 @@
     },
     {
       "path": "reports/PHASE_STATUS.md",
-      "bytes": 9397,
-      "sha256": "699e4bf6a16b227388a62961292f3613f7af20a7083222ce2a77fcb64c94159e"
+      "bytes": 9729,
+      "sha256": "f433875e6e8e17176db1813133151cc389d5adfd39ceeb1672d24a749efd9b49"
     },
     {
       "path": "scripts/qa.cjs",
@@ -361,6 +371,11 @@
       "sha256": "f527b1ec7383e6856b58956c17b24fec7d0847261aed66a2cbc3ced672ce2c99"
     },
     {
+      "path": "tools/hide-desktop-window.ps1",
+      "bytes": 3142,
+      "sha256": "a9ecbdae53d372784cc65e1af89fcf0d1cffdad6a0119ae485dd1c30438b606f"
+    },
+    {
       "path": "tools/install-control-copy.cjs",
       "bytes": 2192,
       "sha256": "1541d1a6e7eb2b8a2503f119cfec3fcc9741d971ecab2cd88eaa6d1848ad8062"
@@ -379,6 +394,11 @@
       "path": "tools/performance.cjs",
       "bytes": 3400,
       "sha256": "d60f7e51360c9734dbe46866127d56e17ed1d01efa3b8598f03989e527aa6549"
+    },
+    {
+      "path": "tools/protected-dev-kb.cjs",
+      "bytes": 10871,
+      "sha256": "6ba9be6a5b1dd6e6db6fe3563341c0179e6aa69558ca896e5bb37e3023b66a85"
     },
     {
       "path": "tools/quota-gateway.cjs",
