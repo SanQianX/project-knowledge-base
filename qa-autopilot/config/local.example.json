@@ -74,5 +74,9 @@
     "taskTimeoutMs": 900000,
     "notes": "必须按真实 Agent CLI/SDK 构建并验收适配器；不得自行猜测命令参数。"
   },
-  "rcAcceptanceFile": "state/rc-acceptance.json"
+  "rcAcceptanceFile": "state/rc-acceptance.json",
+  "browser": {
+    "chromePath": "",
+    "note": "浏览器绝对路径。隔离环境会重写 LOCALAPPDATA，机器级安装位置不可见；产品自带的 find-chrome.js 以 KB_CHROME_PATH 为首选候选。CDP helper 始终使用新建 profile，真实用户 profile 不被读写。"
+  }
 }

@@ -16,6 +16,16 @@ function selectTests(repo, suite, config) {
         must(available.includes(f), 'TEST_MISSING', 'Test file missing at this checkout: ' + f, 20);
     return names;
 }
+/**
+ * 隔离环境会重写 LOCALAPPDATA，机器级浏览器的安装位置因此不可见。
+ * 产品自带的 _site/_test/helpers/find-chrome.js 已把 KB_CHROME_PATH 作为首选候选，
+ * 这里只把经审阅的浏览器路径透传下去；不改动产品代码，也不放宽 profile 隔离
+ * （CDP helper 始终用新建 profile 目录，真实用户 profile 不被读写）。
+ */
+function browserEnv(cfg) {
+    const configured = cfg.browser && cfg.browser.chromePath;
+    return configured ? { KB_CHROME_PATH: configured } : {};
+}
 async function runSuite(cfg, suite, contract) {
     assertRepo(cfg, false);
     must(fs.realpathSync(cfg.repoRoot) !== fs.realpathSync(cfg.sourceRoot), 'ORIGINAL_WORKTREE', 'Execute product tests in the isolated QA clone.');
@@ -30,9 +40,9 @@ async function runSuite(cfg, suite, contract) {
             const childDir = path.join(run, path.basename(file, '.js'));
             fs.mkdirSync(childDir);
             const result = await runLogged(cfg.tools.node, [path.join(cfg.repoRoot, '_site/_test', file)], {
-                cwd: cfg.repoRoot, env: isolatedEnv(childDir), logDir: path.join(evidenceDir, file), timeoutMs: cfg.limits?.perTestTimeoutMs || 120000
+                cwd: cfg.repoRoot, env: isolatedEnv(childDir, browserEnv(cfg)), logDir: path.join(evidenceDir, file), timeoutMs: cfg.limits?.perTestTimeoutMs || 120000
             });
-            const skipped = /#\s*SKIP\b|\bSKIP(?:PED)?\b|browser tests are excluded/i.test(result.stdout + result.stderr) ? 1 : 0;
+            const skipped = /#\s*SKIP\b|\uFE63|^\s*SKIP(?:PED)?\b|\bbrowser tests are excluded\b/.test(result.stdout + result.stderr) ? 1 : 0;
             const r = { file, exitCode: result.code, signal: result.signal, durationMs: result.durationMs, timedOut: result.timedOut, skipped, status: result.code === 0 && !result.timedOut && !result.error && !skipped ? 'PASS' : skipped && result.code === 0 ? 'BLOCKED_CAPABILITY' : 'FAIL' };
             results.push(r);
             atomicJSON(path.join(evidenceDir, 'progress.json'), { id, results });
@@ -51,4 +61,4 @@ async function runSuite(cfg, suite, contract) {
         release();
     }
 }
-module.exports = { selectTests, runSuite };
+module.exports = { selectTests, runSuite, browserEnv };
