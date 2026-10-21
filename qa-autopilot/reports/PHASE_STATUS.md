@@ -14,7 +14,7 @@
 | └ **B00-B** | **PENDING_APPROVAL**（10 项待批 / 3 项 BLOCKED） | 准备与演练完成，远程写操作待批准 |
 | T01 | **PASS** | 基准已冻结：`c7d5b2b`（5.0.24），QA 分支 + 非 v tag `qa-baseline-20261020`，远程解引用核对通过 |
 | T02 | **PASS** | QA 控制包 69 文件已 bootstrap 并推送（`dd652d5`），脚注更正 `f3206ac` |
-| T03 | **BLOCKED** | 无 MiniMax CLI、无 API Key、无已验证 worker 适配器 → `EXECUTABLE_MISSING` / `ADAPTER_UNVERIFIED` |
+| T03-OVERNIGHT | **PASS** | 真实 ZCode CLI Worker（`--prompt/--cwd/--resume/--json`）+ 真实订阅额度（`api.minimax.cn`）+ 独立 Supervisor；A–H 故障注入验收 READY（模拟 4/4，真实 4/4） |
 | T04 | **PASS** | RC-only 发布工作流已装为同名 `publish.yml`（`eb2f879`），26/26 反例通过，7 项门禁条件全绿 |
 | T05 | **PASS** | inventory：439 文件 / 169 测试 / 124 定位点 / 99 API 引用 |
 | T06 | **PASS** | 浏览器接线已通：Chrome 可见性（`f1f6574`/`432659d`）+ git 标准模板（`432659d`）修复后，7 个浏览器/视觉用例全部转 PASS |
