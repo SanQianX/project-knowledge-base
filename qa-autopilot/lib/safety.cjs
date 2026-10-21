@@ -119,6 +119,25 @@ function setRunStatus(dir, status) {
     state.finishedAt = new Date().toISOString();
     atomicJSON(file, state);
 }
+/**
+ * git 的标准模板目录。指向它而不是空目录：
+ *  - 空目录会让 git init 跳过 .git/hooks 的创建，产品测试读取
+ *    .git/hooks/post-commit 时得到 ENOENT；
+ *  - 标准模板只含 *.sample 惰性样本，不会把用户的生产 Hook 复制进测试仓库，
+ *    保护意图不变。找不到时退回 git 自身默认（仍不是空目录）。
+ */
+let gitStockTemplateDir = null;
+function stockTemplateDir() {
+    if (gitStockTemplateDir !== null) return gitStockTemplateDir || undefined;
+    try {
+        const exec = commandSync("git", ["--exec-path"], { timeout: 10000 }).trim();
+        const tpl = path.resolve(exec, "..", "..", "share", "git-core", "templates");
+        if (fs.existsSync(tpl) && fs.existsSync(path.join(tpl, "hooks"))) gitStockTemplateDir = tpl;
+        else gitStockTemplateDir = "";
+    } catch (_) { gitStockTemplateDir = ""; }
+    return gitStockTemplateDir || undefined;
+}
+
 function isolatedEnv(run, additions = {}) {
     const env = {};
     for (const key of ['PATH', 'Path', 'SystemRoot', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'LANG', 'LC_ALL'])
@@ -131,7 +150,7 @@ function isolatedEnv(run, additions = {}) {
         TEMP: path.join(run, 'tmp'), TMP: path.join(run, 'tmp'), TMPDIR: path.join(run, 'tmp'),
         KB_DATA_DIR: path.join(run, 'data'), KB_KNOWLEDGE_DATA_DIR: path.join(run, 'knowledge'),
         AI_CODING_EVENT_BRIDGE_HOME: path.join(run, 'bridge'), CLAUDE_CONFIG_DIR: path.join(run, 'claude'),
-        GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.join(run, 'home', '.gitconfig'), GIT_TEMPLATE_DIR: path.join(run, 'git-template'),
+        GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.join(run, 'home', '.gitconfig'), GIT_TEMPLATE_DIR: stockTemplateDir() || path.join(run, 'git-template'),
         npm_config_cache: path.join(run, 'npm-cache'), npm_config_registry: 'https://registry.npmjs.org',
         npm_config_userconfig: path.join(run, 'home', '.npmrc'), FORCE_COLOR: '0', CI: '1',
         KB_MODULES_AUTOSTART: '0'

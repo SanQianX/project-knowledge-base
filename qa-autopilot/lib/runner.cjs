@@ -42,6 +42,31 @@ function shortTempEnv(run) {
     return { TEMP: base, TMP: base, TMPDIR: base };
 }
 
+/**
+ * 浏览器用例需要真实的应用数据视图。
+ * Chrome 在 Windows 上用 HOME/USERPROFILE/LOCALAPPDATA 判断默认用户数据目录；
+ * 这几个变量被重定向时，Chrome 认为给定的 --user-data-dir 就是默认目录，
+ * 于是拒绝 --remote-debugging（DevTools remote debugging requires a
+ * non-default data directory）。纯真实环境下端口 0 模式可正常写出
+ * DevToolsActivePort。
+ * 产品的数据隔离并不依赖这些变量：知识目录、桥接目录、Claude 配置目录、
+ * npm 缓存与模块开关都有各自独立的位置，因此只对引用 cdp-browser 的用例
+ * 放宽这四项，其余隔离照旧。判定方式与产品自带 run-all-tests.js 相同。
+ */
+function browserCapableEnv(cfg, run) {
+    const env = Object.assign(isolatedEnv(run, browserEnv(cfg)), shortTempEnv(run));
+    for (const key of ["HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA"]) {
+        if (process.env[key]) env[key] = process.env[key];
+    }
+    return env;
+}
+
+/** 该用例是否依赖真实浏览器（与产品 run-all-tests.js 的判定一致）。 */
+function needsBrowser(file) {
+    try { return fs.readFileSync(file, "utf8").includes("helpers/cdp-browser"); }
+    catch { return false; }
+}
+
 async function runSuite(cfg, suite, contract) {
     assertRepo(cfg, false);
     must(fs.realpathSync(cfg.repoRoot) !== fs.realpathSync(cfg.sourceRoot), 'ORIGINAL_WORKTREE', 'Execute product tests in the isolated QA clone.');
@@ -56,7 +81,9 @@ async function runSuite(cfg, suite, contract) {
             const childDir = path.join(run, path.basename(file, '.js'));
             fs.mkdirSync(childDir);
             const result = await runLogged(cfg.tools.node, [path.join(cfg.repoRoot, '_site/_test', file)], {
-                cwd: cfg.repoRoot, env: Object.assign(isolatedEnv(childDir, browserEnv(cfg)), shortTempEnv(childDir)), logDir: path.join(evidenceDir, file), timeoutMs: cfg.limits?.perTestTimeoutMs || 120000
+                cwd: cfg.repoRoot,
+                env: needsBrowser(path.join(cfg.repoRoot, "_site/_test", file)) ? browserCapableEnv(cfg, childDir) : Object.assign(isolatedEnv(childDir, browserEnv(cfg)), shortTempEnv(childDir)),
+                logDir: path.join(evidenceDir, file), timeoutMs: cfg.limits?.perTestTimeoutMs || 120000
             });
             const skipped = /#\s*SKIP\b|\uFE63|^\s*SKIP(?:PED)?\b|\bbrowser tests are excluded\b/.test(result.stdout + result.stderr) ? 1 : 0;
             const r = { file, exitCode: result.code, signal: result.signal, durationMs: result.durationMs, timedOut: result.timedOut, skipped, status: result.code === 0 && !result.timedOut && !result.error && !skipped ? 'PASS' : skipped && result.code === 0 ? 'BLOCKED_CAPABILITY' : 'FAIL' };
@@ -77,4 +104,4 @@ async function runSuite(cfg, suite, contract) {
         release();
     }
 }
-module.exports = { selectTests, runSuite, browserEnv, shortTempEnv };
+module.exports = { selectTests, runSuite, browserEnv, shortTempEnv, browserCapableEnv, needsBrowser };
