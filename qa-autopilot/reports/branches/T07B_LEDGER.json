@@ -1,12 +1,13 @@
 {
   "schema": "qa-autopilot/spec-ledger/v1",
   "phase": "T07B",
-  "generatedAt": "2026-10-21T15:50:11.095Z",
+  "generatedAt": "2026-10-21T15:59:39.581Z",
   "total": 130,
   "counts": {
-    "PARTIAL": 75,
-    "COVERED": 42,
-    "BLOCKED": 13
+    "PARTIAL": 61,
+    "COVERED": 46,
+    "BLOCKED": 13,
+    "NOT_COVERED": 10
   },
   "byModule": {
     "产品外壳": {
@@ -42,21 +43,25 @@
     },
     "长期记忆": {
       "total": 8,
-      "PARTIAL": 8
+      "PARTIAL": 2,
+      "NOT_COVERED": 6
     },
     "外部Agent集成": {
       "total": 10,
-      "PARTIAL": 8,
-      "COVERED": 2
+      "PARTIAL": 9,
+      "COVERED": 1
     },
     "活动与诊断": {
       "total": 8,
-      "PARTIAL": 8
+      "PARTIAL": 5,
+      "COVERED": 2,
+      "NOT_COVERED": 1
     },
     "设置与生命周期": {
       "total": 10,
-      "PARTIAL": 9,
-      "COVERED": 1
+      "PARTIAL": 4,
+      "COVERED": 4,
+      "NOT_COVERED": 2
     },
     "额度与恢复": {
       "total": 8,
@@ -74,7 +79,7 @@
     "工程清理": {
       "total": 8,
       "COVERED": 7,
-      "PARTIAL": 1
+      "NOT_COVERED": 1
     }
   },
   "rows": [
@@ -1936,18 +1941,20 @@
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "candidateSuite": "retrieval",
       "source": "ui/product.js:670-780",
-      "implementedBy": "knowledge-scopes-test.js",
-      "note": "断言范围与记忆存储；未断言手动添加记忆",
+      "implementedBy": [
+        "shared-scope-root-binding-test.js"
+      ],
+      "note": "引擎侧已覆盖候选→确认与已确认记忆落盘；产品记忆面板 UI（addMemory/memoryContent/memoryTabs/memoryScopeFilter/candidateCount/memoryFeedback）在全部 156 个产品测试中零引用，\"POST 真实保存为 confirmed\"与\"刷新后保留\"无前端断言。",
       "verdict": "PARTIAL",
       "evidence": [
         {
-          "file": "knowledge-scopes-test.js",
+          "file": "shared-scope-root-binding-test.js",
           "result": {
             "status": "PASS",
             "exitCode": 0,
             "timedOut": false,
             "skipped": 0,
-            "durationMs": 461,
+            "durationMs": 2817,
             "at": "2026-10-21T14:35:26.576Z",
             "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
             "runId": "test-all-1792592987036"
@@ -1966,27 +1973,11 @@
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "candidateSuite": "retrieval",
       "source": "ui/product.js:670-780",
-      "implementedBy": "knowledge-scopes-test.js",
-      "note": "断言记忆范围；未断言候选与已确认分离",
-      "verdict": "PARTIAL",
-      "evidence": [
-        {
-          "file": "knowledge-scopes-test.js",
-          "result": {
-            "status": "PASS",
-            "exitCode": 0,
-            "timedOut": false,
-            "skipped": 0,
-            "durationMs": 461,
-            "at": "2026-10-21T14:35:26.576Z",
-            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-            "runId": "test-all-1792592987036"
-          }
-        }
-      ],
-      "executed": true,
-      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-      "runAt": "2026-10-21T14:35:26.576Z"
+      "implementedBy": [],
+      "note": "【无任何测试断言】引擎 create() 对空文本抛 INVALID_ARGUMENT（实现存在）；产品记忆面板 UI（addMemory/memoryContent/memoryTabs/memoryScopeFilter/candidateCount/memoryFeedback）在全部 156 个产品测试中零引用，\"前后端均拒绝、不出现空记忆\"无前端断言。",
+      "verdict": "NOT_COVERED",
+      "evidence": [],
+      "executed": true
     },
     {
       "id": "MEM-003",
@@ -1996,18 +1987,20 @@
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "candidateSuite": "retrieval",
       "source": "ui/product.js:670-780",
-      "implementedBy": "knowledge-scopes-test.js",
-      "note": "断言记忆作用域；未断言确认后生效",
+      "implementedBy": [
+        "shared-scope-root-binding-test.js"
+      ],
+      "note": "引擎侧已有带 evidence 的 candidate 记录样例；产品记忆面板 UI（addMemory/memoryContent/memoryTabs/memoryScopeFilter/candidateCount/memoryFeedback）在全部 156 个产品测试中零引用，\"仍为 candidate、不能注入长期任务偏好\"未被断言。",
       "verdict": "PARTIAL",
       "evidence": [
         {
-          "file": "knowledge-scopes-test.js",
+          "file": "shared-scope-root-binding-test.js",
           "result": {
             "status": "PASS",
             "exitCode": 0,
             "timedOut": false,
             "skipped": 0,
-            "durationMs": 461,
+            "durationMs": 2817,
             "at": "2026-10-21T14:35:26.576Z",
             "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
             "runId": "test-all-1792592987036"
@@ -2026,27 +2019,11 @@
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "candidateSuite": "retrieval",
       "source": "ui/product.js:670-780",
-      "implementedBy": "knowledge-scopes-test.js",
-      "note": "断言记忆隔离；未断言项目间不泄漏",
-      "verdict": "PARTIAL",
-      "evidence": [
-        {
-          "file": "knowledge-scopes-test.js",
-          "result": {
-            "status": "PASS",
-            "exitCode": 0,
-            "timedOut": false,
-            "skipped": 0,
-            "durationMs": 461,
-            "at": "2026-10-21T14:35:26.576Z",
-            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-            "runId": "test-all-1792592987036"
-          }
-        }
-      ],
-      "executed": true,
-      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-      "runAt": "2026-10-21T14:35:26.576Z"
+      "implementedBy": [],
+      "note": "【无任何测试断言】引擎 update() 的 scopeType/scopeId 校验存在；产品记忆面板 UI（addMemory/memoryContent/memoryTabs/memoryScopeFilter/candidateCount/memoryFeedback）在全部 156 个产品测试中零引用，\"scopeId 与 scopeType 匹配、只影响指定范围\"未被断言。",
+      "verdict": "NOT_COVERED",
+      "evidence": [],
+      "executed": true
     },
     {
       "id": "MEM-005",
@@ -2056,27 +2033,11 @@
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "candidateSuite": "retrieval",
       "source": "ui/product.js:670-780",
-      "implementedBy": "knowledge-scopes-test.js",
-      "note": "断言记忆范围；未断言指纹与去重",
-      "verdict": "PARTIAL",
-      "evidence": [
-        {
-          "file": "knowledge-scopes-test.js",
-          "result": {
-            "status": "PASS",
-            "exitCode": 0,
-            "timedOut": false,
-            "skipped": 0,
-            "durationMs": 461,
-            "at": "2026-10-21T14:35:26.576Z",
-            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-            "runId": "test-all-1792592987036"
-          }
-        }
-      ],
-      "executed": true,
-      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-      "runAt": "2026-10-21T14:35:26.576Z"
+      "implementedBy": [],
+      "note": "【无任何测试断言】引擎 update() 允许 ignored 且忽略后不可再改（409）；产品记忆面板 UI（addMemory/memoryContent/memoryTabs/memoryScopeFilter/candidateCount/memoryFeedback）在全部 156 个产品测试中零引用，\"状态 ignored、来源冻结记录不篡改\"未被断言。",
+      "verdict": "NOT_COVERED",
+      "evidence": [],
+      "executed": true
     },
     {
       "id": "MEM-006",
@@ -2086,27 +2047,11 @@
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "candidateSuite": "retrieval",
       "source": "ui/product.js:670-780",
-      "implementedBy": "knowledge-scopes-test.js",
-      "note": "断言记忆持久；未断言更新后检索命中",
-      "verdict": "PARTIAL",
-      "evidence": [
-        {
-          "file": "knowledge-scopes-test.js",
-          "result": {
-            "status": "PASS",
-            "exitCode": 0,
-            "timedOut": false,
-            "skipped": 0,
-            "durationMs": 461,
-            "at": "2026-10-21T14:35:26.576Z",
-            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-            "runId": "test-all-1792592987036"
-          }
-        }
-      ],
-      "executed": true,
-      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-      "runAt": "2026-10-21T14:35:26.576Z"
+      "implementedBy": [],
+      "note": "【无任何测试断言】引擎 project() 会给出 syncStatus pending；产品记忆面板 UI（addMemory/memoryContent/memoryTabs/memoryScopeFilter/candidateCount/memoryFeedback）在全部 156 个产品测试中零引用，\"sync pending 真实显示、未同步内容不注入任务\"未被断言。",
+      "verdict": "NOT_COVERED",
+      "evidence": [],
+      "executed": true
     },
     {
       "id": "MEM-007",
@@ -2116,27 +2061,11 @@
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "candidateSuite": "retrieval",
       "source": "ui/product.js:670-780",
-      "implementedBy": "knowledge-scopes-test.js",
-      "note": "断言记忆读取；未断言删除与来源标记",
-      "verdict": "PARTIAL",
-      "evidence": [
-        {
-          "file": "knowledge-scopes-test.js",
-          "result": {
-            "status": "PASS",
-            "exitCode": 0,
-            "timedOut": false,
-            "skipped": 0,
-            "durationMs": 461,
-            "at": "2026-10-21T14:35:26.576Z",
-            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-            "runId": "test-all-1792592987036"
-          }
-        }
-      ],
-      "executed": true,
-      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-      "runAt": "2026-10-21T14:35:26.576Z"
+      "implementedBy": [],
+      "note": "【无任何测试断言】引擎 capture() 记录 evidence（projectId/commitSha/runId/entryId/quote）；产品记忆面板 UI（addMemory/memoryContent/memoryTabs/memoryScopeFilter/candidateCount/memoryFeedback）在全部 156 个产品测试中零引用，prepared/output/delivery/actual-use 四层证据区分未被断言。",
+      "verdict": "NOT_COVERED",
+      "evidence": [],
+      "executed": true
     },
     {
       "id": "MEM-008",
@@ -2146,27 +2075,11 @@
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "candidateSuite": "retrieval",
       "source": "ui/product.js:670-780",
-      "implementedBy": "knowledge-scopes-test.js",
-      "note": "断言记忆范围与归属；未断言维护/委派不自动成为人类偏好",
-      "verdict": "PARTIAL",
-      "evidence": [
-        {
-          "file": "knowledge-scopes-test.js",
-          "result": {
-            "status": "PASS",
-            "exitCode": 0,
-            "timedOut": false,
-            "skipped": 0,
-            "durationMs": 461,
-            "at": "2026-10-21T14:35:26.576Z",
-            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-            "runId": "test-all-1792592987036"
-          }
-        }
-      ],
-      "executed": true,
-      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-      "runAt": "2026-10-21T14:35:26.576Z"
+      "implementedBy": [],
+      "note": "【无任何测试断言】引擎 create() 只接受 text/brainId/scopeType/scopeId（不能指定来源证据），store 校验 manual 记录 evidence 必须为 null；产品记忆面板 UI（addMemory/memoryContent/memoryTabs/memoryScopeFilter/candidateCount/memoryFeedback）在全部 156 个产品测试中零引用，\"不得自动当作人类长期偏好、C01 未解决项明确阻断\"未被断言。",
+      "verdict": "NOT_COVERED",
+      "evidence": [],
+      "executed": true
     },
     {
       "id": "CAP-001",
@@ -2236,188 +2149,10 @@
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "candidateSuite": "capture",
       "source": "ui/product.js:480-560; plugins/project-knowledge; 外部客户端逐项现场验证",
-      "implementedBy": "client-capture-restart-e2e-test.js",
-      "note": "断言客户端采集与 codex 游标；未断言跨项目归属",
-      "verdict": "PARTIAL",
-      "evidence": [
-        {
-          "file": "client-capture-restart-e2e-test.js",
-          "result": {
-            "status": "PASS",
-            "exitCode": 0,
-            "timedOut": false,
-            "skipped": 0,
-            "durationMs": 1849,
-            "at": "2026-10-21T14:35:26.576Z",
-            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-            "runId": "test-all-1792592987036"
-          }
-        }
+      "implementedBy": [
+        "native-context-integrations-test.js"
       ],
-      "executed": true,
-      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-      "runAt": "2026-10-21T14:35:26.576Z"
-    },
-    {
-      "id": "CAP-004",
-      "module": "外部Agent集成",
-      "title": "原生OpenCode",
-      "priority": "P1",
-      "mode": "SOURCE_GUIDED_PROCEDURE",
-      "candidateSuite": "capture",
-      "source": "ui/product.js:480-560; plugins/project-knowledge; 外部客户端逐项现场验证",
-      "implementedBy": "integration-capture-setup-test.js",
-      "note": "断言安装冲突被拒、第三方 Hook 保持、不覆盖未知命令",
-      "verdict": "COVERED",
-      "evidence": [
-        {
-          "file": "integration-capture-setup-test.js",
-          "result": {
-            "status": "PASS",
-            "exitCode": 0,
-            "timedOut": false,
-            "skipped": 0,
-            "durationMs": 1802,
-            "at": "2026-10-21T14:35:26.576Z",
-            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-            "runId": "test-all-1792592987036"
-          }
-        }
-      ],
-      "executed": true,
-      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-      "runAt": "2026-10-21T14:35:26.576Z"
-    },
-    {
-      "id": "CAP-005",
-      "module": "外部Agent集成",
-      "title": "原生ZCode",
-      "priority": "P1",
-      "mode": "SOURCE_GUIDED_PROCEDURE",
-      "candidateSuite": "capture",
-      "source": "ui/product.js:480-560; plugins/project-knowledge; 外部客户端逐项现场验证",
-      "implementedBy": "cross-repo-isolation-e2e-test.js",
-      "note": "断言跨仓库隔离与不产生新的 user_prompt",
-      "verdict": "COVERED",
-      "evidence": [
-        {
-          "file": "cross-repo-isolation-e2e-test.js",
-          "result": {
-            "status": "PASS",
-            "exitCode": 0,
-            "timedOut": false,
-            "skipped": 0,
-            "durationMs": 6306,
-            "at": "2026-10-21T14:35:26.576Z",
-            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-            "runId": "test-all-1792592987036"
-          }
-        }
-      ],
-      "executed": true,
-      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-      "runAt": "2026-10-21T14:35:26.576Z"
-    },
-    {
-      "id": "CAP-006",
-      "module": "外部Agent集成",
-      "title": "修复幂等",
-      "priority": "P1",
-      "mode": "SOURCE_GUIDED_PROCEDURE",
-      "candidateSuite": "capture",
-      "source": "ui/product.js:480-560; plugins/project-knowledge; 外部客户端逐项现场验证",
-      "implementedBy": "cross-repo-isolation-e2e-test.js",
-      "note": "断言隔离；未断言消费者 ACK 后的正确消费",
-      "verdict": "PARTIAL",
-      "evidence": [
-        {
-          "file": "cross-repo-isolation-e2e-test.js",
-          "result": {
-            "status": "PASS",
-            "exitCode": 0,
-            "timedOut": false,
-            "skipped": 0,
-            "durationMs": 6306,
-            "at": "2026-10-21T14:35:26.576Z",
-            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-            "runId": "test-all-1792592987036"
-          }
-        }
-      ],
-      "executed": true,
-      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-      "runAt": "2026-10-21T14:35:26.576Z"
-    },
-    {
-      "id": "CAP-007",
-      "module": "外部Agent集成",
-      "title": "移除保留",
-      "priority": "P1",
-      "mode": "SOURCE_GUIDED_PROCEDURE",
-      "candidateSuite": "capture",
-      "source": "ui/product.js:480-560; plugins/project-knowledge; 外部客户端逐项现场验证",
-      "implementedBy": "client-capture-restart-e2e-test.js",
-      "note": "断言重启后采集续接；未断言会话基线不被伪造",
-      "verdict": "PARTIAL",
-      "evidence": [
-        {
-          "file": "client-capture-restart-e2e-test.js",
-          "result": {
-            "status": "PASS",
-            "exitCode": 0,
-            "timedOut": false,
-            "skipped": 0,
-            "durationMs": 1849,
-            "at": "2026-10-21T14:35:26.576Z",
-            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-            "runId": "test-all-1792592987036"
-          }
-        }
-      ],
-      "executed": true,
-      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-      "runAt": "2026-10-21T14:35:26.576Z"
-    },
-    {
-      "id": "CAP-008",
-      "module": "外部Agent集成",
-      "title": "跨仓隔离",
-      "priority": "P0",
-      "mode": "SOURCE_GUIDED_PROCEDURE",
-      "candidateSuite": "capture",
-      "source": "ui/product.js:480-560; plugins/project-knowledge; 外部客户端逐项现场验证",
-      "implementedBy": "integration-capture-setup-test.js",
-      "note": "断言安装与冲突；未断言修复后恢复",
-      "verdict": "PARTIAL",
-      "evidence": [
-        {
-          "file": "integration-capture-setup-test.js",
-          "result": {
-            "status": "PASS",
-            "exitCode": 0,
-            "timedOut": false,
-            "skipped": 0,
-            "durationMs": 1802,
-            "at": "2026-10-21T14:35:26.576Z",
-            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-            "runId": "test-all-1792592987036"
-          }
-        }
-      ],
-      "executed": true,
-      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-      "runAt": "2026-10-21T14:35:26.576Z"
-    },
-    {
-      "id": "CAP-009",
-      "module": "外部Agent集成",
-      "title": "配置自动修复",
-      "priority": "P1",
-      "mode": "SOURCE_GUIDED_PROCEDURE",
-      "candidateSuite": "capture",
-      "source": "ui/product.js:480-560; plugins/project-knowledge; 外部客户端逐项现场验证",
-      "implementedBy": "native-context-integrations-test.js",
-      "note": "断言 UserPromptSubmit 钩子契约；未断言真实客户端逐项现场",
+      "note": "断言 Codex 原生采集链路的 UserPromptSubmit 契约与保留组元数据；\"保留第三方 notify 与用户信任、拒绝自动写 trust\"未逐项断言。",
       "verdict": "PARTIAL",
       "evidence": [
         {
@@ -2439,6 +2174,198 @@
       "runAt": "2026-10-21T14:35:26.576Z"
     },
     {
+      "id": "CAP-004",
+      "module": "外部Agent集成",
+      "title": "原生OpenCode",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "candidateSuite": "capture",
+      "source": "ui/product.js:480-560; plugins/project-knowledge; 外部客户端逐项现场验证",
+      "implementedBy": [
+        "native-context-integrations-test.js"
+      ],
+      "note": "断言检测到命令不等于已安装（installed/waiting-trust）；OpenCode 只报告实际支持能力未逐项断言。",
+      "verdict": "PARTIAL",
+      "evidence": [
+        {
+          "file": "native-context-integrations-test.js",
+          "result": {
+            "status": "PASS",
+            "exitCode": 0,
+            "timedOut": false,
+            "skipped": 0,
+            "durationMs": 311,
+            "at": "2026-10-21T14:35:26.576Z",
+            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
+            "runId": "test-all-1792592987036"
+          }
+        }
+      ],
+      "executed": true,
+      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
+      "runAt": "2026-10-21T14:35:26.576Z"
+    },
+    {
+      "id": "CAP-005",
+      "module": "外部Agent集成",
+      "title": "原生ZCode",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "candidateSuite": "capture",
+      "source": "ui/product.js:480-560; plugins/project-knowledge; 外部客户端逐项现场验证",
+      "implementedBy": [
+        "native-context-integrations-test.js"
+      ],
+      "note": "ZCode 采集链路在真实客户端上已实证（本会话 user_prompt 出现在开发库 journal），但无自动化断言。",
+      "verdict": "PARTIAL",
+      "evidence": [
+        {
+          "file": "native-context-integrations-test.js",
+          "result": {
+            "status": "PASS",
+            "exitCode": 0,
+            "timedOut": false,
+            "skipped": 0,
+            "durationMs": 311,
+            "at": "2026-10-21T14:35:26.576Z",
+            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
+            "runId": "test-all-1792592987036"
+          }
+        }
+      ],
+      "executed": true,
+      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
+      "runAt": "2026-10-21T14:35:26.576Z"
+    },
+    {
+      "id": "CAP-006",
+      "module": "外部Agent集成",
+      "title": "修复幂等",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "candidateSuite": "capture",
+      "source": "ui/product.js:480-560; plugins/project-knowledge; 外部客户端逐项现场验证",
+      "implementedBy": [
+        "integration-capture-setup-test.js"
+      ],
+      "note": "断言安装冲突被拒、第三方 Hook 字节保持；\"不叠加 Hook、不重复 notify wrapper、operationId 可追踪\"仅 operationId 部分被断言。",
+      "verdict": "PARTIAL",
+      "evidence": [
+        {
+          "file": "integration-capture-setup-test.js",
+          "result": {
+            "status": "PASS",
+            "exitCode": 0,
+            "timedOut": false,
+            "skipped": 0,
+            "durationMs": 1802,
+            "at": "2026-10-21T14:35:26.576Z",
+            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
+            "runId": "test-all-1792592987036"
+          }
+        }
+      ],
+      "executed": true,
+      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
+      "runAt": "2026-10-21T14:35:26.576Z"
+    },
+    {
+      "id": "CAP-007",
+      "module": "外部Agent集成",
+      "title": "移除保留",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "candidateSuite": "capture",
+      "source": "ui/product.js:480-560; plugins/project-knowledge; 外部客户端逐项现场验证",
+      "implementedBy": [
+        "integration-capture-setup-test.js"
+      ],
+      "note": "断言冲突不覆盖未知命令；\"只撤托管项、第三方与历史记录保留\"未逐项断言。",
+      "verdict": "PARTIAL",
+      "evidence": [
+        {
+          "file": "integration-capture-setup-test.js",
+          "result": {
+            "status": "PASS",
+            "exitCode": 0,
+            "timedOut": false,
+            "skipped": 0,
+            "durationMs": 1802,
+            "at": "2026-10-21T14:35:26.576Z",
+            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
+            "runId": "test-all-1792592987036"
+          }
+        }
+      ],
+      "executed": true,
+      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
+      "runAt": "2026-10-21T14:35:26.576Z"
+    },
+    {
+      "id": "CAP-008",
+      "module": "外部Agent集成",
+      "title": "跨仓隔离",
+      "priority": "P0",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "candidateSuite": "capture",
+      "source": "ui/product.js:480-560; plugins/project-knowledge; 外部客户端逐项现场验证",
+      "implementedBy": [
+        "cross-repo-isolation-e2e-test.js"
+      ],
+      "note": "断言跨仓库隔离：以 canonical 身份区分，不串对话与 Commit。",
+      "verdict": "COVERED",
+      "evidence": [
+        {
+          "file": "cross-repo-isolation-e2e-test.js",
+          "result": {
+            "status": "PASS",
+            "exitCode": 0,
+            "timedOut": false,
+            "skipped": 0,
+            "durationMs": 6306,
+            "at": "2026-10-21T14:35:26.576Z",
+            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
+            "runId": "test-all-1792592987036"
+          }
+        }
+      ],
+      "executed": true,
+      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
+      "runAt": "2026-10-21T14:35:26.576Z"
+    },
+    {
+      "id": "CAP-009",
+      "module": "外部Agent集成",
+      "title": "配置自动修复",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "candidateSuite": "capture",
+      "source": "ui/product.js:480-560; plugins/project-knowledge; 外部客户端逐项现场验证",
+      "implementedBy": [
+        "integration-capture-setup-test.js"
+      ],
+      "note": "断言未知命令冲突被阻断而非覆盖；\"仅修复曾授权托管部分\"未断言。",
+      "verdict": "PARTIAL",
+      "evidence": [
+        {
+          "file": "integration-capture-setup-test.js",
+          "result": {
+            "status": "PASS",
+            "exitCode": 0,
+            "timedOut": false,
+            "skipped": 0,
+            "durationMs": 1802,
+            "at": "2026-10-21T14:35:26.576Z",
+            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
+            "runId": "test-all-1792592987036"
+          }
+        }
+      ],
+      "executed": true,
+      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
+      "runAt": "2026-10-21T14:35:26.576Z"
+    },
+    {
       "id": "CAP-010",
       "module": "外部Agent集成",
       "title": "真实送达",
@@ -2446,18 +2373,20 @@
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "candidateSuite": "capture",
       "source": "ui/product.js:480-560; plugins/project-knowledge; 外部客户端逐项现场验证",
-      "implementedBy": "conversation-origin-test.js",
-      "note": "断言来源判定；未断言长期偏好只来自确认",
+      "implementedBy": [
+        "client-capture-restart-e2e-test.js"
+      ],
+      "note": "断言客户端采集重启后续接与 codex 游标；\"单凭 Hook 日志或 output 事件不足以声明送达\"未被断言。",
       "verdict": "PARTIAL",
       "evidence": [
         {
-          "file": "conversation-origin-test.js",
+          "file": "client-capture-restart-e2e-test.js",
           "result": {
             "status": "PASS",
             "exitCode": 0,
             "timedOut": false,
             "skipped": 0,
-            "durationMs": 87,
+            "durationMs": 1849,
             "at": "2026-10-21T14:35:26.576Z",
             "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
             "runId": "test-all-1792592987036"
@@ -2476,38 +2405,10 @@
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "candidateSuite": "logging",
       "source": "ui/product.js:535-580,710-745; logging API原生tests",
-      "implementedBy": "log-redaction-test.js",
-      "note": "断言日志脱敏；未断言导出脱敏",
-      "verdict": "PARTIAL",
-      "evidence": [
-        {
-          "file": "log-redaction-test.js",
-          "result": {
-            "status": "PASS",
-            "exitCode": 0,
-            "timedOut": false,
-            "skipped": 0,
-            "durationMs": 96,
-            "at": "2026-10-21T14:35:26.576Z",
-            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-            "runId": "test-all-1792592987036"
-          }
-        }
+      "implementedBy": [
+        "logging-api-test.js"
       ],
-      "executed": true,
-      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-      "runAt": "2026-10-21T14:35:26.576Z"
-    },
-    {
-      "id": "LOG-002",
-      "module": "活动与诊断",
-      "title": "失败重试状态",
-      "priority": "P1",
-      "mode": "SOURCE_GUIDED_PROCEDURE",
-      "candidateSuite": "logging",
-      "source": "ui/product.js:535-580,710-745; logging API原生tests",
-      "implementedBy": "logging-api-test.js",
-      "note": "断言日志 API；未断言游标分页",
+      "note": "API 层断言了今日查询默认 500 条、展示上限 5000、跨项目按时间 k-way 合并；\"按游标稳定分页\"与\"打开详情不被刷新重置\"未断言。",
       "verdict": "PARTIAL",
       "evidence": [
         {
@@ -2529,6 +2430,52 @@
       "runAt": "2026-10-21T14:35:26.576Z"
     },
     {
+      "id": "LOG-002",
+      "module": "活动与诊断",
+      "title": "失败重试状态",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "candidateSuite": "logging",
+      "source": "ui/product.js:535-580,710-745; logging API原生tests",
+      "implementedBy": [
+        "product-progress-status-test.js",
+        "product-diagnostics-ui-test.js"
+      ],
+      "note": "断言\"提交事件消费受阻\"文案与 offline cannot masquerade as empty/success，真实原因与成功状态被区分。",
+      "verdict": "COVERED",
+      "evidence": [
+        {
+          "file": "product-progress-status-test.js",
+          "result": {
+            "status": "PASS",
+            "exitCode": 0,
+            "timedOut": false,
+            "skipped": 0,
+            "durationMs": 3676,
+            "at": "2026-10-21T14:35:26.576Z",
+            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
+            "runId": "test-all-1792592987036"
+          }
+        },
+        {
+          "file": "product-diagnostics-ui-test.js",
+          "result": {
+            "status": "PASS",
+            "exitCode": 0,
+            "timedOut": false,
+            "skipped": 0,
+            "durationMs": 7008,
+            "at": "2026-10-21T14:35:26.576Z",
+            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
+            "runId": "test-all-1792592987036"
+          }
+        }
+      ],
+      "executed": true,
+      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
+      "runAt": "2026-10-21T14:35:26.576Z"
+    },
+    {
       "id": "LOG-003",
       "module": "活动与诊断",
       "title": "日志查询",
@@ -2536,9 +2483,43 @@
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "candidateSuite": "logging",
       "source": "ui/product.js:535-580,710-745; logging API原生tests",
-      "implementedBy": "logging-sse-no-gap-test.js",
-      "note": "断言 SSE 无缺口；未断言不重复",
+      "implementedBy": [
+        "logging-api-test.js"
+      ],
+      "note": "断言旧 app/hooks 日志仍为只读查询源、跨项目查询按时间合并；\"不含其他项目敏感信息\"未断言。",
       "verdict": "PARTIAL",
+      "evidence": [
+        {
+          "file": "logging-api-test.js",
+          "result": {
+            "status": "PASS",
+            "exitCode": 0,
+            "timedOut": false,
+            "skipped": 0,
+            "durationMs": 146,
+            "at": "2026-10-21T14:35:26.576Z",
+            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
+            "runId": "test-all-1792592987036"
+          }
+        }
+      ],
+      "executed": true,
+      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
+      "runAt": "2026-10-21T14:35:26.576Z"
+    },
+    {
+      "id": "LOG-004",
+      "module": "活动与诊断",
+      "title": "日志实时续接",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "candidateSuite": "logging",
+      "source": "ui/product.js:535-580,710-745; logging API原生tests",
+      "implementedBy": [
+        "logging-sse-no-gap-test.js"
+      ],
+      "note": "断言 GET 到 SSE 的交接按 id 精确重放每条持久化缺口记录（不丢失不重复）；\"关闭弹窗断开流\"未断言。",
+      "verdict": "COVERED",
       "evidence": [
         {
           "file": "logging-sse-no-gap-test.js",
@@ -2559,36 +2540,6 @@
       "runAt": "2026-10-21T14:35:26.576Z"
     },
     {
-      "id": "LOG-004",
-      "module": "活动与诊断",
-      "title": "日志实时续接",
-      "priority": "P1",
-      "mode": "SOURCE_GUIDED_PROCEDURE",
-      "candidateSuite": "logging",
-      "source": "ui/product.js:535-580,710-745; logging API原生tests",
-      "implementedBy": "product-diagnostics-ui-test.js",
-      "note": "断言诊断 UI 不成为另一个主产品；未断言查看器与筛选",
-      "verdict": "PARTIAL",
-      "evidence": [
-        {
-          "file": "product-diagnostics-ui-test.js",
-          "result": {
-            "status": "PASS",
-            "exitCode": 0,
-            "timedOut": false,
-            "skipped": 0,
-            "durationMs": 7008,
-            "at": "2026-10-21T14:35:26.576Z",
-            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-            "runId": "test-all-1792592987036"
-          }
-        }
-      ],
-      "executed": true,
-      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-      "runAt": "2026-10-21T14:35:26.576Z"
-    },
-    {
       "id": "LOG-005",
       "module": "活动与诊断",
       "title": "日志上限",
@@ -2596,27 +2547,11 @@
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "candidateSuite": "logging",
       "source": "ui/product.js:535-580,710-745; logging API原生tests",
-      "implementedBy": "logging-api-test.js",
-      "note": "断言日志查询；未断言操作流与结构化错误详情",
-      "verdict": "PARTIAL",
-      "evidence": [
-        {
-          "file": "logging-api-test.js",
-          "result": {
-            "status": "PASS",
-            "exitCode": 0,
-            "timedOut": false,
-            "skipped": 0,
-            "durationMs": 146,
-            "at": "2026-10-21T14:35:26.576Z",
-            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-            "runId": "test-all-1792592987036"
-          }
-        }
-      ],
-      "executed": true,
-      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-      "runAt": "2026-10-21T14:35:26.576Z"
+      "implementedBy": [],
+      "note": "【无任何测试断言】API 有 5000 条展示上限；\"当前界面保持有界节点、历史仍可查询而非静默永久丢失\"未被断言。",
+      "verdict": "NOT_COVERED",
+      "evidence": [],
+      "executed": true
     },
     {
       "id": "LOG-006",
@@ -2626,8 +2561,10 @@
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "candidateSuite": "logging",
       "source": "ui/product.js:535-580,710-745; logging API原生tests",
-      "implementedBy": "log-redaction-test.js",
-      "note": "断言脱敏；未断言错误栈中的凭据",
+      "implementedBy": [
+        "log-redaction-test.js"
+      ],
+      "note": "断言写入时与查询时均对当前配置密钥脱敏；\"导出脱敏\"未被断言。",
       "verdict": "PARTIAL",
       "evidence": [
         {
@@ -2656,8 +2593,10 @@
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "candidateSuite": "logging",
       "source": "ui/product.js:535-580,710-745; logging API原生tests",
-      "implementedBy": "product-diagnostics-ui-test.js",
-      "note": "断言诊断惰性；未断言实时流",
+      "implementedBy": [
+        "product-diagnostics-ui-test.js"
+      ],
+      "note": "诊断 UI 有 DOM 级断言（#logsDialog 不含外部 img/script、window.__xss 注入被拦）；\"API 支持不等于 UI 已提供控件\"的 README↔DOM 差异核对未做。",
       "verdict": "PARTIAL",
       "evidence": [
         {
@@ -2686,18 +2625,20 @@
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "candidateSuite": "logging",
       "source": "ui/product.js:535-580,710-745; logging API原生tests",
-      "implementedBy": "logging-sse-no-gap-test.js",
-      "note": "断言流式无缺口；未断言容量与保留策略",
+      "implementedBy": [
+        "product-diagnostics-ui-test.js"
+      ],
+      "note": "断言 offline 不能伪装成空/成功；\"不能生成空文件冒充成功导出\"未被断言。",
       "verdict": "PARTIAL",
       "evidence": [
         {
-          "file": "logging-sse-no-gap-test.js",
+          "file": "product-diagnostics-ui-test.js",
           "result": {
             "status": "PASS",
             "exitCode": 0,
             "timedOut": false,
             "skipped": 0,
-            "durationMs": 1839,
+            "durationMs": 7008,
             "at": "2026-10-21T14:35:26.576Z",
             "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
             "runId": "test-all-1792592987036"
@@ -2716,18 +2657,20 @@
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "candidateSuite": "lifecycle",
       "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
-      "implementedBy": "cli-instance-management-test.js",
-      "note": "断言实例身份校验；未断言多实例隔离",
+      "implementedBy": [
+        "module-process-lifecycle-test.js"
+      ],
+      "note": "模块进程生命周期有断言；\"端口在线不等于全部模块就绪\"未针对四模块整体断言。",
       "verdict": "PARTIAL",
       "evidence": [
         {
-          "file": "cli-instance-management-test.js",
+          "file": "module-process-lifecycle-test.js",
           "result": {
             "status": "PASS",
             "exitCode": 0,
             "timedOut": false,
             "skipped": 0,
-            "durationMs": 10111,
+            "durationMs": 307,
             "at": "2026-10-21T14:35:26.576Z",
             "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
             "runId": "test-all-1792592987036"
@@ -2746,18 +2689,20 @@
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "candidateSuite": "lifecycle",
       "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
-      "implementedBy": "module-process-lifecycle-test.js",
-      "note": "断言模块进程生命周期；未断言停止后端不误杀他人进程",
+      "implementedBy": [
+        "claude-workbench-test.js"
+      ],
+      "note": "断言切换 profile 会重置上游会话并更新 aiProfileId/model；\"后台默认模型不随临时聊天选择变化\"未断言。",
       "verdict": "PARTIAL",
       "evidence": [
         {
-          "file": "module-process-lifecycle-test.js",
+          "file": "claude-workbench-test.js",
           "result": {
             "status": "PASS",
             "exitCode": 0,
             "timedOut": false,
             "skipped": 0,
-            "durationMs": 307,
+            "durationMs": 516,
             "at": "2026-10-21T14:35:26.576Z",
             "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
             "runId": "test-all-1792592987036"
@@ -2776,27 +2721,43 @@
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "candidateSuite": "lifecycle",
       "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
-      "implementedBy": "module-dynamic-port-test.js",
-      "note": "断言动态端口与占用后退避，不把占用端口误读为模块",
+      "implementedBy": [
+        "qa-autopilot:sensitive environment not inherited",
+        "qa-autopilot:redaction"
+      ],
+      "note": "自检断言敏感环境变量不继承、日志写入前脱敏。",
       "verdict": "COVERED",
       "evidence": [
         {
-          "file": "module-dynamic-port-test.js",
+          "file": "qa-autopilot:sensitive environment not inherited",
           "result": {
             "status": "PASS",
             "exitCode": 0,
             "timedOut": false,
             "skipped": 0,
-            "durationMs": 213,
-            "at": "2026-10-21T14:35:26.576Z",
-            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-            "runId": "test-all-1792592987036"
+            "durationMs": 0,
+            "at": "2026-10-21T15:48:27.726Z",
+            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\qa-selftest-2026-10-21T15-48-25-017Z\\receipt.json",
+            "runId": "qa-selftest-2026-10-21T15-48-25-017Z"
+          }
+        },
+        {
+          "file": "qa-autopilot:redaction",
+          "result": {
+            "status": "PASS",
+            "exitCode": 0,
+            "timedOut": false,
+            "skipped": 0,
+            "durationMs": 0,
+            "at": "2026-10-21T15:48:27.726Z",
+            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\qa-selftest-2026-10-21T15-48-25-017Z\\receipt.json",
+            "runId": "qa-selftest-2026-10-21T15-48-25-017Z"
           }
         }
       ],
       "executed": true,
-      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-      "runAt": "2026-10-21T14:35:26.576Z"
+      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\qa-selftest-2026-10-21T15-48-25-017Z\\receipt.json",
+      "runAt": "2026-10-21T15:48:27.726Z"
     },
     {
       "id": "SYS-004",
@@ -2806,18 +2767,20 @@
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "candidateSuite": "lifecycle",
       "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
-      "implementedBy": "test-server-module-isolation-test.js",
-      "note": "断言测试服务器与模块隔离；未断言端口选择不撞生产端口",
-      "verdict": "PARTIAL",
+      "implementedBy": [
+        "shared-scope-root-binding-test.js"
+      ],
+      "note": "断言切换知识根不移动既有项目知识路径、旧共享目录绑定保留（IMMUTABLE_FIELD 拒绝隐式移动）。",
+      "verdict": "COVERED",
       "evidence": [
         {
-          "file": "test-server-module-isolation-test.js",
+          "file": "shared-scope-root-binding-test.js",
           "result": {
             "status": "PASS",
             "exitCode": 0,
             "timedOut": false,
             "skipped": 0,
-            "durationMs": 69,
+            "durationMs": 2817,
             "at": "2026-10-21T14:35:26.576Z",
             "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
             "runId": "test-all-1792592987036"
@@ -2836,18 +2799,34 @@
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "candidateSuite": "lifecycle",
       "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
-      "implementedBy": "cli-instance-management-test.js",
-      "note": "断言 CLI 实例管理；未断言旧端点拒绝",
-      "verdict": "PARTIAL",
+      "implementedBy": [
+        "module-dynamic-port-test.js",
+        "bin-cli-test.js"
+      ],
+      "note": "断言端口被占用时按实际协议后移、占用端口不被误读为模块；Hook 使用记录端点而非写死端口。",
+      "verdict": "COVERED",
       "evidence": [
         {
-          "file": "cli-instance-management-test.js",
+          "file": "module-dynamic-port-test.js",
           "result": {
             "status": "PASS",
             "exitCode": 0,
             "timedOut": false,
             "skipped": 0,
-            "durationMs": 10111,
+            "durationMs": 213,
+            "at": "2026-10-21T14:35:26.576Z",
+            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
+            "runId": "test-all-1792592987036"
+          }
+        },
+        {
+          "file": "bin-cli-test.js",
+          "result": {
+            "status": "PASS",
+            "exitCode": 0,
+            "timedOut": false,
+            "skipped": 0,
+            "durationMs": 2785,
             "at": "2026-10-21T14:35:26.576Z",
             "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
             "runId": "test-all-1792592987036"
@@ -2866,18 +2845,20 @@
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "candidateSuite": "lifecycle",
       "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
-      "implementedBy": "module-process-lifecycle-test.js",
-      "note": "断言进程守护；未断言异常退出诊断",
+      "implementedBy": [
+        "project-remove-running-guard-test.js"
+      ],
+      "note": "断言 PROJECT_BUSY 阻断删除/解绑、Hook 失败保留登记；\"只停验证过的目标、独立模块与其他实例保持\"未断言。",
       "verdict": "PARTIAL",
       "evidence": [
         {
-          "file": "module-process-lifecycle-test.js",
+          "file": "project-remove-running-guard-test.js",
           "result": {
             "status": "PASS",
             "exitCode": 0,
             "timedOut": false,
             "skipped": 0,
-            "durationMs": 307,
+            "durationMs": 1935,
             "at": "2026-10-21T14:35:26.576Z",
             "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
             "runId": "test-all-1792592987036"
@@ -2896,18 +2877,20 @@
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "candidateSuite": "lifecycle",
       "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
-      "implementedBy": "cli-instance-management-test.js",
-      "note": "断言启停；未断言版本不匹配拒绝启动第二后台",
-      "verdict": "PARTIAL",
+      "implementedBy": [
+        "server-security-test.js"
+      ],
+      "note": "断言非 loopback 无令牌失败、未列入的 Origin 失败、允许来源为显式白名单。",
+      "verdict": "COVERED",
       "evidence": [
         {
-          "file": "cli-instance-management-test.js",
+          "file": "server-security-test.js",
           "result": {
             "status": "PASS",
             "exitCode": 0,
             "timedOut": false,
             "skipped": 0,
-            "durationMs": 10111,
+            "durationMs": 2043,
             "at": "2026-10-21T14:35:26.576Z",
             "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
             "runId": "test-all-1792592987036"
@@ -2926,18 +2909,20 @@
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "candidateSuite": "lifecycle",
       "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
-      "implementedBy": "module-dynamic-port-test.js",
-      "note": "断言端口分配；未断言终端默认端口不被误读",
+      "implementedBy": [
+        "server-security-test.js"
+      ],
+      "note": "安全边界有断言；\"返回确定错误不崩溃、不写入非目标目录\"未断言。",
       "verdict": "PARTIAL",
       "evidence": [
         {
-          "file": "module-dynamic-port-test.js",
+          "file": "server-security-test.js",
           "result": {
             "status": "PASS",
             "exitCode": 0,
             "timedOut": false,
             "skipped": 0,
-            "durationMs": 213,
+            "durationMs": 2043,
             "at": "2026-10-21T14:35:26.576Z",
             "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
             "runId": "test-all-1792592987036"
@@ -2956,27 +2941,11 @@
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "candidateSuite": "lifecycle",
       "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
-      "implementedBy": "workspace-ui-contract-test.js",
-      "note": "断言领域写入使前置读失效；未断言配置持久化",
-      "verdict": "PARTIAL",
-      "evidence": [
-        {
-          "file": "workspace-ui-contract-test.js",
-          "result": {
-            "status": "PASS",
-            "exitCode": 0,
-            "timedOut": false,
-            "skipped": 0,
-            "durationMs": 74,
-            "at": "2026-10-21T14:35:26.576Z",
-            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-            "runId": "test-all-1792592987036"
-          }
-        }
-      ],
-      "executed": true,
-      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-      "runAt": "2026-10-21T14:35:26.576Z"
+      "implementedBy": [],
+      "note": "【无任何测试断言】项目选择在初始注册表快照加载前保持禁用（workspace-ui-contract-test.js 有断言）；其余请求边界项无独立断言。",
+      "verdict": "NOT_COVERED",
+      "evidence": [],
+      "executed": true
     },
     {
       "id": "SYS-010",
@@ -2986,27 +2955,11 @@
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "candidateSuite": "lifecycle",
       "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
-      "implementedBy": "test-server-module-isolation-test.js",
-      "note": "断言隔离；未断言数据目录与知识根分离",
-      "verdict": "PARTIAL",
-      "evidence": [
-        {
-          "file": "test-server-module-isolation-test.js",
-          "result": {
-            "status": "PASS",
-            "exitCode": 0,
-            "timedOut": false,
-            "skipped": 0,
-            "durationMs": 69,
-            "at": "2026-10-21T14:35:26.576Z",
-            "receiptPath": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-            "runId": "test-all-1792592987036"
-          }
-        }
-      ],
-      "executed": true,
-      "receipt": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\artifacts\\test-all-1792592987036\\receipt.json",
-      "runAt": "2026-10-21T14:35:26.576Z"
+      "implementedBy": [],
+      "note": "【无任何测试断言】未找到直接对应断言；数据目录与知识根分离由 isolatedEnv 结构性保证，但无产品级断言。",
+      "verdict": "NOT_COVERED",
+      "evidence": [],
+      "executed": true
     },
     {
       "id": "QTA-001",
@@ -3827,8 +3780,8 @@
       "candidateSuite": "qa-autopilot npm test + 专用现场用例",
       "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
       "implementedBy": null,
-      "note": "超容量报警与停止新大任务的门禁在 lib/cleanupPlan 内，但自检无用例覆盖：缺口，需补一个自检用例。",
-      "verdict": "PARTIAL",
+      "note": "【无任何测试断言】超容量报警与停止新大任务的门禁在 lib/cleanupPlan 内，但自检无用例覆盖：缺口，需补一个自检用例。",
+      "verdict": "NOT_COVERED",
       "evidence": [],
       "executed": false
     },

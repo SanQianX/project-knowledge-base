@@ -317,44 +317,48 @@
       "note": "断言检索服务行为；未断言降级路径"
     },
     "MEM-001": {
-      "implementedBy": "knowledge-scopes-test.js",
+      "implementedBy": [
+        "shared-scope-root-binding-test.js"
+      ],
       "verdict": "PARTIAL",
-      "note": "断言范围与记忆存储；未断言手动添加记忆"
+      "note": "引擎侧已覆盖候选→确认与已确认记忆落盘；产品记忆面板 UI（addMemory/memoryContent/memoryTabs/memoryScopeFilter/candidateCount/memoryFeedback）在全部 156 个产品测试中零引用，\"POST 真实保存为 confirmed\"与\"刷新后保留\"无前端断言。"
     },
     "MEM-002": {
-      "implementedBy": "knowledge-scopes-test.js",
-      "verdict": "PARTIAL",
-      "note": "断言记忆范围；未断言候选与已确认分离"
+      "implementedBy": [],
+      "verdict": "NOT_COVERED",
+      "note": "【无任何测试断言】引擎 create() 对空文本抛 INVALID_ARGUMENT（实现存在）；产品记忆面板 UI（addMemory/memoryContent/memoryTabs/memoryScopeFilter/candidateCount/memoryFeedback）在全部 156 个产品测试中零引用，\"前后端均拒绝、不出现空记忆\"无前端断言。"
     },
     "MEM-003": {
-      "implementedBy": "knowledge-scopes-test.js",
+      "implementedBy": [
+        "shared-scope-root-binding-test.js"
+      ],
       "verdict": "PARTIAL",
-      "note": "断言记忆作用域；未断言确认后生效"
+      "note": "引擎侧已有带 evidence 的 candidate 记录样例；产品记忆面板 UI（addMemory/memoryContent/memoryTabs/memoryScopeFilter/candidateCount/memoryFeedback）在全部 156 个产品测试中零引用，\"仍为 candidate、不能注入长期任务偏好\"未被断言。"
     },
     "MEM-004": {
-      "implementedBy": "knowledge-scopes-test.js",
-      "verdict": "PARTIAL",
-      "note": "断言记忆隔离；未断言项目间不泄漏"
+      "implementedBy": [],
+      "verdict": "NOT_COVERED",
+      "note": "【无任何测试断言】引擎 update() 的 scopeType/scopeId 校验存在；产品记忆面板 UI（addMemory/memoryContent/memoryTabs/memoryScopeFilter/candidateCount/memoryFeedback）在全部 156 个产品测试中零引用，\"scopeId 与 scopeType 匹配、只影响指定范围\"未被断言。"
     },
     "MEM-005": {
-      "implementedBy": "knowledge-scopes-test.js",
-      "verdict": "PARTIAL",
-      "note": "断言记忆范围；未断言指纹与去重"
+      "implementedBy": [],
+      "verdict": "NOT_COVERED",
+      "note": "【无任何测试断言】引擎 update() 允许 ignored 且忽略后不可再改（409）；产品记忆面板 UI（addMemory/memoryContent/memoryTabs/memoryScopeFilter/candidateCount/memoryFeedback）在全部 156 个产品测试中零引用，\"状态 ignored、来源冻结记录不篡改\"未被断言。"
     },
     "MEM-006": {
-      "implementedBy": "knowledge-scopes-test.js",
-      "verdict": "PARTIAL",
-      "note": "断言记忆持久；未断言更新后检索命中"
+      "implementedBy": [],
+      "verdict": "NOT_COVERED",
+      "note": "【无任何测试断言】引擎 project() 会给出 syncStatus pending；产品记忆面板 UI（addMemory/memoryContent/memoryTabs/memoryScopeFilter/candidateCount/memoryFeedback）在全部 156 个产品测试中零引用，\"sync pending 真实显示、未同步内容不注入任务\"未被断言。"
     },
     "MEM-007": {
-      "implementedBy": "knowledge-scopes-test.js",
-      "verdict": "PARTIAL",
-      "note": "断言记忆读取；未断言删除与来源标记"
+      "implementedBy": [],
+      "verdict": "NOT_COVERED",
+      "note": "【无任何测试断言】引擎 capture() 记录 evidence（projectId/commitSha/runId/entryId/quote）；产品记忆面板 UI（addMemory/memoryContent/memoryTabs/memoryScopeFilter/candidateCount/memoryFeedback）在全部 156 个产品测试中零引用，prepared/output/delivery/actual-use 四层证据区分未被断言。"
     },
     "MEM-008": {
-      "implementedBy": "knowledge-scopes-test.js",
-      "verdict": "PARTIAL",
-      "note": "断言记忆范围与归属；未断言维护/委派不自动成为人类偏好"
+      "implementedBy": [],
+      "verdict": "NOT_COVERED",
+      "note": "【无任何测试断言】引擎 create() 只接受 text/brainId/scopeType/scopeId（不能指定来源证据），store 校验 manual 记录 evidence 必须为 null；产品记忆面板 UI（addMemory/memoryContent/memoryTabs/memoryScopeFilter/candidateCount/memoryFeedback）在全部 156 个产品测试中零引用，\"不得自动当作人类长期偏好、C01 未解决项明确阻断\"未被断言。"
     },
     "CAP-001": {
       "implementedBy": "native-context-integrations-test.js",
@@ -367,134 +371,183 @@
       "note": "断言会话来源区分；未断言仅新会话事件按真实 Git 目录归属"
     },
     "CAP-003": {
-      "implementedBy": "client-capture-restart-e2e-test.js",
+      "implementedBy": [
+        "native-context-integrations-test.js"
+      ],
       "verdict": "PARTIAL",
-      "note": "断言客户端采集与 codex 游标；未断言跨项目归属"
+      "note": "断言 Codex 原生采集链路的 UserPromptSubmit 契约与保留组元数据；\"保留第三方 notify 与用户信任、拒绝自动写 trust\"未逐项断言。"
     },
     "CAP-004": {
-      "implementedBy": "integration-capture-setup-test.js",
-      "verdict": "COVERED",
-      "note": "断言安装冲突被拒、第三方 Hook 保持、不覆盖未知命令"
+      "implementedBy": [
+        "native-context-integrations-test.js"
+      ],
+      "verdict": "PARTIAL",
+      "note": "断言检测到命令不等于已安装（installed/waiting-trust）；OpenCode 只报告实际支持能力未逐项断言。"
     },
     "CAP-005": {
-      "implementedBy": "cross-repo-isolation-e2e-test.js",
-      "verdict": "COVERED",
-      "note": "断言跨仓库隔离与不产生新的 user_prompt"
+      "implementedBy": [
+        "native-context-integrations-test.js"
+      ],
+      "verdict": "PARTIAL",
+      "note": "ZCode 采集链路在真实客户端上已实证（本会话 user_prompt 出现在开发库 journal），但无自动化断言。"
     },
     "CAP-006": {
-      "implementedBy": "cross-repo-isolation-e2e-test.js",
+      "implementedBy": [
+        "integration-capture-setup-test.js"
+      ],
       "verdict": "PARTIAL",
-      "note": "断言隔离；未断言消费者 ACK 后的正确消费"
+      "note": "断言安装冲突被拒、第三方 Hook 字节保持；\"不叠加 Hook、不重复 notify wrapper、operationId 可追踪\"仅 operationId 部分被断言。"
     },
     "CAP-007": {
-      "implementedBy": "client-capture-restart-e2e-test.js",
+      "implementedBy": [
+        "integration-capture-setup-test.js"
+      ],
       "verdict": "PARTIAL",
-      "note": "断言重启后采集续接；未断言会话基线不被伪造"
+      "note": "断言冲突不覆盖未知命令；\"只撤托管项、第三方与历史记录保留\"未逐项断言。"
     },
     "CAP-008": {
-      "implementedBy": "integration-capture-setup-test.js",
-      "verdict": "PARTIAL",
-      "note": "断言安装与冲突；未断言修复后恢复"
+      "implementedBy": [
+        "cross-repo-isolation-e2e-test.js"
+      ],
+      "verdict": "COVERED",
+      "note": "断言跨仓库隔离：以 canonical 身份区分，不串对话与 Commit。"
     },
     "CAP-009": {
-      "implementedBy": "native-context-integrations-test.js",
+      "implementedBy": [
+        "integration-capture-setup-test.js"
+      ],
       "verdict": "PARTIAL",
-      "note": "断言 UserPromptSubmit 钩子契约；未断言真实客户端逐项现场"
+      "note": "断言未知命令冲突被阻断而非覆盖；\"仅修复曾授权托管部分\"未断言。"
     },
     "CAP-010": {
-      "implementedBy": "conversation-origin-test.js",
+      "implementedBy": [
+        "client-capture-restart-e2e-test.js"
+      ],
       "verdict": "PARTIAL",
-      "note": "断言来源判定；未断言长期偏好只来自确认"
+      "note": "断言客户端采集重启后续接与 codex 游标；\"单凭 Hook 日志或 output 事件不足以声明送达\"未被断言。"
     },
     "LOG-001": {
-      "implementedBy": "log-redaction-test.js",
+      "implementedBy": [
+        "logging-api-test.js"
+      ],
       "verdict": "PARTIAL",
-      "note": "断言日志脱敏；未断言导出脱敏"
+      "note": "API 层断言了今日查询默认 500 条、展示上限 5000、跨项目按时间 k-way 合并；\"按游标稳定分页\"与\"打开详情不被刷新重置\"未断言。"
     },
     "LOG-002": {
-      "implementedBy": "logging-api-test.js",
-      "verdict": "PARTIAL",
-      "note": "断言日志 API；未断言游标分页"
+      "implementedBy": [
+        "product-progress-status-test.js",
+        "product-diagnostics-ui-test.js"
+      ],
+      "verdict": "COVERED",
+      "note": "断言\"提交事件消费受阻\"文案与 offline cannot masquerade as empty/success，真实原因与成功状态被区分。"
     },
     "LOG-003": {
-      "implementedBy": "logging-sse-no-gap-test.js",
+      "implementedBy": [
+        "logging-api-test.js"
+      ],
       "verdict": "PARTIAL",
-      "note": "断言 SSE 无缺口；未断言不重复"
+      "note": "断言旧 app/hooks 日志仍为只读查询源、跨项目查询按时间合并；\"不含其他项目敏感信息\"未断言。"
     },
     "LOG-004": {
-      "implementedBy": "product-diagnostics-ui-test.js",
-      "verdict": "PARTIAL",
-      "note": "断言诊断 UI 不成为另一个主产品；未断言查看器与筛选"
+      "implementedBy": [
+        "logging-sse-no-gap-test.js"
+      ],
+      "verdict": "COVERED",
+      "note": "断言 GET 到 SSE 的交接按 id 精确重放每条持久化缺口记录（不丢失不重复）；\"关闭弹窗断开流\"未断言。"
     },
     "LOG-005": {
-      "implementedBy": "logging-api-test.js",
-      "verdict": "PARTIAL",
-      "note": "断言日志查询；未断言操作流与结构化错误详情"
+      "implementedBy": [],
+      "verdict": "NOT_COVERED",
+      "note": "【无任何测试断言】API 有 5000 条展示上限；\"当前界面保持有界节点、历史仍可查询而非静默永久丢失\"未被断言。"
     },
     "LOG-006": {
-      "implementedBy": "log-redaction-test.js",
+      "implementedBy": [
+        "log-redaction-test.js"
+      ],
       "verdict": "PARTIAL",
-      "note": "断言脱敏；未断言错误栈中的凭据"
+      "note": "断言写入时与查询时均对当前配置密钥脱敏；\"导出脱敏\"未被断言。"
     },
     "LOG-007": {
-      "implementedBy": "product-diagnostics-ui-test.js",
+      "implementedBy": [
+        "product-diagnostics-ui-test.js"
+      ],
       "verdict": "PARTIAL",
-      "note": "断言诊断惰性；未断言实时流"
+      "note": "诊断 UI 有 DOM 级断言（#logsDialog 不含外部 img/script、window.__xss 注入被拦）；\"API 支持不等于 UI 已提供控件\"的 README↔DOM 差异核对未做。"
     },
     "LOG-008": {
-      "implementedBy": "logging-sse-no-gap-test.js",
+      "implementedBy": [
+        "product-diagnostics-ui-test.js"
+      ],
       "verdict": "PARTIAL",
-      "note": "断言流式无缺口；未断言容量与保留策略"
+      "note": "断言 offline 不能伪装成空/成功；\"不能生成空文件冒充成功导出\"未被断言。"
     },
     "SYS-001": {
-      "implementedBy": "cli-instance-management-test.js",
+      "implementedBy": [
+        "module-process-lifecycle-test.js"
+      ],
       "verdict": "PARTIAL",
-      "note": "断言实例身份校验；未断言多实例隔离"
+      "note": "模块进程生命周期有断言；\"端口在线不等于全部模块就绪\"未针对四模块整体断言。"
     },
     "SYS-002": {
-      "implementedBy": "module-process-lifecycle-test.js",
+      "implementedBy": [
+        "claude-workbench-test.js"
+      ],
       "verdict": "PARTIAL",
-      "note": "断言模块进程生命周期；未断言停止后端不误杀他人进程"
+      "note": "断言切换 profile 会重置上游会话并更新 aiProfileId/model；\"后台默认模型不随临时聊天选择变化\"未断言。"
     },
     "SYS-003": {
-      "implementedBy": "module-dynamic-port-test.js",
+      "implementedBy": [
+        "qa-autopilot:sensitive environment not inherited",
+        "qa-autopilot:redaction"
+      ],
       "verdict": "COVERED",
-      "note": "断言动态端口与占用后退避，不把占用端口误读为模块"
+      "note": "自检断言敏感环境变量不继承、日志写入前脱敏。"
     },
     "SYS-004": {
-      "implementedBy": "test-server-module-isolation-test.js",
-      "verdict": "PARTIAL",
-      "note": "断言测试服务器与模块隔离；未断言端口选择不撞生产端口"
+      "implementedBy": [
+        "shared-scope-root-binding-test.js"
+      ],
+      "verdict": "COVERED",
+      "note": "断言切换知识根不移动既有项目知识路径、旧共享目录绑定保留（IMMUTABLE_FIELD 拒绝隐式移动）。"
     },
     "SYS-005": {
-      "implementedBy": "cli-instance-management-test.js",
-      "verdict": "PARTIAL",
-      "note": "断言 CLI 实例管理；未断言旧端点拒绝"
+      "implementedBy": [
+        "module-dynamic-port-test.js",
+        "bin-cli-test.js"
+      ],
+      "verdict": "COVERED",
+      "note": "断言端口被占用时按实际协议后移、占用端口不被误读为模块；Hook 使用记录端点而非写死端口。"
     },
     "SYS-006": {
-      "implementedBy": "module-process-lifecycle-test.js",
+      "implementedBy": [
+        "project-remove-running-guard-test.js"
+      ],
       "verdict": "PARTIAL",
-      "note": "断言进程守护；未断言异常退出诊断"
+      "note": "断言 PROJECT_BUSY 阻断删除/解绑、Hook 失败保留登记；\"只停验证过的目标、独立模块与其他实例保持\"未断言。"
     },
     "SYS-007": {
-      "implementedBy": "cli-instance-management-test.js",
-      "verdict": "PARTIAL",
-      "note": "断言启停；未断言版本不匹配拒绝启动第二后台"
+      "implementedBy": [
+        "server-security-test.js"
+      ],
+      "verdict": "COVERED",
+      "note": "断言非 loopback 无令牌失败、未列入的 Origin 失败、允许来源为显式白名单。"
     },
     "SYS-008": {
-      "implementedBy": "module-dynamic-port-test.js",
+      "implementedBy": [
+        "server-security-test.js"
+      ],
       "verdict": "PARTIAL",
-      "note": "断言端口分配；未断言终端默认端口不被误读"
+      "note": "安全边界有断言；\"返回确定错误不崩溃、不写入非目标目录\"未断言。"
     },
     "SYS-009": {
-      "implementedBy": "workspace-ui-contract-test.js",
-      "verdict": "PARTIAL",
-      "note": "断言领域写入使前置读失效；未断言配置持久化"
+      "implementedBy": [],
+      "verdict": "NOT_COVERED",
+      "note": "【无任何测试断言】项目选择在初始注册表快照加载前保持禁用（workspace-ui-contract-test.js 有断言）；其余请求边界项无独立断言。"
     },
     "SYS-010": {
-      "implementedBy": "test-server-module-isolation-test.js",
-      "verdict": "PARTIAL",
-      "note": "断言隔离；未断言数据目录与知识根分离"
+      "implementedBy": [],
+      "verdict": "NOT_COVERED",
+      "note": "【无任何测试断言】未找到直接对应断言；数据目录与知识根分离由 isolatedEnv 结构性保证，但无产品级断言。"
     },
     "QTA-001": {
       "implementedBy": [
@@ -716,8 +769,8 @@
     },
     "CLN-005": {
       "implementedBy": null,
-      "verdict": "PARTIAL",
-      "note": "超容量报警与停止新大任务的门禁在 lib/cleanupPlan 内，但自检无用例覆盖：缺口，需补一个自检用例。"
+      "verdict": "NOT_COVERED",
+      "note": "【无任何测试断言】超容量报警与停止新大任务的门禁在 lib/cleanupPlan 内，但自检无用例覆盖：缺口，需补一个自检用例。"
     },
     "CLN-006": {
       "implementedBy": [

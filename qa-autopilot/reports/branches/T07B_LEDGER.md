@@ -1,34 +1,35 @@
 # T07B · 130 项测试规格执行台账
 
-- 生成时间：2026-10-21T15:50:11.095Z
+- 生成时间：2026-10-21T15:59:39.581Z
 - 规格总数：**130**
 
 ## 判定分布
 
 | 判定 | 数量 | 含义 |
 |---|---|---|
-| PARTIAL | 75 | 仅部分期望被覆盖 |
-| COVERED | 42 |  |
+| PARTIAL | 61 | 仅部分期望被覆盖 |
+| COVERED | 46 |  |
 | BLOCKED | 13 | 被门禁或能力阻断，无法执行 |
+| NOT_COVERED | 10 | 没有任何测试断言该规格的期望 |
 
 ## 按模块
 
-| 模块 | 规格数 | PARTIAL | COVERED | BLOCKED |
-|---|---|---|---|---|
-| 产品外壳 | 8 | 5 | 3 | 0 |
-| 项目与领域 | 12 | 4 | 8 | 0 |
-| 知识引擎与Git维护 | 12 | 10 | 2 | 0 |
-| Workbench真实对话 | 12 | 9 | 2 | 1 |
-| 右侧工作区 | 10 | 6 | 4 | 0 |
-| 知识检索与范围 | 8 | 7 | 1 | 0 |
-| 长期记忆 | 8 | 8 | 0 | 0 |
-| 外部Agent集成 | 10 | 8 | 2 | 0 |
-| 活动与诊断 | 8 | 8 | 0 | 0 |
-| 设置与生命周期 | 10 | 9 | 1 | 0 |
-| 额度与恢复 | 8 | 0 | 0 | 8 |
-| 版本和远程门禁 | 8 | 0 | 8 | 0 |
-| 候选发布和安装 | 8 | 0 | 4 | 4 |
-| 工程清理 | 8 | 1 | 7 | 0 |
+| 模块 | 规格数 | PARTIAL | COVERED | BLOCKED | NOT_COVERED |
+|---|---|---|---|---|---|
+| 产品外壳 | 8 | 5 | 3 | 0 | 0 |
+| 项目与领域 | 12 | 4 | 8 | 0 | 0 |
+| 知识引擎与Git维护 | 12 | 10 | 2 | 0 | 0 |
+| Workbench真实对话 | 12 | 9 | 2 | 1 | 0 |
+| 右侧工作区 | 10 | 6 | 4 | 0 | 0 |
+| 知识检索与范围 | 8 | 7 | 1 | 0 | 0 |
+| 长期记忆 | 8 | 2 | 0 | 0 | 6 |
+| 外部Agent集成 | 10 | 9 | 1 | 0 | 0 |
+| 活动与诊断 | 8 | 5 | 2 | 0 | 1 |
+| 设置与生命周期 | 10 | 4 | 4 | 0 | 2 |
+| 额度与恢复 | 8 | 0 | 0 | 8 | 0 |
+| 版本和远程门禁 | 8 | 0 | 8 | 0 | 0 |
+| 候选发布和安装 | 8 | 0 | 4 | 4 | 0 |
+| 工程清理 | 8 | 0 | 7 | 0 | 1 |
 
 ## 逐条明细
 
@@ -96,42 +97,42 @@
 | RET-006 | 知识检索与范围 | 索引根切换 | P1 | SOURCE_GUIDED_PROCEDURE | knowledge-query-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
 | RET-007 | 知识检索与范围 | 新提交检索一致 | P1 | SOURCE_GUIDED_PROCEDURE | knowledge-scopes-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
 | RET-008 | 知识检索与范围 | 检索负载 | P1 | SOURCE_GUIDED_PROCEDURE | knowledge-retrieval-service-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| MEM-001 | 长期记忆 | 手动添加 | P1 | SOURCE_GUIDED_PROCEDURE | knowledge-scopes-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| MEM-002 | 长期记忆 | 空白拒绝 | P1 | SOURCE_GUIDED_PROCEDURE | knowledge-scopes-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| MEM-003 | 长期记忆 | 候选保留 | P1 | SOURCE_GUIDED_PROCEDURE | knowledge-scopes-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| MEM-004 | 长期记忆 | 确认目标 | P1 | SOURCE_GUIDED_PROCEDURE | knowledge-scopes-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| MEM-005 | 长期记忆 | 忽略候选 | P1 | SOURCE_GUIDED_PROCEDURE | knowledge-scopes-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| MEM-006 | 长期记忆 | 同步失败 | P1 | SOURCE_GUIDED_PROCEDURE | knowledge-scopes-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| MEM-007 | 长期记忆 | 真实注入 | P1 | SOURCE_GUIDED_PROCEDURE | knowledge-scopes-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| MEM-008 | 长期记忆 | 来源边界 | P0 | SOURCE_GUIDED_PROCEDURE | knowledge-scopes-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
+| MEM-001 | 长期记忆 | 手动添加 | P1 | SOURCE_GUIDED_PROCEDURE | shared-scope-root-binding-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
+| MEM-002 | 长期记忆 | 空白拒绝 | P1 | SOURCE_GUIDED_PROCEDURE |  | **NOT_COVERED** | - |
+| MEM-003 | 长期记忆 | 候选保留 | P1 | SOURCE_GUIDED_PROCEDURE | shared-scope-root-binding-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
+| MEM-004 | 长期记忆 | 确认目标 | P1 | SOURCE_GUIDED_PROCEDURE |  | **NOT_COVERED** | - |
+| MEM-005 | 长期记忆 | 忽略候选 | P1 | SOURCE_GUIDED_PROCEDURE |  | **NOT_COVERED** | - |
+| MEM-006 | 长期记忆 | 同步失败 | P1 | SOURCE_GUIDED_PROCEDURE |  | **NOT_COVERED** | - |
+| MEM-007 | 长期记忆 | 真实注入 | P1 | SOURCE_GUIDED_PROCEDURE |  | **NOT_COVERED** | - |
+| MEM-008 | 长期记忆 | 来源边界 | P0 | SOURCE_GUIDED_PROCEDURE |  | **NOT_COVERED** | - |
 | CAP-001 | 外部Agent集成 | 三能力独立 | P1 | SOURCE_GUIDED_PROCEDURE | native-context-integrations-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
 | CAP-002 | 外部Agent集成 | 原生Claude采集 | P1 | SOURCE_GUIDED_PROCEDURE | conversation-origin-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| CAP-003 | 外部Agent集成 | 原生Codex采集 | P1 | SOURCE_GUIDED_PROCEDURE | client-capture-restart-e2e-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| CAP-004 | 外部Agent集成 | 原生OpenCode | P1 | SOURCE_GUIDED_PROCEDURE | integration-capture-setup-test.js | **COVERED** | 收据 test-all-1792592987036 |
-| CAP-005 | 外部Agent集成 | 原生ZCode | P1 | SOURCE_GUIDED_PROCEDURE | cross-repo-isolation-e2e-test.js | **COVERED** | 收据 test-all-1792592987036 |
-| CAP-006 | 外部Agent集成 | 修复幂等 | P1 | SOURCE_GUIDED_PROCEDURE | cross-repo-isolation-e2e-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| CAP-007 | 外部Agent集成 | 移除保留 | P1 | SOURCE_GUIDED_PROCEDURE | client-capture-restart-e2e-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| CAP-008 | 外部Agent集成 | 跨仓隔离 | P0 | SOURCE_GUIDED_PROCEDURE | integration-capture-setup-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| CAP-009 | 外部Agent集成 | 配置自动修复 | P1 | SOURCE_GUIDED_PROCEDURE | native-context-integrations-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| CAP-010 | 外部Agent集成 | 真实送达 | P1 | SOURCE_GUIDED_PROCEDURE | conversation-origin-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| LOG-001 | 活动与诊断 | 活动分页 | P1 | SOURCE_GUIDED_PROCEDURE | log-redaction-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| LOG-002 | 活动与诊断 | 失败重试状态 | P1 | SOURCE_GUIDED_PROCEDURE | logging-api-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| LOG-003 | 活动与诊断 | 日志查询 | P1 | SOURCE_GUIDED_PROCEDURE | logging-sse-no-gap-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| LOG-004 | 活动与诊断 | 日志实时续接 | P1 | SOURCE_GUIDED_PROCEDURE | product-diagnostics-ui-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| LOG-005 | 活动与诊断 | 日志上限 | P1 | SOURCE_GUIDED_PROCEDURE | logging-api-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
+| CAP-003 | 外部Agent集成 | 原生Codex采集 | P1 | SOURCE_GUIDED_PROCEDURE | native-context-integrations-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
+| CAP-004 | 外部Agent集成 | 原生OpenCode | P1 | SOURCE_GUIDED_PROCEDURE | native-context-integrations-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
+| CAP-005 | 外部Agent集成 | 原生ZCode | P1 | SOURCE_GUIDED_PROCEDURE | native-context-integrations-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
+| CAP-006 | 外部Agent集成 | 修复幂等 | P1 | SOURCE_GUIDED_PROCEDURE | integration-capture-setup-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
+| CAP-007 | 外部Agent集成 | 移除保留 | P1 | SOURCE_GUIDED_PROCEDURE | integration-capture-setup-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
+| CAP-008 | 外部Agent集成 | 跨仓隔离 | P0 | SOURCE_GUIDED_PROCEDURE | cross-repo-isolation-e2e-test.js | **COVERED** | 收据 test-all-1792592987036 |
+| CAP-009 | 外部Agent集成 | 配置自动修复 | P1 | SOURCE_GUIDED_PROCEDURE | integration-capture-setup-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
+| CAP-010 | 外部Agent集成 | 真实送达 | P1 | SOURCE_GUIDED_PROCEDURE | client-capture-restart-e2e-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
+| LOG-001 | 活动与诊断 | 活动分页 | P1 | SOURCE_GUIDED_PROCEDURE | logging-api-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
+| LOG-002 | 活动与诊断 | 失败重试状态 | P1 | SOURCE_GUIDED_PROCEDURE | product-progress-status-test.js, product-diagnostics-ui-test.js | **COVERED** | 收据 test-all-1792592987036 |
+| LOG-003 | 活动与诊断 | 日志查询 | P1 | SOURCE_GUIDED_PROCEDURE | logging-api-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
+| LOG-004 | 活动与诊断 | 日志实时续接 | P1 | SOURCE_GUIDED_PROCEDURE | logging-sse-no-gap-test.js | **COVERED** | 收据 test-all-1792592987036 |
+| LOG-005 | 活动与诊断 | 日志上限 | P1 | SOURCE_GUIDED_PROCEDURE |  | **NOT_COVERED** | - |
 | LOG-006 | 活动与诊断 | 导出脱敏 | P0 | SOURCE_GUIDED_PROCEDURE | log-redaction-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
 | LOG-007 | 活动与诊断 | 高级过滤核对 | P1 | SOURCE_GUIDED_PROCEDURE | product-diagnostics-ui-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| LOG-008 | 活动与诊断 | 网络失败反馈 | P1 | SOURCE_GUIDED_PROCEDURE | logging-sse-no-gap-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| SYS-001 | 设置与生命周期 | 四模块健康 | P1 | SOURCE_GUIDED_PROCEDURE | cli-instance-management-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| SYS-002 | 设置与生命周期 | 维护默认模型 | P1 | SOURCE_GUIDED_PROCEDURE | module-process-lifecycle-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| SYS-003 | 设置与生命周期 | 凭据留空 | P1 | SOURCE_GUIDED_PROCEDURE | module-dynamic-port-test.js | **COVERED** | 收据 test-all-1792592987036 |
-| SYS-004 | 设置与生命周期 | 知识根路径 | P1 | SOURCE_GUIDED_PROCEDURE | test-server-module-isolation-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| SYS-005 | 设置与生命周期 | 端口冲突 | P1 | SOURCE_GUIDED_PROCEDURE | cli-instance-management-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| SYS-006 | 设置与生命周期 | 停止指定实例 | P1 | SOURCE_GUIDED_PROCEDURE | module-process-lifecycle-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| SYS-007 | 设置与生命周期 | Origin防护 | P0 | SOURCE_GUIDED_PROCEDURE | cli-instance-management-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| SYS-008 | 设置与生命周期 | 请求边界 | P1 | SOURCE_GUIDED_PROCEDURE | module-dynamic-port-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| SYS-009 | 设置与生命周期 | Windows恢复 | P1 | SOURCE_GUIDED_PROCEDURE | workspace-ui-contract-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
-| SYS-010 | 设置与生命周期 | 桌面范围 | P1 | SOURCE_GUIDED_PROCEDURE | test-server-module-isolation-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
+| LOG-008 | 活动与诊断 | 网络失败反馈 | P1 | SOURCE_GUIDED_PROCEDURE | product-diagnostics-ui-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
+| SYS-001 | 设置与生命周期 | 四模块健康 | P1 | SOURCE_GUIDED_PROCEDURE | module-process-lifecycle-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
+| SYS-002 | 设置与生命周期 | 维护默认模型 | P1 | SOURCE_GUIDED_PROCEDURE | claude-workbench-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
+| SYS-003 | 设置与生命周期 | 凭据留空 | P1 | SOURCE_GUIDED_PROCEDURE | qa-autopilot:sensitive environment not inherited, qa-autopilot:redaction | **COVERED** | 收据 qa-selftest-2026-10-21T15-48-25-017Z |
+| SYS-004 | 设置与生命周期 | 知识根路径 | P1 | SOURCE_GUIDED_PROCEDURE | shared-scope-root-binding-test.js | **COVERED** | 收据 test-all-1792592987036 |
+| SYS-005 | 设置与生命周期 | 端口冲突 | P1 | SOURCE_GUIDED_PROCEDURE | module-dynamic-port-test.js, bin-cli-test.js | **COVERED** | 收据 test-all-1792592987036 |
+| SYS-006 | 设置与生命周期 | 停止指定实例 | P1 | SOURCE_GUIDED_PROCEDURE | project-remove-running-guard-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
+| SYS-007 | 设置与生命周期 | Origin防护 | P0 | SOURCE_GUIDED_PROCEDURE | server-security-test.js | **COVERED** | 收据 test-all-1792592987036 |
+| SYS-008 | 设置与生命周期 | 请求边界 | P1 | SOURCE_GUIDED_PROCEDURE | server-security-test.js | **PARTIAL** | 收据 test-all-1792592987036 |
+| SYS-009 | 设置与生命周期 | Windows恢复 | P1 | SOURCE_GUIDED_PROCEDURE |  | **NOT_COVERED** | - |
+| SYS-010 | 设置与生命周期 | 桌面范围 | P1 | SOURCE_GUIDED_PROCEDURE |  | **NOT_COVERED** | - |
 | QTA-001 | 额度与恢复 | 账户识别 | P0 | CONTROLLER_ACCEPTANCE | account balance not quota, ambiguous usage never inferred | **BLOCKED** | 已登记 |
 | QTA-002 | 额度与恢复 | usage字段歧义 | P0 | CONTROLLER_ACCEPTANCE | ambiguous usage never inferred, duplicate model rows block | **BLOCKED** | 已登记 |
 | QTA-003 | 额度与恢复 | 低额度停止 | P0 | CONTROLLER_ACCEPTANCE | quota thresholds 10, stale quota blocks | **BLOCKED** | 已登记 |
@@ -160,7 +161,7 @@
 | CLN-002 | 工程清理 | 格式独立 | P0 | CONTROLLER_ACCEPTANCE | cleanup excludes active failed retained runs, cleanup dry-run hash mismatch blocks | **COVERED** | 已登记 |
 | CLN-003 | 工程清理 | 链接逃逸 | P0 | CONTROLLER_ACCEPTANCE | package leak artifacts/trace.zip, cleanup removes only old successful owned files | **COVERED** | 已登记 |
 | CLN-004 | 工程清理 | 硬链接防护 | P0 | CONTROLLER_ACCEPTANCE | cleanup removes only old successful owned files | **COVERED** | 已登记 |
-| CLN-005 | 工程清理 | 活跃数据保留 | P0 | CONTROLLER_ACCEPTANCE | 超容量报警与停止新大任务的门禁在 lib/cleanupPlan 内，但自检无用例覆盖：缺口，需补一个自检用例。 | **PARTIAL** | - |
+| CLN-005 | 工程清理 | 活跃数据保留 | P0 | CONTROLLER_ACCEPTANCE | 【无任何测试断言】超容量报警与停止新大任务的门禁在 lib/cleanupPlan 内，但自检无用例覆盖：缺口，需补一个自检用例。 | **NOT_COVERED** | - |
 | CLN-006 | 工程清理 | 清理清单变动 | P0 | CONTROLLER_ACCEPTANCE | cleanup removes only old successful owned files | **COVERED** | 已登记 |
 | CLN-007 | 工程清理 | Windows重启锁 | P0 | CONTROLLER_ACCEPTANCE | cleanup dry-run hash mismatch blocks, atomic state update and exclusive collision | **COVERED** | 已登记 |
 | CLN-008 | 工程清理 | 清理回归 | P0 | CONTROLLER_ACCEPTANCE | root requires explicit approval, cleanup dry-run hash mismatch blocks | **COVERED** | 已登记 |

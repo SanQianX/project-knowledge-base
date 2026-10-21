@@ -84,8 +84,8 @@ function build() {
           row.failure = failed.map(x => ({ file: x.file, status: x.result.status, exitCode: x.result.exitCode, receipt: x.result.receiptPath }));
         } else {
           row.verdict = cov.verdict || 'PASS';
-          row.receipt = real[0].result.receiptPath;
-          row.runAt = real[0].result.at;
+          row.receipt = (real.find(x => x.result) || {}).result && real.find(x => x.result).result.receiptPath;
+          row.runAt = (real.find(x => x.result) || {}).result && real.find(x => x.result).result.at;
         }
       } else {
         row.verdict = cov.verdict || 'NOT_EXECUTED';
@@ -124,6 +124,7 @@ function build() {
     FAIL: '实施测试文件真实失败（带退出码与收据路径）',
     BLOCKED: '被门禁或能力阻断，无法执行',
     NOT_EXECUTED: '已登记实施文件但尚未真实执行',
+    NOT_COVERED: '没有任何测试断言该规格的期望',
     UNMAPPED: '尚未登记覆盖关系',
     PARTIAL: '仅部分期望被覆盖'
   };

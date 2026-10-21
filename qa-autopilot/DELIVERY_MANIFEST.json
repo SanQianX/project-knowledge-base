@@ -37,8 +37,8 @@
     },
     {
       "path": "config/specs-coverage.json",
-      "bytes": 28502,
-      "sha256": "f396dcc3ca545ed4b05545c4fc651d99faef666814180e34a02634acf899823c"
+      "bytes": 32826,
+      "sha256": "cd27e39f7e8f5760d99e58756101d3e34a07396bfff73cd6cf03a08c1d0293dc"
     },
     {
       "path": "config/suites.json",
@@ -252,18 +252,18 @@
     },
     {
       "path": "reports/branches/T07B_LEDGER.json",
-      "bytes": 143900,
-      "sha256": "c66a09b7d1cbfc93d77038f58ff52c72245a3dd008abc6705b00e83b8c45f89c"
+      "bytes": 144069,
+      "sha256": "de5f60fa1c0177be6237a55a73eb4ce34d4f3eafb7d4e82e343d8290307d37b0"
     },
     {
       "path": "reports/branches/T07B_LEDGER.md",
-      "bytes": 22333,
-      "sha256": "ebf5ff3d5a1a2787aa091121ed0edb0b7da01a17d152caaccc85724126cd1929"
+      "bytes": 22177,
+      "sha256": "fe2d182ff319ae433d209edf1c93d3a1edfffe28d3b9c1e59d45bfa9a7f1ce0e"
     },
     {
       "path": "reports/branches/T07B_STATUS.md",
-      "bytes": 7710,
-      "sha256": "9a9c6b3211aac5cb9c7e7121f5463dc91186ded73565289ea15865c165c19a80"
+      "bytes": 8770,
+      "sha256": "729c4799392e4a5d43013383693a844c89b4fcf5c8d0aabd33765533540f317e"
     },
     {
       "path": "reports/delivery/CAPABILITY_MATRIX.md",
@@ -437,8 +437,8 @@
     },
     {
       "path": "tools/spec-ledger.cjs",
-      "bytes": 8060,
-      "sha256": "05f6c1cc7cdac685e4374885a7c436cf983c0b4b59ceb9db6bdab246bc785ea2"
+      "bytes": 8243,
+      "sha256": "8e6006985d359927f83197ba2a0c6ad71f29a78666c19d15c4a611e30f238bc1"
     },
     {
       "path": "tools/supervisor.cjs",
