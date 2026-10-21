@@ -1,0 +1,3700 @@
+{
+  "schema": 1,
+  "cases": [
+    {
+      "id": "NAV-001",
+      "module": "产品外壳",
+      "title": "六页导航",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/index.html; ui/product.js:1-120,670-835",
+      "candidateSuite": "smoke",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "依次点击六个 data-view 导航按钮，再刷新每个 hash 页面。"
+      ],
+      "expected": [
+        "只有当前 view active。",
+        "标题、hash、选中导航一致。",
+        "没有额外业务写入。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "NAV-002",
+      "module": "产品外壳",
+      "title": "主题同步",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/index.html; ui/product.js:1-120,670-835",
+      "candidateSuite": "smoke",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "在浅/深主题间切换，再切换三个内嵌模块并刷新。"
+      ],
+      "expected": [
+        "外壳主题持久化。",
+        "已就绪 iframe 收到 kb:theme。",
+        "不能因主题切换重建任务。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "NAV-003",
+      "module": "产品外壳",
+      "title": "空项目",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/index.html; ui/product.js:1-120,670-835",
+      "candidateSuite": "smoke",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "使用新数据目录，打开工作、检索、领域与项目。"
+      ],
+      "expected": [
+        "展示空状态。",
+        "不能将未知/读取失败当作空库。",
+        "不创建占位项目。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "NAV-004",
+      "module": "产品外壳",
+      "title": "失败保留旧数据",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/index.html; ui/product.js:1-120,670-835",
+      "candidateSuite": "smoke",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "已有项目后令登记查询失败，再恢复。"
+      ],
+      "expected": [
+        "错误可见。",
+        "旧列表不清空。",
+        "恢复后以新快照更新。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "NAV-005",
+      "module": "产品外壳",
+      "title": "项目快速切换",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/index.html; ui/product.js:1-120,670-835",
+      "candidateSuite": "smoke",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "准备 A/B 两个独立项目，快速 A→B→A 并延迟旧响应。"
+      ],
+      "expected": [
+        "只展示当前项目。",
+        "迟到响应不跨项目覆盖。",
+        "实际 contextId 映射正确。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "NAV-006",
+      "module": "产品外壳",
+      "title": "可操作性",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/index.html; ui/product.js:1-120,670-835",
+      "candidateSuite": "smoke",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "原生指针点击按钮；Tab/Enter 遍历主要表单，检查遮挡。"
+      ],
+      "expected": [
+        "命中测试通过。",
+        "输入焦点可见。",
+        "没有透明层拦截。",
+        "不使用 DOM.click 代替。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "NAV-007",
+      "module": "产品外壳",
+      "title": "分辨率矩阵",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/index.html; ui/product.js:1-120,670-835",
+      "candidateSuite": "smoke",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "在4个桌面视口、两种主题检查六页截图及 bounding rect。"
+      ],
+      "expected": [
+        "无非预期水平溢出、控件遮挡。",
+        "截图人工基线与像素检查分别报告。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "NAV-008",
+      "module": "产品外壳",
+      "title": "断网恢复",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/index.html; ui/product.js:1-120,670-835",
+      "candidateSuite": "smoke",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "数据加载后模拟浏览器 offline 再 online。"
+      ],
+      "expected": [
+        "关闭旧流，恢复快照及新流。",
+        "不重复订阅。",
+        "内容不伪装实时。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "PRJ-001",
+      "module": "项目与领域",
+      "title": "领域创建",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:580-835; _site/_test/product-import-ui-test.js",
+      "candidateSuite": "project",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "领域与项目→创建领域→输入名称→明确提交→刷新。"
+      ],
+      "expected": [
+        "领域存在并持久化。",
+        "空名称拒绝。",
+        "不创建新的 Git 项目。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "PRJ-002",
+      "module": "项目与领域",
+      "title": "导入完整预检",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:580-835; _site/_test/product-import-ui-test.js",
+      "candidateSuite": "project",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "新 Git fixture→填写代码/知识路径→确认导入。"
+      ],
+      "expected": [
+        "预检通过才启用确认。",
+        "四模块分别报状态。",
+        "源码HEAD不变、历史不分析。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "PRJ-003",
+      "module": "项目与领域",
+      "title": "缺知识根返回表单",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:580-835; _site/_test/product-import-ui-test.js",
+      "candidateSuite": "project",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "未配知识根时填写导入，点击设置知识根，保存再返回。"
+      ],
+      "expected": [
+        "原输入和导入ID保留。",
+        "不会误建两个项目。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "PRJ-004",
+      "module": "项目与领域",
+      "title": "中文空格路径",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:580-835; _site/_test/product-import-ui-test.js",
+      "candidateSuite": "project",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "使用中文及空格路径的 Git 仓库导入并重启。"
+      ],
+      "expected": [
+        "路径标准化正确。",
+        "Hook可运行。",
+        "绝对知识路径一致。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "PRJ-005",
+      "module": "项目与领域",
+      "title": "重复导入",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:580-835; _site/_test/product-import-ui-test.js",
+      "candidateSuite": "project",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "同一个路径导入两次，再用路径大小写/分隔符别名试一次。"
+      ],
+      "expected": [
+        "拒绝重复登记。",
+        "不破坏已有项目数据。",
+        "别名按平台合同判断。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "PRJ-006",
+      "module": "项目与领域",
+      "title": "Hook竞态冲突",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:580-835; _site/_test/product-import-ui-test.js",
+      "candidateSuite": "project",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "预检通过后在测试仓库写第三方Hook，再点击确认。"
+      ],
+      "expected": [
+        "HOOK_CONFLICT。",
+        "第三方字节保持。",
+        "UI operationId能查真实失败日志。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "PRJ-007",
+      "module": "项目与领域",
+      "title": "部分模块离线",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:580-835; _site/_test/product-import-ui-test.js",
+      "candidateSuite": "project",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "四模块均返回503时导入，再只恢复一个模块并修复接线。"
+      ],
+      "expected": [
+        "登记保留，真实模块状态仍失败。",
+        "仅补失败模块，不重复登记。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "PRJ-008",
+      "module": "项目与领域",
+      "title": "Git初始化确认",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:580-835; _site/_test/product-import-ui-test.js",
+      "candidateSuite": "project",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "选择不是Git的测试目录，分别不勾选与勾选初始化。"
+      ],
+      "expected": [
+        "未明确勾选不得 git init。",
+        "初始化只发生在用户选中fixture。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "PRJ-009",
+      "module": "项目与领域",
+      "title": "解绑写入保护",
+      "priority": "P0",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:580-835; _site/_test/product-import-ui-test.js",
+      "candidateSuite": "project",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "准备排队任务和正在写入任务，分别请求解绑。"
+      ],
+      "expected": [
+        "排队任务按合同取消。",
+        "活动writer阻断解绑。",
+        "保留磁盘代码、知识、会话。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "PRJ-010",
+      "module": "项目与领域",
+      "title": "解绑迟到读",
+      "priority": "P0",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:580-835; _site/_test/product-import-ui-test.js",
+      "candidateSuite": "project",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "让登记GET挂起，解绑完成后再返回旧GET。"
+      ],
+      "expected": [
+        "旧响应不能复活项目。",
+        "刷新后仍解绑。",
+        "其他项目不受影响。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "PRJ-011",
+      "module": "项目与领域",
+      "title": "领域变更",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:580-835; _site/_test/product-import-ui-test.js",
+      "candidateSuite": "project",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "变更项目所属领域后发起项目/领域检索。"
+      ],
+      "expected": [
+        "作用范围随登记更新。",
+        "知识文件绝对路径不移动。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "PRJ-012",
+      "module": "项目与领域",
+      "title": "导入失败重试",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:580-835; _site/_test/product-import-ui-test.js",
+      "candidateSuite": "project",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "导入成功但刷新失败，与导入本身失败分别注入。"
+      ],
+      "expected": [
+        "前者不能再建项目。",
+        "后者保留错误和opID并允许受控重试。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "ENG-001",
+      "module": "知识引擎与Git维护",
+      "title": "首次导入基线",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "_site/lib/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
+      "candidateSuite": "engine",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "导入有多条历史提交的仓库，观察后台任务与文件。"
+      ],
+      "expected": [
+        "只建基线。",
+        "不分析历史、不生成伪知识、不改源码。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "ENG-002",
+      "module": "知识引擎与Git维护",
+      "title": "真实Hook闭环",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "_site/lib/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
+      "candidateSuite": "engine",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "导入fixture→新增真实git commit→等待journal→claim→晋升→查询。"
+      ],
+      "expected": [
+        "按完整SHA绑定证据。",
+        "Markdown与检索引用一致。",
+        "不能直接API造任务替代Hook验收。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "ENG-003",
+      "module": "知识引擎与Git维护",
+      "title": "空仓首提交",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "_site/lib/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
+      "candidateSuite": "engine",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "导入空仓后作第一次提交。"
+      ],
+      "expected": [
+        "第一次后续提交可处理。",
+        "无HEAD阶段不假装已有分析。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "ENG-004",
+      "module": "知识引擎与Git维护",
+      "title": "重复事件",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "_site/lib/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
+      "candidateSuite": "engine",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "同一SHA重复通知、多次journal消费与启动对账。"
+      ],
+      "expected": [
+        "只产生一次有效分析/晋升。",
+        "重复接收日志不等于重复执行。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "ENG-005",
+      "module": "知识引擎与Git维护",
+      "title": "单项目顺序",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "_site/lib/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
+      "candidateSuite": "engine",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "连续提交A/B/C，令B失败。"
+      ],
+      "expected": [
+        "A成功、B失败、C等待。",
+        "不能越过B宣告分析到C。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "ENG-006",
+      "module": "知识引擎与Git维护",
+      "title": "跨项目并发",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "_site/lib/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
+      "candidateSuite": "engine",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "两个或更多fixture提交并观察调度。"
+      ],
+      "expected": [
+        "按当前实际并发上限排队。",
+        "项目之间无文件串写。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "ENG-007",
+      "module": "知识引擎与Git维护",
+      "title": "离线提交补偿",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "_site/lib/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
+      "candidateSuite": "engine",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "仅停测试服务，Git提交成功后再启动。"
+      ],
+      "expected": [
+        "Git不被Hook故障阻塞。",
+        "启动对账补漏。",
+        "已完成SHA不重跑。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "ENG-008",
+      "module": "知识引擎与Git维护",
+      "title": "staging越界",
+      "priority": "P0",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "_site/lib/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
+      "candidateSuite": "engine",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "让测试Agent产物包含../、绝对路径、非允许类型。"
+      ],
+      "expected": [
+        "晋升拒绝。",
+        "最终知识与源码哈希不变。",
+        "失败证据保留。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "ENG-009",
+      "module": "知识引擎与Git维护",
+      "title": "晋升中断恢复",
+      "priority": "P0",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "_site/lib/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
+      "candidateSuite": "engine",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "在许可的故障注入点中断测试writer，再重启。"
+      ],
+      "expected": [
+        "journal恢复一致。",
+        "不留下半晋升的假成功。",
+        "pointer顺序正确。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "ENG-010",
+      "module": "知识引擎与Git维护",
+      "title": "索引独立失败",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "_site/lib/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
+      "candidateSuite": "engine",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "Markdown晋升成功后令向量服务失败。"
+      ],
+      "expected": [
+        "知识已更新/索引待修复分开。",
+        "不回滚Markdown、不重复付费分析。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "ENG-011",
+      "module": "知识引擎与Git维护",
+      "title": "故障重试",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "_site/lib/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
+      "candidateSuite": "engine",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "UI点击指定run重试，连续双击与网络响应丢失分别测试。"
+      ],
+      "expected": [
+        "同一意图不会重复派发。",
+        "活动状态正确。",
+        "请求结果未知先查询。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "ENG-012",
+      "module": "知识引擎与Git维护",
+      "title": "分析来源排除",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "_site/lib/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
+      "candidateSuite": "engine",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "内部维护任务与真实用户任务使用不同origin，读取采集事件。"
+      ],
+      "expected": [
+        "维护/委派不能自动成为人类长期偏好。",
+        "C01未定项不得自动删除实现。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "WB-001",
+      "module": "Workbench真实对话",
+      "title": "源码版本匹配",
+      "priority": "P0",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "宿主锁定0.13.6；独立默认分支0.3.0不得充当同版本源码；ui/product.js iframe合同",
+      "candidateSuite": "workbench",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "核对本地模块package、锁文件、runtime manifest和源码commit。"
+      ],
+      "expected": [
+        "每一文件所有权可追溯。",
+        "不匹配则BLOCKED_SOURCE_MATCH。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "WB-002",
+      "module": "Workbench真实对话",
+      "title": "独立宿主",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "宿主锁定0.13.6；独立默认分支0.3.0不得充当同版本源码；ui/product.js iframe合同",
+      "candidateSuite": "workbench",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "使用0.13.6真实最小宿主配置模型并对话，再在宿主中重复。"
+      ],
+      "expected": [
+        "模块不依赖知识库业务对象才能工作。",
+        "集成上下文单独验证。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "WB-003",
+      "module": "Workbench真实对话",
+      "title": "真实模型抽测",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "宿主锁定0.13.6；独立默认分支0.3.0不得充当同版本源码；ui/product.js iframe合同",
+      "candidateSuite": "workbench",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "配置订阅模型并发送唯一随机事实问题，记录请求及回答。"
+      ],
+      "expected": [
+        "模型返回的确是MiniMax-M3.1-Flash。",
+        "无替身。",
+        "响应与本轮关联。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "WB-004",
+      "module": "Workbench真实对话",
+      "title": "连续回复次序",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "宿主锁定0.13.6；独立默认分支0.3.0不得充当同版本源码；ui/product.js iframe合同",
+      "candidateSuite": "workbench",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "Q1结束后立即Q2，注入Q1迟到结果。"
+      ],
+      "expected": [
+        "Q1正文不重复在Q2后出现。",
+        "不能把Q2错误标idle。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "WB-005",
+      "module": "Workbench真实对话",
+      "title": "草稿隔离",
+      "priority": "P0",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "宿主锁定0.13.6；独立默认分支0.3.0不得充当同版本源码；ui/product.js iframe合同",
+      "candidateSuite": "workbench",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "A输入1111，B输入2222，切换/刷新/重启测试服务。"
+      ],
+      "expected": [
+        "草稿分别恢复。",
+        "附件按当前会话生命周期，不跨项目泄漏。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "WB-006",
+      "module": "Workbench真实对话",
+      "title": "权限拒绝",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "宿主锁定0.13.6；独立默认分支0.3.0不得充当同版本源码；ui/product.js iframe合同",
+      "candidateSuite": "workbench",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "要求测试Agent执行受保护操作，选择Deny。"
+      ],
+      "expected": [
+        "真实工具未执行。",
+        "UI错误与拒绝回执一致。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "WB-007",
+      "module": "Workbench真实对话",
+      "title": "用户问题选择",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "宿主锁定0.13.6；独立默认分支0.3.0不得充当同版本源码；ui/product.js iframe合同",
+      "candidateSuite": "workbench",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "触发单选/多选/自定义问题，先不提交再提交。"
+      ],
+      "expected": [
+        "必须由真实选择确认。",
+        "bypass工具权限不能代选、空答或放行。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "WB-008",
+      "module": "Workbench真实对话",
+      "title": "中止隔离",
+      "priority": "P0",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "宿主锁定0.13.6；独立默认分支0.3.0不得充当同版本源码；ui/product.js iframe合同",
+      "candidateSuite": "workbench",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "A/B同时执行，只中止B。"
+      ],
+      "expected": [
+        "B按协议终止，A继续。",
+        "不得停止未知服务/进程。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "WB-009",
+      "module": "Workbench真实对话",
+      "title": "流式重连",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "宿主锁定0.13.6；独立默认分支0.3.0不得充当同版本源码；ui/product.js iframe合同",
+      "candidateSuite": "workbench",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "输出中断网，恢复后先取快照再续游标。"
+      ],
+      "expected": [
+        "无重复正文/遗漏。",
+        "不能重发已接受输入。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "WB-010",
+      "module": "Workbench真实对话",
+      "title": "长历史阅读",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "宿主锁定0.13.6；独立默认分支0.3.0不得充当同版本源码；ui/product.js iframe合同",
+      "candidateSuite": "workbench",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "生成长对话后向上滚动，同时持续输出。"
+      ],
+      "expected": [
+        "不强制跳到底。",
+        "合理DOM/内存增长。",
+        "焦点不丢失。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "WB-011",
+      "module": "Workbench真实对话",
+      "title": "主回复与后台",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "宿主锁定0.13.6；独立默认分支0.3.0不得充当同版本源码；ui/product.js iframe合同",
+      "candidateSuite": "workbench",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "主回复结束但两个子任务仍运行时继续输入。"
+      ],
+      "expected": [
+        "按当前合同主输入可用。",
+        "后台卡片仍真实运行，不能仅从文字猜启动。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "WB-012",
+      "module": "Workbench真实对话",
+      "title": "停止服务恢复",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "宿主锁定0.13.6；独立默认分支0.3.0不得充当同版本源码；ui/product.js iframe合同",
+      "candidateSuite": "workbench",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "在测试进程停启后恢复会话历史。"
+      ],
+      "expected": [
+        "会话ID、事件序号、任务历史归属正确。",
+        "真实会话状态非端口在线推断。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "DOCK-001",
+      "module": "右侧工作区",
+      "title": "右上角显示隐藏",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:14-120,684-708；模块运行包同版本源码待匹配",
+      "candidateSuite": "workbench",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "按当前实现定位右上角显示/隐藏按钮，循环切换。"
+      ],
+      "expected": [
+        "不改变会话和任务。",
+        "按钮实际可点。",
+        "缺实现先标需求差异。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "DOCK-002",
+      "module": "右侧工作区",
+      "title": "标签生命周期",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:14-120,684-708；模块运行包同版本源码待匹配",
+      "candidateSuite": "workbench",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "打开两个不同标签，切换、关闭一个，再打开。"
+      ],
+      "expected": [
+        "状态按panelId隔离。",
+        "关闭释放监听器。",
+        "不关闭主会话。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "DOCK-003",
+      "module": "右侧工作区",
+      "title": "知识被动刷新",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:14-120,684-708；模块运行包同版本源码待匹配",
+      "candidateSuite": "workbench",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "Dock关闭时让知识缓存更新。"
+      ],
+      "expected": [
+        "不得自动开标签或展开Dock。",
+        "只有用户导航才打开。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "DOCK-004",
+      "module": "右侧工作区",
+      "title": "知识重新注册",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:14-120,684-708；模块运行包同版本源码待匹配",
+      "candidateSuite": "workbench",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "重载Workbench iframe后再打开知识引用。"
+      ],
+      "expected": [
+        "重新完成panel/register握手。",
+        "过期panelId不可误送。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "DOCK-005",
+      "module": "右侧工作区",
+      "title": "知识项目快速切换",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:14-120,684-708；模块运行包同版本源码待匹配",
+      "candidateSuite": "workbench",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "A引用加载期间切换B并返回A。"
+      ],
+      "expected": [
+        "epoch和projectId匹配。",
+        "知识文本不串项目。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "DOCK-006",
+      "module": "右侧工作区",
+      "title": "子代理控制台",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:14-120,684-708；模块运行包同版本源码待匹配",
+      "candidateSuite": "workbench",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "启动真实子任务，显示控制台与完成历史。"
+      ],
+      "expected": [
+        "显示真实事件。",
+        "失效请求可只读重试，不重复委派。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "DOCK-007",
+      "module": "右侧工作区",
+      "title": "标签异常和恢复",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:14-120,684-708；模块运行包同版本源码待匹配",
+      "candidateSuite": "workbench",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "面板超时/断网后恢复，关闭再打开。"
+      ],
+      "expected": [
+        "错误可见，主聊天继续。",
+        "销毁超时回调。",
+        "不持续重建iframe。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "DOCK-008",
+      "module": "右侧工作区",
+      "title": "来源安全",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:14-120,684-708；模块运行包同版本源码待匹配",
+      "candidateSuite": "workbench",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "从未知iframe或错误origin发送kb:panel消息。"
+      ],
+      "expected": [
+        "被拒绝。",
+        "不能注册任意URL/访问宿主私密上下文。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "DOCK-009",
+      "module": "右侧工作区",
+      "title": "浏览器与代码审查",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:14-120,684-708；模块运行包同版本源码待匹配",
+      "candidateSuite": "workbench",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "查0.13.6注册清单，再按实际实现操作面板。"
+      ],
+      "expected": [
+        "仅有源码证据才纳入必测已实现项。",
+        "规划功能标PLANNED非Bug。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "DOCK-010",
+      "module": "右侧工作区",
+      "title": "多标签压力",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:14-120,684-708；模块运行包同版本源码待匹配",
+      "candidateSuite": "workbench",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "在设计上限内反复开关面板并记录监听器/内存。"
+      ],
+      "expected": [
+        "关闭后的资源释放。",
+        "真实浏览器连接限制单独验收。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "RET-001",
+      "module": "知识检索与范围",
+      "title": "文本检索",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js iframe/scope合同；vector-hub固定1.0.8-rc.8",
+      "candidateSuite": "retrieval",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "植入带唯一事实的已晋升测试Markdown，通过知识检索输入查询。"
+      ],
+      "expected": [
+        "命中正文和真实引用。",
+        "不能把模板占位当事实。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "RET-002",
+      "module": "知识检索与范围",
+      "title": "真实向量",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js iframe/scope合同；vector-hub固定1.0.8-rc.8",
+      "candidateSuite": "retrieval",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "配置真实embedding，构造不共享关键词的语义查询。"
+      ],
+      "expected": [
+        "检查非空向量与真实通道证据。",
+        "文本回退不算向量PASS。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "RET-003",
+      "module": "知识检索与范围",
+      "title": "作用域隔离",
+      "priority": "P0",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js iframe/scope合同；vector-hub固定1.0.8-rc.8",
+      "candidateSuite": "retrieval",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "A/B项目、同/不同领域设计互斥事实，切scope。"
+      ],
+      "expected": [
+        "项目/领域/brain返回集合符合授权范围。",
+        "未知项目不借别人的上下文。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "RET-004",
+      "module": "知识检索与范围",
+      "title": "引用定位",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js iframe/scope合同；vector-hub固定1.0.8-rc.8",
+      "candidateSuite": "retrieval",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "点击结果引用，读取正文并复制引用。"
+      ],
+      "expected": [
+        "相对条目和完整提交来源对应当前结果。",
+        "不可路径越界。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "RET-005",
+      "module": "知识检索与范围",
+      "title": "模型停用",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js iframe/scope合同；vector-hub固定1.0.8-rc.8",
+      "candidateSuite": "retrieval",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "停用embedding再查询。"
+      ],
+      "expected": [
+        "真实Markdown回退可见。",
+        "不删知识、不称向量成功。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "RET-006",
+      "module": "知识检索与范围",
+      "title": "索引根切换",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js iframe/scope合同；vector-hub固定1.0.8-rc.8",
+      "candidateSuite": "retrieval",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "修改全局知识根，在旧索引有写入时执行。"
+      ],
+      "expected": [
+        "旧数据保留、排空旧writer、后续新根重建。",
+        "项目知识不被搬移。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "RET-007",
+      "module": "知识检索与范围",
+      "title": "新提交检索一致",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js iframe/scope合同；vector-hub固定1.0.8-rc.8",
+      "candidateSuite": "retrieval",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "真实提交分析后在下一轮会话检索该事实。"
+      ],
+      "expected": [
+        "完整SHA、项目、正文及索引链匹配。",
+        "不是只匹配SHA字符串。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "RET-008",
+      "module": "知识检索与范围",
+      "title": "检索负载",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js iframe/scope合同；vector-hub固定1.0.8-rc.8",
+      "candidateSuite": "retrieval",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "固定语料与查询集合进行基线/候选交替重复测量。"
+      ],
+      "expected": [
+        "语义召回与延迟同时评价。",
+        "不同语料/硬件不得比较为回归。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "MEM-001",
+      "module": "长期记忆",
+      "title": "手动添加",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:670-780",
+      "candidateSuite": "retrieval",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "长期记忆→添加→内容/作用域/目标→确认。"
+      ],
+      "expected": [
+        "POST真实保存为confirmed。",
+        "刷新后保留。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "MEM-002",
+      "module": "长期记忆",
+      "title": "空白拒绝",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:670-780",
+      "candidateSuite": "retrieval",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "输入纯空白或缺目标尝试确认。"
+      ],
+      "expected": [
+        "前后端均拒绝。",
+        "不出现空记忆。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "MEM-003",
+      "module": "长期记忆",
+      "title": "候选保留",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:670-780",
+      "candidateSuite": "retrieval",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "编辑候选点击保存候选而不确认。"
+      ],
+      "expected": [
+        "仍为candidate。",
+        "不能注入长期任务偏好。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "MEM-004",
+      "module": "长期记忆",
+      "title": "确认目标",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:670-780",
+      "candidateSuite": "retrieval",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "切换global/domain/project并更换目标后确认。"
+      ],
+      "expected": [
+        "scopeId与scopeType匹配。",
+        "只影响指定范围。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "MEM-005",
+      "module": "长期记忆",
+      "title": "忽略候选",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:670-780",
+      "candidateSuite": "retrieval",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "点击忽略并刷新，检查原始来源记录。"
+      ],
+      "expected": [
+        "状态ignored。",
+        "来源冻结记录不篡改。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "MEM-006",
+      "module": "长期记忆",
+      "title": "同步失败",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:670-780",
+      "candidateSuite": "retrieval",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "confirmed保存后注入写文件失败。"
+      ],
+      "expected": [
+        "sync pending真实显示。",
+        "未同步内容不注入任务。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "MEM-007",
+      "module": "长期记忆",
+      "title": "真实注入",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:670-780",
+      "candidateSuite": "retrieval",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "新增唯一约定，在下一真实模型任务检查引用和采用。"
+      ],
+      "expected": [
+        "区分prepared、output、delivery、actual use四层证据。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "MEM-008",
+      "module": "长期记忆",
+      "title": "来源边界",
+      "priority": "P0",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:670-780",
+      "candidateSuite": "retrieval",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "委派Agent指令/系统维护输出诱发记忆候选。"
+      ],
+      "expected": [
+        "不得自动当作人类长期偏好。",
+        "C01未解决项明确阻断。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CAP-001",
+      "module": "外部Agent集成",
+      "title": "三能力独立",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:480-560; plugins/project-knowledge; 外部客户端逐项现场验证",
+      "candidateSuite": "capture",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "检查Knowledge Integration、Automatic Context、Development Capture。"
+      ],
+      "expected": [
+        "检测到命令不等于已安装。",
+        "三能力分别真实验证。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CAP-002",
+      "module": "外部Agent集成",
+      "title": "原生Claude采集",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:480-560; plugins/project-knowledge; 外部客户端逐项现场验证",
+      "candidateSuite": "capture",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "隔离客户端HOME安装托管Hook，重开会话后外部开发。"
+      ],
+      "expected": [
+        "仅新会话事件按真实Git目录归属。",
+        "不补捏历史。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CAP-003",
+      "module": "外部Agent集成",
+      "title": "原生Codex采集",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:480-560; plugins/project-knowledge; 外部客户端逐项现场验证",
+      "candidateSuite": "capture",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "隔离Codex配置与notify链，执行开发并检查记录。"
+      ],
+      "expected": [
+        "保留第三方notify和用户信任。",
+        "拒绝自动写trust。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CAP-004",
+      "module": "外部Agent集成",
+      "title": "原生OpenCode",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:480-560; plugins/project-knowledge; 外部客户端逐项现场验证",
+      "candidateSuite": "capture",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "核对真实插件入口，在fixture发消息和提交。"
+      ],
+      "expected": [
+        "只报告实际支持能力。",
+        "不可声称自动注入已通过。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CAP-005",
+      "module": "外部Agent集成",
+      "title": "原生ZCode",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:480-560; plugins/project-knowledge; 外部客户端逐项现场验证",
+      "candidateSuite": "capture",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "按同版本真实入口接入，检查采集与上下文区别。"
+      ],
+      "expected": [
+        "没有证据不报MCP成功。",
+        "保留第三方配置。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CAP-006",
+      "module": "外部Agent集成",
+      "title": "修复幂等",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:480-560; plugins/project-knowledge; 外部客户端逐项现场验证",
+      "candidateSuite": "capture",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "连续两次接入/修复同一客户端。"
+      ],
+      "expected": [
+        "不叠加Hook、不重复notify wrapper。",
+        "operationId可追踪。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CAP-007",
+      "module": "外部Agent集成",
+      "title": "移除保留",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:480-560; plugins/project-knowledge; 外部客户端逐项现场验证",
+      "candidateSuite": "capture",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "移除采集集成后查看配置diff和历史文件。"
+      ],
+      "expected": [
+        "只撤托管项。",
+        "第三方及历史记录保留。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CAP-008",
+      "module": "外部Agent集成",
+      "title": "跨仓隔离",
+      "priority": "P0",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:480-560; plugins/project-knowledge; 外部客户端逐项现场验证",
+      "candidateSuite": "capture",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "相同basename不同真实路径A/B开发会话并行。"
+      ],
+      "expected": [
+        "以canonical身份隔离，不串对话/Commit。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CAP-009",
+      "module": "外部Agent集成",
+      "title": "配置自动修复",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:480-560; plugins/project-knowledge; 外部客户端逐项现场验证",
+      "candidateSuite": "capture",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "已接入客户端配置损坏后重启隔离服务。"
+      ],
+      "expected": [
+        "仅修复曾授权托管部分。",
+        "未知命令冲突则阻断而非覆盖。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CAP-010",
+      "module": "外部Agent集成",
+      "title": "真实送达",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:480-560; plugins/project-knowledge; 外部客户端逐项现场验证",
+      "candidateSuite": "capture",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "已确认上下文注入后，模型引用任务事实并实际使用。"
+      ],
+      "expected": [
+        "单凭Hook日志或output事件不足以声明送达。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "LOG-001",
+      "module": "活动与诊断",
+      "title": "活动分页",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:535-580,710-745; logging API原生tests",
+      "candidateSuite": "logging",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "生成多页知识run，切页并打开详情再更新。"
+      ],
+      "expected": [
+        "按游标稳定分页。",
+        "打开详情不被刷新重置。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "LOG-002",
+      "module": "活动与诊断",
+      "title": "失败重试状态",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:535-580,710-745; logging API原生tests",
+      "candidateSuite": "logging",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "制造quota耗尽/前序失败/索引pending等状态。"
+      ],
+      "expected": [
+        "文案区分真实原因。",
+        "状态不能都显示已成功。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "LOG-003",
+      "module": "活动与诊断",
+      "title": "日志查询",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:535-580,710-745; logging API原生tests",
+      "candidateSuite": "logging",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "系统状态→诊断，输入唯一operationId，选择当前项目。"
+      ],
+      "expected": [
+        "GET返回与UI一致。",
+        "不含其他项目敏感信息。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "LOG-004",
+      "module": "活动与诊断",
+      "title": "日志实时续接",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:535-580,710-745; logging API原生tests",
+      "candidateSuite": "logging",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "无搜索时订阅流，查询+订阅交界插入日志。"
+      ],
+      "expected": [
+        "streamCursor无缝续接，不丢失或重复。",
+        "关闭弹窗断开流。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "LOG-005",
+      "module": "活动与诊断",
+      "title": "日志上限",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:535-580,710-745; logging API原生tests",
+      "candidateSuite": "logging",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "持续写入超过100条可见日志。"
+      ],
+      "expected": [
+        "当前界面保持有界节点。",
+        "历史仍可查询而非静默永久丢失。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "LOG-006",
+      "module": "活动与诊断",
+      "title": "导出脱敏",
+      "priority": "P0",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:535-580,710-745; logging API原生tests",
+      "candidateSuite": "logging",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "写入假密钥到嵌套error/context字段，导出诊断。"
+      ],
+      "expected": [
+        "写/查/导出均脱敏。",
+        "不能在测试报告保存原真密钥。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "LOG-007",
+      "module": "活动与诊断",
+      "title": "高级过滤核对",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:535-580,710-745; logging API原生tests",
+      "candidateSuite": "logging",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "分别核对API日志级别、时间、component字段与当前UI控件。"
+      ],
+      "expected": [
+        "API支持不等于UI已提供控件。",
+        "README与DOM差异记录而不造按钮。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "LOG-008",
+      "module": "活动与诊断",
+      "title": "网络失败反馈",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "ui/product.js:535-580,710-745; logging API原生tests",
+      "candidateSuite": "logging",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "查询超时和导出失败分别触发。"
+      ],
+      "expected": [
+        "UI显示失败。",
+        "不能生成空文件冒充成功导出。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "SYS-001",
+      "module": "设置与生命周期",
+      "title": "四模块健康",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
+      "candidateSuite": "lifecycle",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "启动隔离实例，分别观察外壳及四模块ready。"
+      ],
+      "expected": [
+        "端口在线不等于全部模块就绪。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "SYS-002",
+      "module": "设置与生命周期",
+      "title": "维护默认模型",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
+      "candidateSuite": "lifecycle",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "保存后台默认后临时切聊天模型，再启动维护。"
+      ],
+      "expected": [
+        "后台默认不随临时聊天选择变化。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "SYS-003",
+      "module": "设置与生命周期",
+      "title": "凭据留空",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
+      "candidateSuite": "lifecycle",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "已有embedding凭据后留空保存，再读取mask元数据。"
+      ],
+      "expected": [
+        "留空不覆盖。",
+        "响应、日志不泄露secret。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "SYS-004",
+      "module": "设置与生命周期",
+      "title": "知识根路径",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
+      "candidateSuite": "lifecycle",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "修改全局root再导入新项目，比较已有项目knowledgePath。"
+      ],
+      "expected": [
+        "新导入使用新root。",
+        "旧项目固定路径不改变。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "SYS-005",
+      "module": "设置与生命周期",
+      "title": "端口冲突",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
+      "candidateSuite": "lifecycle",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "占用默认端口再CLI启动隔离实例。"
+      ],
+      "expected": [
+        "按实际协议选择/报错。",
+        "Hook使用记录端点非写死端口。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "SYS-006",
+      "module": "设置与生命周期",
+      "title": "停止指定实例",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
+      "candidateSuite": "lifecycle",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "两个独立数据目录启动，停止其中一个。"
+      ],
+      "expected": [
+        "只停验证过的目标。",
+        "独立模块/其他实例保持。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "SYS-007",
+      "module": "设置与生命周期",
+      "title": "Origin防护",
+      "priority": "P0",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
+      "candidateSuite": "lifecycle",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "对隔离实例发错误Origin及非回环未认证请求。"
+      ],
+      "expected": [
+        "拒绝不允许来源。",
+        "不得为了E2E改成通配CORS。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "SYS-008",
+      "module": "设置与生命周期",
+      "title": "请求边界",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
+      "candidateSuite": "lifecycle",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "测试无效JSON、超长输入、路径越界。"
+      ],
+      "expected": [
+        "返回确定错误、不崩溃。",
+        "不写入非目标目录。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "SYS-009",
+      "module": "设置与生命周期",
+      "title": "Windows恢复",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
+      "candidateSuite": "lifecycle",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "服务/浏览器/控制器重启后对照持久化和PID身份。"
+      ],
+      "expected": [
+        "不得按旧PID误杀重用进程。",
+        "失去归属证明先阻断。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "SYS-010",
+      "module": "设置与生命周期",
+      "title": "桌面范围",
+      "priority": "P1",
+      "mode": "SOURCE_GUIDED_PROCEDURE",
+      "implementation": "待本地核对或扩展既有测试；不是已运行结果",
+      "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
+      "candidateSuite": "lifecycle",
+      "preconditions": [
+        "使用独立测试数据和受管实例",
+        "冻结source/module/fixture身份",
+        "不得复用用户HOME与生产凭据"
+      ],
+      "steps": [
+        "核对当前桌面package依赖和发布合同，仅测仍支持功能。"
+      ],
+      "expected": [
+        "不把历史桌面功能恢复当本轮必做。",
+        "网页候选不冒充桌面发布。"
+      ],
+      "evidence": [
+        "实际命令与退出码",
+        "UI/接口/磁盘对应证据",
+        "源HEAD/文件哈希/测试夹具ID"
+      ],
+      "cleanup": "先停止并核对自有测试进程；保留首失败证据；仅清理已过保留期且PASSED的拥有标记目录。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "QTA-001",
+      "module": "额度与恢复",
+      "title": "账户识别",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "核对订阅Key、CLI地区、实际模型行及周权益。"
+      ],
+      "expected": [
+        "不能把PAYG余额当五小时额度；保护旧套餐权益。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "QTA-002",
+      "module": "额度与恢复",
+      "title": "usage字段歧义",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "回放只有usage_count的响应，再回放带明确百分比响应。"
+      ],
+      "expected": [
+        "无语义证据时UNKNOWN；明确百分比优先。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "QTA-003",
+      "module": "额度与恢复",
+      "title": "低额度停止",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "80→19→9配额注入，分别尝试派发任务与单次请求。"
+      ],
+      "expected": [
+        "19不派新任务；9不转发新模型调用；保护在途请求。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "QTA-004",
+      "module": "额度与恢复",
+      "title": "额度恢复",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "暂停后两次新鲜80%样本，恢复原任务检查点。"
+      ],
+      "expected": [
+        "恢复只执行未完成动作；不是睡固定5小时。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "QTA-005",
+      "module": "额度与恢复",
+      "title": "查询故障",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "模拟401、429、503和超时。"
+      ],
+      "expected": [
+        "分别分类，UNKNOWN拒绝新调用；不切PAYG或自动买积分。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "QTA-006",
+      "module": "额度与恢复",
+      "title": "共享消耗",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "另一客户端快速消耗同一订阅，观察采样陈旧性。"
+      ],
+      "expected": [
+        "安全裕量不足提前暂停；承认单次在途调用无法保证永不耗尽。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "QTA-007",
+      "module": "额度与恢复",
+      "title": "进程重启",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "停止控制器，保留checkpoint+journal，再启动。"
+      ],
+      "expected": [
+        "校验journal链；活动worker/Git操作状态未知时先对账不重发。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "QTA-008",
+      "module": "额度与恢复",
+      "title": "绕过防护",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "worker尝试读真实订阅/Git/npm凭据、改控制合同或直接连上游。"
+      ],
+      "expected": [
+        "真实OS ACL/网络策略拒绝；布尔配置和提示词不算隔离证据。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "GIT-001",
+      "module": "版本和远程门禁",
+      "title": "原始改动保护",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "原工作区有未提交或本地领先远程提交时执行baseline。"
+      ],
+      "expected": [
+        "只报告并阻断；不reset、stash、覆盖或假称已冻结未提交改动。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "GIT-002",
+      "module": "版本和远程门禁",
+      "title": "基准远程验证",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "独立clone后创建非v基准tag与QA分支并核对ls-remote。"
+      ],
+      "expected": [
+        "tag解引用与分支均为完整基准SHA；不能把操作命令成功当远程完成。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "GIT-003",
+      "module": "版本和远程门禁",
+      "title": "测试凭证失效",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "测试后修改一个源码字节或合同，再试提交。"
+      ],
+      "expected": [
+        "fingerprint/contractHash不匹配而拒绝。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "GIT-004",
+      "module": "版本和远程门禁",
+      "title": "新文件泄密",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "在任务许可新文件中加入假token，尝试提交。"
+      ],
+      "expected": [
+        "暂存前拒绝；不允许只扫描git diff遗漏untracked。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "GIT-005",
+      "module": "版本和远程门禁",
+      "title": "Push回执丢失",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "在临时裸仓fixture模拟远程已推成功但客户端超时。"
+      ],
+      "expected": [
+        "读远程HEAD、parent、操作ID后确认；不重复commit或force push。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "GIT-006",
+      "module": "版本和远程门禁",
+      "title": "CI取消失败",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "推送后CI失败、取消、缺Windowsjob分别测试。"
+      ],
+      "expected": [
+        "均不能记PASS；CI按本次SHA+QA分支匹配。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "GIT-007",
+      "module": "版本和远程门禁",
+      "title": "单问题回退",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "已推修复出现新回归，使用受控revert后再测。"
+      ],
+      "expected": [
+        "远程历史完整保留；数据恢复单独验证。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "GIT-008",
+      "module": "版本和远程门禁",
+      "title": "清理单独提交",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "一个功能修复和一个dead-code清理尝试合并。"
+      ],
+      "expected": [
+        "任务类型/文件许可不同，拆分并各自回归。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "REL-001",
+      "module": "候选发布和安装",
+      "title": "正式通道封锁",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "测试v*、baseline、错误rc号、合法qa-rc标签。"
+      ],
+      "expected": [
+        "仅精确qa-rc/x.y.z-rc.n可进入候选通道；latest无自动出口。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "REL-002",
+      "module": "候选发布和安装",
+      "title": "OIDC身份",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "核对package、workflow filename、受保护environment与publisher。"
+      ],
+      "expected": [
+        "真实权限未配置则BLOCKED_PUBLISHER；不加长效token替代。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "REL-003",
+      "module": "候选发布和安装",
+      "title": "制品泄漏",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "向pack列表加入qa/state/.env，再运行audit。"
+      ],
+      "expected": [
+        "拒绝；必要引擎与plugins不能被清理掉。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "REL-004",
+      "module": "候选发布和安装",
+      "title": "不可变发布",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "同一个RC版本重复触发、已有tag或发布响应丢失。"
+      ],
+      "expected": [
+        "查Registry/integrity/动作日志；不改tag、不覆盖同版本。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "REL-005",
+      "module": "候选发布和安装",
+      "title": "官方独立安装",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "固定version从official registry安装到owned prefix。"
+      ],
+      "expected": [
+        "version/resolved/integrity/源码SHA匹配；不用global或移动next作凭证。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "REL-006",
+      "module": "候选发布和安装",
+      "title": "四模块安装运行",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "在该安装路径启动四模块与真实模型、Git闭环。"
+      ],
+      "expected": [
+        "不能借兄弟源码/node_modules/link运行；安装成功不等于runtime通过。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "REL-007",
+      "module": "候选发布和安装",
+      "title": "latest保护",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "发布前后查询latest，并保留next当前指向。"
+      ],
+      "expected": [
+        "latest始终不被本次候选修改；异常立刻阻断。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "REL-008",
+      "module": "候选发布和安装",
+      "title": "稳定版审批",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "全部候选验收通过后检查发布动作。"
+      ],
+      "expected": [
+        "仅READY_FOR_STABLE_APPROVAL；不将rc直接重标latest。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLN-001",
+      "module": "工程清理",
+      "title": "动态入口证明",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "选择搜索不到引用的CLI/Hook/插件文件提出删除。"
+      ],
+      "expected": [
+        "必须查exports/bin/运行注册/打包/平台路径，不能直接删。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLN-002",
+      "module": "工程清理",
+      "title": "格式独立",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "只改变本次触及代码格式及关键双语注释。"
+      ],
+      "expected": [
+        "无全仓格式化、许可证变化或功能语义改变。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLN-003",
+      "module": "工程清理",
+      "title": "链接逃逸",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "owned run嵌入指向项目外目录的junction/symlink。"
+      ],
+      "expected": [
+        "dry-run即拒绝；外部目录内容不变。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLN-004",
+      "module": "工程清理",
+      "title": "硬链接防护",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "临时目录含hardlink到保留文件。"
+      ],
+      "expected": [
+        "拒绝清理；没有跨边界误删。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLN-005",
+      "module": "工程清理",
+      "title": "活跃数据保留",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "ACTIVE/FAILED/RETAIN与旧PASSED目录混合。"
+      ],
+      "expected": [
+        "仅PASSED且到期进入清单；首失败/检查点/基线永不自动删。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLN-006",
+      "module": "工程清理",
+      "title": "清理清单变动",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "生成dry-run后修改文件，再apply。"
+      ],
+      "expected": [
+        "hash校验拒绝；不按旧清单盲删。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLN-007",
+      "module": "工程清理",
+      "title": "Windows重启锁",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "重启留有锁文件但旧PID可能重用。"
+      ],
+      "expected": [
+        "不按年龄删锁；核对启动时间/命令/目录后人工或平台监督回收。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    },
+    {
+      "id": "CLN-008",
+      "module": "工程清理",
+      "title": "清理回归",
+      "priority": "P0",
+      "mode": "CONTROLLER_ACCEPTANCE",
+      "implementation": "部分有开发包自检，真实Windows/远程执行仍需单独验收",
+      "source": "本开发包设计约束；plans/14_SOURCES_AND_CONFLICTS.md",
+      "candidateSuite": "qa-autopilot npm test + 专用现场用例",
+      "preconditions": [
+        "独立fixture",
+        "真实副作用另行审批"
+      ],
+      "steps": [
+        "删除已证明死代码后跑相关API/UI/pack与候选安装。"
+      ],
+      "expected": [
+        "无回归才远程提交；不能用覆盖率未执行作为删除依据。"
+      ],
+      "evidence": [
+        "首失败与复测回执",
+        "状态/远程/哈希对应关系"
+      ],
+      "cleanup": "只处理本轮拥有的非活跃临时资源。",
+      "status": "NOT_RUN"
+    }
+  ],
+  "note": "用例规格不等于自动化脚本或执行结果；没有产品PASS。"
+}

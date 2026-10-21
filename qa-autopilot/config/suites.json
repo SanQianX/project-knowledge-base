@@ -1,0 +1,62 @@
+{
+  "smoke": [
+    "product-brand-contract-test.js",
+    "product-progress-status-test.js",
+    "server-security-test.js"
+  ],
+  "project": [
+    "product-import-ui-test.js",
+    "import-preflight-api-test.js",
+    "project-lifecycle-transaction-test.js",
+    "project-remove-running-guard-test.js",
+    "project-delete-recovery-test.js"
+  ],
+  "engine": [
+    "commit-evidence-test.js",
+    "commit-boundary-freeze-test.js",
+    "knowledge-promotion-recovery-test.js",
+    "orphaned-claim-recovery-test.js",
+    "index-error-display-contract-test.js",
+    "startup-analysis-disabled-test.js"
+  ],
+  "workbench": [
+    "claude-workbench-test.js",
+    "workbench-permission-test.js",
+    "workspace-ui-contract-test.js",
+    "knowledge-panel-lifecycle-test.js",
+    "knowledge-panel-ui-contract-test.js",
+    "module-stream-proxy-test.js"
+  ],
+  "capture": [
+    "conversation-origin-test.js",
+    "cross-repo-isolation-e2e-test.js",
+    "client-capture-restart-e2e-test.js",
+    "integration-capture-setup-test.js",
+    "native-context-integrations-test.js"
+  ],
+  "retrieval": [
+    "knowledge-query-test.js",
+    "knowledge-retrieval-service-test.js",
+    "knowledge-scopes-test.js",
+    "vector-storage-root-test.js"
+  ],
+  "logging": [
+    "log-redaction-test.js",
+    "logging-api-test.js",
+    "logging-sse-no-gap-test.js",
+    "product-diagnostics-ui-test.js"
+  ],
+  "release": [
+    "candidate-release-contract-test.js",
+    "candidate-product-assets-test.js",
+    "module-artifact-integrity-test.js",
+    "package-boundary-test.js",
+    "packaged-ui-smoke-test.js"
+  ],
+  "lifecycle": [
+    "cli-instance-management-test.js",
+    "module-process-lifecycle-test.js",
+    "module-dynamic-port-test.js",
+    "test-server-module-isolation-test.js"
+  ]
+}

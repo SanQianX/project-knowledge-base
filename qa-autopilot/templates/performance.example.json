@@ -1,0 +1,10 @@
+{
+  "baseUrl": "http://127.0.0.1:VERIFIED_PORT",
+  "ownedInstanceVerified": false,
+  "identityReceipt": null,
+  "environmentId": null,
+  "fixtureHash": null,
+  "route": "/api/projects/aggregated",
+  "count": 200,
+  "concurrency": 2
+}

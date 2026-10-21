@@ -1,0 +1,69 @@
+{
+  "schema": 1,
+  "repository": "SanQianX/project-knowledge-base",
+  "commit": "c7d5b2bc86b7e51fe6e322999294bb497af1808c",
+  "packageVersion": "5.0.24",
+  "date": "2026-10-20",
+  "files": [
+    {
+      "path": "package.json",
+      "gitBlobSHA": "d0ba2a46b0b2efd3e1279ee23c70f9d42231e147",
+      "readScope": "FULL",
+      "url": "https://github.com/SanQianX/project-knowledge-base/blob/c7d5b2bc86b7e51fe6e322999294bb497af1808c/package.json"
+    },
+    {
+      "path": ".github/workflows/publish.yml",
+      "gitBlobSHA": "8d3d2f50761ecdf819dd4eb700057da6d36fd413",
+      "readScope": "FULL",
+      "url": "https://github.com/SanQianX/project-knowledge-base/blob/c7d5b2bc86b7e51fe6e322999294bb497af1808c/.github/workflows/publish.yml"
+    },
+    {
+      "path": "ui/product.js",
+      "gitBlobSHA": "8121cd1be86c1fd8cecf88b59ed58214c8ff5e95",
+      "readScope": "EXCERPTS_1_120_AND_480_835",
+      "url": "https://github.com/SanQianX/project-knowledge-base/blob/c7d5b2bc86b7e51fe6e322999294bb497af1808c/ui/product.js"
+    },
+    {
+      "path": "_site/server.js",
+      "gitBlobSHA": "613cf5908e027f22d12ec157248719e31b0c575e",
+      "readScope": "FULL",
+      "url": "https://github.com/SanQianX/project-knowledge-base/blob/c7d5b2bc86b7e51fe6e322999294bb497af1808c/_site/server.js"
+    },
+    {
+      "path": "_site/lib/server-app.js",
+      "gitBlobSHA": "a01e7cf88bab8e6e7b31d6cd057af04055303c76",
+      "readScope": "EXCERPT_1_180",
+      "url": "https://github.com/SanQianX/project-knowledge-base/blob/c7d5b2bc86b7e51fe6e322999294bb497af1808c/_site/lib/server-app.js"
+    },
+    {
+      "path": "_site/_test/run-all-tests.js",
+      "gitBlobSHA": "4f445c424d33d08bd7cecf4fa56ea0978d15eff3",
+      "readScope": "EXCERPT_1_140",
+      "url": "https://github.com/SanQianX/project-knowledge-base/blob/c7d5b2bc86b7e51fe6e322999294bb497af1808c/_site/_test/run-all-tests.js"
+    },
+    {
+      "path": "_site/_test/product-import-ui-test.js",
+      "gitBlobSHA": "24dd247e33196bddb92affd96f5c6f6a05cfa737",
+      "readScope": "FULL",
+      "url": "https://github.com/SanQianX/project-knowledge-base/blob/c7d5b2bc86b7e51fe6e322999294bb497af1808c/_site/_test/product-import-ui-test.js"
+    },
+    {
+      "path": "_site/_test/helpers/cdp-browser.js",
+      "gitBlobSHA": "9ffb8aeac7316a9e943d4d154bcdfba820bd4a26",
+      "readScope": "EXCERPTS",
+      "url": "https://github.com/SanQianX/project-knowledge-base/blob/c7d5b2bc86b7e51fe6e322999294bb497af1808c/_site/_test/helpers/cdp-browser.js"
+    },
+    {
+      "path": "_site/_test/helpers/spawn-server.js",
+      "gitBlobSHA": "2a8ecbe683300a18aa58325b14021edcdd2ee2b8",
+      "readScope": "FULL",
+      "url": "https://github.com/SanQianX/project-knowledge-base/blob/c7d5b2bc86b7e51fe6e322999294bb497af1808c/_site/_test/helpers/spawn-server.js"
+    }
+  ],
+  "limitations": [
+    "未在本环境clone全仓或运行产品",
+    "未核对用户本地工作区",
+    "独立Workbench当前main不能映射到依赖0.13.6",
+    "原生测试名称清单不等于已读全部断言"
+  ]
+}

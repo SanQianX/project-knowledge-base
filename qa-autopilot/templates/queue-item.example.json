@@ -1,0 +1,9 @@
+{
+  "id": "QA-001",
+  "contract": "config/tasks/QA-001.json",
+  "approvedContractHash": "由独立控制端对规范 JSON 序列化计算 SHA256",
+  "reproductionReceipt": "artifacts/真实运行/receipt.json",
+  "suites": [
+    "smoke"
+  ]
+}

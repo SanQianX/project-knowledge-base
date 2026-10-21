@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "head": "FULL_COMMIT_SHA",
+  "status": "PASS",
+  "reviewedBy": "HUMAN_OR_ISOLATED_REVIEWER",
+  "sourceFingerprint": "REQUIRED",
+  "requiredGates": [
+    "unitIntegration",
+    "realE2E",
+    "visual",
+    "performance",
+    "faultRecovery",
+    "pack"
+  ],
+  "gates": {},
+  "note": "模板不是通过凭证；每一项都必须绑定真实证据文件及 SHA256。"
+}

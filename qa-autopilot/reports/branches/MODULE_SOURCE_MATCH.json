@@ -1,0 +1,2209 @@
+{
+  "schema": "qa-autopilot/module-source-match/v1",
+  "phase": "B00-A",
+  "mode": "READ_ONLY",
+  "generatedAt": "2026-10-21T09:13:41.695Z",
+  "kb": "D:/SanQian.Xu/project-knowledge-base",
+  "kbRev": "origin/main",
+  "results": [
+    {
+      "module": "terminal",
+      "expectedVersion": "0.13.6",
+      "attempts": [
+        {
+          "label": "Claude-Ai-Workbench",
+          "repo": "D:/SanQian.Xu/claude-ai-workbench",
+          "rev": "agent/sdk-productization",
+          "fileCount": 124,
+          "prefixes": [
+            ""
+          ],
+          "notes": [],
+          "files": {
+            "LICENSE": {
+              "verdict": "exact",
+              "repoPath": "LICENSE",
+              "prefix": ""
+            },
+            "README.md": {
+              "verdict": "exact",
+              "repoPath": "README.md",
+              "prefix": ""
+            },
+            "apps/agent-terminal/app.css": {
+              "verdict": "mismatch",
+              "repoPath": "apps/agent-terminal/app.css",
+              "prefix": ""
+            },
+            "apps/agent-terminal/app.js": {
+              "verdict": "mismatch",
+              "repoPath": "apps/agent-terminal/app.js",
+              "prefix": ""
+            },
+            "apps/agent-terminal/conversation-composer.js": {
+              "verdict": "missing"
+            },
+            "apps/agent-terminal/index.html": {
+              "verdict": "mismatch",
+              "repoPath": "apps/agent-terminal/index.html",
+              "prefix": ""
+            },
+            "apps/agent-terminal/panel-host-proof.html": {
+              "verdict": "missing"
+            },
+            "apps/agent-terminal/panel-proof-content.html": {
+              "verdict": "missing"
+            },
+            "apps/agent-terminal/right-dock-panel-registry.js": {
+              "verdict": "missing"
+            },
+            "apps/agent-terminal/right-workspace-dock.css": {
+              "verdict": "missing"
+            },
+            "apps/agent-terminal/right-workspace-dock.js": {
+              "verdict": "missing"
+            },
+            "apps/agent-terminal/user-question-card.js": {
+              "verdict": "missing"
+            },
+            "apps/ai-profile-settings-host/index.html": {
+              "verdict": "exact",
+              "repoPath": "apps/ai-profile-settings-host/index.html",
+              "prefix": ""
+            },
+            "apps/ai-profile-settings-host/page.css": {
+              "verdict": "exact",
+              "repoPath": "apps/ai-profile-settings-host/page.css",
+              "prefix": ""
+            },
+            "apps/ai-profile-settings-host/page.js": {
+              "verdict": "exact",
+              "repoPath": "apps/ai-profile-settings-host/page.js",
+              "prefix": ""
+            },
+            "apps/minimal-test-host/host.css": {
+              "verdict": "exact",
+              "repoPath": "apps/minimal-test-host/host.css",
+              "prefix": ""
+            },
+            "apps/minimal-test-host/host.js": {
+              "verdict": "exact",
+              "repoPath": "apps/minimal-test-host/host.js",
+              "prefix": ""
+            },
+            "apps/minimal-test-host/index.html": {
+              "verdict": "exact",
+              "repoPath": "apps/minimal-test-host/index.html",
+              "prefix": ""
+            },
+            "apps/minimal-test-host/optional-mock/fault-injection.js": {
+              "verdict": "exact",
+              "repoPath": "apps/minimal-test-host/optional-mock/fault-injection.js",
+              "prefix": ""
+            },
+            "apps/minimal-test-host/README.md": {
+              "verdict": "exact",
+              "repoPath": "apps/minimal-test-host/README.md",
+              "prefix": ""
+            },
+            "docs/sdk/FILE_LAYOUT.md": {
+              "verdict": "exact",
+              "repoPath": "docs/sdk/FILE_LAYOUT.md",
+              "prefix": ""
+            },
+            "docs/sdk/INTEGRATION.md": {
+              "verdict": "exact",
+              "repoPath": "docs/sdk/INTEGRATION.md",
+              "prefix": ""
+            },
+            "docs/sdk/openapi.yaml": {
+              "verdict": "mismatch",
+              "repoPath": "docs/sdk/openapi.yaml",
+              "prefix": ""
+            },
+            "docs/sdk/README.md": {
+              "verdict": "exact",
+              "repoPath": "docs/sdk/README.md",
+              "prefix": ""
+            },
+            "docs/sdk/SESSION_EVENTS.md": {
+              "verdict": "mismatch",
+              "repoPath": "docs/sdk/SESSION_EVENTS.md",
+              "prefix": ""
+            },
+            "package.json": {
+              "verdict": "mismatch",
+              "repoPath": "package.json",
+              "prefix": ""
+            },
+            "packages/client/index.d.ts": {
+              "verdict": "mismatch",
+              "repoPath": "packages/client/index.d.ts",
+              "prefix": ""
+            },
+            "packages/client/index.js": {
+              "verdict": "mismatch",
+              "repoPath": "packages/client/index.js",
+              "prefix": ""
+            },
+            "packages/client/package.json": {
+              "verdict": "mismatch",
+              "repoPath": "packages/client/package.json",
+              "prefix": ""
+            },
+            "packages/client/README.md": {
+              "verdict": "mismatch",
+              "repoPath": "packages/client/README.md",
+              "prefix": ""
+            },
+            "packages/contracts/index.d.ts": {
+              "verdict": "mismatch",
+              "repoPath": "packages/contracts/index.d.ts",
+              "prefix": ""
+            },
+            "packages/contracts/index.js": {
+              "verdict": "mismatch",
+              "repoPath": "packages/contracts/index.js",
+              "prefix": ""
+            },
+            "packages/contracts/package.json": {
+              "verdict": "mismatch",
+              "repoPath": "packages/contracts/package.json",
+              "prefix": ""
+            },
+            "packages/contracts/README.md": {
+              "verdict": "exact",
+              "repoPath": "packages/contracts/README.md",
+              "prefix": ""
+            },
+            "packages/core/index.d.ts": {
+              "verdict": "exact",
+              "repoPath": "packages/core/index.d.ts",
+              "prefix": ""
+            },
+            "packages/core/index.js": {
+              "verdict": "exact",
+              "repoPath": "packages/core/index.js",
+              "prefix": ""
+            },
+            "packages/core/package.json": {
+              "verdict": "mismatch",
+              "repoPath": "packages/core/package.json",
+              "prefix": ""
+            },
+            "packages/core/README.md": {
+              "verdict": "exact",
+              "repoPath": "packages/core/README.md",
+              "prefix": ""
+            },
+            "packages/server/bin/agent-terminal-server.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/bin/agent-terminal-server.js",
+              "prefix": ""
+            },
+            "packages/server/bin/claude-workbench-server.js": {
+              "verdict": "mismatch",
+              "repoPath": "packages/server/bin/claude-workbench-server.js",
+              "prefix": ""
+            },
+            "packages/server/bin/claude-workbench.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/bin/claude-workbench.js",
+              "prefix": ""
+            },
+            "packages/server/index.d.ts": {
+              "verdict": "mismatch",
+              "repoPath": "packages/server/index.d.ts",
+              "prefix": ""
+            },
+            "packages/server/index.js": {
+              "verdict": "mismatch",
+              "repoPath": "packages/server/index.js",
+              "prefix": ""
+            },
+            "packages/server/lib/agent-discovery.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/agent-discovery.js",
+              "prefix": ""
+            },
+            "packages/server/lib/agent-registry.js": {
+              "verdict": "mismatch",
+              "repoPath": "packages/server/lib/agent-registry.js",
+              "prefix": ""
+            },
+            "packages/server/lib/agent-spawn-env.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/agent-spawn-env.js",
+              "prefix": ""
+            },
+            "packages/server/lib/attachment-store.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/attachment-store.js",
+              "prefix": ""
+            },
+            "packages/server/lib/bridges/app-server-bridge.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/bridges/app-server-bridge.js",
+              "prefix": ""
+            },
+            "packages/server/lib/bridges/opencode-server-bridge.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/bridges/opencode-server-bridge.js",
+              "prefix": ""
+            },
+            "packages/server/lib/capture-settings-store.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/capture-settings-store.js",
+              "prefix": ""
+            },
+            "packages/server/lib/claude-history-recovery.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/claude-history-recovery.js",
+              "prefix": ""
+            },
+            "packages/server/lib/cli-session-recovery.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/cli-session-recovery.js",
+              "prefix": ""
+            },
+            "packages/server/lib/context-resolver.js": {
+              "verdict": "mismatch",
+              "repoPath": "packages/server/lib/context-resolver.js",
+              "prefix": ""
+            },
+            "packages/server/lib/conversation-capture.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/conversation-capture.js",
+              "prefix": ""
+            },
+            "packages/server/lib/delegation-phase-store.js": {
+              "verdict": "missing"
+            },
+            "packages/server/lib/delegation-store.js": {
+              "verdict": "missing"
+            },
+            "packages/server/lib/diagnostics.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/diagnostics.js",
+              "prefix": ""
+            },
+            "packages/server/lib/drivers/cli-json-runner.js": {
+              "verdict": "mismatch",
+              "repoPath": "packages/server/lib/drivers/cli-json-runner.js",
+              "prefix": ""
+            },
+            "packages/server/lib/drivers/codex-driver.js": {
+              "verdict": "mismatch",
+              "repoPath": "packages/server/lib/drivers/codex-driver.js",
+              "prefix": ""
+            },
+            "packages/server/lib/drivers/opencode-driver.js": {
+              "verdict": "mismatch",
+              "repoPath": "packages/server/lib/drivers/opencode-driver.js",
+              "prefix": ""
+            },
+            "packages/server/lib/drivers/zcode-driver.js": {
+              "verdict": "mismatch",
+              "repoPath": "packages/server/lib/drivers/zcode-driver.js",
+              "prefix": ""
+            },
+            "packages/server/lib/drivers/zcode-profile-runtime.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/drivers/zcode-profile-runtime.js",
+              "prefix": ""
+            },
+            "packages/server/lib/event-stream.js": {
+              "verdict": "mismatch",
+              "repoPath": "packages/server/lib/event-stream.js",
+              "prefix": ""
+            },
+            "packages/server/lib/folder-picker.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/folder-picker.js",
+              "prefix": ""
+            },
+            "packages/server/lib/http-handler.js": {
+              "verdict": "mismatch",
+              "repoPath": "packages/server/lib/http-handler.js",
+              "prefix": ""
+            },
+            "packages/server/lib/json-file.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/json-file.js",
+              "prefix": ""
+            },
+            "packages/server/lib/knowledge-context.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/knowledge-context.js",
+              "prefix": ""
+            },
+            "packages/server/lib/model-detection.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/model-detection.js",
+              "prefix": ""
+            },
+            "packages/server/lib/parent-context.js": {
+              "verdict": "missing"
+            },
+            "packages/server/lib/profile-store.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/profile-store.js",
+              "prefix": ""
+            },
+            "packages/server/lib/project-store.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/project-store.js",
+              "prefix": ""
+            },
+            "packages/server/lib/runtime-loader.js": {
+              "verdict": "missing"
+            },
+            "packages/server/lib/session-archive-store.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/session-archive-store.js",
+              "prefix": ""
+            },
+            "packages/server/lib/session-history.js": {
+              "verdict": "mismatch",
+              "repoPath": "packages/server/lib/session-history.js",
+              "prefix": ""
+            },
+            "packages/server/lib/system-doctor.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/system-doctor.js",
+              "prefix": ""
+            },
+            "packages/server/lib/ui-preferences-store.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/ui-preferences-store.js",
+              "prefix": ""
+            },
+            "packages/server/lib/user-questions.js": {
+              "verdict": "missing"
+            },
+            "packages/server/lib/workbench-service.js": {
+              "verdict": "mismatch",
+              "repoPath": "packages/server/lib/workbench-service.js",
+              "prefix": ""
+            },
+            "packages/server/package.json": {
+              "verdict": "mismatch",
+              "repoPath": "packages/server/package.json",
+              "prefix": ""
+            },
+            "packages/server/README.md": {
+              "verdict": "exact",
+              "repoPath": "packages/server/README.md",
+              "prefix": ""
+            },
+            "packages/ui/ai-profile-settings.d.ts": {
+              "verdict": "exact",
+              "repoPath": "packages/ui/ai-profile-settings.d.ts",
+              "prefix": ""
+            },
+            "packages/ui/ai-profile-settings.js": {
+              "verdict": "exact",
+              "repoPath": "packages/ui/ai-profile-settings.js",
+              "prefix": ""
+            },
+            "packages/ui/claude-terminal.d.ts": {
+              "verdict": "exact",
+              "repoPath": "packages/ui/claude-terminal.d.ts",
+              "prefix": ""
+            },
+            "packages/ui/claude-terminal.js": {
+              "verdict": "exact",
+              "repoPath": "packages/ui/claude-terminal.js",
+              "prefix": ""
+            },
+            "packages/ui/index.d.ts": {
+              "verdict": "exact",
+              "repoPath": "packages/ui/index.d.ts",
+              "prefix": ""
+            },
+            "packages/ui/index.js": {
+              "verdict": "exact",
+              "repoPath": "packages/ui/index.js",
+              "prefix": ""
+            },
+            "packages/ui/package.json": {
+              "verdict": "mismatch",
+              "repoPath": "packages/ui/package.json",
+              "prefix": ""
+            },
+            "packages/ui/README.md": {
+              "verdict": "exact",
+              "repoPath": "packages/ui/README.md",
+              "prefix": ""
+            },
+            "packages/ui/theme.css": {
+              "verdict": "exact",
+              "repoPath": "packages/ui/theme.css",
+              "prefix": ""
+            },
+            "src/assets/claude-prompts.json": {
+              "verdict": "exact",
+              "repoPath": "src/assets/claude-prompts.json",
+              "prefix": ""
+            },
+            "src/backend/http/ai-profile-routes.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/http/ai-profile-routes.js",
+              "prefix": ""
+            },
+            "src/backend/http/claude-routes.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/http/claude-routes.js",
+              "prefix": ""
+            },
+            "src/backend/http/node-helpers.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/http/node-helpers.js",
+              "prefix": ""
+            },
+            "src/backend/index.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/index.js",
+              "prefix": ""
+            },
+            "src/backend/lib/ai-adapter.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/ai-adapter.js",
+              "prefix": ""
+            },
+            "src/backend/lib/ai-profile-store.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/ai-profile-store.js",
+              "prefix": ""
+            },
+            "src/backend/lib/ai-vendor-presets.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/ai-vendor-presets.js",
+              "prefix": ""
+            },
+            "src/backend/lib/ai-workspace.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/ai-workspace.js",
+              "prefix": ""
+            },
+            "src/backend/lib/automation-config.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/automation-config.js",
+              "prefix": ""
+            },
+            "src/backend/lib/claude-cli-runner.js": {
+              "verdict": "mismatch",
+              "repoPath": "src/backend/lib/claude-cli-runner.js",
+              "prefix": ""
+            },
+            "src/backend/lib/data-dir.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/data-dir.js",
+              "prefix": ""
+            },
+            "src/backend/lib/llm-client.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/llm-client.js",
+              "prefix": ""
+            },
+            "src/backend/lib/model-context-windows.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/model-context-windows.js",
+              "prefix": ""
+            },
+            "src/backend/lib/native-task-control.js": {
+              "verdict": "missing"
+            },
+            "src/backend/lib/native-task-history-index.js": {
+              "verdict": "missing"
+            },
+            "src/backend/lib/native-task-history-reader.js": {
+              "verdict": "missing"
+            },
+            "src/backend/lib/native-task-messages.js": {
+              "verdict": "missing"
+            },
+            "src/backend/lib/native-task-registry.js": {
+              "verdict": "missing"
+            },
+            "src/backend/lib/native-task-runtime.js": {
+              "verdict": "missing"
+            },
+            "src/backend/lib/native-task-trace.js": {
+              "verdict": "missing"
+            },
+            "src/backend/lib/native-task-transcript.js": {
+              "verdict": "missing"
+            },
+            "src/backend/lib/prompt-registry.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/prompt-registry.js",
+              "prefix": ""
+            },
+            "src/backend/lib/runtime-config.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/runtime-config.js",
+              "prefix": ""
+            },
+            "src/backend/lib/sdk-session-stream.js": {
+              "verdict": "mismatch",
+              "repoPath": "src/backend/lib/sdk-session-stream.js",
+              "prefix": ""
+            },
+            "src/backend/lib/sdk-turn-stream.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/sdk-turn-stream.js",
+              "prefix": ""
+            },
+            "src/backend/lib/store-scope.js": {
+              "verdict": "missing"
+            },
+            "src/backend/lib/task-identity.js": {
+              "verdict": "missing"
+            },
+            "src/backend/lib/task-state-projection.js": {
+              "verdict": "missing"
+            },
+            "src/index.js": {
+              "verdict": "exact",
+              "repoPath": "src/index.js",
+              "prefix": ""
+            },
+            "src/sdk-wave-a.ts": {
+              "verdict": "exact",
+              "repoPath": "src/sdk-wave-a.ts",
+              "prefix": ""
+            },
+            "src/sdk-wave-b.ts": {
+              "verdict": "exact",
+              "repoPath": "src/sdk-wave-b.ts",
+              "prefix": ""
+            },
+            "src/sdk-wave-c.ts": {
+              "verdict": "exact",
+              "repoPath": "src/sdk-wave-c.ts",
+              "prefix": ""
+            },
+            "src/sdk-wave-d.ts": {
+              "verdict": "exact",
+              "repoPath": "src/sdk-wave-d.ts",
+              "prefix": ""
+            },
+            "src/sdk-wave-e.ts": {
+              "verdict": "exact",
+              "repoPath": "src/sdk-wave-e.ts",
+              "prefix": ""
+            }
+          },
+          "counts": {
+            "exact": 70,
+            "crlf-eq": 0,
+            "lf-eq": 0,
+            "eol-mixed-eq": 0,
+            "mismatch": 31,
+            "missing": 23
+          },
+          "allBytesMatch": false,
+          "contentMatchesIgnoringEol": false
+        },
+        {
+          "label": "Claude-Ai-Workbench",
+          "repo": "D:/SanQian.Xu/claude-ai-workbench",
+          "rev": "origin/agent/sdk-productization",
+          "fileCount": 124,
+          "prefixes": [
+            ""
+          ],
+          "notes": [],
+          "files": {
+            "LICENSE": {
+              "verdict": "exact",
+              "repoPath": "LICENSE",
+              "prefix": ""
+            },
+            "README.md": {
+              "verdict": "exact",
+              "repoPath": "README.md",
+              "prefix": ""
+            },
+            "apps/agent-terminal/app.css": {
+              "verdict": "exact",
+              "repoPath": "apps/agent-terminal/app.css",
+              "prefix": ""
+            },
+            "apps/agent-terminal/app.js": {
+              "verdict": "exact",
+              "repoPath": "apps/agent-terminal/app.js",
+              "prefix": ""
+            },
+            "apps/agent-terminal/conversation-composer.js": {
+              "verdict": "exact",
+              "repoPath": "apps/agent-terminal/conversation-composer.js",
+              "prefix": ""
+            },
+            "apps/agent-terminal/index.html": {
+              "verdict": "exact",
+              "repoPath": "apps/agent-terminal/index.html",
+              "prefix": ""
+            },
+            "apps/agent-terminal/panel-host-proof.html": {
+              "verdict": "exact",
+              "repoPath": "apps/agent-terminal/panel-host-proof.html",
+              "prefix": ""
+            },
+            "apps/agent-terminal/panel-proof-content.html": {
+              "verdict": "exact",
+              "repoPath": "apps/agent-terminal/panel-proof-content.html",
+              "prefix": ""
+            },
+            "apps/agent-terminal/right-dock-panel-registry.js": {
+              "verdict": "exact",
+              "repoPath": "apps/agent-terminal/right-dock-panel-registry.js",
+              "prefix": ""
+            },
+            "apps/agent-terminal/right-workspace-dock.css": {
+              "verdict": "exact",
+              "repoPath": "apps/agent-terminal/right-workspace-dock.css",
+              "prefix": ""
+            },
+            "apps/agent-terminal/right-workspace-dock.js": {
+              "verdict": "exact",
+              "repoPath": "apps/agent-terminal/right-workspace-dock.js",
+              "prefix": ""
+            },
+            "apps/agent-terminal/user-question-card.js": {
+              "verdict": "exact",
+              "repoPath": "apps/agent-terminal/user-question-card.js",
+              "prefix": ""
+            },
+            "apps/ai-profile-settings-host/index.html": {
+              "verdict": "exact",
+              "repoPath": "apps/ai-profile-settings-host/index.html",
+              "prefix": ""
+            },
+            "apps/ai-profile-settings-host/page.css": {
+              "verdict": "exact",
+              "repoPath": "apps/ai-profile-settings-host/page.css",
+              "prefix": ""
+            },
+            "apps/ai-profile-settings-host/page.js": {
+              "verdict": "exact",
+              "repoPath": "apps/ai-profile-settings-host/page.js",
+              "prefix": ""
+            },
+            "apps/minimal-test-host/host.css": {
+              "verdict": "exact",
+              "repoPath": "apps/minimal-test-host/host.css",
+              "prefix": ""
+            },
+            "apps/minimal-test-host/host.js": {
+              "verdict": "exact",
+              "repoPath": "apps/minimal-test-host/host.js",
+              "prefix": ""
+            },
+            "apps/minimal-test-host/index.html": {
+              "verdict": "exact",
+              "repoPath": "apps/minimal-test-host/index.html",
+              "prefix": ""
+            },
+            "apps/minimal-test-host/optional-mock/fault-injection.js": {
+              "verdict": "exact",
+              "repoPath": "apps/minimal-test-host/optional-mock/fault-injection.js",
+              "prefix": ""
+            },
+            "apps/minimal-test-host/README.md": {
+              "verdict": "exact",
+              "repoPath": "apps/minimal-test-host/README.md",
+              "prefix": ""
+            },
+            "docs/sdk/FILE_LAYOUT.md": {
+              "verdict": "exact",
+              "repoPath": "docs/sdk/FILE_LAYOUT.md",
+              "prefix": ""
+            },
+            "docs/sdk/INTEGRATION.md": {
+              "verdict": "exact",
+              "repoPath": "docs/sdk/INTEGRATION.md",
+              "prefix": ""
+            },
+            "docs/sdk/openapi.yaml": {
+              "verdict": "exact",
+              "repoPath": "docs/sdk/openapi.yaml",
+              "prefix": ""
+            },
+            "docs/sdk/README.md": {
+              "verdict": "exact",
+              "repoPath": "docs/sdk/README.md",
+              "prefix": ""
+            },
+            "docs/sdk/SESSION_EVENTS.md": {
+              "verdict": "exact",
+              "repoPath": "docs/sdk/SESSION_EVENTS.md",
+              "prefix": ""
+            },
+            "package.json": {
+              "verdict": "exact",
+              "repoPath": "package.json",
+              "prefix": ""
+            },
+            "packages/client/index.d.ts": {
+              "verdict": "exact",
+              "repoPath": "packages/client/index.d.ts",
+              "prefix": ""
+            },
+            "packages/client/index.js": {
+              "verdict": "exact",
+              "repoPath": "packages/client/index.js",
+              "prefix": ""
+            },
+            "packages/client/package.json": {
+              "verdict": "exact",
+              "repoPath": "packages/client/package.json",
+              "prefix": ""
+            },
+            "packages/client/README.md": {
+              "verdict": "exact",
+              "repoPath": "packages/client/README.md",
+              "prefix": ""
+            },
+            "packages/contracts/index.d.ts": {
+              "verdict": "exact",
+              "repoPath": "packages/contracts/index.d.ts",
+              "prefix": ""
+            },
+            "packages/contracts/index.js": {
+              "verdict": "exact",
+              "repoPath": "packages/contracts/index.js",
+              "prefix": ""
+            },
+            "packages/contracts/package.json": {
+              "verdict": "exact",
+              "repoPath": "packages/contracts/package.json",
+              "prefix": ""
+            },
+            "packages/contracts/README.md": {
+              "verdict": "exact",
+              "repoPath": "packages/contracts/README.md",
+              "prefix": ""
+            },
+            "packages/core/index.d.ts": {
+              "verdict": "exact",
+              "repoPath": "packages/core/index.d.ts",
+              "prefix": ""
+            },
+            "packages/core/index.js": {
+              "verdict": "exact",
+              "repoPath": "packages/core/index.js",
+              "prefix": ""
+            },
+            "packages/core/package.json": {
+              "verdict": "exact",
+              "repoPath": "packages/core/package.json",
+              "prefix": ""
+            },
+            "packages/core/README.md": {
+              "verdict": "exact",
+              "repoPath": "packages/core/README.md",
+              "prefix": ""
+            },
+            "packages/server/bin/agent-terminal-server.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/bin/agent-terminal-server.js",
+              "prefix": ""
+            },
+            "packages/server/bin/claude-workbench-server.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/bin/claude-workbench-server.js",
+              "prefix": ""
+            },
+            "packages/server/bin/claude-workbench.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/bin/claude-workbench.js",
+              "prefix": ""
+            },
+            "packages/server/index.d.ts": {
+              "verdict": "exact",
+              "repoPath": "packages/server/index.d.ts",
+              "prefix": ""
+            },
+            "packages/server/index.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/index.js",
+              "prefix": ""
+            },
+            "packages/server/lib/agent-discovery.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/agent-discovery.js",
+              "prefix": ""
+            },
+            "packages/server/lib/agent-registry.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/agent-registry.js",
+              "prefix": ""
+            },
+            "packages/server/lib/agent-spawn-env.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/agent-spawn-env.js",
+              "prefix": ""
+            },
+            "packages/server/lib/attachment-store.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/attachment-store.js",
+              "prefix": ""
+            },
+            "packages/server/lib/bridges/app-server-bridge.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/bridges/app-server-bridge.js",
+              "prefix": ""
+            },
+            "packages/server/lib/bridges/opencode-server-bridge.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/bridges/opencode-server-bridge.js",
+              "prefix": ""
+            },
+            "packages/server/lib/capture-settings-store.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/capture-settings-store.js",
+              "prefix": ""
+            },
+            "packages/server/lib/claude-history-recovery.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/claude-history-recovery.js",
+              "prefix": ""
+            },
+            "packages/server/lib/cli-session-recovery.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/cli-session-recovery.js",
+              "prefix": ""
+            },
+            "packages/server/lib/context-resolver.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/context-resolver.js",
+              "prefix": ""
+            },
+            "packages/server/lib/conversation-capture.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/conversation-capture.js",
+              "prefix": ""
+            },
+            "packages/server/lib/delegation-phase-store.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/delegation-phase-store.js",
+              "prefix": ""
+            },
+            "packages/server/lib/delegation-store.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/delegation-store.js",
+              "prefix": ""
+            },
+            "packages/server/lib/diagnostics.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/diagnostics.js",
+              "prefix": ""
+            },
+            "packages/server/lib/drivers/cli-json-runner.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/drivers/cli-json-runner.js",
+              "prefix": ""
+            },
+            "packages/server/lib/drivers/codex-driver.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/drivers/codex-driver.js",
+              "prefix": ""
+            },
+            "packages/server/lib/drivers/opencode-driver.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/drivers/opencode-driver.js",
+              "prefix": ""
+            },
+            "packages/server/lib/drivers/zcode-driver.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/drivers/zcode-driver.js",
+              "prefix": ""
+            },
+            "packages/server/lib/drivers/zcode-profile-runtime.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/drivers/zcode-profile-runtime.js",
+              "prefix": ""
+            },
+            "packages/server/lib/event-stream.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/event-stream.js",
+              "prefix": ""
+            },
+            "packages/server/lib/folder-picker.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/folder-picker.js",
+              "prefix": ""
+            },
+            "packages/server/lib/http-handler.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/http-handler.js",
+              "prefix": ""
+            },
+            "packages/server/lib/json-file.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/json-file.js",
+              "prefix": ""
+            },
+            "packages/server/lib/knowledge-context.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/knowledge-context.js",
+              "prefix": ""
+            },
+            "packages/server/lib/model-detection.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/model-detection.js",
+              "prefix": ""
+            },
+            "packages/server/lib/parent-context.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/parent-context.js",
+              "prefix": ""
+            },
+            "packages/server/lib/profile-store.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/profile-store.js",
+              "prefix": ""
+            },
+            "packages/server/lib/project-store.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/project-store.js",
+              "prefix": ""
+            },
+            "packages/server/lib/runtime-loader.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/runtime-loader.js",
+              "prefix": ""
+            },
+            "packages/server/lib/session-archive-store.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/session-archive-store.js",
+              "prefix": ""
+            },
+            "packages/server/lib/session-history.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/session-history.js",
+              "prefix": ""
+            },
+            "packages/server/lib/system-doctor.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/system-doctor.js",
+              "prefix": ""
+            },
+            "packages/server/lib/ui-preferences-store.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/ui-preferences-store.js",
+              "prefix": ""
+            },
+            "packages/server/lib/user-questions.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/user-questions.js",
+              "prefix": ""
+            },
+            "packages/server/lib/workbench-service.js": {
+              "verdict": "exact",
+              "repoPath": "packages/server/lib/workbench-service.js",
+              "prefix": ""
+            },
+            "packages/server/package.json": {
+              "verdict": "exact",
+              "repoPath": "packages/server/package.json",
+              "prefix": ""
+            },
+            "packages/server/README.md": {
+              "verdict": "exact",
+              "repoPath": "packages/server/README.md",
+              "prefix": ""
+            },
+            "packages/ui/ai-profile-settings.d.ts": {
+              "verdict": "exact",
+              "repoPath": "packages/ui/ai-profile-settings.d.ts",
+              "prefix": ""
+            },
+            "packages/ui/ai-profile-settings.js": {
+              "verdict": "exact",
+              "repoPath": "packages/ui/ai-profile-settings.js",
+              "prefix": ""
+            },
+            "packages/ui/claude-terminal.d.ts": {
+              "verdict": "exact",
+              "repoPath": "packages/ui/claude-terminal.d.ts",
+              "prefix": ""
+            },
+            "packages/ui/claude-terminal.js": {
+              "verdict": "exact",
+              "repoPath": "packages/ui/claude-terminal.js",
+              "prefix": ""
+            },
+            "packages/ui/index.d.ts": {
+              "verdict": "exact",
+              "repoPath": "packages/ui/index.d.ts",
+              "prefix": ""
+            },
+            "packages/ui/index.js": {
+              "verdict": "exact",
+              "repoPath": "packages/ui/index.js",
+              "prefix": ""
+            },
+            "packages/ui/package.json": {
+              "verdict": "exact",
+              "repoPath": "packages/ui/package.json",
+              "prefix": ""
+            },
+            "packages/ui/README.md": {
+              "verdict": "exact",
+              "repoPath": "packages/ui/README.md",
+              "prefix": ""
+            },
+            "packages/ui/theme.css": {
+              "verdict": "exact",
+              "repoPath": "packages/ui/theme.css",
+              "prefix": ""
+            },
+            "src/assets/claude-prompts.json": {
+              "verdict": "exact",
+              "repoPath": "src/assets/claude-prompts.json",
+              "prefix": ""
+            },
+            "src/backend/http/ai-profile-routes.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/http/ai-profile-routes.js",
+              "prefix": ""
+            },
+            "src/backend/http/claude-routes.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/http/claude-routes.js",
+              "prefix": ""
+            },
+            "src/backend/http/node-helpers.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/http/node-helpers.js",
+              "prefix": ""
+            },
+            "src/backend/index.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/index.js",
+              "prefix": ""
+            },
+            "src/backend/lib/ai-adapter.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/ai-adapter.js",
+              "prefix": ""
+            },
+            "src/backend/lib/ai-profile-store.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/ai-profile-store.js",
+              "prefix": ""
+            },
+            "src/backend/lib/ai-vendor-presets.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/ai-vendor-presets.js",
+              "prefix": ""
+            },
+            "src/backend/lib/ai-workspace.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/ai-workspace.js",
+              "prefix": ""
+            },
+            "src/backend/lib/automation-config.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/automation-config.js",
+              "prefix": ""
+            },
+            "src/backend/lib/claude-cli-runner.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/claude-cli-runner.js",
+              "prefix": ""
+            },
+            "src/backend/lib/data-dir.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/data-dir.js",
+              "prefix": ""
+            },
+            "src/backend/lib/llm-client.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/llm-client.js",
+              "prefix": ""
+            },
+            "src/backend/lib/model-context-windows.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/model-context-windows.js",
+              "prefix": ""
+            },
+            "src/backend/lib/native-task-control.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/native-task-control.js",
+              "prefix": ""
+            },
+            "src/backend/lib/native-task-history-index.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/native-task-history-index.js",
+              "prefix": ""
+            },
+            "src/backend/lib/native-task-history-reader.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/native-task-history-reader.js",
+              "prefix": ""
+            },
+            "src/backend/lib/native-task-messages.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/native-task-messages.js",
+              "prefix": ""
+            },
+            "src/backend/lib/native-task-registry.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/native-task-registry.js",
+              "prefix": ""
+            },
+            "src/backend/lib/native-task-runtime.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/native-task-runtime.js",
+              "prefix": ""
+            },
+            "src/backend/lib/native-task-trace.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/native-task-trace.js",
+              "prefix": ""
+            },
+            "src/backend/lib/native-task-transcript.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/native-task-transcript.js",
+              "prefix": ""
+            },
+            "src/backend/lib/prompt-registry.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/prompt-registry.js",
+              "prefix": ""
+            },
+            "src/backend/lib/runtime-config.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/runtime-config.js",
+              "prefix": ""
+            },
+            "src/backend/lib/sdk-session-stream.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/sdk-session-stream.js",
+              "prefix": ""
+            },
+            "src/backend/lib/sdk-turn-stream.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/sdk-turn-stream.js",
+              "prefix": ""
+            },
+            "src/backend/lib/store-scope.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/store-scope.js",
+              "prefix": ""
+            },
+            "src/backend/lib/task-identity.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/task-identity.js",
+              "prefix": ""
+            },
+            "src/backend/lib/task-state-projection.js": {
+              "verdict": "exact",
+              "repoPath": "src/backend/lib/task-state-projection.js",
+              "prefix": ""
+            },
+            "src/index.js": {
+              "verdict": "exact",
+              "repoPath": "src/index.js",
+              "prefix": ""
+            },
+            "src/sdk-wave-a.ts": {
+              "verdict": "exact",
+              "repoPath": "src/sdk-wave-a.ts",
+              "prefix": ""
+            },
+            "src/sdk-wave-b.ts": {
+              "verdict": "exact",
+              "repoPath": "src/sdk-wave-b.ts",
+              "prefix": ""
+            },
+            "src/sdk-wave-c.ts": {
+              "verdict": "exact",
+              "repoPath": "src/sdk-wave-c.ts",
+              "prefix": ""
+            },
+            "src/sdk-wave-d.ts": {
+              "verdict": "exact",
+              "repoPath": "src/sdk-wave-d.ts",
+              "prefix": ""
+            },
+            "src/sdk-wave-e.ts": {
+              "verdict": "exact",
+              "repoPath": "src/sdk-wave-e.ts",
+              "prefix": ""
+            }
+          },
+          "counts": {
+            "exact": 124,
+            "crlf-eq": 0,
+            "lf-eq": 0,
+            "eol-mixed-eq": 0,
+            "mismatch": 0,
+            "missing": 0
+          },
+          "allBytesMatch": true,
+          "contentMatchesIgnoringEol": true
+        }
+      ]
+    },
+    {
+      "module": "vectorHub",
+      "expectedVersion": "1.0.8-rc.8",
+      "attempts": [
+        {
+          "label": "vector-hub",
+          "repo": "D:/SanQian.Xu/vector-hub",
+          "rev": "main",
+          "fileCount": 59,
+          "prefixes": [
+            ""
+          ],
+          "notes": [],
+          "files": {
+            "README.md": {
+              "verdict": "crlf-eq",
+              "repoPath": "README.md",
+              "prefix": ""
+            },
+            "dist/cjs/bin.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/cjs/bin.js": {
+              "verdict": "missing"
+            },
+            "dist/cjs/bin.js.map": {
+              "verdict": "missing"
+            },
+            "dist/cjs/core/embeddings.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/cjs/core/embeddings.js": {
+              "verdict": "missing"
+            },
+            "dist/cjs/core/embeddings.js.map": {
+              "verdict": "missing"
+            },
+            "dist/cjs/core/hub.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/cjs/core/hub.js": {
+              "verdict": "missing"
+            },
+            "dist/cjs/core/hub.js.map": {
+              "verdict": "missing"
+            },
+            "dist/cjs/core/kb-sync.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/cjs/core/kb-sync.js": {
+              "verdict": "missing"
+            },
+            "dist/cjs/core/kb-sync.js.map": {
+              "verdict": "missing"
+            },
+            "dist/cjs/core/types.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/cjs/core/types.js": {
+              "verdict": "missing"
+            },
+            "dist/cjs/core/types.js.map": {
+              "verdict": "missing"
+            },
+            "dist/cjs/index.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/cjs/index.js": {
+              "verdict": "missing"
+            },
+            "dist/cjs/index.js.map": {
+              "verdict": "missing"
+            },
+            "dist/cjs/server/folder-picker.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/cjs/server/folder-picker.js": {
+              "verdict": "missing"
+            },
+            "dist/cjs/server/folder-picker.js.map": {
+              "verdict": "missing"
+            },
+            "dist/cjs/server/manager.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/cjs/server/manager.js": {
+              "verdict": "missing"
+            },
+            "dist/cjs/server/manager.js.map": {
+              "verdict": "missing"
+            },
+            "dist/cjs/server/server.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/cjs/server/server.js": {
+              "verdict": "missing"
+            },
+            "dist/cjs/server/server.js.map": {
+              "verdict": "missing"
+            },
+            "dist/esm/bin.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/esm/bin.js": {
+              "verdict": "missing"
+            },
+            "dist/esm/bin.js.map": {
+              "verdict": "missing"
+            },
+            "dist/esm/core/embeddings.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/esm/core/embeddings.js": {
+              "verdict": "missing"
+            },
+            "dist/esm/core/embeddings.js.map": {
+              "verdict": "missing"
+            },
+            "dist/esm/core/hub.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/esm/core/hub.js": {
+              "verdict": "missing"
+            },
+            "dist/esm/core/hub.js.map": {
+              "verdict": "missing"
+            },
+            "dist/esm/core/kb-sync.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/esm/core/kb-sync.js": {
+              "verdict": "missing"
+            },
+            "dist/esm/core/kb-sync.js.map": {
+              "verdict": "missing"
+            },
+            "dist/esm/core/types.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/esm/core/types.js": {
+              "verdict": "missing"
+            },
+            "dist/esm/core/types.js.map": {
+              "verdict": "missing"
+            },
+            "dist/esm/index.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/esm/index.js": {
+              "verdict": "missing"
+            },
+            "dist/esm/index.js.map": {
+              "verdict": "missing"
+            },
+            "dist/esm/package.json": {
+              "verdict": "missing"
+            },
+            "dist/esm/server/folder-picker.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/esm/server/folder-picker.js": {
+              "verdict": "missing"
+            },
+            "dist/esm/server/folder-picker.js.map": {
+              "verdict": "missing"
+            },
+            "dist/esm/server/manager.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/esm/server/manager.js": {
+              "verdict": "missing"
+            },
+            "dist/esm/server/manager.js.map": {
+              "verdict": "missing"
+            },
+            "dist/esm/server/server.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/esm/server/server.js": {
+              "verdict": "missing"
+            },
+            "dist/esm/server/server.js.map": {
+              "verdict": "missing"
+            },
+            "package.json": {
+              "verdict": "exact",
+              "repoPath": "package.json",
+              "prefix": ""
+            },
+            "ui/index.html": {
+              "verdict": "crlf-eq",
+              "repoPath": "ui/index.html",
+              "prefix": ""
+            },
+            "ui/vendor/marked.min.js": {
+              "verdict": "exact",
+              "repoPath": "ui/vendor/marked.min.js",
+              "prefix": ""
+            }
+          },
+          "counts": {
+            "exact": 2,
+            "crlf-eq": 2,
+            "lf-eq": 0,
+            "eol-mixed-eq": 0,
+            "mismatch": 0,
+            "missing": 55
+          },
+          "allBytesMatch": false,
+          "contentMatchesIgnoringEol": false
+        },
+        {
+          "label": "vector-hub",
+          "repo": "D:/SanQian.Xu/vector-hub",
+          "rev": "origin/main",
+          "fileCount": 59,
+          "prefixes": [
+            ""
+          ],
+          "notes": [],
+          "files": {
+            "README.md": {
+              "verdict": "crlf-eq",
+              "repoPath": "README.md",
+              "prefix": ""
+            },
+            "dist/cjs/bin.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/cjs/bin.js": {
+              "verdict": "missing"
+            },
+            "dist/cjs/bin.js.map": {
+              "verdict": "missing"
+            },
+            "dist/cjs/core/embeddings.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/cjs/core/embeddings.js": {
+              "verdict": "missing"
+            },
+            "dist/cjs/core/embeddings.js.map": {
+              "verdict": "missing"
+            },
+            "dist/cjs/core/hub.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/cjs/core/hub.js": {
+              "verdict": "missing"
+            },
+            "dist/cjs/core/hub.js.map": {
+              "verdict": "missing"
+            },
+            "dist/cjs/core/kb-sync.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/cjs/core/kb-sync.js": {
+              "verdict": "missing"
+            },
+            "dist/cjs/core/kb-sync.js.map": {
+              "verdict": "missing"
+            },
+            "dist/cjs/core/types.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/cjs/core/types.js": {
+              "verdict": "missing"
+            },
+            "dist/cjs/core/types.js.map": {
+              "verdict": "missing"
+            },
+            "dist/cjs/index.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/cjs/index.js": {
+              "verdict": "missing"
+            },
+            "dist/cjs/index.js.map": {
+              "verdict": "missing"
+            },
+            "dist/cjs/server/folder-picker.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/cjs/server/folder-picker.js": {
+              "verdict": "missing"
+            },
+            "dist/cjs/server/folder-picker.js.map": {
+              "verdict": "missing"
+            },
+            "dist/cjs/server/manager.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/cjs/server/manager.js": {
+              "verdict": "missing"
+            },
+            "dist/cjs/server/manager.js.map": {
+              "verdict": "missing"
+            },
+            "dist/cjs/server/server.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/cjs/server/server.js": {
+              "verdict": "missing"
+            },
+            "dist/cjs/server/server.js.map": {
+              "verdict": "missing"
+            },
+            "dist/esm/bin.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/esm/bin.js": {
+              "verdict": "missing"
+            },
+            "dist/esm/bin.js.map": {
+              "verdict": "missing"
+            },
+            "dist/esm/core/embeddings.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/esm/core/embeddings.js": {
+              "verdict": "missing"
+            },
+            "dist/esm/core/embeddings.js.map": {
+              "verdict": "missing"
+            },
+            "dist/esm/core/hub.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/esm/core/hub.js": {
+              "verdict": "missing"
+            },
+            "dist/esm/core/hub.js.map": {
+              "verdict": "missing"
+            },
+            "dist/esm/core/kb-sync.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/esm/core/kb-sync.js": {
+              "verdict": "missing"
+            },
+            "dist/esm/core/kb-sync.js.map": {
+              "verdict": "missing"
+            },
+            "dist/esm/core/types.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/esm/core/types.js": {
+              "verdict": "missing"
+            },
+            "dist/esm/core/types.js.map": {
+              "verdict": "missing"
+            },
+            "dist/esm/index.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/esm/index.js": {
+              "verdict": "missing"
+            },
+            "dist/esm/index.js.map": {
+              "verdict": "missing"
+            },
+            "dist/esm/package.json": {
+              "verdict": "missing"
+            },
+            "dist/esm/server/folder-picker.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/esm/server/folder-picker.js": {
+              "verdict": "missing"
+            },
+            "dist/esm/server/folder-picker.js.map": {
+              "verdict": "missing"
+            },
+            "dist/esm/server/manager.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/esm/server/manager.js": {
+              "verdict": "missing"
+            },
+            "dist/esm/server/manager.js.map": {
+              "verdict": "missing"
+            },
+            "dist/esm/server/server.d.ts": {
+              "verdict": "missing"
+            },
+            "dist/esm/server/server.js": {
+              "verdict": "missing"
+            },
+            "dist/esm/server/server.js.map": {
+              "verdict": "missing"
+            },
+            "package.json": {
+              "verdict": "exact",
+              "repoPath": "package.json",
+              "prefix": ""
+            },
+            "ui/index.html": {
+              "verdict": "crlf-eq",
+              "repoPath": "ui/index.html",
+              "prefix": ""
+            },
+            "ui/vendor/marked.min.js": {
+              "verdict": "exact",
+              "repoPath": "ui/vendor/marked.min.js",
+              "prefix": ""
+            }
+          },
+          "counts": {
+            "exact": 2,
+            "crlf-eq": 2,
+            "lf-eq": 0,
+            "eol-mixed-eq": 0,
+            "mismatch": 0,
+            "missing": 55
+          },
+          "allBytesMatch": false,
+          "contentMatchesIgnoringEol": false
+        }
+      ]
+    },
+    {
+      "module": "eventBridge",
+      "expectedVersion": "0.7.2",
+      "attempts": [
+        {
+          "label": "ai-coding-event-bridge",
+          "repo": "D:/SanQian.Xu/ai-coding-event-bridge",
+          "rev": "feat/ai-coding-event-bridge",
+          "fileCount": 38,
+          "prefixes": [
+            "packages/console/"
+          ],
+          "notes": [],
+          "files": {
+            "LICENSE": {
+              "verdict": "exact",
+              "repoPath": "packages/console/LICENSE",
+              "prefix": "packages/console/"
+            },
+            "README.md": {
+              "verdict": "exact",
+              "repoPath": "packages/console/README.md",
+              "prefix": "packages/console/"
+            },
+            "console/index.html": {
+              "verdict": "exact",
+              "repoPath": "packages/console/console/index.html",
+              "prefix": "packages/console/"
+            },
+            "package.json": {
+              "verdict": "exact",
+              "repoPath": "packages/console/package.json",
+              "prefix": "packages/console/"
+            },
+            "src/agent-detect.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/agent-detect.js",
+              "prefix": "packages/console/"
+            },
+            "src/bin.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bin.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/bin/commit-boundary.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/bin/commit-boundary.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/connectors/capture-guard.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/connectors/capture-guard.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/connectors/claude-code/hook-entry.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/connectors/claude-code/hook-entry.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/connectors/claude-code/notify.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/connectors/claude-code/notify.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/connectors/codex/cursor-store.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/connectors/codex/cursor-store.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/connectors/codex/hook-entry.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/connectors/codex/hook-entry.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/connectors/codex/session-parser.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/connectors/codex/session-parser.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/connectors/opencode/hook-entry.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/connectors/opencode/hook-entry.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/core/bridge.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/core/bridge.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/core/commit-projection.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/core/commit-projection.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/core/compaction.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/core/compaction.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/core/consumer-registry.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/core/consumer-registry.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/core/event-schema.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/core/event-schema.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/core/fs-utils.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/core/fs-utils.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/core/journal-router.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/core/journal-router.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/core/journal.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/core/journal.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/core/lock.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/core/lock.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/core/normalizer.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/core/normalizer.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/core/paths.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/core/paths.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/core/project-registry.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/core/project-registry.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/core/repo-context.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/core/repo-context.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/core/runtime-home.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/core/runtime-home.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/core/semver.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/core/semver.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/core/turn-identity.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/core/turn-identity.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/index.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/index.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/installers/claude-code/installer.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/installers/claude-code/installer.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/installers/codex/installer.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/installers/codex/installer.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/installers/opencode/installer.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/installers/opencode/installer.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/installers/zcode/installer.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/installers/zcode/installer.js",
+              "prefix": "packages/console/"
+            },
+            "src/bridge/query/conversation-query.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/bridge/query/conversation-query.js",
+              "prefix": "packages/console/"
+            },
+            "src/pick-folder.js": {
+              "verdict": "crlf-eq",
+              "repoPath": "packages/console/src/pick-folder.js",
+              "prefix": "packages/console/"
+            },
+            "src/server.js": {
+              "verdict": "exact",
+              "repoPath": "packages/console/src/server.js",
+              "prefix": "packages/console/"
+            }
+          },
+          "counts": {
+            "exact": 37,
+            "crlf-eq": 1,
+            "lf-eq": 0,
+            "eol-mixed-eq": 0,
+            "mismatch": 0,
+            "missing": 0
+          },
+          "allBytesMatch": true,
+          "contentMatchesIgnoringEol": true
+        }
+      ]
+    },
+    {
+      "module": "knowledge-engine",
+      "expectedVersion": "0.2.7-rc.10",
+      "attempts": [
+        {
+          "label": "knowledge-engine",
+          "repo": "D:/SanQian.Xu/knowledge-engine",
+          "rev": "main",
+          "fileCount": 42,
+          "prefixes": [
+            ""
+          ],
+          "notes": [],
+          "files": {
+            "README.md": {
+              "verdict": "exact",
+              "repoPath": "README.md",
+              "prefix": ""
+            },
+            "package.json": {
+              "verdict": "exact",
+              "repoPath": "package.json",
+              "prefix": ""
+            },
+            "src/analysis-contract.js": {
+              "verdict": "exact",
+              "repoPath": "src/analysis-contract.js",
+              "prefix": ""
+            },
+            "src/analysis-failures.js": {
+              "verdict": "exact",
+              "repoPath": "src/analysis-failures.js",
+              "prefix": ""
+            },
+            "src/analysis-output.js": {
+              "verdict": "exact",
+              "repoPath": "src/analysis-output.js",
+              "prefix": ""
+            },
+            "src/analysis-worker.js": {
+              "verdict": "exact",
+              "repoPath": "src/analysis-worker.js",
+              "prefix": ""
+            },
+            "src/bin.js": {
+              "verdict": "exact",
+              "repoPath": "src/bin.js",
+              "prefix": ""
+            },
+            "src/bridge-client.js": {
+              "verdict": "exact",
+              "repoPath": "src/bridge-client.js",
+              "prefix": ""
+            },
+            "src/context.js": {
+              "verdict": "exact",
+              "repoPath": "src/context.js",
+              "prefix": ""
+            },
+            "src/coordinator.js": {
+              "verdict": "exact",
+              "repoPath": "src/coordinator.js",
+              "prefix": ""
+            },
+            "src/diagnostics.js": {
+              "verdict": "exact",
+              "repoPath": "src/diagnostics.js",
+              "prefix": ""
+            },
+            "src/headless-analyzer.js": {
+              "verdict": "exact",
+              "repoPath": "src/headless-analyzer.js",
+              "prefix": ""
+            },
+            "src/index-request.js": {
+              "verdict": "exact",
+              "repoPath": "src/index-request.js",
+              "prefix": ""
+            },
+            "src/knowledge-targets.js": {
+              "verdict": "exact",
+              "repoPath": "src/knowledge-targets.js",
+              "prefix": ""
+            },
+            "src/memories.js": {
+              "verdict": "exact",
+              "repoPath": "src/memories.js",
+              "prefix": ""
+            },
+            "src/memory-eligibility.js": {
+              "verdict": "exact",
+              "repoPath": "src/memory-eligibility.js",
+              "prefix": ""
+            },
+            "src/retrieval-policy.json": {
+              "verdict": "exact",
+              "repoPath": "src/retrieval-policy.json",
+              "prefix": ""
+            },
+            "src/retrieval-ranking.js": {
+              "verdict": "exact",
+              "repoPath": "src/retrieval-ranking.js",
+              "prefix": ""
+            },
+            "src/retrieval.js": {
+              "verdict": "exact",
+              "repoPath": "src/retrieval.js",
+              "prefix": ""
+            },
+            "src/runtime/README.md": {
+              "verdict": "exact",
+              "repoPath": "src/runtime/README.md",
+              "prefix": ""
+            },
+            "src/runtime/atomic-file.js": {
+              "verdict": "exact",
+              "repoPath": "src/runtime/atomic-file.js",
+              "prefix": ""
+            },
+            "src/runtime/automation-config.js": {
+              "verdict": "crlf-eq",
+              "repoPath": "src/runtime/automation-config.js",
+              "prefix": ""
+            },
+            "src/runtime/commit-conversation-binder.js": {
+              "verdict": "eol-mixed-eq",
+              "repoPath": "src/runtime/commit-conversation-binder.js",
+              "prefix": ""
+            },
+            "src/runtime/commit-processing-ledger.js": {
+              "verdict": "crlf-eq",
+              "repoPath": "src/runtime/commit-processing-ledger.js",
+              "prefix": ""
+            },
+            "src/runtime/commit-prompt.js": {
+              "verdict": "eol-mixed-eq",
+              "repoPath": "src/runtime/commit-prompt.js",
+              "prefix": ""
+            },
+            "src/runtime/commit-reconciler.js": {
+              "verdict": "eol-mixed-eq",
+              "repoPath": "src/runtime/commit-reconciler.js",
+              "prefix": ""
+            },
+            "src/runtime/content-hash.js": {
+              "verdict": "exact",
+              "repoPath": "src/runtime/content-hash.js",
+              "prefix": ""
+            },
+            "src/runtime/contracts.js": {
+              "verdict": "crlf-eq",
+              "repoPath": "src/runtime/contracts.js",
+              "prefix": ""
+            },
+            "src/runtime/conversation-exclusions.js": {
+              "verdict": "exact",
+              "repoPath": "src/runtime/conversation-exclusions.js",
+              "prefix": ""
+            },
+            "src/runtime/conversation-store.js": {
+              "verdict": "crlf-eq",
+              "repoPath": "src/runtime/conversation-store.js",
+              "prefix": ""
+            },
+            "src/runtime/evidence-bundle.js": {
+              "verdict": "crlf-eq",
+              "repoPath": "src/runtime/evidence-bundle.js",
+              "prefix": ""
+            },
+            "src/runtime/git-runner.js": {
+              "verdict": "crlf-eq",
+              "repoPath": "src/runtime/git-runner.js",
+              "prefix": ""
+            },
+            "src/runtime/knowledge-promotion.js": {
+              "verdict": "eol-mixed-eq",
+              "repoPath": "src/runtime/knowledge-promotion.js",
+              "prefix": ""
+            },
+            "src/runtime/knowledge-retrieval-service.js": {
+              "verdict": "eol-mixed-eq",
+              "repoPath": "src/runtime/knowledge-retrieval-service.js",
+              "prefix": ""
+            },
+            "src/runtime/layout.js": {
+              "verdict": "exact",
+              "repoPath": "src/runtime/layout.js",
+              "prefix": ""
+            },
+            "src/runtime/markdown-knowledge-indexer.js": {
+              "verdict": "eol-mixed-eq",
+              "repoPath": "src/runtime/markdown-knowledge-indexer.js",
+              "prefix": ""
+            },
+            "src/runtime/scanner.js": {
+              "verdict": "crlf-eq",
+              "repoPath": "src/runtime/scanner.js",
+              "prefix": ""
+            },
+            "src/server.js": {
+              "verdict": "exact",
+              "repoPath": "src/server.js",
+              "prefix": ""
+            },
+            "src/store.js": {
+              "verdict": "exact",
+              "repoPath": "src/store.js",
+              "prefix": ""
+            },
+            "ui/app.css": {
+              "verdict": "exact",
+              "repoPath": "ui/app.css",
+              "prefix": ""
+            },
+            "ui/app.js": {
+              "verdict": "exact",
+              "repoPath": "ui/app.js",
+              "prefix": ""
+            },
+            "ui/index.html": {
+              "verdict": "exact",
+              "repoPath": "ui/index.html",
+              "prefix": ""
+            }
+          },
+          "counts": {
+            "exact": 29,
+            "crlf-eq": 7,
+            "lf-eq": 0,
+            "eol-mixed-eq": 6,
+            "mismatch": 0,
+            "missing": 0
+          },
+          "allBytesMatch": false,
+          "contentMatchesIgnoringEol": true
+        }
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "module": "terminal",
+      "expectedVersion": "0.13.6",
+      "matchedRev": "origin/agent/sdk-productization",
+      "verdict": "ALL_BYTES_MATCH",
+      "counts": {
+        "exact": 124,
+        "crlf-eq": 0,
+        "lf-eq": 0,
+        "eol-mixed-eq": 0,
+        "mismatch": 0,
+        "missing": 0
+      }
+    },
+    {
+      "module": "vectorHub",
+      "expectedVersion": "1.0.8-rc.8",
+      "matchedRev": null,
+      "verdict": "NO_EXACT_REV_MATCH",
+      "counts": {
+        "exact": 2,
+        "crlf-eq": 2,
+        "lf-eq": 0,
+        "eol-mixed-eq": 0,
+        "mismatch": 0,
+        "missing": 55
+      }
+    },
+    {
+      "module": "eventBridge",
+      "expectedVersion": "0.7.2",
+      "matchedRev": "feat/ai-coding-event-bridge",
+      "verdict": "ALL_BYTES_MATCH",
+      "counts": {
+        "exact": 37,
+        "crlf-eq": 1,
+        "lf-eq": 0,
+        "eol-mixed-eq": 0,
+        "mismatch": 0,
+        "missing": 0
+      }
+    },
+    {
+      "module": "knowledge-engine",
+      "expectedVersion": "0.2.7-rc.10",
+      "matchedRev": "main",
+      "verdict": "CONTENT_MATCH_EOL_ONLY",
+      "counts": {
+        "exact": 29,
+        "crlf-eq": 7,
+        "lf-eq": 0,
+        "eol-mixed-eq": 6,
+        "mismatch": 0,
+        "missing": 0
+      },
+      "note": "knowledge-engine 以 _modules/ 内嵌副本交付，不是 npm 依赖；npm 上最高为 0.2.7-rc.9，内嵌为 0.2.7-rc.10。"
+    }
+  ],
+  "moduleRuntimeManifest": {
+    "version": "0.13.6",
+    "modules": {
+      "terminal": {
+        "name": "@sanqianx/claude-ai-workbench",
+        "version": "0.13.6",
+        "fileCount": 124
+      },
+      "vectorHub": {
+        "name": "@sanqianx/vector-hub",
+        "version": "1.0.8-rc.8",
+        "fileCount": 59
+      },
+      "eventBridge": {
+        "name": "@sanqianx/ai-coding-event-bridge-console",
+        "version": "0.7.2",
+        "fileCount": 38
+      }
+    }
+  }
+}

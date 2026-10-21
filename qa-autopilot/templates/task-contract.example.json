@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "bugId": "QA-001",
+  "kind": "bug",
+  "summary": "填写可稳定复现的单一问题，不以模型主观判断作为需求",
+  "allowedFiles": [
+    "ui/product.js"
+  ],
+  "approvedProtectedFiles": [],
+  "approvalReceipt": null,
+  "publicApiChange": false,
+  "storageContractChange": false,
+  "expectedBehavior": "按已确认需求和来源定义",
+  "sourceEvidence": [],
+  "reproductionCaseIds": [],
+  "verificationSuites": [
+    "smoke"
+  ],
+  "maxAttempts": 2,
+  "risk": "P2"
+}
