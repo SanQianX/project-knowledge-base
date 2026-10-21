@@ -134,7 +134,7 @@ function isolatedEnv(run, additions = {}) {
         GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.join(run, 'home', '.gitconfig'), GIT_TEMPLATE_DIR: path.join(run, 'git-template'),
         npm_config_cache: path.join(run, 'npm-cache'), npm_config_registry: 'https://registry.npmjs.org',
         npm_config_userconfig: path.join(run, 'home', '.npmrc'), FORCE_COLOR: '0', CI: '1',
-        KB_MODULES_AUTOSTART: '0', KB_MODULES_REGISTER: '0'
+        KB_MODULES_AUTOSTART: '0'
     });
     for (const [key, value] of Object.entries(additions)) {
         must(!/(NODE_OPTIONS|GIT_CONFIG_COUNT|NPM_TOKEN|GH_TOKEN|GITHUB_TOKEN)/i.test(key), 'ENV_FORBIDDEN', 'Unsafe child environment override.');

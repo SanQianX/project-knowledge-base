@@ -26,6 +26,22 @@ function browserEnv(cfg) {
     const configured = cfg.browser && cfg.browser.chromePath;
     return configured ? { KB_CHROME_PATH: configured } : {};
 }
+/**
+ * Windows MAX_PATH 是 260。QA 的运行目录本身很深
+ * （.runtime/runs/<suite>-<ts>/<test-file>/tmp/...），
+ * 产品测试再在其中创建 Lance 的 _transactions/<uuid>.txn 时会超限，
+ * 以 ENOENT（os error 3）失败。给子进程一个系统短路径下的独立临时根，
+ * 既保留每个 run 相互隔离，又把最坏路径压到上限以内。
+ * 运行证据仍由 runLogged 写入 qaRoot/artifacts，run 目录仍在 qaRoot/.runtime。
+ */
+function shortTempEnv(run) {
+    const os = require("node:os");
+    const tag = path.basename(run).slice(-12).replace(/[^A-Za-z0-9-]/g, "");
+    const base = path.join(os.tmpdir(), "qa-" + tag);
+    fs.mkdirSync(base, { recursive: true });
+    return { TEMP: base, TMP: base, TMPDIR: base };
+}
+
 async function runSuite(cfg, suite, contract) {
     assertRepo(cfg, false);
     must(fs.realpathSync(cfg.repoRoot) !== fs.realpathSync(cfg.sourceRoot), 'ORIGINAL_WORKTREE', 'Execute product tests in the isolated QA clone.');
@@ -40,7 +56,7 @@ async function runSuite(cfg, suite, contract) {
             const childDir = path.join(run, path.basename(file, '.js'));
             fs.mkdirSync(childDir);
             const result = await runLogged(cfg.tools.node, [path.join(cfg.repoRoot, '_site/_test', file)], {
-                cwd: cfg.repoRoot, env: isolatedEnv(childDir, browserEnv(cfg)), logDir: path.join(evidenceDir, file), timeoutMs: cfg.limits?.perTestTimeoutMs || 120000
+                cwd: cfg.repoRoot, env: Object.assign(isolatedEnv(childDir, browserEnv(cfg)), shortTempEnv(childDir)), logDir: path.join(evidenceDir, file), timeoutMs: cfg.limits?.perTestTimeoutMs || 120000
             });
             const skipped = /#\s*SKIP\b|\uFE63|^\s*SKIP(?:PED)?\b|\bbrowser tests are excluded\b/.test(result.stdout + result.stderr) ? 1 : 0;
             const r = { file, exitCode: result.code, signal: result.signal, durationMs: result.durationMs, timedOut: result.timedOut, skipped, status: result.code === 0 && !result.timedOut && !result.error && !skipped ? 'PASS' : skipped && result.code === 0 ? 'BLOCKED_CAPABILITY' : 'FAIL' };
@@ -61,4 +77,4 @@ async function runSuite(cfg, suite, contract) {
         release();
     }
 }
-module.exports = { selectTests, runSuite, browserEnv };
+module.exports = { selectTests, runSuite, browserEnv, shortTempEnv };
