@@ -33,6 +33,10 @@ function spawnServer({ root, port, host = '127.0.0.1', dataDir, extraEnv = {}, t
   // 'project-knowledge' consumer at startup, and without this the test
   // server would write into the developer's real ~/.ai-coding-event-bridge.
   const bridgeHome = fs.mkdtempSync(path.join(os.tmpdir(), `kb-bridge-${tag || 'test'}-${process.pid}-`));
+  // The knowledge root is a second product-owned location. A test must never
+  // inherit the developer's real knowledge directory through the environment,
+  // so give every isolated instance its own one.
+  const knowledgeDir = fs.mkdtempSync(path.join(os.tmpdir(), `kb-knowledge-${tag || 'test'}-${process.pid}-`));
   // Legacy behavior tests characterize the retired writer in isolation. The
   // production entry point still defaults to engine ownership; product tests
   // explicitly request it and run the real module services.
@@ -45,6 +49,7 @@ function spawnServer({ root, port, host = '127.0.0.1', dataDir, extraEnv = {}, t
       KB_SITE_PORT: String(port),
       KB_SITE_HOST: host,
       KB_DATA_DIR: dir,
+      KB_KNOWLEDGE_DATA_DIR: knowledgeDir,
       KB_CLAUDE_RULES_DIR: dir,
       KB_SKIP_MIGRATION: '1',
       // 测试隔离：禁止测试服务器向真实模块（terminal/vector-hub）登记项目
@@ -67,6 +72,7 @@ function spawnServer({ root, port, host = '127.0.0.1', dataDir, extraEnv = {}, t
     child,
     dataDir: dir,
     bridgeHome,
+    knowledgeDir,
     cleanup: async () => {
       // On Windows SIGTERM is a force kill. Drain owned background work via
       // the verified control channel first, so Git/Agent children release cwd.
@@ -87,6 +93,7 @@ function spawnServer({ root, port, host = '127.0.0.1', dataDir, extraEnv = {}, t
       });
       await fs.promises.rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
       await fs.promises.rm(bridgeHome, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      await fs.promises.rm(knowledgeDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     },
   };
 }
