@@ -10,12 +10,19 @@ const TEMP = fs.mkdtempSync(path.join(os.tmpdir(), `pk-codex-fanout-${process.pi
 const fanout = path.join(ROOT, '_site', 'scripts', 'codex-notify-fanout.cjs');
 const receiver = path.join(TEMP, 'receiver.cjs');
 
+// Completion protocol: receivers stage the JSON beside the target and publish
+// with rename, so the polling reader only ever observes a fully written file.
+// A direct writeFileSync made the file visible while still empty and CI run
+// 39849466967 read it mid-write (Unexpected end of JSON input).
 fs.writeFileSync(receiver, [
   "let data = '';",
   "process.stdin.on('data', chunk => data += chunk);",
-  "process.stdin.on('end', () => require('fs').writeFileSync(process.argv[2], JSON.stringify({",
-  "  stdin: data, args: process.argv.slice(3), sessionsRoot: process.env.CODEX_SESSIONS_ROOT || null,",
-  '})));',
+  "process.stdin.on('end', () => { const fs = require('fs'); const output = process.argv[2];",
+  "  const staging = output + '.tmp-' + process.pid;",
+  "  fs.writeFileSync(staging, JSON.stringify({",
+  "    stdin: data, args: process.argv.slice(3), sessionsRoot: process.env.CODEX_SESSIONS_ROOT || null,",
+  '  }));',
+  '  fs.renameSync(staging, output); });',
 ].join('\n'), 'utf8');
 
 function encoded(command) {
