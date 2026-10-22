@@ -1,0 +1,15 @@
+{
+  "status": "PASS",
+  "caseSpecifications": 130,
+  "uniqueCaseIds": true,
+  "productCasesExecuted": 0,
+  "productCaseStatus": "NOT_RUN",
+  "phases": 15,
+  "defaultRemoteWriteEnabled": false,
+  "defaultCandidatePublishEnabled": false,
+  "defaultWorkerAdapterEnabled": false,
+  "approvedQueueInitiallyEmpty": true,
+  "yamlSyntaxAndRcTrigger": "PASS",
+  "stablePublishCommandProvided": false,
+  "note": "静态配置检查不等于真实GitHub权限/发布验收"
+}

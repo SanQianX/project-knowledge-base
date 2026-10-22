@@ -1,0 +1,22 @@
+{
+  "commands": [
+    "init",
+    "self-check",
+    "audit",
+    "inventory",
+    "baseline",
+    "snapshot",
+    "quota",
+    "run-suite --suite NAME --contract FILE",
+    "commit-push --contract FILE --receipt FILE [--apply]",
+    "ci",
+    "pack-audit",
+    "rc-plan",
+    "rc-tag --plan FILE [--apply]",
+    "rc-install --version x.y.z-rc.n [--apply]",
+    "cleanup-plan",
+    "cleanup-apply --plan FILE --apply",
+    "report"
+  ],
+  "note": "No stable release command exists."
+}

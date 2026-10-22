@@ -1,0 +1,5 @@
+{
+  "status": "PASS",
+  "check": "configuration JSON syntax",
+  "note": "Run npm test for behavioral self-tests; this is not product acceptance."
+}
