@@ -12,7 +12,7 @@
 | vector-hub | 单一 main | 保持 1.0.8-rc.8 功能代码 |
 | knowledge-engine | 单一 main，本地领先 1 提交 | 将已嵌入主产品的 `85c618f` 同步到远程 main |
 
-各仓库只维护 `main`。AGENTS.md 已记录：后续不自动创建 feature、QA、release 或 backup 分支，只有用户明确要求时才创建。
+五仓库本地与远程均只保留 `main`，默认分支统一为 `main`。为原本没有本地 main 的 Workbench 和 Event Bridge 补建 main 后，共删除 25 个旧本地分支和 5 个远程分支；每仓库仅保留主工作区。AGENTS.md 已记录：后续不自动创建 feature、QA、release 或 backup 分支，只有用户明确要求时才创建。
 
 ## 内容保全与清理
 
@@ -30,14 +30,14 @@
 | 范围 | 结果 |
 |---|---|
 | 主项目完整回归 | 157 个测试文件通过，0 失败，包含真实浏览器与打包启动测试 |
-| 主项目 release:verify、npm pack dry-run | 通过；模块版本、内容哈希、发布包边界通过 |
+| 主项目 release:verify、npm pack dry-run | 通过；模块版本、内容哈希、发布包边界通过；[功能清理提交 9e91af2 的 CI](https://github.com/SanQianX/project-knowledge-base/actions/runs/39788978358) 的 Node 22/24 Linux 与 Windows 三项通过 |
 | QA 控制工具 | 106 通过、0 失败、0 跳过；self-check 通过 |
 | Workbench release:verify | 966 项中 963 通过、0 失败、3 个既有跳过；SDK 与版本检查通过 |
 | vector-hub | 73 通过；build 通过 |
 | knowledge-engine | 204 项中 202 通过、0 失败、2 个既有跳过 |
-| Event Bridge | 本地 30 个测试文件通过；Windows 盘符大小写回归已完成失败/通过对照；远程复验记录见后续补记 |
+| Event Bridge | 本地 30 个测试文件通过；Windows 盘符大小写回归已完成失败/通过对照；[GitHub CI 39788814417](https://github.com/SanQianX/ai-coding-event-bridge/actions/runs/39788814417) 的 Node 18/24 Linux/Windows 四项通过 |
 
-初次本地测试中的 Chrome 配置、TEMP 路径格式及并发构建超时均保留原日志，修正测试环境后重新运行通过。Workbench 同时修正测试对跨盘路径、路径分隔符和带颜色 TypeScript 诊断的假设，未放宽功能断言。Event Bridge CI 删除了对已移除的 core/ui workspace 的打包步骤；另外根据 GitHub Windows 现场诊断修复了 `RUNNER~1` 与 `runneradmin` 这类 8.3 短路径别名的比较，与项目身份解析统一采用 native realpath。
+初次本地测试遇到 Chrome 配置、TEMP 路径格式及并发构建超时，修正测试环境后重新运行通过。Workbench 同时修正测试对跨盘路径、路径分隔符和带颜色 TypeScript 诊断的假设，未放宽功能断言。Event Bridge CI 删除了对已移除的 core/ui workspace 的打包步骤；另外根据 GitHub Windows 现场诊断修复了 `RUNNER~1` 与 `runneradmin` 这类 8.3 短路径别名的比较，与项目身份解析统一采用 native realpath。
 
 ## 恢复位置
 
