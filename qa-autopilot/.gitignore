@@ -1,11 +1,13 @@
 /node_modules/
 /config/local.json
+/config/scan-contract-*.json
 /config/approval*.json
 /config/*secret*
 /state/*
 /artifacts/*
 /.runtime/*
 /reports/runs/
+/reports/branches/PROTECTED_DEV_KB_HEALTH.json
 *.tmp
 *.log
 .env*

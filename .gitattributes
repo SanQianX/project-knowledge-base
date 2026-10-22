@@ -4,3 +4,5 @@
 /_modules/knowledge-engine/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 /ui/** -text
 /plugins/** -text
+# The QA delivery manifest also binds exact bytes across Windows and Linux.
+/qa-autopilot/** -text

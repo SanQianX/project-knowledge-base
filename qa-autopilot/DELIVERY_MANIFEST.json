@@ -7,8 +7,8 @@
   "files": [
     {
       "path": ".gitignore",
-      "bytes": 141,
-      "sha256": "a585497d98b7f85d292f1c9592060e153a2ec2b828dc81cc547c388895313ef6"
+      "bytes": 217,
+      "sha256": "d4b8947af9f79b24d3ec572e28818ba11bd66b11d2063823884a9c1f21487da2"
     },
     {
       "path": ".npmignore",
@@ -77,8 +77,8 @@
     },
     {
       "path": "lib/safety.cjs",
-      "bytes": 14686,
-      "sha256": "f69c2ab70804e560235060a3258b14726f08a4e7d333d9493b5588d4bd6624b7"
+      "bytes": 13344,
+      "sha256": "e338eac3912d42f84b1a280c88d9bba31936aa3938afe3d0203cb9bc07227637"
     },
     {
       "path": "lib/state.cjs",
@@ -202,8 +202,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 4532,
-      "sha256": "bd1045010aa6ce56d4d49194bc1ec9e7a9493e0d1139f752b7aec538d2df7590"
+      "bytes": 4993,
+      "sha256": "1f40a28b43196876a3b9401d0c2cf2106040408027488d8194de55c872d054a6"
     },
     {
       "path": "reports/branches/B00B_CONSOLIDATION_REPORT.md",
@@ -322,8 +322,8 @@
     },
     {
       "path": "reports/PHASE_STATUS.md",
-      "bytes": 9811,
-      "sha256": "dba1b21857392e7ae61761bfa032f3bf303233d9a866ef2c0570f2441423f403"
+      "bytes": 10115,
+      "sha256": "2f73ce09b75651f1fa0232bd118199f2123cd4f83b334bc99993eb3ee1b97abe"
     },
     {
       "path": "scripts/qa.cjs",
@@ -337,8 +337,8 @@
     },
     {
       "path": "scripts/start-overnight.ps1",
-      "bytes": 9540,
-      "sha256": "6aaba763b283ce000797166e67e9ab2b4a9c2521afeb85b9a2f1c227fa5d4388"
+      "bytes": 9538,
+      "sha256": "87a17133ac9bf6850dc5a6ac89fceeed9b783e26d8a818e0f8ec224d79a60b50"
     },
     {
       "path": "scripts/stop-overnight.ps1",
@@ -432,13 +432,13 @@
     },
     {
       "path": "tools/overnight-acceptance.cjs",
-      "bytes": 21706,
-      "sha256": "821f75c2a961827039e58743834fdc5fef95ba9a4dfbddc0b6ee88e11d3e039a"
+      "bytes": 21362,
+      "sha256": "f4c781e34b91c224f508a11685efc68c38bc5b8b170a85f195f40f7959cee529"
     },
     {
       "path": "tools/overnight-supervisor.cjs",
-      "bytes": 25301,
-      "sha256": "a657a4a4fc0d5e778008c3f30beb287749268df9b48ae3b5c282e9f68f50740c"
+      "bytes": 24848,
+      "sha256": "7e50d10788d679afb482a7d8db23fe29b56322ed0f667274ccb30aaf11c0b75c"
     },
     {
       "path": "tools/performance.cjs",
@@ -482,8 +482,8 @@
     },
     {
       "path": "tools/zcode-worker.cjs",
-      "bytes": 12393,
-      "sha256": "460703b11e5f68219363793ab79ab9a9cd88f50669853a3c5f780c9b167f74ab"
+      "bytes": 12159,
+      "sha256": "8a4443571e6028c87d6a2fa055e7e7d21c98fee60d241474bd5815c8d8d7e6e2"
     }
   ],
   "note": "Manifest integrity detects changes, not trust. No credentials or runtime data. Manifest excludes itself. | 2026-10-21 刷新：3 项过期哈希按已提交状态重算；新增 10 项 B00 计划/工具/审计报告。原清单见 artifacts/branch-archives/DELIVERY_MANIFEST.json.before-refresh-20261021"

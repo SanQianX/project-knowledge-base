@@ -55,6 +55,10 @@ ai-profiles.json
 
 # Local backups
 _backup/
+/.git.rar
+/pk43check/
+/*.tgz
+/docs/*.zip
 
 # Local-only notes and maintenance scripts are not part of the public package.
 CLAUDE.md

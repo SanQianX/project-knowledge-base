@@ -1,4 +1,6 @@
 # Project Knowledge Base · QA Autopilot 执行开发包
+
+> 2026-10-22 维护更新：已将有效 QA 提交纳入主仓库 `main`。日常直接在 `main` 开发，不自动重建历史 `qa/*` 分支或启动旧的通宵控制器。原始现场、隔离 clone、配置和未提交测试草稿归档于仓库外的 `D:/SanQian.Xu/.project-knowledge-backups/consolidation-20261022/`；下方及 plans 中的阶段状态属于历史执行合同。工具自检仍使用 `npm test` 和 `node scripts/qa.cjs self-check`。
 版本：1.0.0 · 编制：2026-10-20 · 语言：中文 · 目标：MiniMax M3.1 Flash
 
 ## 交付定位
