@@ -120,6 +120,8 @@ git diff --name-status main...<branch>
 
 现有 `plans/07_GIT_BASELINE_AND_REMOTE_PUSH.md` 的 `qa/*` 分支在自动修复期间必须保留，因为每个独立修复都要求先推送远程 QA 分支并获取 CI 验收。最终将 QA 修复集成到 main 必须经过用户批准与最后完整验收，随后再清理 QA ref。**“每仓库只留 main”是阶段性完成后的长期状态，不是禁止测试期间新建 QA 分支。**
 
+> **2026-10-23 决策（L-QA-01，覆盖上句）**：`qa/*` 分支不再作为自动修复期间的必要形态。QA 执行固定在 `main` 的独立 clone 上，推送目标固定为 `refs/heads/main`，且必须有 `remoteWriteEnabled` 与 `controllerIsolationVerified` 双授权。基准不再用 tag，改用本地 SHA+收据。**“每仓库只留 main”现在是执行期的硬约束，不是阶段性目标。**
+
 ## 7. 退出条件、报告和停止规则
 
 **B00-A PASS（只读完成）**：所有可访问仓库分支清单完整、每个 ref 有 SHA 与分类、独有提交可追溯、默认分支与 Workbench/Bridge 依赖明确、备份及实施计划清晰。对未知情况标记 BLOCKED，不能标记“已清理”。

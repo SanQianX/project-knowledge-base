@@ -1,0 +1,208 @@
+{
+  "schema": "qa-autopilot/case-assertions/v1",
+  "note": "用例 → 真实断言的绑定表。只有绑定到的断言在本轮真实执行并通过，用例才记 ASSERTED_PASS；绑定到的断言失败记 ASSERTED_FAIL；没有绑定或没执行记 NOT_RUN；缺少可记录的前提记 BLOCKED。文件级套件通过不构成用例级证据。",
+  "productCaseDefault": {
+    "status": "NOT_RUN",
+    "residual": "产品侧尚无 QA-SPEC-<case-id> 级断言；本轮只跑到候选套件的文件级通过，按 Leader 口径不作为用例覆盖。",
+    "evidenceLevel": "file-level-only"
+  },
+  "cases": {
+    "QTA-001": {
+      "expectations": [
+        { "key": "payg-balance-is-not-quota", "text": "不能把PAYG余额当五小时额度", "bindings": [{ "marker": "QA-SPEC-QTA-001", "message": "PAYG 余额不得当作五小时额度" }] },
+        { "key": "weekly-entitlement-protected", "text": "保护旧套餐权益", "bindings": [{ "marker": "QA-SPEC-QTA-001", "message": "没有周权益证据时不得推定旧套餐额度" }, { "marker": "QA-SPEC-QTA-001", "message": "已证实的周权益按最小值计入可用额度" }] }
+      ]
+    },
+    "QTA-002": {
+      "expectations": [
+        { "key": "ambiguous-count-unknown", "text": "无语义证据时UNKNOWN", "bindings": [{ "marker": "QA-SPEC-QTA-002", "message": "usage_count 没有语义证据时不得推断百分比" }] },
+        { "key": "explicit-percent-wins", "text": "明确百分比优先", "bindings": [{ "marker": "QA-SPEC-QTA-002", "message": "明确百分比优先于任何计数推断" }, { "marker": "QA-SPEC-QTA-002", "message": "已有审查证据时按明确含义换算百分比" }] }
+      ]
+    },
+    "QTA-003": {
+      "expectations": [
+        { "key": "no-new-task-below-20", "text": "19不派新任务", "bindings": [{ "marker": "QA-SPEC-QTA-003", "message": "额度 ≤20% 不派发新任务" }] },
+        { "key": "no-new-model-call-below-10", "text": "9不转发新模型调用", "bindings": [{ "marker": "QA-SPEC-QTA-003", "message": "额度 ≤10% 不转发新模型调用" }] },
+        { "key": "inflight-request-protected", "text": "保护在途请求", "bindings": [{ "marker": "QA-SPEC-QTA-003", "message": "在途请求不受影响" }] }
+      ]
+    },
+    "QTA-004": {
+      "expectations": [
+        { "key": "resume-only-unfinished", "text": "恢复只执行未完成动作", "bindings": [{ "marker": "QA-SPEC-QTA-004", "message": "恢复只执行未完成动作" }, { "marker": "QA-SPEC-QTA-004", "message": "暂停后从检查点继续" }] },
+        { "key": "not-fixed-sleep", "text": "不是睡固定5小时", "bindings": [{ "marker": "QA-SPEC-QTA-004", "message": "恢复需要连续两次新鲜样本，不按固定时长等待" }, { "marker": "QA-SPEC-QTA-004", "message": "连续新鲜样本达标后恢复派发" }] }
+      ]
+    },
+    "QTA-005": {
+      "expectations": [
+        { "key": "classify-separately", "text": "分别分类", "bindings": [{ "marker": "QA-SPEC-QTA-005", "message": "401 单独归类为鉴权失败" }, { "marker": "QA-SPEC-QTA-005", "message": "429 单独归类为限流" }, { "marker": "QA-SPEC-QTA-005", "message": "503 归类为端点不可用" }, { "marker": "QA-SPEC-QTA-005", "message": "超时单独归类" }] },
+        { "key": "unknown-blocks-new-calls", "text": "UNKNOWN拒绝新调用", "bindings": [{ "marker": "QA-SPEC-QTA-005", "message": "额度未知时不派发新任务" }, { "marker": "QA-SPEC-QTA-005", "message": "额度未知时不转发新模型调用" }, { "marker": "QA-SPEC-QTA-005", "message": "上游业务失败归类为 UNKNOWN" }] },
+        { "key": "no-payg-switch", "text": "不切PAYG或自动买积分", "bindings": [{ "marker": "QA-SPEC-QTA-005", "message": "拒绝 PAYG 余额代替订阅额度，不自动购买积分" }] }
+      ]
+    },
+    "QTA-006": {
+      "expectations": [
+        { "key": "early-pause-on-low-quota", "text": "安全裕量不足提前暂停", "bindings": [{ "marker": "QA-SPEC-QTA-006", "message": "额度不足时提前暂停新任务" }] },
+        { "key": "inflight-never-guaranteed", "text": "承认单次在途调用无法保证永不耗尽", "bindings": [{ "marker": "QA-SPEC-QTA-006", "message": "并明确承认在途调用无法保证永不耗尽" }] },
+        { "key": "stale-sample-blocks", "text": "采样陈旧性", "bindings": [{ "marker": "QA-SPEC-QTA-006", "message": "采样陈旧时拒绝新请求" }] }
+      ]
+    },
+    "QTA-007": {
+      "expectations": [
+        { "key": "journal-chain-verified", "text": "校验journal链", "bindings": [{ "marker": "QA-SPEC-QTA-007", "message": "journal 链被破坏时拒绝恢复" }, { "marker": "QA-SPEC-QTA-007", "message": "重启后按journal链补齐缺口" }] },
+        { "key": "reconcile-before-resend", "text": "活动worker/Git操作状态未知时先对账不重发", "bindings": [{ "marker": "QA-SPEC-QTA-007", "message": "活动操作状态未知时先对账" }, { "marker": "QA-SPEC-QTA-007", "message": "已恢复的动作不重发" }] }
+      ]
+    },
+    "QTA-008": {
+      "blocked": {
+        "missingPrecondition": "本机没有为 QA worker 配置 OS 级 ACL 或网络策略（无 AppContainer、无受限令牌、无出站网络封锁）。",
+        "why": "现有隔离只到环境变量与端口层面。按 Leader 口径，环境级隔离不得当作真实 OS 沙箱，因此不能记 PASS。",
+        "residual": "需要受管账号 + OS ACL + 出站网络策略后，用真实拒绝事件复现。"
+      }
+    },
+    "GIT-001": {
+      "expectations": [
+        { "key": "report-only", "text": "只报告", "bindings": [{ "marker": "QA-SPEC-GIT-001", "message": "基准必须如实报告源工作区的未提交改动" }, { "marker": "QA-SPEC-GIT-001", "message": "源工作区领先远程时基准必须如实报告" }] },
+        { "key": "block", "text": "阻断", "bindings": [{ "marker": "QA-SPEC-GIT-001", "message": "源工作区有未提交改动时基准必须阻断" }, { "marker": "QA-SPEC-GIT-001", "message": "源工作区领先远程时基准必须阻断" }] },
+        { "key": "no-reset-stash-overwrite", "text": "不reset、stash、覆盖", "bindings": [{ "marker": "QA-SPEC-GIT-001", "message": "基准不得 reset 或 stash 用户改动" }, { "marker": "QA-SPEC-GIT-001", "message": "阻断后不得改写用户历史" }, { "marker": "QA-SPEC-GIT-001", "message": "阻断后不得改动用户工作区" }] },
+        { "key": "no-frozen-claim", "text": "不假称已冻结未提交改动", "bindings": [{ "marker": "QA-SPEC-GIT-001", "message": "基准不得创建 tag 或分支" }, { "marker": "QA-SPEC-GIT-001", "message": "基准不得改动远端" }] }
+      ]
+    },
+    "GIT-002": {
+      "partialEvidence": [
+        { "key": "remote-sha-verified", "note": "隔离 clone 自证用 ls-remote 核对远程 main 的完整 SHA，而不是把命令成功当成远程完成。", "bindings": [{ "marker": "QA-SPEC-GIT-002", "message": "隔离 clone 必须用 ls-remote 核对远程 main 的完整 SHA" }] }
+      ],
+      "residual": "用例要求的“创建基准 tag 与 QA 分支并核对 ls-remote”与 2026-10-22 main-only 决策冲突：现行基线只写本地可审计收据（SHA + receipt），不创建任何 tag/分支。因此 tag 解引用与分支远程校验这两项期望在本轮未执行。"
+    },
+    "GIT-003": {
+      "expectations": [
+        { "key": "fingerprint-mismatch-rejected", "text": "fingerprint不匹配而拒绝", "bindings": [{ "marker": "QA-SPEC-GIT-003", "message": "源码改动后旧收据失效" }, { "marker": "QA-SPEC-GIT-003", "message": "源码改动后旧测试收据失效" }] },
+        { "key": "contract-hash-mismatch-rejected", "text": "contractHash不匹配而拒绝", "bindings": [{ "marker": "QA-SPEC-GIT-003", "message": "合同变化后旧收据失效" }] }
+      ]
+    },
+    "GIT-004": {
+      "expectations": [
+        { "key": "reject-before-staging", "text": "暂存前拒绝", "bindings": [{ "marker": "QA-SPEC-GIT-004", "message": "新文件中的凭据在暂存前即被拒绝" }, { "marker": "QA-SPEC-GIT-004", "message": "拒绝后不得留下已暂存内容" }, { "marker": "QA-SPEC-GIT-004", "message": "拒绝后不得产生提交" }] },
+        { "key": "untracked-not-missed", "text": "不允许只扫描git diff遗漏untracked", "bindings": [{ "marker": "QA-SPEC-GIT-004", "message": "未跟踪的新文件必须进入待提交集合，不能只扫 git diff" }] }
+      ]
+    },
+    "GIT-005": {
+      "expectations": [
+        { "key": "read-remote-and-op-id", "text": "读远程HEAD、parent、操作ID后确认", "bindings": [{ "marker": "QA-SPEC-GIT-005", "message": "远程 SHA 不匹配时必须阻断" }, { "marker": "QA-SPEC-GIT-005", "message": "操作 ID 必须留在日志里供人工对账" }] },
+        { "key": "no-duplicate-no-force-push", "text": "不重复commit或force push", "bindings": [{ "marker": "QA-SPEC-GIT-005", "message": "远程确认失败时必须报错，不得记为已推送" }, { "marker": "QA-SPEC-GIT-005", "message": "远程已收到的提交必须完整保留" }, { "marker": "QA-SPEC-GIT-005", "message": "远程不得出现重复提交" }, { "marker": "QA-SPEC-GIT-005", "message": "确认丢失后不得盲目重推" }, { "marker": "QA-SPEC-GIT-005", "message": "重试不得产生第二个提交" }] }
+      ]
+    },
+    "GIT-006": {
+      "blocked": {
+        "missingPrecondition": "没有本次 SHA + QA 分支的 GitHub Actions 运行记录（本轮禁止 push，也没有可匹配的 CI run）。",
+        "why": "CI 失败/取消/缺 Windows job 的判定必须读真实运行结果，不能用本地推断代替。",
+        "residual": "推送后用 ciStatus() 对同一 SHA 与分支取运行结论；取消与缺 job 都必须落到 FAIL 而非 PASS。"
+      }
+    },
+    "GIT-007": {
+      "partialEvidence": [
+        { "key": "revert-keeps-history", "note": "受控回退以新提交落地，远程历史完整保留，不改写不强推。", "bindings": [{ "marker": "QA-SPEC-GIT-007", "message": "受控回退以新提交落地，不改写远程历史" }, { "marker": "QA-SPEC-GIT-007", "message": "远程历史保留全部提交，不得改写或强推" }] }
+      ],
+      "residual": "本轮没有已推送的真实修复可回退，控制器也还没有受控 revert 流程；数据恢复（“数据恢复单独验证”）没有独立用例，因此整条用例未记 PASS。"
+    },
+    "GIT-008": {
+      "expectations": [
+        { "key": "split-by-contract", "text": "任务类型/文件许可不同，拆分", "bindings": [{ "marker": "QA-SPEC-GIT-008", "message": "清理文件不在修复任务的文件许可内，必须拆成两个任务" }] },
+        { "key": "separate-regression-receipts", "text": "各自回归", "bindings": [{ "marker": "QA-SPEC-GIT-008", "message": "清理任务单独提交，各自绑定自己的收据" }, { "marker": "QA-SPEC-GIT-008", "message": "两个任务的收据互不通用" }] }
+      ]
+    },
+    "REL-001": {
+      "expectations": [
+        { "key": "only-exact-rc-tag", "text": "仅精确qa-rc/x.y.z-rc.n可进入候选通道", "bindings": [{ "marker": "QA-SPEC-REL-001", "message": "只有精确的 qa-rc/x.y.z-rc.n 标签可进入候选通道" }, { "marker": "QA-SPEC-REL-001", "message": "稳定版标签不得进入候选通道" }, { "marker": "QA-SPEC-REL-001", "message": "基准标签不得进入候选通道" }, { "marker": "QA-SPEC-REL-001", "message": "序号不匹配的 RC 标签必须被拒绝" }] },
+        { "key": "no-latest-outlet", "text": "latest无自动出口", "bindings": [{ "marker": "QA-SPEC-REL-001", "message": "latest/next 之类不是固定 RC 版本，没有自动出口" }] }
+      ]
+    },
+    "REL-002": {
+      "blocked": {
+        "missingPrecondition": "没有受保护的 GitHub environment 与 OIDC publisher 身份配置，本轮也不允许用长效 token 替代。",
+        "why": "publisher 身份必须由真实权限配置证明，配置缺失时只能是 BLOCKED_PUBLISHER。",
+        "residual": "在真实 CI 中核对 package、workflow filename、environment 与 publisher 后补跑。"
+      }
+    },
+    "REL-003": {
+      "expectations": [
+        { "key": "reject-leaking-files", "text": "拒绝", "bindings": [{ "marker": "QA-SPEC-REL-003", "message": "制品清单包含 qa/state/.env 一类文件时拒绝打包" }] },
+        { "key": "keep-required-engine", "text": "必要引擎与plugins不能被清理掉", "bindings": [{ "marker": "QA-SPEC-REL-003", "message": "必要引擎不得被清理出制品" }] }
+      ]
+    },
+    "REL-004": {
+      "partialEvidence": [
+        { "key": "action-log-idempotent", "note": "同一个操作 ID 只允许执行一次，避免覆盖同版本发布。", "bindings": [{ "marker": "QA-SPEC-REL-004", "message": "同一个操作 ID 只允许执行一次" }] }
+      ],
+      "residual": "Registry 查重与 integrity 比对需要真实 registry 访问与一次真实发布，本轮没有发布，因此“查Registry/integrity”以及“发布响应丢失后不覆盖同版本”未执行。"
+    },
+    "REL-005": {
+      "blocked": {
+        "missingPrecondition": "没有从 official registry 安装固定 RC 版本的授权路径（本轮禁止发布，也禁止安装到 global 前缀）。",
+        "why": "官方独立安装需要真实 registry 安装与 version/resolved/integrity/源码SHA 四项比对。",
+        "residual": "在受管 owned prefix 上用 installRC() 跑一次并核对 installation.json。"
+      }
+    },
+    "REL-006": {
+      "blocked": {
+        "missingPrecondition": "官方安装路径下的四模块运行时不存在；global 安装与替换被明确禁止。",
+        "why": "四模块安装运行必须使用安装路径内的真实模块，不能借兄弟源码或 node_modules。",
+        "residual": "在官方安装前缀上启动四模块并跑真实模型与 Git 闭环。"
+      }
+    },
+    "REL-007": {
+      "blocked": {
+        "missingPrecondition": "本轮没有候选发布，因此没有发布前后 latest/next 的真实 registry 取值。",
+        "why": "latest 保护只能在真实发布窗口内前后取样证明。",
+        "residual": "发布前后各取一次 latest/next，异常立刻阻断；RC 守卫的 post 动作已实现该判定。"
+      }
+    },
+    "REL-008": {
+      "partialEvidence": [
+        { "key": "gates-required-before-release", "note": "候选验收门禁未齐全时发布动作被拒绝，稳定版只能经外部审批。", "bindings": [{ "marker": "QA-SPEC-REL-008", "message": "候选验收门禁未齐全时不得进入发布动作" }] }
+      ],
+      "residual": "“仅 READY_FOR_STABLE_APPROVAL”这个状态本身没有本地实现与断言，本轮只验证了门禁不齐时被拒绝，未执行稳定版审批判定。"
+    },
+    "CLN-001": {
+      "residual": "库存工具自己声明“Inventory is not dead-code proof”，动态入口（exports/bin/运行注册/打包/平台路径）目前没有自动核对，所以本轮没有删除任何文件，也没有可引用的断言。"
+    },
+    "CLN-002": {
+      "residual": "没有针对“只改本次触及代码的格式与双语注释”的自动核对（全仓格式化、许可证变化、语义变化均无断言），本轮未执行。"
+    },
+    "CLN-003": {
+      "expectations": [
+        { "key": "dry-run-refuses-link", "text": "dry-run即拒绝", "bindings": [{ "marker": "QA-SPEC-CLN-003", "message": "指向项目外目录的链接在 dry-run 阶段即被拒绝" }] },
+        { "key": "outside-unchanged", "text": "外部目录内容不变", "bindings": [{ "marker": "QA-SPEC-CLN-003", "message": "外部目录内容不得被改动" }] }
+      ]
+    },
+    "CLN-004": {
+      "expectations": [
+        { "key": "refuse-cleanup", "text": "拒绝清理", "bindings": [{ "marker": "QA-SPEC-CLN-004", "message": "硬链接文件被拒绝清理" }] },
+        { "key": "no-cross-boundary-delete", "text": "没有跨边界误删", "bindings": [{ "marker": "QA-SPEC-CLN-004", "message": "跨边界保留文件不得被误删" }] }
+      ]
+    },
+    "CLN-005": {
+      "expectations": [
+        { "key": "only-passed-and-expired", "text": "仅PASSED且到期进入清单", "bindings": [{ "marker": "QA-SPEC-CLN-005", "message": "只有 PASSED 且到期的运行进入清理清单" }] },
+        { "key": "keep-active-failed-retained", "text": "首失败/检查点/基线永不自动删", "bindings": [{ "marker": "QA-SPEC-CLN-005", "message": "ACTIVE/FAILED/RETAIN 运行即使过期也不进入清理清单" }] }
+      ],
+      "productBindings": [
+        { "key": "product-coverage-test", "file": "t07b-cln-005-coverage-test.js", "note": "产品侧覆盖测试在隔离 clone 中执行，作为第二条独立证据。" }
+      ]
+    },
+    "CLN-006": {
+      "expectations": [
+        { "key": "hash-check-refuses", "text": "hash校验拒绝", "bindings": [{ "marker": "QA-SPEC-CLN-006", "message": "清单生成后文件变化时拒绝按旧清单删除" }] },
+        { "key": "no-blind-delete", "text": "不按旧清单盲删", "bindings": [{ "marker": "QA-SPEC-CLN-006", "message": "拒绝之后不得删除任何文件" }] }
+      ]
+    },
+    "CLN-007": {
+      "expectations": [
+        { "key": "no-age-based-lock-steal", "text": "不按年龄删锁", "bindings": [{ "marker": "QA-SPEC-CLN-007", "message": "旧锁文件不按年龄回收，需人工或平台监督核对后再处理" }] }
+      ],
+      "residual": "“核对启动时间/命令/目录”的人工或平台监督回收流程还没有实现，本轮只证明了不会按年龄自动删锁。"
+    },
+    "CLN-008": {
+      "residual": "本轮没有删除任何已证明的死代码，因此“删除后跑相关 API/UI/pack 与候选安装”的回归链没有执行。"
+    }
+  }
+}

@@ -1,11 +1,10 @@
 {
-  "schema": 1,
+  "schema": 2,
   "qaRoot": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot",
   "sourceRoot": "D:\\SanQian.Xu\\project-knowledge-base",
-  "repoRoot": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\.runtime\\workspaces\\repair",
+  "repoRoot": "D:\\SanQian.Xu\\project-knowledge-base\\qa-autopilot\\.runtime\\workspaces\\main",
   "githubRepo": "SanQianX/project-knowledge-base",
-  "qaBranch": "qa/continuous-repair-20261020",
-  "baselineTag": "qa-baseline-20261020",
+  "mainBranch": "main",
   "tools": {
     "node": "C:\\Program Files\\nodejs\\node.exe",
     "npmCli": "C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js",
@@ -13,6 +12,7 @@
   },
   "authorization": {
     "controllerIsolationVerified": false,
+    "localCloneEnabled": false,
     "remoteWriteEnabled": false,
     "candidatePublishEnabled": false,
     "publisherGateVerified": false,
@@ -28,10 +28,15 @@
   "ciRequiredJobs": [
     "Core / Node 22.x / Linux",
     "Core / Node 24.x / Linux",
-    "Core (web runtime) / Windows"
+    "Core (web runtime) / Windows",
+    "QA controller / Node 22.x / Linux",
+    "QA controller / Node 24.x / Linux",
+    "QA controller / Windows"
   ],
   "quota": {
-    "mode": "cli",
+    "mode": "published-file",
+    "file": "",
+    "fileNote": "published-file 模式要求：评审批准的绝对本地路径；普通文件（拒绝符号链接/junction/目录），大小 ≤64KB。发布方必须写入有限 epoch 毫秒 checkedAt——缺失/字符串/负数/过远未来/超过 maxAgeMs 一律 fail-closed，不做 Date.now() 兜底。gate 构成准入上界：state 为 UNKNOWN/PAUSED/WAITING_RECOVERY 或 deny/admitTask/admitRequest=false 时只收紧、不放宽。该文件没有发布方进程身份字段，本模式不宣称发布方真实性，也不等同于 OS 级隔离。",
     "executable": "",
     "args": [
       "quota",
@@ -78,5 +83,36 @@
   "browser": {
     "chromePath": "",
     "note": "浏览器绝对路径。隔离环境会重写 LOCALAPPDATA，机器级安装位置不可见；产品自带的 find-chrome.js 以 KB_CHROME_PATH 为首选候选。CDP helper 始终使用新建 profile，真实用户 profile 不被读写。"
-  }
+  },
+  "protected": {
+    "desktop": {
+      "host": "127.0.0.1",
+      "port": 5757,
+      "pid": 37368,
+      "version": "5.0.24"
+    },
+    "dataDir": "C:\\Users\\SanQian\\.project-knowledge-v5",
+    "knowledgeRoot": "D:\\SanQian.Xu\\knowledge",
+    "globalNpmRoot": "C:\\Users\\SanQian\\AppData\\Roaming\\npm",
+    "reservedPorts": [
+      5757,
+      5760,
+      5789,
+      5790,
+      8787,
+      8790
+    ],
+    "files": [
+      "C:\\Users\\SanQian\\AppData\\Roaming\\npm\\node_modules\\@sanqianx\\project-knowledge-desktop\\package.json",
+      "C:\\Users\\SanQian\\AppData\\Roaming\\npm\\node_modules\\@sanqianx\\project-knowledge-desktop\\lib\\backend-runtime.cjs",
+      "C:\\Users\\SanQian\\AppData\\Roaming\\npm\\node_modules\\@sanqianx\\project-knowledge\\package.json",
+      "C:\\Users\\SanQian\\AppData\\Roaming\\npm\\node_modules\\@sanqianx\\project-knowledge\\_site\\lib\\server-app.js"
+    ],
+    "note": "受保护目标只读观察：QA 不写、不停、不替换。installRoots（静态安装产物）用递归清单哈希比对，覆盖子目录；dataDir/knowledgeRoot（真实可变目录）只做只读观察，目录变化本身不构成 QA 越界证据。运行实例身份以 /api/runtime/identity 的 version/pid/dataDir 核对，/api/health 的 200 不能证明 5.0.24 未被替换。",
+    "installRoots": [
+      "C:\\Users\\SanQian\\AppData\\Roaming\\npm\\node_modules\\@sanqianx\\project-knowledge-desktop",
+      "C:\\Users\\SanQian\\AppData\\Roaming\\npm\\node_modules\\@sanqianx\\project-knowledge"
+    ]
+  },
+  "preflightExceptions": []
 }

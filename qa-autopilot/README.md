@@ -1,6 +1,8 @@
 # Project Knowledge Base · QA Autopilot 执行开发包
 
 > 2026-10-22 维护更新：已将有效 QA 提交纳入主仓库 `main`。日常直接在 `main` 开发，不自动重建历史 `qa/*` 分支或启动旧的通宵控制器。原始现场、隔离 clone、配置和未提交测试草稿归档于仓库外的 `D:/SanQian.Xu/.project-knowledge-backups/consolidation-20261022/`；下方及 plans 中的阶段状态属于历史执行合同。工具自检仍使用 `npm test` 和 `node scripts/qa.cjs self-check`。
+>
+> 2026-10-23 执行基座更新（L-QA-01）：本包现在只认 `main`。不再有 QA/backup/release 分支，基准是本地可审计的 SHA+收据而不是 tag。执行发生在 `qa-autopilot/.runtime/workspaces/main` 这份独立 clone 上，受保护目标（运行中的桌面 5.0.24、全局 npm 包、真实数据目录、真实知识根）由 `lib/isolation.cjs` 变成**可执行**的保护规则：执行前筛查、执行中隔离、执行前后比对（静态安装产物用递归清单哈希；真实可变 data/knowledge 目录只做只读观察并写明归因限制）。详见下文“执行基座”。
 版本：1.0.0 · 编制：2026-10-20 · 语言：中文 · 目标：MiniMax M3.1 Flash
 
 ## 交付定位
@@ -26,6 +28,30 @@ Node 必须至少22。`init` 生成本地配置并以退出码20提示需要配�
 
 然后把 `MINIMAX_START_PROMPT.md` 发给执行 Agent。先读 `plans/00_README_FIRST.md`，按阶段推进。额度/worker未接通时仍可执行安全的只读审计和工具自检，不假装已建立自动恢复闭环。
 
+## 执行基座（2026-10-23，main-only + 隔离执行）
+
+| 规则 | 落地方式 | 证据 |
+|---|---|---|
+| 只允许 `main` | `lib/git.cjs` 的 `branchName()` 只接受 `main`；`qa/*`、`backup/*`、`release/*`、`master` 一律 `BRANCH_FORBIDDEN` | `tests/governance.test.cjs` |
+| 不建基准 tag、不推远程 | `baseline` 走 `sha-receipt` 模式：只写本地 `state/baseline.json`，不产生 tag、分支或远程 ref | `tests/governance.test.cjs` |
+| 独立 clone | `.runtime/workspaces/main`，`--no-local --no-hardlinks --single-branch --branch main`；`verify-clone` 自证 origin 精确、在 main、干净、无硬链接、与用户工作区不同 | `node scripts/qa.cjs verify-clone` |
+| 数据隔离 | 每个产品子进程同时隔离 `KB_DATA_DIR` 与 `KB_KNOWLEDGE_DATA_DIR`，重置真实模块 URL，剥离密钥，用独占端口 | `tests/governance.test.cjs` |
+| 受保护目标 | 桌面 5.0.24、全局 npm、真实数据目录、真实知识根：执行前筛查硬编码，执行前后比对身份与哈希。**静态安装产物（全局 npm 安装根）走递归清单哈希，覆盖子目录；真实可变 data/knowledge 目录只做只读观察，其变化本身不构成越界证据（运行中的桌面一直在写自己的事件目录）。不宣称只检查顶层能防住子目录写入。** 真正的保护来自隔离的数据目录、独立模块与端口、重置真实模块 URL，以及对真实写入/真实连接的拒绝 | `protected-snapshot` / `protected-verify` |
+| 运行实例身份 | 以 `/api/runtime/identity` 的 version/pid/dataDir 核对；`/api/health` 的 200 只能证明"有东西在应答"，不能证明应答的还是那个 5.0.24 实例 | `verify-isolation` |
+| 只读额度 | `quota.mode = published-file`，只读任务网关发布的状态文件，不碰真实 Key | `node scripts/qa.cjs quota` |
+
+常用命令：
+
+```powershell
+node scripts/qa.cjs verify-clone        # clone 自证
+node scripts/qa.cjs verify-isolation    # clone + 环境隔离 + 受保护目标一次核对
+node scripts/qa.cjs protected-snapshot  # 记录受保护目标身份与哈希
+node scripts/qa.cjs run-suite --suite smoke --contract <合同.json>
+```
+
+授权位默认关闭，**只打开本轮真正验证过的那几个**：`localCloneEnabled`、`controllerIsolationVerified`。
+`remoteWriteEnabled`、`candidatePublishEnabled`、`installRcEnabled`、`cleanupEnabled` 保持 false。
+
 ## 核心内容
 
 | 内容 | 入口 | 说明 |
@@ -45,7 +71,13 @@ Node 必须至少22。`init` 生成本地配置并以退出码20提示需要配�
 
 ## 本包没有替你做的事
 
-没有更改本机原项目；没有创建远程基准tag/QA分支；没有执行真实产品测试；没有查询你的实际额度；没有发布npm；没有注册Windows计划任务。模块0.13.6同版本源码、原生Agent调用参数以及发布授权需要在本机核对，缺失时返回BLOCKED，而不是猜测。
+没有更改本机原项目；没有创建远程基准tag/QA分支；没有发布npm；没有注册Windows计划任务；没有替换或重启已安装的 5.0.24。
+
+2026-10-23 这一轮**执行了真实产品测试**：`smoke` 套件 3 个用例文件全部通过（隔离端口 52425，隔离数据目录，受保护目标零差异），
+`lifecycle` 套件 4 个中 2 个通过、2 个因执行前筛查命中受保护端口（5760）被判定为 BLOCKED_CAPABILITY。
+额度只读任务网关发布的百分比状态，不查询真实账户。
+
+模块0.13.6同版本源码、原生Agent调用参数以及发布授权需要在本机核对，缺失时返回BLOCKED，而不是猜测。
 
 纯工具自检的成功，不能推导项目130个用例通过。`reports/delivery/VALIDATION.md` 是本次实际验证边界。
 

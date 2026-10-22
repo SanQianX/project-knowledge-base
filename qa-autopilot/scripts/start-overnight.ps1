@@ -124,7 +124,7 @@ function Show-Status {
   try {
     $gitSha = (git -C $cfg.repoRoot rev-parse HEAD).Trim()
     $gitBranch = (git -C $cfg.repoRoot rev-parse --abbrev-ref HEAD).Trim()
-    $remoteSha = ((git -C $cfg.repoRoot ls-remote origin "refs/heads/$($cfg.qaBranch)") -split '\s+')[0]
+    $remoteSha = ((git -C $cfg.repoRoot ls-remote origin "refs/heads/$(if ($cfg.mainBranch) { $cfg.mainBranch } else { 'main' })") -split '\s+')[0]
   } catch { }
 
   Write-Host ''

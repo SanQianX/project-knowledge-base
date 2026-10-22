@@ -5,7 +5,7 @@
   "description": "Fail-closed QA control tools for project-knowledge-base",
   "engines": {"node": ">=22"},
   "scripts": {
-    "test": "node --test tests/core.test.cjs tests/workflow.test.cjs",
+    "test": "node --test tests/core.test.cjs tests/workflow.test.cjs tests/governance.test.cjs tests/protocol.test.cjs",
     "audit": "node scripts/qa.cjs audit",
     "self-check": "node scripts/qa.cjs self-check"
   }

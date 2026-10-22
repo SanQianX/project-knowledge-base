@@ -96,7 +96,7 @@ function makeEnv(baseCfg, name, opts = {}) {
   cfg.qaRoot = dir;
   cfg.repoRoot = repo;
   cfg.sourceRoot = repo;
-  cfg.qaBranch = 'qa/acceptance';
+  cfg.mainBranch = 'main';
   const file = path.join(dir, 'local.json');
   const fk = fakes(path.join(dir, 'fakes'));
   cfg.quota = { ...cfg.quota, mode: 'cli', ...fk.quota, modelNames: ['general'], weeklyPercentField: 'current_weekly_remaining_percent', weeklyEntitlementEvidence: 'acceptance-simulation', stopTaskPercent: 20, stopRequestPercent: 10, resumePercent: 35, resumeConsecutive: 2, maxAgeMs: 120000, sampleMs: 1000 };
@@ -114,7 +114,7 @@ function seedRepo() {
   fs.rmSync(seed, { recursive: true, force: true });
   fs.mkdirSync(seed, { recursive: true });
   const g = a => execFileSync('git', ['-C', seed, ...a], { encoding: 'utf8' });
-  g(['init', '-q']);
+  g(['init', '-q', '-b', 'main']);
   g(['config', 'user.email', 'seed@local.invalid']);
   g(['config', 'user.name', 'Seed']);
   g(['config', 'commit.gpgsign', 'false']);
@@ -228,8 +228,8 @@ const gitOf = (repo, a) => execFileSync('git', ['-C', repo, ...a], { encoding: '
       { id: 'ACC-D-1', module: 'accd1', specIds: ['ACC-SPEC-D1'], specCount: 1, status: 'PENDING' },
       { id: 'ACC-D-2', module: 'accd2', specIds: ['ACC-SPEC-D2'], count: 1, specCount: 1, status: 'PENDING' }
     ]);
-    const revIf = () => { try { return gitOf(env.bare, ['rev-parse', '--verify', 'refs/heads/qa/acceptance']).trim(); } catch { return null; } };
-    const countIf = () => { try { return gitOf(env.bare, ['rev-list', '--count', 'refs/heads/qa/acceptance']).trim(); } catch { return '0'; } };
+    const revIf = () => { try { return gitOf(env.bare, ['rev-parse', '--verify', 'refs/heads/main']).trim(); } catch { return null; } };
+    const countIf = () => { try { return gitOf(env.bare, ['rev-list', '--count', 'refs/heads/main']).trim(); } catch { return '0'; } };
 
     // 1) 任务1 用正常 Worker
     env.fk.setBehaviour('ok');

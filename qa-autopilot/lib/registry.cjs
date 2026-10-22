@@ -48,7 +48,7 @@ async function ciStatus(cfg, sha = head(cfg)) {
     const r = await fetch(base + '/actions/runs?head_sha=' + sha + '&per_page=100', { headers, signal: AbortSignal.timeout(20000) });
     must(r.ok, 'CI_UNAVAILABLE', 'CI lookup failed.', 20);
     const data = await r.json();
-    const runs = (data.workflow_runs || []).filter(x => x.head_sha === sha && x.path === '.github/workflows/ci.yml' && x.event === 'push' && x.head_branch === cfg.qaBranch).sort((a, b) => b.id - a.id);
+    const runs = (data.workflow_runs || []).filter(x => x.head_sha === sha && x.path === '.github/workflows/ci.yml' && x.event === 'push' && x.head_branch === (cfg.mainBranch || 'main')).sort((a, b) => b.id - a.id);
     if (!runs.length)
         return { status: 'PENDING', sha, reason: 'No matching QA push validation workflow.' };
     const run = runs[0];
@@ -82,7 +82,7 @@ async function candidatePlan(cfg) {
     const version = readJSON(path.join(cfg.repoRoot, 'package.json')).version;
     must(isRC(version), 'RC_ONLY', 'Only x.y.z-rc.n versions are accepted.');
     const sha = head(cfg);
-    must(remoteHead(cfg, 'refs/heads/' + cfg.qaBranch) === sha, 'REMOTE_SHA', 'Candidate commit not on remote QA head.');
+    must(remoteHead(cfg, 'refs/heads/' + (cfg.mainBranch || 'main')) === sha, 'REMOTE_SHA', 'Candidate commit is not on the remote main head.');
     must(!git(cfg, ['status', '--porcelain']), 'DIRTY_RC', 'Release source must be clean.');
     const ci = await ciStatus(cfg, sha);
     must(ci.status === 'PASS', 'CI_PENDING', 'CI gate not satisfied.', 20);

@@ -57,16 +57,16 @@ test('actual local Git fingerprint invalidates stale proof', () => { const d = f
     const cfg = { repoRoot: d, tools: { git: 'git' } }, contract = { bugId: 'QA-001' }, snap = snapshot(cfg), receipt = { schema: 1, kind: 'suite', status: 'PASS', exitCode: 0, executed: 1, skipped: 0, head: snap.head, fingerprint: snap.fingerprint, contractHash: hash(JSON.stringify(contract)) };
     verifyReceipt(cfg, receipt, contract);
     fs.writeFileSync(path.join(d, 'a.txt'), 'b');
-    assert.throws(() => verifyReceipt(cfg, receipt, contract), { code: 'STALE_TESTS' });
+    assert.throws(() => verifyReceipt(cfg, receipt, contract), { code: 'STALE_TESTS' }, 'QA-SPEC-GIT-003 源码改动后旧测试收据失效');
 }
 finally {
     fs.rmSync(d, { recursive: true, force: true });
 } });
 const { validateTag } = require('../tools/ci-rc-guard.cjs');
-test('release stable tag rejected', () => assert.throws(() => validateTag('5.0.25', 'refs/tags/v5.0.25')));
-test('release baseline tag rejected', () => assert.throws(() => validateTag('5.0.25-rc.1', 'refs/tags/qa-baseline-20261020')));
-test('release exact RC tag accepted', () => assert.doesNotThrow(() => validateTag('5.0.25-rc.1', 'refs/tags/qa-rc/5.0.25-rc.1')));
-test('release mismatched RC number rejected', () => assert.throws(() => validateTag('5.0.25-rc.2', 'refs/tags/qa-rc/5.0.25-rc.1')));
+test('release stable tag rejected', () => assert.throws(() => validateTag('5.0.25', 'refs/tags/v5.0.25'), undefined, 'QA-SPEC-REL-001 稳定版标签不得进入候选通道'));
+test('release baseline tag rejected', () => assert.throws(() => validateTag('5.0.25-rc.1', 'refs/tags/qa-baseline-20261020'), undefined, 'QA-SPEC-REL-001 基准标签不得进入候选通道'));
+test('release exact RC tag accepted', () => assert.doesNotThrow(() => validateTag('5.0.25-rc.1', 'refs/tags/qa-rc/5.0.25-rc.1'), undefined, 'QA-SPEC-REL-001 只有精确的 qa-rc/x.y.z-rc.n 标签可进入候选通道'));
+test('release mismatched RC number rejected', () => assert.throws(() => validateTag('5.0.25-rc.2', 'refs/tags/qa-rc/5.0.25-rc.1'), undefined, 'QA-SPEC-REL-001 序号不匹配的 RC 标签必须被拒绝'));
 test('supervisor controlled quota pause resumes the same task without new Git commits', async () => {
     const { tick } = require('../tools/supervisor.cjs'), { atomicJSON, readJSON } = require('../lib/safety.cjs');
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-resume-test-')), repo = path.join(dir, 'source'), qa = path.join(dir, 'control');
@@ -98,12 +98,12 @@ test('supervisor controlled quota pause resumes the same task without new Git co
         await advance();
         let state = await advance();
         assert.equal(state.task.status, 'PAUSED_QUOTA');
-        assert.equal(state.task.resumeCheckpoint.step, 1);
+        assert.equal(state.task.resumeCheckpoint.step, 1, 'QA-SPEC-QTA-004 暂停后从检查点继续，不重做已完成步骤');
         await advance();
         state = await advance();
-        assert.equal(state.task.resumeCheckpoint.step, 2);
+        assert.equal(state.task.resumeCheckpoint.step, 2, 'QA-SPEC-QTA-004 恢复只执行未完成动作');
         assert.equal(snapshot(cfg).head, before.head);
-        assert.equal(git(['rev-list', '--count', 'HEAD']), '1');
+        assert.equal(git(['rev-list', '--count', 'HEAD']), '1', 'QA-SPEC-QTA-004 恢复过程不产生新的 Git 提交');
     }
     finally {
         fs.rmSync(dir, { recursive: true, force: true });

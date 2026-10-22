@@ -58,5 +58,8 @@
     "module-process-lifecycle-test.js",
     "module-dynamic-port-test.js",
     "test-server-module-isolation-test.js"
+  ],
+  "ledger": [
+    "t07b-cln-005-coverage-test.js"
   ]
 }

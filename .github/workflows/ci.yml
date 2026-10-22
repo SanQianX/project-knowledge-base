@@ -61,3 +61,42 @@ jobs:
           npm test -- --no-report
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm pack --dry-run --json
+
+  qa-controller:
+    name: QA controller / Node ${{ matrix.node }} / Linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22.x', '24.x']
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Run QA controller tests
+        run: npm test --prefix qa-autopilot
+        env:
+          # Fixtures and temp bare repos must stay outside the checkout;
+          # os.tmpdir() follows TMPDIR/TMP/TEMP.
+          TMPDIR: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          TEMP: ${{ runner.temp }}
+
+  qa-controller-windows:
+    name: QA controller / Windows
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.x'
+      - name: Run QA controller tests
+        run: npm test --prefix qa-autopilot
+        env:
+          # Step-level runner.temp: full-length path (no RUNNER~1 8.3 short
+          # form), outside the workspace; no job-level runner expressions.
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}

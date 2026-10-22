@@ -3,25 +3,26 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { readJSON, atomicJSON, must, hash, redact, cleanupPlan, applyCleanup, acquireLock } = require('../lib/safety.cjs');
-const { audit, baseline, commitPush, snapshot } = require('../lib/git.cjs');
+const { audit, baseline, commitPush, snapshot, prepareClone, verifyClone } = require('../lib/git.cjs');
 const { runSuite } = require('../lib/runner.cjs');
 const { Store } = require('../lib/state.cjs');
 const { fetchQuota } = require('../lib/quota.cjs');
 const { packAudit, registryInfo, ciStatus, candidatePlan, tagCandidate, installRC } = require('../lib/registry.cjs');
+const { snapshotProtected, diffProtected, classifyDrift, productEnv, assertEnvIsolated } = require('../lib/isolation.cjs');
 const qaRoot = path.resolve(__dirname, '..');
 function arg(name) { const i = process.argv.indexOf('--' + name); return i < 0 ? null : process.argv[i + 1]; }
 async function main() {
     const command = process.argv[2] || 'help';
     const apply = process.argv.includes('--apply');
     if (command === 'help')
-        return { commands: ['init', 'self-check', 'audit', 'inventory', 'baseline', 'snapshot', 'quota', 'run-suite --suite NAME --contract FILE', 'commit-push --contract FILE --receipt FILE [--apply]', 'ci', 'pack-audit', 'rc-plan', 'rc-tag --plan FILE [--apply]', 'rc-install --version x.y.z-rc.n [--apply]', 'cleanup-plan', 'cleanup-apply --plan FILE --apply', 'report'], note: 'No stable release command exists.' };
+        return { commands: ['init', 'self-check', 'audit', 'inventory', 'baseline', 'prepare-clone', 'verify-clone', 'verify-isolation', 'protected-snapshot', 'protected-verify', 'snapshot', 'quota', 'run-suite --suite NAME --contract FILE [--patch-under-test]', 'commit-push --contract FILE --receipt FILE [--apply]', 'ci', 'pack-audit', 'rc-plan', 'rc-tag --plan FILE [--apply]', 'rc-install --version x.y.z-rc.n [--apply]', 'cleanup-plan', 'cleanup-apply --plan FILE --apply', 'report'], note: 'No stable release command exists. The work root must be an independent clone of main.' };
     const configPath = arg('config') || path.join(qaRoot, 'config', 'local.json');
     if (command === 'init') {
         must(!fs.existsSync(configPath), 'CONFIG_EXISTS', 'Local config exists; no overwrite.');
         const cfg = readJSON(path.join(qaRoot, 'config', 'local.example.json'));
         cfg.qaRoot = qaRoot;
         cfg.sourceRoot = path.resolve(qaRoot, '..');
-        cfg.repoRoot = path.join(qaRoot, '.runtime', 'workspaces', 'repair');
+        cfg.repoRoot = path.join(qaRoot, '.runtime', 'workspaces', 'main');
         cfg.tools.node = process.execPath;
         atomicJSON(configPath, cfg, { exclusive: true });
         return { created: configPath, status: 'CONFIGURATION_REQUIRED', instruction: 'Review absolute executable paths, quota account and controller authorization. No remote write has run.' };
@@ -45,8 +46,41 @@ async function main() {
     if (command === 'baseline') {
         const b = baseline(cfg, apply);
         if (apply)
-            atomicJSON(path.join(qaRoot, 'state', 'baseline.json'), b, { exclusive: true });
+            atomicJSON(path.join(qaRoot, 'state', 'baseline.json'), b);
         return b;
+    }
+    if (command === 'prepare-clone') {
+        must(cfg.authorization?.localCloneEnabled === true, 'CLONE_NOT_AUTHORIZED', 'Isolated clone creation needs a reviewed local authorization.', 20);
+        return prepareClone(cfg);
+    }
+    if (command === 'verify-clone')
+        return verifyClone(cfg);
+    if (command === 'verify-isolation') {
+        const clone = verifyClone(cfg);
+        const probe = path.join(qaRoot, '.runtime', 'isolation-probe');
+        const env = productEnv(cfg, probe, { KB_SITE_PORT: '0' });
+        const envCheck = assertEnvIsolated(env, cfg, { runRoot: probe });
+        const protectedNow = await snapshotProtected(cfg);
+        const stored = path.join(qaRoot, 'state', 'protected-snapshot.json');
+        const protectedDiff = fs.existsSync(stored) ? diffProtected(readJSON(stored), protectedNow) : [];
+        const classified = classifyDrift(protectedDiff);
+        const ok = clone.ok && envCheck.ok && classified.violations.length === 0;
+        const out = { schema: 'qa-autopilot/isolation-verification/v1', at: new Date().toISOString(), ok, clone, environment: envCheck, protected: { current: protectedNow, drift: protectedDiff, violations: classified.violations, observations: classified.observations } };
+        atomicJSON(path.join(qaRoot, 'state', 'isolation-verification.json'), out);
+        return out;
+    }
+    if (command === 'protected-snapshot') {
+        const snap = await snapshotProtected(cfg);
+        atomicJSON(path.join(qaRoot, 'state', 'protected-snapshot.json'), snap);
+        return snap;
+    }
+    if (command === 'protected-verify') {
+        const stored = path.join(qaRoot, 'state', 'protected-snapshot.json');
+        must(fs.existsSync(stored), 'NO_BASELINE', 'Run protected-snapshot first.');
+        const now = await snapshotProtected(cfg);
+        const drift = diffProtected(readJSON(stored), now);
+        const classified = classifyDrift(drift);
+        return { schema: 'qa-autopilot/protected-verify/v1', at: new Date().toISOString(), ok: classified.violations.length === 0, drift, violations: classified.violations, observations: classified.observations, current: now };
     }
     if (command === 'recover-state')
         return new Store(path.join(qaRoot, 'state')).recoverJournal();
@@ -59,7 +93,7 @@ async function main() {
     }
     if (command === 'run-suite') {
         must(arg('contract'), 'CONTRACT', 'Provide the reviewed task contract.');
-        return runSuite(cfg, arg('suite'), readJSON(arg('contract')));
+        return runSuite(cfg, arg('suite'), readJSON(arg('contract')), { patchUnderTest: process.argv.includes('--patch-under-test') });
     }
     if (command === 'commit-push')
         return commitPush(cfg, readJSON(arg('contract')), readJSON(arg('receipt')), new Store(path.join(qaRoot, 'state')), apply);

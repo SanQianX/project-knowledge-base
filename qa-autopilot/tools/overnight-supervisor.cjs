@@ -23,6 +23,7 @@ const path = require('path');
 const { execFileSync, spawn } = require('child_process');
 const { readJSON, atomicJSON, acquireLock, must, hash, redact, ownedRun, isolatedEnv, runLogged } = require('../lib/safety.cjs');
 const { fetchQuota, quotaDecision } = require('../lib/quota.cjs');
+const { branchName } = require('../lib/git.cjs');
 const PROVIDER_CONFIG = 'C:/Users/SanQian/.zcode/v2/provider_config.json';
 
 /** 额度查询必须用与 Worker 同一个订阅 Key：同一个 ZCode provider 配置。Key 只在内存中。 */
@@ -228,28 +229,18 @@ async function verify(cfg, task, dispatchInfo) {
 }
 
 // ───────────────────────────────────────────────────────── 提交
+// L-QAFIX-02：遗留直写入口已禁用。该路径绕过 canonical 收据门
+// （runSuite → 真实 runner 收据 → lib/git.cjs commitPush），也没有
+// authorization 检查。在任何 git add/commit/push 与任何文件系统改动之前抛出。
 function commitAndPush(cfg, task) {
-  const repo = cfg.repoRoot;
-  const hook = path.join(repo, '.git', 'qa-controller-empty-hooks');
-  fs.mkdirSync(hook, { recursive: true });
-  const git = (args, opts) => execFileSync(cfg.tools.git || 'git', ['-c', 'core.hooksPath=' + hook, ...args], { cwd: repo, encoding: 'utf8', ...(opts || {}) });
-  const status = git(['status', '--porcelain=v1']);
-  if (!status.trim()) return { pushed: false, reason: 'NO_CHANGES' };
-  git(['add', '--', ...task.contract.allowedFiles]);
-  const staged = git(['diff', '--cached', '--name-only']).trim().split(/\r?\n/).filter(Boolean);
-  const outside = staged.filter(f => !task.contract.allowedFiles.includes(f));
-  if (outside.length) return { pushed: false, reason: 'CHANGE_OUTSIDE_ALLOWLIST', files: outside };
-  const msg = `test(qa-autopilot): cover T07B specs for ${task.module}\n\nQA-Task: ${task.id}\nQA-Specs: ${task.specIds.join(', ')}\nQA-Evidence: qa-autopilot/reports/branches/T07B_LEDGER.md\nQA-Self-Test: see supervisor evidence artifacts/overnight/${task.id}\nQA-Artifact: ${task.contract.allowedFiles.join(' ')}\n`;
-  git(['commit', '-q', '-F', '-'], { input: msg });
-  const sha = git(['rev-parse', 'HEAD']).trim();
-  git(['push', 'origin', 'HEAD:refs/heads/' + cfg.qaBranch]);
-  return { pushed: true, sha, files: staged };
+  must(false, 'LEGACY_WRITE_DISABLED',
+    'Legacy overnight commitAndPush is disabled (L-QAFIX-02). Automatic commits must go through the canonical runSuite → receipt → commitPush path in lib/git.cjs.', 20);
 }
 
 // ───────────────────────────────────────────────────────── 远程/CI 核对
 function remoteState(cfg) {
   try {
-    const out = execFileSync(cfg.tools.git || 'git', ['ls-remote', 'origin', 'refs/heads/' + cfg.qaBranch], { cwd: cfg.repoRoot, encoding: 'utf8', timeout: 60000 });
+    const out = execFileSync(cfg.tools.git || 'git', ['ls-remote', 'origin', 'refs/heads/' + branchName(cfg.mainBranch || 'main')], { cwd: cfg.repoRoot, encoding: 'utf8', timeout: 60000 });
     const line = out.trim().split(/\s+/);
     return { sha: line[0] || null };
   } catch { return { sha: null }; }
@@ -342,7 +333,15 @@ async function tick(cfg, state) {
   // 6) 提交推送
   task.status = 'COMMITTING';
   saveState(state);
-  const push = commitAndPush(cfg, task);
+  let push;
+  try { push = commitAndPush(cfg, task); }
+  catch (e) {
+    task.status = 'FAILED';
+    task.failureReason = e.code;
+    task.nextAction = '遗留直写入口已禁用（L-QAFIX-02）：自动提交必须走 runSuite → 收据 → lib/git.cjs commitPush。';
+    saveState(state);
+    return state;
+  }
   if (!push.pushed) {
     task.status = 'FAILED';
     task.failureReason = push.reason;
@@ -471,4 +470,4 @@ async function main() {
   console.log('用法: overnight-supervisor.cjs [build-queue|status|reconcile|run] [config]');
 }
 if (require.main === module) main().catch(e => { console.error(redact(e.message)); process.exitCode = 20; });
-module.exports = { buildQueue, makeContract, quotaGate, devKbHealth, tick, reconcile, statusOf };
+module.exports = { buildQueue, makeContract, quotaGate, devKbHealth, tick, reconcile, statusOf, commitAndPush };
