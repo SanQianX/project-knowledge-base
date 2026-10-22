@@ -17,6 +17,8 @@ const {
     assert.equal(typeof coreRoot, 'string');
     assert.ok(coreRoot.length > 0);
     assert.ok(fs.existsSync(path.join(coreRoot, 'package.json')), 'core root must be the project-knowledge package directory');
+    const corePackage = require(path.join(coreRoot, 'package.json'));
+    assert.equal(corePackage.version, require('../package.json').dependencies['@sanqianx/project-knowledge'], 'resolved core must match the desktop dependency pin');
   }
   // resolveCoreRoot failure path: with module resolution patched so the core
   // package cannot be found (temp-dir isolation alone is not enough on

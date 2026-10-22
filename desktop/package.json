@@ -16,7 +16,7 @@
     "test": "node test/thin-package-test.cjs && node test/backend-runtime-test.cjs && node test/cli-args-test.cjs"
   },
   "dependencies": {
-    "@sanqianx/project-knowledge": "5.0.18",
+    "@sanqianx/project-knowledge": "5.0.24",
     "electron": "43.1.1",
     "electron-squirrel-startup": "1.0.1"
   },
