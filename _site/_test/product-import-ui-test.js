@@ -20,6 +20,10 @@ const git = args => {
   const result = spawnSync('git', args, { cwd: repo, windowsHide: true, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr); return result.stdout.trim();
 };
+const gitIn = (dir, args) => {
+  const result = spawnSync('git', args, { cwd: dir, windowsHide: true, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr); return result.stdout.trim();
+};
 async function main() {
   fs.mkdirSync(repo); fs.mkdirSync(knowledgeRoot);
   git(['init', '-q']); git(['config', 'user.email', 'ui-regression@local.invalid']); git(['config', 'user.name', 'UI Regression']);
@@ -139,6 +143,70 @@ async function main() {
     await waitFor(() => run("document.getElementById('preflightStatus').textContent.includes('此项目已导入')"), 'duplicate rejected');
     assert.equal(await run("document.getElementById('confirmImport').disabled"), true);
     assert.equal((await api('/api/projects/aggregated')).projects.length, 1);
+    // PRJ-012: the other half of the case — the import itself succeeds, and
+    // the registry read that follows it fails. The failure is injected at the
+    // transport level in the browser (the answer is really lost), so the
+    // product never sees a broken request and the page has to cope with a
+    // read it never got.
+    const repo2 = path.join(fixture, '第二个项目');
+    const knowledge2 = path.join(knowledgeRoot, '第二个项目知识');
+    fs.mkdirSync(repo2);
+    gitIn(repo2, ['init', '-q']); gitIn(repo2, ['config', 'user.email', 'ui-regression@local.invalid']); gitIn(repo2, ['config', 'user.name', 'UI Regression']);
+    fs.writeFileSync(path.join(repo2, 'README.md'), '# second project baseline\n'); gitIn(repo2, ['add', '.']); gitIn(repo2, ['commit', '-qm', 'baseline']);
+    const fetchFaults = { armed: false, failed: [] };
+    const onFetchMessage = raw => {
+      let message; try { message = JSON.parse(String(raw)); } catch { return; }
+      if (message.method !== 'Fetch.requestPaused') return;
+      const { requestId, request } = message.params;
+      if (fetchFaults.armed) {
+        fetchFaults.failed.push({ url: request.url, at: Date.now() });
+        browser.send('Fetch.failRequest', { requestId, errorReason: 'ConnectionFailed' }).catch(() => {});
+        return;
+      }
+      browser.send('Fetch.continueRequest', { requestId }).catch(() => {});
+    };
+    browser.socket.on('message', onFetchMessage);
+    await browser.send('Fetch.enable', { patterns: [{ urlPattern: '*projects/projection*' }] });
+    await run(`(() => { window.__toasts = []; const el = document.getElementById('toast'); new MutationObserver(() => { const text = (el.textContent || '').trim(); if (text && window.__toasts[window.__toasts.length - 1] !== text) window.__toasts.push(text); }).observe(el, { childList: true, characterData: true, subtree: true }); })()`);
+    await click('.view.active [data-action="import"]');
+    await fill('#importCode', repo2); await fill('#importName', '第二个项目'); await fill('#importKnowledge', knowledge2);
+    await waitFor(() => run("!document.getElementById('confirmImport').disabled"), 'the second preflight is ready', 20000);
+    assert.equal((await api('/api/projects/aggregated')).projects.length, 1, 'the second import has not registered anything yet');
+    const beforeSecondImport = capture.requests.length;
+    fetchFaults.armed = true;
+    await click('#confirmImport');
+    await waitFor(() => fetchFaults.failed.length >= 1, 'the registry read that follows the import fails', 20000);
+    await waitFor(() => run("!document.getElementById('importDialog').open"), 'the successful import closes the dialog', 20000);
+    await waitFor(async () => (await run('window.__toasts || []')).some(text => text.includes('部分状态暂未刷新')), 'the failed registry read is reported', 20000);
+    const requests = capture.requests;
+    const importIndex = requests.findIndex((entry, index) => index >= beforeSecondImport && entry.method === 'POST' && entry.url.endsWith('/api/projects/import'));
+    assert.ok(importIndex >= 0, 'the second import request is recorded');
+    assert.equal(requests[importIndex].status, 201, 'the import itself succeeded');
+    const readsAfterImport = requests.slice(importIndex + 1).filter(entry => entry.method === 'GET' && entry.url.includes('/api/projects/projection'));
+    assert.ok(readsAfterImport.length >= 1, 'the import is followed by a registry read');
+    assert.ok(readsAfterImport.every(entry => entry.status === null), 'every registry read after the import really failed at the transport level');
+    assert.ok(fetchFaults.failed.length >= 1, 'the browser really lost the registry read');
+    // The import created exactly one project; the failed read created nothing.
+    const registered = (await api('/api/projects/aggregated')).projects;
+    assert.equal(registered.length, 2, 'the successful import registers exactly one more project');
+    assert.ok(registered.some(project => project.name === '第二个项目'), 'the second project is registered');
+    // The page does not present the failed read as fresh state.
+    assert.equal(await run("document.querySelectorAll('#projectTree [data-select-project]').length"), 1, 'the failed read leaves the project tree on the previous state');
+    assert.equal(await run("document.getElementById('projectTree').textContent.includes('第二个项目')"), false, 'the failed read is not shown as a refreshed list');
+    // A later read succeeds: the same import is not registered a second time.
+    fetchFaults.armed = false;
+    const laterRead = () => capture.find(entry => entry.method === 'GET' && entry.url.includes('/api/projects/projection') && entry.status === 200 && requests.indexOf(entry) > importIndex).length > 0;
+    const readDeadline = Date.now() + 20000;
+    while (!laterRead() && Date.now() < readDeadline) {
+      await run("document.dispatchEvent(new Event('visibilitychange'))");
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+    assert.ok(laterRead(), 'the later registry read succeeds');
+    await waitFor(() => run("document.getElementById('projectTree').textContent.includes('第二个项目')"), 'the refreshed project tree', 20000);
+    assert.equal(await run("document.querySelectorAll('#projectTree [data-select-project]').length"), 2, 'the retry reads the same two projects and creates no third');
+    assert.equal((await api('/api/projects/aggregated')).projects.length, 2, 'the product registry still holds exactly two projects');
+    assert.ok(fs.existsSync(knowledge2), 'the second project keeps its knowledge directory');
+    await browser.send('Fetch.disable');
     assert.equal(browser.exceptions.length, 0, 'no uncaught product JavaScript exceptions');
     console.log('product-import-ui-test PASS (1920×1080; real UI → registry/Hook/directories; offline module wiring remains partial)');
   } finally {

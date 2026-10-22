@@ -1,0 +1,1598 @@
+{
+  "schema": "qa-autopilot/product-case-assertions/v2",
+  "batches": [
+    "L-PROD-01",
+    "L-PROD-02"
+  ],
+  "note": "产品用例（PRJ-*）→ 真实断言的可复用绑定表。本表只描述“哪条 expected 由哪个测试入口的哪一条断言覆盖”；不含任何一次运行的结果（退出码、状态、日志路径、私有路径）。每次运行的结果必须另存到被忽略的证据目录，不回写本表。文件级套件通过不构成用例级证据。",
+  "definitionModel": {
+    "isolation": "每个断言都在独立产品实例上真实执行：独立 KB_DATA_DIR、独立 KB_KNOWLEDGE_DATA_DIR、独立 AI_CODING_EVENT_BRIDGE_HOME、独立端口、新 Chrome profile、离线模块替身；只结束自己启动的进程。",
+    "entryPoint": "tests[].command 是该 case 的真实测试入口（node <file>）；bindings[].test 指向覆盖该条 expected 的入口 id。入口存在不等于该 case 已通过。",
+    "anchorRule": "每条绑定都指向当前源码里的具体断言行（line + anchor 文本）；锚点漂移即视为未覆盖。用 artifacts/leader-20261023-product/round2/tools/refresh-anchors.cjs 复核并刷新行号，锚点找不到即失败。",
+    "resultRule": "PASS / PARTIAL / NOT_RUN 由每轮真实执行的结果记录决定，不在本表内写死；结果记录存放于 qa-autopilot/artifacts/leader-20261023-product/<round>/evidence/。",
+    "mutationRule": "mutationPlan 只登记“该用哪条变异来反证这条绑定不是空断言”的计划；每次变异的实际退出码与日志同样属于运行结果，不写回本表。"
+  },
+  "mutationPlan": [
+    {
+      "name": "alias-not-same-path",
+      "target": "_site/_test/mutation-check-alias.js（临时副本，跑完即删）",
+      "expectedFailure": "the trailing separator alias must be refused as a duplicate",
+      "proves": "PRJ-005 的别名拒绝断言能检测重复登记失效"
+    },
+    {
+      "name": "empty-domain-guard-removed",
+      "target": "_site/_test/mutation-check-empty-domain.js（临时副本，跑完即删）",
+      "expectedFailure": "the domain form reports an empty name as invalid",
+      "proves": "PRJ-001 的空名称拒绝断言能检测浏览器端守卫失效"
+    },
+    {
+      "name": "terminal-reuse-guard-removed",
+      "target": "_site/lib/module-bridge.js `} else if (existingTerminal) {`",
+      "expectedFailure": "the second repair reuses the terminal registration instead of creating a second one",
+      "proves": "PRJ-007 的“不重复登记”绑定能检测终端复用守卫失效"
+    },
+    {
+      "name": "git-init-confirmation-guard-removed",
+      "target": "_site/lib/project-lifecycle-service.js `if (options.confirmGitInit !== true) throw ...`",
+      "expectedFailure": "未确认时导入返回 400 INVALID_ARGUMENT",
+      "proves": "PRJ-008 的“未明确勾选不得 git init”绑定能检测确认守卫失效"
+    },
+    {
+      "name": "writer-busy-guard-removed",
+      "target": "_site/lib/module-bridge.js `if (response.status === 409) throw new DomainError('PROJECT_BUSY', ...)`",
+      "expectedFailure": "活动写入时解绑必须返回 409 PROJECT_BUSY",
+      "proves": "PRJ-009 的“活动 writer 阻断解绑”绑定能检测忙碌守卫失效"
+    },
+    {
+      "name": "registry-epoch-guard-removed",
+      "target": "ui/product.js `const projects = api('/api/projects/projection').then(result => { if (epoch !== registryEpoch) return;`",
+      "expectedFailure": "the old answer must not resurrect the unbound project",
+      "proves": "PRJ-010 的“旧响应不能复活项目”绑定能检测读取纪元守卫失效"
+    },
+    {
+      "name": "domain-change-reregistration-removed",
+      "target": "_site/lib/server-app.js `if (['domainId', 'knowledgeLanguage'].some(...)) modules = await runtime.moduleBridge.registerProjectLinks(...)`",
+      "expectedFailure": "the engine registration carries the new domain",
+      "proves": "PRJ-011 的“作用范围随登记更新”绑定能检测重新登记失效"
+    },
+    {
+      "name": "refresh-failure-report-hidden",
+      "target": "ui/product.js `if (epoch === registryEpoch && results.some(r => r.status === 'rejected')) toast('部分状态暂未刷新，已有内容已保留。')`",
+      "expectedFailure": "the failed registry read is reported",
+      "proves": "PRJ-012 的“保留错误并允许受控重试”绑定能检测失败上报失效"
+    },
+    {
+      "name": "optimistic-page-state-after-failed-refresh",
+      "target": "ui/product.js 导入处理器 `await refreshRegistry(true);` 之后追加乐观写入 state.projects",
+      "expectedFailure": "the failed read leaves the project tree on the previous state",
+      "proves": "PRJ-012 的“刷新失败不建第二个项目”绑定能检测乐观写页失效"
+    }
+  ],
+  "cases": {
+    "PRJ-001": {
+      "title": "领域创建",
+      "tests": [
+        {
+          "id": "ui",
+          "command": "node _site/_test/product-import-ui-test.js",
+          "isolation": "独立 KB_DATA_DIR + KB_KNOWLEDGE_DATA_DIR + 独立端口 + 新 Chrome profile + 离线模块替身"
+        },
+        {
+          "id": "domain",
+          "command": "node _site/_test/project-domain-create-test.js",
+          "isolation": "独立 KB_DATA_DIR + KB_KNOWLEDGE_DATA_DIR + 独立端口"
+        }
+      ],
+      "expected": [
+        {
+          "key": "domain-exists-and-persists",
+          "text": "领域存在并持久化。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-001-domain-exists-and-persists-1",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 72,
+              "anchor": "domain persisted from UI",
+              "kind": "browser",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-001-domain-exists-and-persists-2",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 74,
+              "anchor": "the domain is persisted on disk",
+              "kind": "browser+disk",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-001-domain-exists-and-persists-3",
+              "file": "_site/_test/project-domain-create-test.js",
+              "line": 60,
+              "anchor": "the stored domain name is trimmed",
+              "kind": "api",
+              "test": "domain"
+            },
+            {
+              "id": "QA-SPEC-PRJ-001-domain-exists-and-persists-4",
+              "file": "_site/_test/project-domain-create-test.js",
+              "line": 65,
+              "anchor": "the domain is visible in the settings view",
+              "kind": "api",
+              "test": "domain"
+            },
+            {
+              "id": "QA-SPEC-PRJ-001-domain-exists-and-persists-5",
+              "file": "_site/_test/project-domain-create-test.js",
+              "line": 67,
+              "anchor": "the domain is persisted in settings.json",
+              "kind": "disk",
+              "test": "domain"
+            }
+          ]
+        },
+        {
+          "key": "empty-name-rejected",
+          "text": "空名称拒绝。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-001-empty-name-rejected-1",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 68,
+              "anchor": "the domain form reports an empty name as invalid",
+              "kind": "browser",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-001-empty-name-rejected-2",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 67,
+              "anchor": "an empty domain name must not close the dialog",
+              "kind": "browser",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-001-empty-name-rejected-3",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 69,
+              "anchor": "an empty domain name must not reach the product",
+              "kind": "browser+network",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-001-empty-name-rejected-4",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 70,
+              "anchor": "an empty domain name must not persist a domain",
+              "kind": "api",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-001-empty-name-rejected-5",
+              "file": "_site/_test/project-domain-create-test.js",
+              "line": 50,
+              "anchor": "an empty domain name must be refused",
+              "kind": "api",
+              "note": "空串、空白、制表符三种输入均为 400 INVALID_ARGUMENT",
+              "test": "domain"
+            },
+            {
+              "id": "QA-SPEC-PRJ-001-empty-name-rejected-6",
+              "file": "_site/_test/project-domain-create-test.js",
+              "line": 55,
+              "anchor": "a domain name longer than 100 characters is refused",
+              "kind": "api",
+              "test": "domain"
+            }
+          ]
+        },
+        {
+          "key": "no-git-project-created",
+          "text": "不创建新的 Git 项目。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-001-no-git-project-created-1",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 76,
+              "anchor": "creating a domain must not create a Git project",
+              "kind": "api",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-001-no-git-project-created-2",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 77,
+              "anchor": "the project registry stays empty after a domain is created",
+              "kind": "disk",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-001-no-git-project-created-3",
+              "file": "_site/_test/project-domain-create-test.js",
+              "line": 75,
+              "anchor": "a domain must not create a project",
+              "kind": "api",
+              "test": "domain"
+            },
+            {
+              "id": "QA-SPEC-PRJ-001-no-git-project-created-4",
+              "file": "_site/_test/project-domain-create-test.js",
+              "line": 78,
+              "anchor": "the project registry stays empty",
+              "kind": "disk",
+              "test": "domain"
+            },
+            {
+              "id": "QA-SPEC-PRJ-001-no-git-project-created-5",
+              "file": "_site/_test/project-domain-create-test.js",
+              "line": 82,
+              "anchor": "no project metadata is written for a domain",
+              "kind": "disk",
+              "test": "domain"
+            }
+          ]
+        }
+      ]
+    },
+    "PRJ-002": {
+      "title": "导入完整预检",
+      "tests": [
+        {
+          "id": "ui",
+          "command": "node _site/_test/product-import-ui-test.js",
+          "isolation": "独立 KB_DATA_DIR + KB_KNOWLEDGE_DATA_DIR + 独立端口 + 新 Chrome profile + 离线模块替身"
+        },
+        {
+          "id": "preflight",
+          "command": "node _site/_test/import-preflight-api-test.js",
+          "isolation": "独立 KB_DATA_DIR + KB_KNOWLEDGE_DATA_DIR + 独立端口"
+        }
+      ],
+      "expected": [
+        {
+          "key": "confirm-enabled-only-after-ready",
+          "text": "预检通过才启用确认。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-002-confirm-enabled-only-after-ready-1",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 79,
+              "anchor": "the import stays disabled before a preflight is ready",
+              "kind": "browser",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-002-confirm-enabled-only-after-ready-2",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 85,
+              "anchor": "the import stays disabled while the knowledge root is missing",
+              "kind": "browser",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-002-confirm-enabled-only-after-ready-3",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 87,
+              "anchor": "setup returns to ready import",
+              "kind": "browser",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-002-confirm-enabled-only-after-ready-4",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 95,
+              "anchor": "the preflight that enables the import reports ready",
+              "kind": "browser+network",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-002-confirm-enabled-only-after-ready-5",
+              "file": "_site/_test/import-preflight-api-test.js",
+              "line": 130,
+              "anchor": "empty repo is importable; the import transaction creates the first commit semantics later",
+              "kind": "api",
+              "test": "preflight"
+            },
+            {
+              "id": "QA-SPEC-PRJ-002-confirm-enabled-only-after-ready-6",
+              "file": "_site/_test/import-preflight-api-test.js",
+              "line": 123,
+              "anchor": "non-git folder with planned auto-init is importable",
+              "kind": "api",
+              "test": "preflight"
+            }
+          ]
+        },
+        {
+          "key": "four-modules-report-status",
+          "text": "四模块分别报状态。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-002-four-modules-report-status-1",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 124,
+              "anchor": "the import reports each of the four modules separately",
+              "kind": "network",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-002-four-modules-report-status-2",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 126,
+              "anchor": "reports its own status",
+              "kind": "network",
+              "note": "terminal / vectorHub / eventBridge / engine 四个模块各报各的状态",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-002-four-modules-report-status-3",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 128,
+              "anchor": "the project view reports each of the four modules separately",
+              "kind": "api",
+              "test": "ui"
+            }
+          ]
+        },
+        {
+          "key": "head-unchanged-no-history-analysis",
+          "text": "源码HEAD不变、历史不分析。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-002-head-unchanged-no-history-analysis-1",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 134,
+              "anchor": "import must not commit or analyze history",
+              "kind": "git",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-002-head-unchanged-no-history-analysis-2",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 137,
+              "anchor": "import must not create or rewrite commits",
+              "kind": "git",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-002-head-unchanged-no-history-analysis-3",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 139,
+              "anchor": "analysis starts from the imported HEAD",
+              "kind": "api",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-002-head-unchanged-no-history-analysis-4",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 140,
+              "anchor": "import must not analyze the existing history",
+              "kind": "disk",
+              "test": "ui"
+            }
+          ]
+        }
+      ]
+    },
+    "PRJ-003": {
+      "title": "缺知识根返回表单",
+      "tests": [
+        {
+          "id": "ui",
+          "command": "node _site/_test/product-import-ui-test.js",
+          "isolation": "独立 KB_DATA_DIR + KB_KNOWLEDGE_DATA_DIR + 独立端口 + 新 Chrome profile + 离线模块替身"
+        }
+      ],
+      "expected": [
+        {
+          "key": "inputs-and-import-id-preserved",
+          "text": "原输入和导入ID保留。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-003-inputs-and-import-id-preserved-1",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 89,
+              "anchor": "the original import inputs survive the knowledge-root round trip",
+              "kind": "browser",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-003-inputs-and-import-id-preserved-2",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 93,
+              "anchor": "the preflight request carries the import id",
+              "kind": "network",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-003-inputs-and-import-id-preserved-3",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 119,
+              "anchor": "the import request carries the import id",
+              "kind": "network",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-003-inputs-and-import-id-preserved-4",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 120,
+              "anchor": "the import id survives the knowledge-root round trip",
+              "kind": "network",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-003-inputs-and-import-id-preserved-5",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 121,
+              "anchor": "the registered project keeps the import id",
+              "kind": "browser+api",
+              "test": "ui"
+            }
+          ]
+        },
+        {
+          "key": "no-second-project",
+          "text": "不会误建两个项目。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-003-no-second-project-1",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 113,
+              "anchor": "the knowledge-root round trip must not create a second project",
+              "kind": "api",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-003-no-second-project-2",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 102,
+              "anchor": "the refused import registers no project",
+              "kind": "api",
+              "test": "ui"
+            }
+          ]
+        }
+      ]
+    },
+    "PRJ-004": {
+      "title": "中文空格路径",
+      "tests": [
+        {
+          "id": "unicode",
+          "command": "node _site/_test/project-import-unicode-restart-test.js",
+          "isolation": "独立 KB_DATA_DIR + KB_KNOWLEDGE_DATA_DIR + 两个独占端口（重启只用本 fixture 实例）"
+        }
+      ],
+      "expected": [
+        {
+          "key": "path-normalized",
+          "text": "路径标准化正确。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-004-path-normalized-1",
+              "file": "_site/_test/project-import-unicode-restart-test.js",
+              "line": 92,
+              "anchor": "the workspace path is stored normalized",
+              "kind": "api",
+              "test": "unicode"
+            },
+            {
+              "id": "QA-SPEC-PRJ-004-path-normalized-2",
+              "file": "_site/_test/project-import-unicode-restart-test.js",
+              "line": 93,
+              "anchor": "the knowledge path is stored normalized",
+              "kind": "api",
+              "test": "unicode"
+            },
+            {
+              "id": "QA-SPEC-PRJ-004-path-normalized-3",
+              "file": "_site/_test/project-import-unicode-restart-test.js",
+              "line": 96,
+              "anchor": "the Chinese and spaced segments survive",
+              "kind": "api",
+              "test": "unicode"
+            },
+            {
+              "id": "QA-SPEC-PRJ-004-path-normalized-4",
+              "file": "_site/_test/project-import-unicode-restart-test.js",
+              "line": 97,
+              "anchor": "the Chinese knowledge segment survive",
+              "kind": "api",
+              "test": "unicode"
+            },
+            {
+              "id": "QA-SPEC-PRJ-004-path-normalized-5",
+              "file": "_site/_test/project-import-unicode-restart-test.js",
+              "line": 84,
+              "anchor": "the knowledge root is stored as an absolute path",
+              "kind": "api",
+              "test": "unicode"
+            },
+            {
+              "id": "QA-SPEC-PRJ-004-path-normalized-6",
+              "file": "_site/_test/project-import-unicode-restart-test.js",
+              "line": 85,
+              "anchor": "the stored knowledge root resolves to the configured directory",
+              "kind": "api",
+              "test": "unicode"
+            }
+          ]
+        },
+        {
+          "key": "hook-runs",
+          "text": "Hook可运行。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-004-hook-runs-1",
+              "file": "_site/_test/project-import-unicode-restart-test.js",
+              "line": 102,
+              "anchor": "the managed Hook is installed",
+              "kind": "disk",
+              "test": "unicode"
+            },
+            {
+              "id": "QA-SPEC-PRJ-004-hook-runs-2",
+              "file": "_site/_test/project-import-unicode-restart-test.js",
+              "line": 104,
+              "anchor": "the Hook carries the managed marker",
+              "kind": "disk",
+              "test": "unicode"
+            },
+            {
+              "id": "QA-SPEC-PRJ-004-hook-runs-3",
+              "file": "_site/_test/project-import-unicode-restart-test.js",
+              "line": 105,
+              "anchor": "the Hook belongs to the imported project",
+              "kind": "disk",
+              "test": "unicode"
+            },
+            {
+              "id": "QA-SPEC-PRJ-004-hook-runs-4",
+              "file": "_site/_test/project-import-unicode-restart-test.js",
+              "line": 107,
+              "anchor": "the Hook must run successfully",
+              "kind": "process",
+              "note": "用 Git 自带 sh 以仓库为工作目录真实执行，退出码 0",
+              "test": "unicode"
+            },
+            {
+              "id": "QA-SPEC-PRJ-004-hook-runs-5",
+              "file": "_site/_test/project-import-unicode-restart-test.js",
+              "line": 110,
+              "anchor": "running the Hook leaves a durable log entry",
+              "kind": "disk",
+              "test": "unicode"
+            },
+            {
+              "id": "QA-SPEC-PRJ-004-hook-runs-6",
+              "file": "_site/_test/project-import-unicode-restart-test.js",
+              "line": 112,
+              "anchor": "the log entry records the Hook execution",
+              "kind": "disk",
+              "test": "unicode"
+            }
+          ]
+        },
+        {
+          "key": "absolute-knowledge-path-stable",
+          "text": "绝对知识路径一致。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-004-absolute-knowledge-path-stable-1",
+              "file": "_site/_test/project-import-unicode-restart-test.js",
+              "line": 125,
+              "anchor": "the absolute knowledge path is unchanged after the restart",
+              "kind": "api",
+              "test": "unicode"
+            },
+            {
+              "id": "QA-SPEC-PRJ-004-absolute-knowledge-path-stable-2",
+              "file": "_site/_test/project-import-unicode-restart-test.js",
+              "line": 124,
+              "anchor": "the workspace path is unchanged after the restart",
+              "kind": "api",
+              "test": "unicode"
+            },
+            {
+              "id": "QA-SPEC-PRJ-004-absolute-knowledge-path-stable-3",
+              "file": "_site/_test/project-import-unicode-restart-test.js",
+              "line": 127,
+              "anchor": "the knowledge root is unchanged after the restart",
+              "kind": "api",
+              "test": "unicode"
+            },
+            {
+              "id": "QA-SPEC-PRJ-004-absolute-knowledge-path-stable-4",
+              "file": "_site/_test/project-import-unicode-restart-test.js",
+              "line": 130,
+              "anchor": "the registered knowledge path is still absolute and identical",
+              "kind": "api",
+              "test": "unicode"
+            },
+            {
+              "id": "QA-SPEC-PRJ-004-absolute-knowledge-path-stable-5",
+              "file": "_site/_test/project-import-unicode-restart-test.js",
+              "line": 131,
+              "anchor": "the knowledge directory still exists on disk",
+              "kind": "disk",
+              "test": "unicode"
+            }
+          ]
+        }
+      ]
+    },
+    "PRJ-005": {
+      "title": "重复导入",
+      "tests": [
+        {
+          "id": "duplicate",
+          "command": "node _site/_test/project-import-duplicate-alias-test.js",
+          "isolation": "独立 KB_DATA_DIR + KB_KNOWLEDGE_DATA_DIR + 独立端口"
+        },
+        {
+          "id": "ui",
+          "command": "node _site/_test/product-import-ui-test.js",
+          "isolation": "独立 KB_DATA_DIR + KB_KNOWLEDGE_DATA_DIR + 独立端口 + 新 Chrome profile + 离线模块替身"
+        }
+      ],
+      "expected": [
+        {
+          "key": "duplicate-refused",
+          "text": "拒绝重复登记。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-005-duplicate-refused-1",
+              "file": "_site/_test/project-import-duplicate-alias-test.js",
+              "line": 93,
+              "anchor": "a repeated import is refused",
+              "kind": "api",
+              "test": "duplicate"
+            },
+            {
+              "id": "QA-SPEC-PRJ-005-duplicate-refused-2",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 143,
+              "anchor": "duplicate rejected",
+              "kind": "browser",
+              "test": "ui"
+            }
+          ]
+        },
+        {
+          "key": "existing-project-data-intact",
+          "text": "不破坏已有项目数据。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-005-existing-project-data-intact-1",
+              "file": "_site/_test/project-import-duplicate-alias-test.js",
+              "line": 114,
+              "anchor": "the project configuration is unchanged after the refused duplicates",
+              "kind": "disk",
+              "test": "duplicate"
+            },
+            {
+              "id": "QA-SPEC-PRJ-005-existing-project-data-intact-2",
+              "file": "_site/_test/project-import-duplicate-alias-test.js",
+              "line": 115,
+              "anchor": "the project state is unchanged after the refused duplicates",
+              "kind": "disk",
+              "test": "duplicate"
+            },
+            {
+              "id": "QA-SPEC-PRJ-005-existing-project-data-intact-3",
+              "file": "_site/_test/project-import-duplicate-alias-test.js",
+              "line": 116,
+              "anchor": "the knowledge directory is unchanged after the refused duplicates",
+              "kind": "disk",
+              "test": "duplicate"
+            },
+            {
+              "id": "QA-SPEC-PRJ-005-existing-project-data-intact-4",
+              "file": "_site/_test/project-import-duplicate-alias-test.js",
+              "line": 118,
+              "anchor": "a refused duplicate must not register a second project",
+              "kind": "api",
+              "test": "duplicate"
+            }
+          ]
+        },
+        {
+          "key": "alias-follows-platform-contract",
+          "text": "别名按平台合同判断。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-005-alias-follows-platform-contract-1",
+              "file": "_site/_test/project-import-duplicate-alias-test.js",
+              "line": 109,
+              "anchor": "alias must be refused as a duplicate",
+              "kind": "api",
+              "note": "三种别名：结尾分隔符、分隔符变体、Windows 大小写变体；同一合同见 storage-layout.normalizeForComparison",
+              "test": "duplicate"
+            },
+            {
+              "id": "QA-SPEC-PRJ-005-alias-follows-platform-contract-2",
+              "file": "_site/_test/project-import-duplicate-alias-test.js",
+              "line": 126,
+              "anchor": "a different repository registers its own project",
+              "kind": "api",
+              "note": "反向对照：不同仓库仍然可以导入，说明拒绝是路径相关而不是一刀切",
+              "test": "duplicate"
+            }
+          ]
+        }
+      ]
+    },
+    "PRJ-006": {
+      "title": "Hook竞态冲突",
+      "tests": [
+        {
+          "id": "ui",
+          "command": "node _site/_test/product-import-ui-test.js",
+          "isolation": "独立 KB_DATA_DIR + KB_KNOWLEDGE_DATA_DIR + 独立端口 + 新 Chrome profile + 离线模块替身"
+        },
+        {
+          "id": "preflight",
+          "command": "node _site/_test/import-preflight-api-test.js",
+          "isolation": "独立 KB_DATA_DIR + KB_KNOWLEDGE_DATA_DIR + 独立端口"
+        }
+      ],
+      "expected": [
+        {
+          "key": "hook-conflict",
+          "text": "HOOK_CONFLICT。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-006-hook-conflict-1",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 99,
+              "anchor": "durable import failure feedback",
+              "kind": "browser",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-006-hook-conflict-2",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 101,
+              "anchor": "failed import must not turn back into a passed preflight",
+              "kind": "browser",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-006-hook-conflict-3",
+              "file": "_site/_test/import-preflight-api-test.js",
+              "line": 192,
+              "anchor": "HOOK_CONFLICT",
+              "kind": "api",
+              "test": "preflight"
+            }
+          ]
+        },
+        {
+          "key": "third-party-bytes-preserved",
+          "text": "第三方字节保持。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-006-third-party-bytes-preserved-1",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 103,
+              "anchor": "the third-party Hook bytes are preserved",
+              "kind": "disk",
+              "test": "ui"
+            }
+          ]
+        },
+        {
+          "key": "operation-id-resolves-to-failure-log",
+          "text": "UI operationId能查真实失败日志。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-006-operation-id-resolves-to-failure-log-1",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 105,
+              "anchor": "the failed import is persisted as one failure record",
+              "kind": "api",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-006-operation-id-resolves-to-failure-log-2",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 106,
+              "anchor": "UI operation ID resolves to the persisted failure",
+              "kind": "browser+api",
+              "test": "ui"
+            }
+          ]
+        }
+      ]
+    },
+    "PRJ-007": {
+      "title": "部分模块离线",
+      "tests": [
+        {
+          "id": "partial-recovery",
+          "command": "node _site/_test/project-module-partial-recovery-test.js",
+          "isolation": "独立 KB_DATA_DIR + KB_KNOWLEDGE_DATA_DIR + 独立端口 + 新 Chrome profile + 真实 vendored 知识引擎（经可离线代理）+ 三个可离线模块替身"
+        }
+      ],
+      "expected": [
+        {
+          "key": "registration-kept-modules-still-fail",
+          "text": "登记保留，真实模块状态仍失败。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-007-registration-kept-modules-still-fail-1",
+              "file": "_site/_test/project-module-partial-recovery-test.js",
+              "line": 133,
+              "anchor": "the project registration survives the offline modules",
+              "kind": "api",
+              "test": "partial-recovery"
+            },
+            {
+              "id": "QA-SPEC-PRJ-007-registration-kept-modules-still-fail-2",
+              "file": "_site/_test/project-module-partial-recovery-test.js",
+              "line": 135,
+              "anchor": "the import reports each of the four modules separately",
+              "kind": "network",
+              "test": "partial-recovery"
+            },
+            {
+              "id": "QA-SPEC-PRJ-007-registration-kept-modules-still-fail-3",
+              "file": "_site/_test/project-module-partial-recovery-test.js",
+              "line": 137,
+              "anchor": "did not register while it answered 503",
+              "kind": "network",
+              "test": "partial-recovery"
+            },
+            {
+              "id": "QA-SPEC-PRJ-007-registration-kept-modules-still-fail-4",
+              "file": "_site/_test/project-module-partial-recovery-test.js",
+              "line": 141,
+              "anchor": "is not registered against the offline module",
+              "kind": "api",
+              "test": "partial-recovery"
+            },
+            {
+              "id": "QA-SPEC-PRJ-007-registration-kept-modules-still-fail-5",
+              "file": "_site/_test/project-module-partial-recovery-test.js",
+              "line": 144,
+              "anchor": "the terminal module holds no registration",
+              "kind": "module-fixture",
+              "test": "partial-recovery"
+            },
+            {
+              "id": "QA-SPEC-PRJ-007-registration-kept-modules-still-fail-6",
+              "file": "_site/_test/project-module-partial-recovery-test.js",
+              "line": 145,
+              "anchor": "the index module holds no registration",
+              "kind": "module-fixture",
+              "test": "partial-recovery"
+            },
+            {
+              "id": "QA-SPEC-PRJ-007-registration-kept-modules-still-fail-7",
+              "file": "_site/_test/project-module-partial-recovery-test.js",
+              "line": 146,
+              "anchor": "the event bridge holds no registration",
+              "kind": "module-fixture",
+              "test": "partial-recovery"
+            },
+            {
+              "id": "QA-SPEC-PRJ-007-registration-kept-modules-still-fail-8",
+              "file": "_site/_test/project-module-partial-recovery-test.js",
+              "line": 147,
+              "anchor": "the knowledge engine holds no registration",
+              "kind": "engine-api",
+              "test": "partial-recovery"
+            }
+          ]
+        },
+        {
+          "key": "only-failed-module-repaired-no-duplicate",
+          "text": "仅补失败模块，不重复登记。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-007-only-failed-module-repaired-no-duplicate-1",
+              "file": "_site/_test/project-module-partial-recovery-test.js",
+              "line": 166,
+              "anchor": "the recovered terminal registers",
+              "kind": "network",
+              "test": "partial-recovery"
+            },
+            {
+              "id": "QA-SPEC-PRJ-007-only-failed-module-repaired-no-duplicate-2",
+              "file": "_site/_test/project-module-partial-recovery-test.js",
+              "line": 168,
+              "anchor": "the terminal holds exactly one registration",
+              "kind": "module-fixture",
+              "test": "partial-recovery"
+            },
+            {
+              "id": "QA-SPEC-PRJ-007-only-failed-module-repaired-no-duplicate-3",
+              "file": "_site/_test/project-module-partial-recovery-test.js",
+              "line": 169,
+              "anchor": "the terminal registration points at the imported workspace",
+              "kind": "module-fixture",
+              "test": "partial-recovery"
+            },
+            {
+              "id": "QA-SPEC-PRJ-007-only-failed-module-repaired-no-duplicate-4",
+              "file": "_site/_test/project-module-partial-recovery-test.js",
+              "line": 171,
+              "anchor": "still fails while it answers 503",
+              "kind": "network",
+              "test": "partial-recovery"
+            },
+            {
+              "id": "QA-SPEC-PRJ-007-only-failed-module-repaired-no-duplicate-5",
+              "file": "_site/_test/project-module-partial-recovery-test.js",
+              "line": 191,
+              "anchor": "the recovered index module registers",
+              "kind": "network",
+              "test": "partial-recovery"
+            },
+            {
+              "id": "QA-SPEC-PRJ-007-only-failed-module-repaired-no-duplicate-6",
+              "file": "_site/_test/project-module-partial-recovery-test.js",
+              "line": 196,
+              "anchor": "the second repair reuses the terminal registration instead of creating a second one",
+              "kind": "network",
+              "test": "partial-recovery"
+            },
+            {
+              "id": "QA-SPEC-PRJ-007-only-failed-module-repaired-no-duplicate-7",
+              "file": "_site/_test/project-module-partial-recovery-test.js",
+              "line": 200,
+              "anchor": "the product still holds exactly one project",
+              "kind": "api",
+              "test": "partial-recovery"
+            },
+            {
+              "id": "QA-SPEC-PRJ-007-only-failed-module-repaired-no-duplicate-8",
+              "file": "_site/_test/project-module-partial-recovery-test.js",
+              "line": 202,
+              "anchor": "the product reports the terminal as wired",
+              "kind": "api",
+              "test": "partial-recovery"
+            },
+            {
+              "id": "QA-SPEC-PRJ-007-only-failed-module-repaired-no-duplicate-9",
+              "file": "_site/_test/project-module-partial-recovery-test.js",
+              "line": 203,
+              "anchor": "the product reports the index module as wired",
+              "kind": "api",
+              "test": "partial-recovery"
+            },
+            {
+              "id": "QA-SPEC-PRJ-007-only-failed-module-repaired-no-duplicate-10",
+              "file": "_site/_test/project-module-partial-recovery-test.js",
+              "line": 204,
+              "anchor": "the product reports the event bridge as not wired",
+              "kind": "api",
+              "test": "partial-recovery"
+            },
+            {
+              "id": "QA-SPEC-PRJ-007-only-failed-module-repaired-no-duplicate-11",
+              "file": "_site/_test/project-module-partial-recovery-test.js",
+              "line": 205,
+              "anchor": "the product reports the knowledge engine as not wired",
+              "kind": "api",
+              "test": "partial-recovery"
+            }
+          ]
+        }
+      ]
+    },
+    "PRJ-008": {
+      "title": "Git初始化确认",
+      "tests": [
+        {
+          "id": "git-init",
+          "command": "node _site/_test/project-git-init-confirm-test.js",
+          "isolation": "独立 KB_DATA_DIR + KB_KNOWLEDGE_DATA_DIR + 独立端口；Git 操作只发生在自有 fixture 目录内"
+        }
+      ],
+      "expected": [
+        {
+          "key": "no-git-init-without-confirmation",
+          "text": "未明确勾选不得 git init。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-008-no-git-init-without-confirmation-1",
+              "file": "_site/_test/project-git-init-confirm-test.js",
+              "line": 82,
+              "anchor": "the preflight must report the planned Git initialization",
+              "kind": "api",
+              "test": "git-init"
+            },
+            {
+              "id": "QA-SPEC-PRJ-008-no-git-init-without-confirmation-2",
+              "file": "_site/_test/project-git-init-confirm-test.js",
+              "line": 84,
+              "anchor": "the preflight must not initialize the repository",
+              "kind": "disk",
+              "test": "git-init"
+            },
+            {
+              "id": "QA-SPEC-PRJ-008-no-git-init-without-confirmation-3",
+              "file": "_site/_test/project-git-init-confirm-test.js",
+              "line": 92,
+              "anchor": "a refused import must not run git init",
+              "kind": "disk",
+              "test": "git-init"
+            },
+            {
+              "id": "QA-SPEC-PRJ-008-no-git-init-without-confirmation-4",
+              "file": "_site/_test/project-git-init-confirm-test.js",
+              "line": 93,
+              "anchor": "a refused import must not create a Git repository anywhere in the fixture",
+              "kind": "disk",
+              "test": "git-init"
+            },
+            {
+              "id": "QA-SPEC-PRJ-008-no-git-init-without-confirmation-5",
+              "file": "_site/_test/project-git-init-confirm-test.js",
+              "line": 91,
+              "anchor": "the refusal must name the missing Git initialization confirmation",
+              "kind": "api",
+              "test": "git-init"
+            }
+          ]
+        },
+        {
+          "key": "init-only-inside-selected-fixture",
+          "text": "初始化只发生在用户选中fixture。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-008-init-only-inside-selected-fixture-1",
+              "file": "_site/_test/project-git-init-confirm-test.js",
+              "line": 100,
+              "anchor": "the confirmed import must initialize the selected directory",
+              "kind": "disk",
+              "test": "git-init"
+            },
+            {
+              "id": "QA-SPEC-PRJ-008-init-only-inside-selected-fixture-2",
+              "file": "_site/_test/project-git-init-confirm-test.js",
+              "line": 101,
+              "anchor": "the neighbouring directory must stay untouched",
+              "kind": "disk",
+              "test": "git-init"
+            },
+            {
+              "id": "QA-SPEC-PRJ-008-init-only-inside-selected-fixture-3",
+              "file": "_site/_test/project-git-init-confirm-test.js",
+              "line": 102,
+              "anchor": "exactly the selected fixture may hold a Git repository",
+              "kind": "disk",
+              "test": "git-init"
+            },
+            {
+              "id": "QA-SPEC-PRJ-008-init-only-inside-selected-fixture-4",
+              "file": "_site/_test/project-git-init-confirm-test.js",
+              "line": 106,
+              "anchor": "the registered workspace path is the selected fixture",
+              "kind": "api",
+              "test": "git-init"
+            },
+            {
+              "id": "QA-SPEC-PRJ-008-init-only-inside-selected-fixture-5",
+              "file": "_site/_test/project-git-init-confirm-test.js",
+              "line": 107,
+              "anchor": "the confirmed import registers exactly one project",
+              "kind": "api",
+              "test": "git-init"
+            }
+          ]
+        }
+      ]
+    },
+    "PRJ-009": {
+      "title": "解绑写入保护",
+      "tests": [
+        {
+          "id": "writer-guard",
+          "command": "node _site/_test/project-unbind-writer-guard-test.js",
+          "isolation": "独立 KB_DATA_DIR + KB_KNOWLEDGE_DATA_DIR + 独立端口 + 真实 vendored 知识引擎 + 三个可离线模块替身"
+        }
+      ],
+      "expected": [
+        {
+          "key": "queued-task-cancelled-by-contract",
+          "text": "排队任务按合同取消。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-009-queued-task-cancelled-by-contract-1",
+              "file": "_site/_test/project-unbind-writer-guard-test.js",
+              "line": 156,
+              "anchor": "the prepared maintenance task must stay queued (not started)",
+              "kind": "engine-api",
+              "test": "writer-guard"
+            },
+            {
+              "id": "QA-SPEC-PRJ-009-queued-task-cancelled-by-contract-2",
+              "file": "_site/_test/project-unbind-writer-guard-test.js",
+              "line": 172,
+              "anchor": "the queued task must be cancelled by the unbind",
+              "kind": "engine-api",
+              "test": "writer-guard"
+            },
+            {
+              "id": "QA-SPEC-PRJ-009-queued-task-cancelled-by-contract-3",
+              "file": "_site/_test/project-unbind-writer-guard-test.js",
+              "line": 173,
+              "anchor": "the cancellation must record the contract reason",
+              "kind": "engine-api",
+              "test": "writer-guard"
+            },
+            {
+              "id": "QA-SPEC-PRJ-009-queued-task-cancelled-by-contract-4",
+              "file": "_site/_test/project-unbind-writer-guard-test.js",
+              "line": 174,
+              "anchor": "the engine must drop the unregistered project",
+              "kind": "engine-api",
+              "test": "writer-guard"
+            },
+            {
+              "id": "QA-SPEC-PRJ-009-queued-task-cancelled-by-contract-5",
+              "file": "_site/_test/project-unbind-writer-guard-test.js",
+              "line": 175,
+              "anchor": "the product must drop the unbound project",
+              "kind": "api",
+              "test": "writer-guard"
+            }
+          ]
+        },
+        {
+          "key": "active-writer-blocks-unbind",
+          "text": "活动writer阻断解绑。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-009-active-writer-blocks-unbind-1",
+              "file": "_site/_test/project-unbind-writer-guard-test.js",
+              "line": 202,
+              "anchor": "assert.equal(blocked.status, 409",
+              "kind": "api",
+              "test": "writer-guard"
+            },
+            {
+              "id": "QA-SPEC-PRJ-009-active-writer-blocks-unbind-2",
+              "file": "_site/_test/project-unbind-writer-guard-test.js",
+              "line": 204,
+              "anchor": "a blocked unbind must be reported as retryable",
+              "kind": "api",
+              "test": "writer-guard"
+            },
+            {
+              "id": "QA-SPEC-PRJ-009-active-writer-blocks-unbind-3",
+              "file": "_site/_test/project-unbind-writer-guard-test.js",
+              "line": 205,
+              "anchor": "the refusal must name the active write",
+              "kind": "api",
+              "test": "writer-guard"
+            },
+            {
+              "id": "QA-SPEC-PRJ-009-active-writer-blocks-unbind-4",
+              "file": "_site/_test/project-unbind-writer-guard-test.js",
+              "line": 206,
+              "anchor": "a blocked unbind must keep the project registered",
+              "kind": "api",
+              "test": "writer-guard"
+            },
+            {
+              "id": "QA-SPEC-PRJ-009-active-writer-blocks-unbind-5",
+              "file": "_site/_test/project-unbind-writer-guard-test.js",
+              "line": 207,
+              "anchor": "a blocked unbind must keep the engine registration",
+              "kind": "engine-api",
+              "test": "writer-guard"
+            },
+            {
+              "id": "QA-SPEC-PRJ-009-active-writer-blocks-unbind-6",
+              "file": "_site/_test/project-unbind-writer-guard-test.js",
+              "line": 215,
+              "anchor": "the retried unbind removes the project",
+              "kind": "api",
+              "test": "writer-guard"
+            }
+          ]
+        },
+        {
+          "key": "disk-code-knowledge-session-preserved",
+          "text": "保留磁盘代码、知识、会话。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-009-disk-code-knowledge-session-preserved-1",
+              "file": "_site/_test/project-unbind-writer-guard-test.js",
+              "line": 181,
+              "anchor": "the code file bytes must not change",
+              "kind": "disk",
+              "test": "writer-guard"
+            },
+            {
+              "id": "QA-SPEC-PRJ-009-disk-code-knowledge-session-preserved-2",
+              "file": "_site/_test/project-unbind-writer-guard-test.js",
+              "line": 183,
+              "anchor": "the session record must stay on disk",
+              "kind": "disk",
+              "test": "writer-guard"
+            },
+            {
+              "id": "QA-SPEC-PRJ-009-disk-code-knowledge-session-preserved-3",
+              "file": "_site/_test/project-unbind-writer-guard-test.js",
+              "line": 184,
+              "anchor": "the knowledge directory must survive the unbind",
+              "kind": "disk",
+              "test": "writer-guard"
+            },
+            {
+              "id": "QA-SPEC-PRJ-009-disk-code-knowledge-session-preserved-4",
+              "file": "_site/_test/project-unbind-writer-guard-test.js",
+              "line": 208,
+              "anchor": "a blocked unbind must not touch the code",
+              "kind": "disk",
+              "test": "writer-guard"
+            },
+            {
+              "id": "QA-SPEC-PRJ-009-disk-code-knowledge-session-preserved-5",
+              "file": "_site/_test/project-unbind-writer-guard-test.js",
+              "line": 209,
+              "anchor": "a blocked unbind must not touch the knowledge files",
+              "kind": "disk",
+              "test": "writer-guard"
+            },
+            {
+              "id": "QA-SPEC-PRJ-009-disk-code-knowledge-session-preserved-6",
+              "file": "_site/_test/project-unbind-writer-guard-test.js",
+              "line": 216,
+              "anchor": "the retried unbind must not touch the code",
+              "kind": "disk",
+              "test": "writer-guard"
+            },
+            {
+              "id": "QA-SPEC-PRJ-009-disk-code-knowledge-session-preserved-7",
+              "file": "_site/_test/project-unbind-writer-guard-test.js",
+              "line": 217,
+              "anchor": "the retried unbind must not touch the knowledge files",
+              "kind": "disk",
+              "test": "writer-guard"
+            }
+          ]
+        }
+      ]
+    },
+    "PRJ-010": {
+      "title": "解绑迟到读",
+      "tests": [
+        {
+          "id": "late-read",
+          "command": "node _site/_test/project-unbind-late-read-ui-test.js",
+          "isolation": "独立 KB_DATA_DIR + KB_KNOWLEDGE_DATA_DIR + 独立端口 + 新 Chrome profile + 可挂起/可失败的透传代理 + 真实 vendored 知识引擎"
+        }
+      ],
+      "expected": [
+        {
+          "key": "late-answer-does-not-resurrect",
+          "text": "旧响应不能复活项目。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-010-late-answer-does-not-resurrect-1",
+              "file": "_site/_test/project-unbind-late-read-ui-test.js",
+              "line": 197,
+              "anchor": "the late answer is a real successful registry read",
+              "kind": "network",
+              "test": "late-read"
+            },
+            {
+              "id": "QA-SPEC-PRJ-010-late-answer-does-not-resurrect-2",
+              "file": "_site/_test/project-unbind-late-read-ui-test.js",
+              "line": 205,
+              "anchor": "the old answer must not resurrect the unbound project",
+              "kind": "browser",
+              "test": "late-read"
+            },
+            {
+              "id": "QA-SPEC-PRJ-010-late-answer-does-not-resurrect-3",
+              "file": "_site/_test/project-unbind-late-read-ui-test.js",
+              "line": 209,
+              "anchor": "the unbound project must not reappear in the tree",
+              "kind": "browser",
+              "test": "late-read"
+            },
+            {
+              "id": "QA-SPEC-PRJ-010-late-answer-does-not-resurrect-4",
+              "file": "_site/_test/project-unbind-late-read-ui-test.js",
+              "line": 213,
+              "anchor": "the product must not register the unbound project",
+              "kind": "api",
+              "test": "late-read"
+            }
+          ]
+        },
+        {
+          "key": "still-unbound-after-refresh",
+          "text": "刷新后仍解绑。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-010-still-unbound-after-refresh-1",
+              "file": "_site/_test/project-unbind-late-read-ui-test.js",
+              "line": 223,
+              "anchor": "the project stays unbound after a later refresh",
+              "kind": "browser",
+              "test": "late-read"
+            }
+          ]
+        },
+        {
+          "key": "other-project-untouched",
+          "text": "其他项目不受影响。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-010-other-project-untouched-1",
+              "file": "_site/_test/project-unbind-late-read-ui-test.js",
+              "line": 206,
+              "anchor": "the other project stays listed",
+              "kind": "browser",
+              "test": "late-read"
+            },
+            {
+              "id": "QA-SPEC-PRJ-010-other-project-untouched-2",
+              "file": "_site/_test/project-unbind-late-read-ui-test.js",
+              "line": 214,
+              "anchor": "the other project stays registered",
+              "kind": "api",
+              "test": "late-read"
+            },
+            {
+              "id": "QA-SPEC-PRJ-010-other-project-untouched-3",
+              "file": "_site/_test/project-unbind-late-read-ui-test.js",
+              "line": 229,
+              "anchor": "the engine keeps the other project",
+              "kind": "engine-api",
+              "test": "late-read"
+            },
+            {
+              "id": "QA-SPEC-PRJ-010-other-project-untouched-4",
+              "file": "_site/_test/project-unbind-late-read-ui-test.js",
+              "line": 230,
+              "anchor": "the unbound project keeps its code",
+              "kind": "disk",
+              "test": "late-read"
+            },
+            {
+              "id": "QA-SPEC-PRJ-010-other-project-untouched-5",
+              "file": "_site/_test/project-unbind-late-read-ui-test.js",
+              "line": 232,
+              "anchor": "the other project keeps its code",
+              "kind": "disk",
+              "test": "late-read"
+            }
+          ]
+        }
+      ]
+    },
+    "PRJ-011": {
+      "title": "领域变更",
+      "tests": [
+        {
+          "id": "domain-scope",
+          "command": "node _site/_test/project-domain-scope-retrieval-test.js",
+          "isolation": "独立 KB_DATA_DIR + KB_KNOWLEDGE_DATA_DIR + 独立端口 + 真实 vendored 知识引擎 + 三个可离线模块替身"
+        }
+      ],
+      "expected": [
+        {
+          "key": "scope-follows-registration-update",
+          "text": "作用范围随登记更新。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-011-scope-follows-registration-update-1",
+              "file": "_site/_test/project-domain-scope-retrieval-test.js",
+              "line": 178,
+              "anchor": "the engine registration carries the new domain",
+              "kind": "engine-api",
+              "test": "domain-scope"
+            },
+            {
+              "id": "QA-SPEC-PRJ-011-scope-follows-registration-update-2",
+              "file": "_site/_test/project-domain-scope-retrieval-test.js",
+              "line": 183,
+              "anchor": "the retrieval now runs in the new domain",
+              "kind": "api+engine",
+              "test": "domain-scope"
+            },
+            {
+              "id": "QA-SPEC-PRJ-011-scope-follows-registration-update-3",
+              "file": "_site/_test/project-domain-scope-retrieval-test.js",
+              "line": 184,
+              "anchor": "the retrieval no longer reaches the old domain",
+              "kind": "api+engine",
+              "test": "domain-scope"
+            },
+            {
+              "id": "QA-SPEC-PRJ-011-scope-follows-registration-update-4",
+              "file": "_site/_test/project-domain-scope-retrieval-test.js",
+              "line": 185,
+              "anchor": "the retrieval now reaches the project of the new domain",
+              "kind": "api+engine",
+              "test": "domain-scope"
+            },
+            {
+              "id": "QA-SPEC-PRJ-011-scope-follows-registration-update-5",
+              "file": "_site/_test/project-domain-scope-retrieval-test.js",
+              "line": 164,
+              "anchor": "the retrieval does not reach the other domain",
+              "kind": "api+engine",
+              "test": "domain-scope"
+            }
+          ]
+        },
+        {
+          "key": "absolute-knowledge-path-does-not-move",
+          "text": "知识文件绝对路径不移动。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-011-absolute-knowledge-path-does-not-move-1",
+              "file": "_site/_test/project-domain-scope-retrieval-test.js",
+              "line": 190,
+              "anchor": "the knowledge path stays the same absolute path",
+              "kind": "api",
+              "test": "domain-scope"
+            },
+            {
+              "id": "QA-SPEC-PRJ-011-absolute-knowledge-path-does-not-move-2",
+              "file": "_site/_test/project-domain-scope-retrieval-test.js",
+              "line": 191,
+              "anchor": "the knowledge file bytes do not change",
+              "kind": "disk",
+              "test": "domain-scope"
+            },
+            {
+              "id": "QA-SPEC-PRJ-011-absolute-knowledge-path-does-not-move-3",
+              "file": "_site/_test/project-domain-scope-retrieval-test.js",
+              "line": 192,
+              "anchor": "the knowledge file stays where it is",
+              "kind": "disk",
+              "test": "domain-scope"
+            },
+            {
+              "id": "QA-SPEC-PRJ-011-absolute-knowledge-path-does-not-move-4",
+              "file": "_site/_test/project-domain-scope-retrieval-test.js",
+              "line": 195,
+              "anchor": "the shared scope path of",
+              "kind": "engine-api",
+              "note": "共享作用范围的绝对路径逐个比对，不移动",
+              "test": "domain-scope"
+            }
+          ]
+        }
+      ]
+    },
+    "PRJ-012": {
+      "title": "导入失败重试",
+      "tests": [
+        {
+          "id": "ui",
+          "command": "node _site/_test/product-import-ui-test.js",
+          "isolation": "独立 KB_DATA_DIR + KB_KNOWLEDGE_DATA_DIR + 独立端口 + 新 Chrome profile + 离线模块替身；刷新失败用 CDP Fetch 域在传输层真实断开"
+        }
+      ],
+      "expected": [
+        {
+          "key": "successful-import-with-failed-refresh-creates-no-extra-project",
+          "text": "前者不能再建项目。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-012-successful-import-with-failed-refresh-creates-no-extra-project-1",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 184,
+              "anchor": "the import itself succeeded",
+              "kind": "network",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-012-successful-import-with-failed-refresh-creates-no-extra-project-2",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 187,
+              "anchor": "every registry read after the import really failed at the transport level",
+              "kind": "network",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-012-successful-import-with-failed-refresh-creates-no-extra-project-3",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 191,
+              "anchor": "the successful import registers exactly one more project",
+              "kind": "api",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-012-successful-import-with-failed-refresh-creates-no-extra-project-4",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 194,
+              "anchor": "the failed read leaves the project tree on the previous state",
+              "kind": "browser",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-012-successful-import-with-failed-refresh-creates-no-extra-project-5",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 195,
+              "anchor": "the failed read is not shown as a refreshed list",
+              "kind": "browser",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-012-successful-import-with-failed-refresh-creates-no-extra-project-6",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 206,
+              "anchor": "the retry reads the same two projects and creates no third",
+              "kind": "browser",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-012-successful-import-with-failed-refresh-creates-no-extra-project-7",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 207,
+              "anchor": "the product registry still holds exactly two projects",
+              "kind": "api",
+              "test": "ui"
+            }
+          ]
+        },
+        {
+          "key": "failed-import-keeps-error-and-opid-allows-controlled-retry",
+          "text": "后者保留错误和opID并允许受控重试。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-PRJ-012-failed-import-keeps-error-and-opid-allows-controlled-retry-1",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 99,
+              "anchor": "durable import failure feedback",
+              "kind": "browser",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-012-failed-import-keeps-error-and-opid-allows-controlled-retry-2",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 101,
+              "anchor": "failed import must not turn back into a passed preflight",
+              "kind": "browser",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-012-failed-import-keeps-error-and-opid-allows-controlled-retry-3",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 105,
+              "anchor": "the failed import is persisted as one failure record",
+              "kind": "api",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-012-failed-import-keeps-error-and-opid-allows-controlled-retry-4",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 106,
+              "anchor": "UI operation ID resolves to the persisted failure",
+              "kind": "browser+api",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-012-failed-import-keeps-error-and-opid-allows-controlled-retry-5",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 109,
+              "anchor": "import feedback",
+              "kind": "browser",
+              "note": "移除冲突 Hook 后同一次受控重试成功并回到项目详情",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-PRJ-012-failed-import-keeps-error-and-opid-allows-controlled-retry-6",
+              "file": "_site/_test/product-import-ui-test.js",
+              "line": 180,
+              "anchor": "the failed registry read is reported",
+              "kind": "browser",
+              "test": "ui"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
