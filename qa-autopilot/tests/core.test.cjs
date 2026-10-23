@@ -60,7 +60,7 @@ test('quota upstream 429 is classified as rate limit', async () => {
 });
 test('quota upstream 503 is classified as unavailable', async () => {
     await withStubbedFetch(async () => new Response('{}', { status: 503 }), async () => {
-        await assert.rejects(() => quotaHttpCall(), { code: 'QUOTA_HTTP' }, 'QA-SPEC-QTA-005 503 归类为端点不可用，不是额度状态');
+        await assert.rejects(() => quotaHttpCall(), e => e.code === 'QUOTA_HTTP' && e.httpStatus === 503, 'QA-SPEC-QTA-005 503 归类为端点不可用（HTTP 状态保留），不是额度状态');
     });
 });
 test('quota upstream timeout is classified as unknown', async () => {

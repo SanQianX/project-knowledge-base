@@ -10,25 +10,54 @@ function tokenEqual(a, b) { const x = Buffer.from(a || ''), y = Buffer.from(b ||
 function createGateway(options) {
     const { queryQuota, upstreamFetch = fetch, apiKey, localToken, upstreamBase, model, policy, onQuota = () => { } } = options;
     must(localToken && localToken.length >= 24, 'GATEWAY_TOKEN', 'Provide a strong local gateway token.');
-    let quota = null, gate = { state: 'UNKNOWN', admitRequest: false, admitTask: false, successes: 0 }, active = 0, lastSample = 0;
+    let quota = null, gate = { state: 'UNKNOWN', admitRequest: false, admitTask: false, successes: 0 }, active = 0, lastSample = 0, inflight = null;
     const routes = { '/v1/messages': '/anthropic/v1/messages', '/anthropic/v1/messages': '/anthropic/v1/messages', '/v1/chat/completions': '/v1/chat/completions' };
-    async function sample() {
-        try {
-            quota = await queryQuota();
+    // A quota query is single-flight: the sampling interval and model requests
+    // share one real query, and the recovery counter advances once per completed
+    // query, never once per caller. Transient query classes (network failure,
+    // timeout, upstream 5xx) get a strictly bounded retry; auth failures, quota
+    // rate limits, and schema/config refusals never loop.
+    const retryableQuotaError = error => !!error && typeof error.code === 'string'
+        && (error.code === 'QUOTA_TIMEOUT' || error.code === 'QUOTA_UNAVAILABLE'
+            || (error.code === 'QUOTA_HTTP' && Number.isFinite(Number(error.httpStatus)) && Number(error.httpStatus) >= 500));
+    async function queryOnce() {
+        const attempts = Math.max(1, Math.min(3, Number(policy.quotaRetryAttempts ?? 2) + 1));
+        let error = null;
+        for (let attempt = 1; attempt <= attempts; attempt += 1) {
+            try { return await queryQuota(); }
+            catch (e) {
+                error = e;
+                if (attempt === attempts || !retryableQuotaError(e)) break;
+                await new Promise(resolve => setTimeout(resolve, Math.max(0, Number(policy.quotaRetryDelayMs ?? 250))));
+            }
         }
-        catch {
-            quota = { state: 'UNKNOWN', checkedAt: Date.now(), reason: 'QUERY_FAILED' };
+        throw error;
+    }
+    async function runSample() {
+        try {
+            quota = await queryOnce();
+        }
+        catch (error) {
+            // Keep lib/quota.cjs's classified failure code (and HTTP status) on
+            // the record; only desensitized identifiers, never messages or keys.
+            quota = { state: 'UNKNOWN', checkedAt: Date.now(), reason: (error && error.code) || 'QUERY_FAILED',
+                ...(error && Number.isFinite(Number(error.httpStatus)) ? { httpStatus: Number(error.httpStatus) } : {}) };
         }
         gate = quotaDecision(quota, policy, gate.state, Date.now(), gate.successes);
         lastSample = Date.now();
         onQuota({ quota, gate });
         return gate;
     }
+    function sample() {
+        if (!inflight)
+            inflight = runSample().finally(() => { inflight = null; });
+        return inflight;
+    }
     const server = http.createServer(async (req, res) => {
         const json = (status, body) => { if (!res.headersSent)
             res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(body)); };
         if (req.url === '/health' && req.method === 'GET')
-            return json(200, { kind: 'qa-quota-gateway', state: gate.state, active });
+            return json(200, { kind: 'qa-quota-gateway', state: gate.state, active, quotaReason: (quota && quota.reason) || null });
         const supplied = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '') || String(req.headers['x-api-key'] || '');
         if (!tokenEqual(supplied, localToken))
             return json(401, { error: { type: 'authentication_error', message: 'Local gateway token required.' } });
@@ -49,7 +78,7 @@ function createGateway(options) {
                 gate = { ...gate, state: 'UNKNOWN', admitRequest: false };
             if (!gate.admitRequest) {
                 res.setHeader('Retry-After', '120');
-                return json(429, { error: { type: 'rate_limit_error', code: 'QA_QUOTA_PAUSED', message: 'Quota guard paused new calls; checkpoint and wait.' } });
+                return json(429, { error: { type: 'rate_limit_error', code: 'QA_QUOTA_PAUSED', message: 'Quota guard paused new calls; checkpoint and wait.', details: { gateState: gate.state, quotaState: quota ? quota.state : null, quotaReason: (quota && quota.reason) || null, quotaCheckedAt: quota ? quota.checkedAt : null } } });
             }
             const chunks = [];
             let total = 0;

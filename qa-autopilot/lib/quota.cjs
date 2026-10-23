@@ -119,7 +119,8 @@ async function fetchQuota(cfg) {
         throw new QAError('QUOTA_AUTH', 'Subscription quota authorization failed.', 20);
     if (r.status === 429)
         throw new QAError('QUOTA_RATE_LIMIT', 'Quota endpoint rate-limited; do not infer subscription exhaustion.', 20);
-    must(r.ok, 'QUOTA_HTTP', 'Quota endpoint unavailable.', 20);
+    if (!r.ok)
+        throw Object.assign(new QAError('QUOTA_HTTP', 'Quota endpoint unavailable.', 20), { httpStatus: r.status });
     const text = await r.text();
     must(text.length < 1024 * 1024, 'QUOTA_SIZE', 'Quota response unexpectedly large.');
     return normalizeQuota(JSON.parse(text), cfg);

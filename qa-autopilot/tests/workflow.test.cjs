@@ -22,6 +22,98 @@ test('gateway output bound blocked', () => withGateway(async ({ send, calls }) =
 test('gateway route not forwarded', () => withGateway(async ({ send, calls }) => { assert.equal((await send({}, undefined, '/admin')).status, 404); assert.equal(calls(), 0); }));
 test('gateway exhaustion blocks actual next upstream call', () => withGateway(async ({ g, send, setPercent, calls }) => { await send(); setPercent(5); await g.sample(); assert.equal((await send()).status, 429); assert.equal(calls(), 1); }));
 test('gateway recovery requires consecutive fresh samples', () => withGateway(async ({ g, send, setPercent, calls }) => { setPercent(0); await g.sample(); setPercent(80); await g.sample(); assert.equal((await send()).status, 429); await g.sample(); assert.equal((await send()).status, 200); assert.equal(calls(), 1); }));
+function quotaError(code, httpStatus) { const e = new Error(code); e.code = code; if (httpStatus !== undefined) e.httpStatus = httpStatus; return e; }
+const knownQuota = p => ({ state: 'KNOWN', remainingPercent: p, checkedAt: Date.now() });
+async function withResilientGateway(fn, { queryQuota, policy = {} }) {
+    const g = createGateway({ queryQuota, upstreamFetch: async () => new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } }), apiKey: 'private-test-key', localToken: token, upstreamBase: 'https://api.minimax.io', model: 'MiniMax-M3.1-Flash', policy: { sampleMs: 120000, maxOutputTokens: 1024, quotaRetryDelayMs: 1, ...policy } });
+    await new Promise(r => g.server.listen(0, '127.0.0.1', r));
+    const base = 'http://127.0.0.1:' + g.server.address().port;
+    const send = () => fetch(base + '/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ model: 'MiniMax-M3.1-Flash', max_tokens: 128, messages: [] }) });
+    try { await fn({ g, send }); }
+    finally { g.server.closeAllConnections(); await new Promise(r => g.server.close(r)); }
+}
+test('gateway transient quota failure is retried inside one sample and still recovers', async () => {
+    let calls = 0;
+    await withResilientGateway(async ({ g, send }) => {
+        await g.sample();
+        assert.equal(calls, 2, 'L-QUOTAFIX-001 一次瞬态失败在单次采样内有界重试，共两次真实查询');
+        assert.equal(g.status().gate.state, 'WAITING_RECOVERY');
+        await g.sample();
+        assert.equal(g.status().gate.state, 'RUNNING');
+        assert.equal((await send()).status, 200, '瞬态失败被有界重试吸收后请求照常放行');
+    }, { queryQuota: async () => { calls += 1; if (calls === 1) throw quotaError('QUOTA_UNAVAILABLE'); return knownQuota(80); } });
+});
+test('gateway exhausted transient retries fail closed with the classified reason', async () => {
+    let calls = 0;
+    await withResilientGateway(async ({ g, send }) => {
+        await g.sample();
+        assert.equal(calls, 3, '重试有上界（1+2 次），不做无限循环');
+        assert.equal(g.status().gate.state, 'UNKNOWN');
+        assert.equal(g.status().gate.admitRequest, false);
+        const res = await send();
+        assert.equal(res.status, 429);
+        const body = await res.json();
+        assert.equal(body.error.code, 'QA_QUOTA_PAUSED');
+        assert.equal(body.error.details.quotaReason, 'QUOTA_UNAVAILABLE', 'L-QUOTAFIX-001 429 携带脱敏失败类别，不再一律 QUERY_FAILED');
+    }, { queryQuota: async () => { calls += 1; throw quotaError('QUOTA_UNAVAILABLE'); } });
+});
+test('gateway concurrent sampling shares one real query and advances recovery once', async () => {
+    let calls = 0, release;
+    const openQuery = () => new Promise(resolve => { calls += 1; release = () => resolve(knownQuota(80)); });
+    await withResilientGateway(async ({ g }) => {
+        const shared = [g.sample(), g.sample(), g.sample()];
+        await new Promise(r => setTimeout(r, 5));
+        assert.equal(calls, 1, 'L-QUOTAFIX-001 interval 与请求并发采样共享同一次真实查询');
+        release();
+        const gates = await Promise.all(shared);
+        assert.deepEqual(gates[0], gates[1]);
+        assert.deepEqual(gates[0], gates[2]);
+        assert.equal(gates[0].state, 'WAITING_RECOVERY', '共享一次查询只推进一次恢复计数，不把共享 promise 算两次');
+        assert.equal(gates[0].successes, 1);
+        const second = g.sample();
+        await new Promise(r => setTimeout(r, 5));
+        assert.equal(calls, 2, '之后的采样是独立的新查询');
+        release();
+        await second;
+        assert.equal(g.status().gate.state, 'RUNNING', '两次独立成功采样完成恢复');
+    }, { queryQuota: openQuery });
+});
+test('gateway auth and quota-rate-limit failures are never retried', async () => {
+    for (const code of ['QUOTA_AUTH', 'QUOTA_RATE_LIMIT']) {
+        let calls = 0;
+        await withResilientGateway(async ({ g, send }) => {
+            await g.sample();
+            assert.equal(calls, 1, code + ' 不做重试循环');
+            assert.equal(g.status().gate.admitRequest, false, code + ' 不放行');
+            const res = await send();
+            assert.equal(res.status, 429);
+            assert.equal((await res.json()).error.details.quotaReason, code);
+        }, { queryQuota: async () => { calls += 1; throw quotaError(code); } });
+    }
+});
+test('gateway 5xx quota failures retry, other HTTP errors do not', async () => {
+    let five = 0;
+    await withResilientGateway(async ({ g }) => {
+        await g.sample();
+        assert.equal(five, 3, 'QUOTA_HTTP 5xx 属于瞬态，按上界重试');
+    }, { queryQuota: async () => { five += 1; throw quotaError('QUOTA_HTTP', 503); } });
+    let four = 0;
+    await withResilientGateway(async ({ g }) => {
+        await g.sample();
+        assert.equal(four, 1, '非 5xx HTTP 错误不重试');
+        assert.equal(g.status().quota.httpStatus, 404, 'L-QUOTAFIX-001 HTTP 状态随分类保留在采样记录上');
+    }, { queryQuota: async () => { four += 1; throw quotaError('QUOTA_HTTP', 404); } });
+});
+test('gateway stale quota still refuses fail-closed', async () => {
+    let calls = 0;
+    await withResilientGateway(async ({ g, send }) => {
+        await g.sample(); await g.sample();
+        assert.equal(g.status().gate.state, 'RUNNING');
+        await new Promise(r => setTimeout(r, 80));
+        assert.equal((await send()).status, 429, '样本超过 maxAgeMs 后仍拒绝新请求（fail-closed 原样）');
+        assert.equal(calls, 2, '新鲜窗口内不重复采样');
+    }, { queryQuota: async () => { calls += 1; return knownQuota(80); }, policy: { sampleMs: 600000, maxAgeMs: 40 } });
+});
 test('PNG encode decode roundtrip', () => { const x = { width: 2, height: 2, pixels: Buffer.from([0, 0, 0, 255, 255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255]) }; assert.deepEqual(decode(encode(x)), x); });
 test('PNG rejects corruption', () => { const b = encode({ width: 1, height: 1, pixels: Buffer.from([1, 2, 3, 255]) }); b[30] ^= 1; assert.throws(() => decode(b)); });
 test('visual exact pair passes', () => { const x = { width: 1, height: 1, pixels: Buffer.from([1, 2, 3, 255]) }; assert.equal(diff(x, x).status, 'PASS'); });
