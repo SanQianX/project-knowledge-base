@@ -14,6 +14,17 @@ const endpoint = require('../lib/runtime-endpoint');
 const control = require('../lib/runtime-control');
 const { EngineKnowledgeClient } = require('../lib/engine-knowledge-client');
 
+// A unit test must be decided by its own fixture, never by the developer
+// shell. Ambient module URLs (a shell exporting KB_KNOWLEDGE_ENGINE_URL at
+// the live instance, e.g. http://127.0.0.1:5790) used to redirect this
+// test's implicit runtime client to the real engine, which then correctly
+// refused the fixture binding with ENGINE_IDENTITY_MISMATCH (F-ENV-LEAK-001).
+// Drop the ambient module addresses for this process and its children; the
+// explicit engineUrl option used below remains the supported way to aim a
+// client at a chosen fixture on purpose, and the identity assertions below
+// still expect the mismatch to surface, never to be swallowed.
+for (const ambientModuleUrl of ['KB_KNOWLEDGE_ENGINE_URL', 'KB_VECTORHUB_URL', 'KB_TERMINAL_URL', 'KB_EVENTBRIDGE_URL']) delete process.env[ambientModuleUrl];
+
 (async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'knowledge-engine-client-'));
   const layout = new StorageLayout({ dataDir: path.join(root, 'data') });

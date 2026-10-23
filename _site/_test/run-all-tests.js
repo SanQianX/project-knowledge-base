@@ -52,17 +52,29 @@ function classifyFailure(result) {
 function runOne(file) {
   const start = Date.now();
   // Every test child gets its own Bridge journal sandbox so hook-trigger /
-  // server runtimes never touch the developer's ~/.ai-coding-event-bridge.
+  // server runtimes never touch the developer's ~/.ai-coding-event-bridge,
+  // its own site data sandbox AND its own knowledge-module data sandbox
+  // (KB_KNOWLEDGE_DATA_DIR is a separate product surface; without it a child
+  // inherits whatever the developer shell points at live knowledge data).
+  // Ambient module URLs are the same leak (F-ENV-LEAK-001): a shell
+  // exporting KB_KNOWLEDGE_ENGINE_URL at the live instance used to point
+  // canonical children at it, and the live engine correctly refused the
+  // fixture binding. A test that deliberately wants a module address sets
+  // it for its own descendants, so ambient inheritance is dropped here.
   const bridgeHome = fs.mkdtempSync(path.join(os.tmpdir(), `kb-runall-bridge-${process.pid}-`));
   const dataHome = fs.mkdtempSync(path.join(os.tmpdir(), `kb-runall-data-${process.pid}-`));
+  const knowledgeHome = fs.mkdtempSync(path.join(os.tmpdir(), `kb-runall-knowledge-${process.pid}-`));
+  const childEnv = { ...process.env, FORCE_COLOR: '0', KB_DATA_DIR: dataHome, KB_KNOWLEDGE_DATA_DIR: knowledgeHome, AI_CODING_EVENT_BRIDGE_HOME: bridgeHome, KB_MODULES_AUTOSTART: '0' };
+  for (const ambientModuleUrl of ['KB_KNOWLEDGE_ENGINE_URL', 'KB_VECTORHUB_URL', 'KB_TERMINAL_URL', 'KB_EVENTBRIDGE_URL']) delete childEnv[ambientModuleUrl];
   const result = spawnSync(process.execPath, [path.join(TEST_DIR, file)], {
     cwd: ROOT,
     encoding: 'utf-8',
     timeout: PER_TEST_TIMEOUT_MS,
-    env: { ...process.env, FORCE_COLOR: '0', KB_DATA_DIR: dataHome, AI_CODING_EVENT_BRIDGE_HOME: bridgeHome, KB_MODULES_AUTOSTART: '0' },
+    env: childEnv,
   });
   try { fs.rmSync(bridgeHome, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); } catch {}
   try { fs.rmSync(dataHome, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); } catch {}
+  try { fs.rmSync(knowledgeHome, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); } catch {}
   const failure = result.status === 0 ? null : classifyFailure(result);
   return {
     file,

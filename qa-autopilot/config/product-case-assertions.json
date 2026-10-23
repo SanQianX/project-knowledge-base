@@ -3,7 +3,8 @@
   "batches": [
     "L-PROD-01",
     "L-PROD-02",
-    "L-NAV-02"
+    "L-NAV-02",
+    "P-TEST-NAV"
   ],
   "note": "产品用例（PRJ-*）→ 真实断言的可复用绑定表。本表只描述“哪条 expected 由哪个测试入口的哪一条断言覆盖”；不含任何一次运行的结果（退出码、状态、日志路径、私有路径）。每次运行的结果必须另存到被忽略的证据目录，不回写本表。文件级套件通过不构成用例级证据。",
   "definitionModel": {
@@ -1939,6 +1940,1070 @@
               "anchor": "the empty state never writes a project",
               "kind": "browser+network",
               "test": "emptyState"
+            }
+          ]
+        }
+      ]
+    },
+    "NAV-002": {
+      "title": "主题持久化与就绪帧",
+      "tests": [
+        {
+          "id": "navTheme",
+          "command": "node _site/_test/parallel-nav-theme-test.js",
+          "isolation": "独立产品实例（独立端口、KB_DATA_DIR、知识根目录、Bridge journal home、Chrome profile）；内嵌模块 UI 为协议替身；不读写用户真实数据。"
+        }
+      ],
+      "expected": [
+        {
+          "key": "theme-persists",
+          "text": "外壳主题持久化。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-002-theme-persists-1",
+              "file": "_site/_test/parallel-nav-theme-test.js",
+              "line": 55,
+              "anchor": "the shell starts in the light theme",
+              "kind": "browser",
+              "test": "navTheme"
+            },
+            {
+              "id": "QA-SPEC-NAV-002-theme-persists-2",
+              "file": "_site/_test/parallel-nav-theme-test.js",
+              "line": 56,
+              "anchor": "no theme is stored before the first switch",
+              "kind": "browser",
+              "test": "navTheme"
+            },
+            {
+              "id": "QA-SPEC-NAV-002-theme-persists-3",
+              "file": "_site/_test/parallel-nav-theme-test.js",
+              "line": 59,
+              "anchor": "the dark theme is persisted",
+              "kind": "browser",
+              "test": "navTheme"
+            },
+            {
+              "id": "QA-SPEC-NAV-002-theme-persists-4",
+              "file": "_site/_test/parallel-nav-theme-test.js",
+              "line": 118,
+              "anchor": "the theme is restored from localStorage after a reload",
+              "kind": "browser",
+              "test": "navTheme"
+            },
+            {
+              "id": "QA-SPEC-NAV-002-theme-persists-5",
+              "file": "_site/_test/parallel-nav-theme-test.js",
+              "line": 119,
+              "anchor": "the persisted theme is unchanged by the reload",
+              "kind": "browser",
+              "test": "navTheme"
+            }
+          ]
+        },
+        {
+          "key": "ready-frame-receives-theme",
+          "text": "已就绪 iframe 收到 kb:theme。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-002-ready-frame-receives-theme-1",
+              "file": "_site/_test/parallel-nav-theme-test.js",
+              "line": 81,
+              "anchor": "frame is told the current theme when it becomes ready",
+              "kind": "browser",
+              "test": "navTheme"
+            },
+            {
+              "id": "QA-SPEC-NAV-002-ready-frame-receives-theme-2",
+              "file": "_site/_test/parallel-nav-theme-test.js",
+              "line": 92,
+              "anchor": "frame's newest kb:theme is the new theme",
+              "kind": "browser",
+              "test": "navTheme"
+            }
+          ]
+        },
+        {
+          "key": "no-task-rebuild",
+          "text": "不能因主题切换重建任务。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-002-no-task-rebuild-1",
+              "file": "_site/_test/parallel-nav-theme-test.js",
+              "line": 100,
+              "anchor": "a theme switch does not reload an embedded module document",
+              "kind": "browser",
+              "test": "navTheme"
+            },
+            {
+              "id": "QA-SPEC-NAV-002-no-task-rebuild-2",
+              "file": "_site/_test/parallel-nav-theme-test.js",
+              "line": 107,
+              "anchor": "a theme switch does not re-register the project with the module",
+              "kind": "browser",
+              "test": "navTheme"
+            }
+          ]
+        },
+        {
+          "key": "no-uncaught-exception",
+          "text": "（追加的批次卫生断言）执行期间没有未捕获的产品脚本异常。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-002-no-uncaught-exception-1",
+              "file": "_site/_test/parallel-nav-theme-test.js",
+              "line": 122,
+              "anchor": "no uncaught product JavaScript exceptions",
+              "kind": "browser",
+              "test": "navTheme"
+            }
+          ]
+        }
+      ]
+    },
+    "NAV-004": {
+      "title": "失败保留旧数据",
+      "tests": [
+        {
+          "id": "navFailure",
+          "command": "node _site/_test/parallel-nav-failure-test.js",
+          "isolation": "独立产品实例；登记读取故障由产品前置代理在传输层注入（HTTP 503），产品确实读不到答案。"
+        }
+      ],
+      "expected": [
+        {
+          "key": "failure-visible",
+          "text": "错误可见。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-004-failure-visible-1",
+              "file": "_site/_test/parallel-nav-failure-test.js",
+              "line": 65,
+              "anchor": "the failure message says the content was kept",
+              "kind": "browser",
+              "test": "navFailure"
+            }
+          ]
+        },
+        {
+          "key": "old-list-kept",
+          "text": "旧列表不清空。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-004-old-list-kept-1",
+              "file": "_site/_test/parallel-nav-failure-test.js",
+              "line": 70,
+              "anchor": "the project list still holds the projects it had before the failure",
+              "kind": "browser",
+              "test": "navFailure"
+            },
+            {
+              "id": "QA-SPEC-NAV-004-old-list-kept-2",
+              "file": "_site/_test/parallel-nav-failure-test.js",
+              "line": 72,
+              "anchor": "the failed read keeps the first project",
+              "kind": "browser",
+              "test": "navFailure"
+            },
+            {
+              "id": "QA-SPEC-NAV-004-old-list-kept-3",
+              "file": "_site/_test/parallel-nav-failure-test.js",
+              "line": 73,
+              "anchor": "the failed read keeps the second project",
+              "kind": "browser",
+              "test": "navFailure"
+            },
+            {
+              "id": "QA-SPEC-NAV-004-old-list-kept-4",
+              "file": "_site/_test/parallel-nav-failure-test.js",
+              "line": 75,
+              "anchor": "the failed read keeps the project selector entries",
+              "kind": "browser",
+              "test": "navFailure"
+            },
+            {
+              "id": "QA-SPEC-NAV-004-old-list-kept-5",
+              "file": "_site/_test/parallel-nav-failure-test.js",
+              "line": 84,
+              "anchor": "the old projects survive the repeated failure",
+              "kind": "browser",
+              "test": "navFailure"
+            },
+            {
+              "id": "QA-SPEC-NAV-004-old-list-kept-6",
+              "file": "_site/_test/parallel-nav-failure-test.js",
+              "line": 85,
+              "anchor": "a project that was never read is not shown while the registry is broken",
+              "kind": "browser",
+              "test": "navFailure"
+            },
+            {
+              "id": "QA-SPEC-NAV-004-old-list-kept-7",
+              "file": "_site/_test/parallel-nav-failure-test.js",
+              "line": 86,
+              "anchor": "the project rows are exactly the projects read before the failure",
+              "kind": "browser",
+              "test": "navFailure"
+            }
+          ]
+        },
+        {
+          "key": "recovered-from-new-snapshot",
+          "text": "恢复后以新快照更新。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-004-recovered-from-new-snapshot-1",
+              "file": "_site/_test/parallel-nav-failure-test.js",
+              "line": 99,
+              "anchor": "the recovered read keeps the earlier projects",
+              "kind": "browser",
+              "test": "navFailure"
+            },
+            {
+              "id": "QA-SPEC-NAV-004-recovered-from-new-snapshot-2",
+              "file": "_site/_test/parallel-nav-failure-test.js",
+              "line": 100,
+              "anchor": "the recovered list is the new snapshot",
+              "kind": "browser",
+              "test": "navFailure"
+            },
+            {
+              "id": "QA-SPEC-NAV-004-recovered-from-new-snapshot-3",
+              "file": "_site/_test/parallel-nav-failure-test.js",
+              "line": 105,
+              "anchor": "the registry read failed at the HTTP level",
+              "kind": "network",
+              "test": "navFailure"
+            },
+            {
+              "id": "QA-SPEC-NAV-004-recovered-from-new-snapshot-4",
+              "file": "_site/_test/parallel-nav-failure-test.js",
+              "line": 109,
+              "anchor": "the failure message is not left behind after the recovery",
+              "kind": "browser",
+              "test": "navFailure"
+            }
+          ]
+        },
+        {
+          "key": "no-uncaught-exception",
+          "text": "（追加的批次卫生断言）执行期间没有未捕获的产品脚本异常。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-004-no-uncaught-exception-1",
+              "file": "_site/_test/parallel-nav-failure-test.js",
+              "line": 111,
+              "anchor": "no uncaught product JavaScript exceptions",
+              "kind": "browser",
+              "test": "navFailure"
+            }
+          ]
+        }
+      ]
+    },
+    "NAV-005": {
+      "title": "快速切换不串项目",
+      "tests": [
+        {
+          "id": "navSwitch",
+          "command": "node _site/_test/parallel-nav-switch-test.js",
+          "isolation": "独立产品实例 + 真实 vendored 知识引擎（真实 run 写入引擎存储）；迟到响应由产品前置代理真实暂存后释放。"
+        }
+      ],
+      "expected": [
+        {
+          "key": "only-current-project-shown",
+          "text": "只展示当前项目。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-005-only-current-project-shown-1",
+              "file": "_site/_test/parallel-nav-switch-test.js",
+              "line": 70,
+              "anchor": "the first project is the current one",
+              "kind": "browser",
+              "test": "navSwitch"
+            },
+            {
+              "id": "QA-SPEC-NAV-005-only-current-project-shown-2",
+              "file": "_site/_test/parallel-nav-switch-test.js",
+              "line": 93,
+              "anchor": "the current project run is shown",
+              "kind": "browser",
+              "test": "navSwitch"
+            },
+            {
+              "id": "QA-SPEC-NAV-005-only-current-project-shown-3",
+              "file": "_site/_test/parallel-nav-switch-test.js",
+              "line": 94,
+              "anchor": "the other project run is not shown while the second project is current",
+              "kind": "browser",
+              "test": "navSwitch"
+            },
+            {
+              "id": "QA-SPEC-NAV-005-only-current-project-shown-4",
+              "file": "_site/_test/parallel-nav-switch-test.js",
+              "line": 125,
+              "anchor": "the other project run is not shown after switching back",
+              "kind": "browser",
+              "test": "navSwitch"
+            }
+          ]
+        },
+        {
+          "key": "late-answer-does-not-cross-projects",
+          "text": "迟到响应不跨项目覆盖。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-005-late-answer-does-not-cross-projects-1",
+              "file": "_site/_test/parallel-nav-switch-test.js",
+              "line": 106,
+              "anchor": "the held snapshot read is really delivered late",
+              "kind": "network",
+              "test": "navSwitch"
+            },
+            {
+              "id": "QA-SPEC-NAV-005-late-answer-does-not-cross-projects-2",
+              "file": "_site/_test/parallel-nav-switch-test.js",
+              "line": 109,
+              "anchor": "the current project did not change because of the late answer",
+              "kind": "browser",
+              "test": "navSwitch"
+            },
+            {
+              "id": "QA-SPEC-NAV-005-late-answer-does-not-cross-projects-3",
+              "file": "_site/_test/parallel-nav-switch-test.js",
+              "line": 110,
+              "anchor": "the current project run is still shown after the late answer",
+              "kind": "browser",
+              "test": "navSwitch"
+            },
+            {
+              "id": "QA-SPEC-NAV-005-late-answer-does-not-cross-projects-4",
+              "file": "_site/_test/parallel-nav-switch-test.js",
+              "line": 111,
+              "anchor": "the late answer of the other project did not overwrite the current project",
+              "kind": "browser",
+              "test": "navSwitch"
+            },
+            {
+              "id": "QA-SPEC-NAV-005-late-answer-does-not-cross-projects-5",
+              "file": "_site/_test/parallel-nav-switch-test.js",
+              "line": 113,
+              "anchor": "the snapshot reads really failed while the late answer was delivered",
+              "kind": "network",
+              "test": "navSwitch"
+            }
+          ]
+        },
+        {
+          "key": "module-mapping-matches-current-project",
+          "text": "实际 contextId 映射正确。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-005-module-mapping-matches-current-project-1",
+              "file": "_site/_test/parallel-nav-switch-test.js",
+              "line": 132,
+              "anchor": "the terminal frame really received kb:select-project",
+              "kind": "browser",
+              "test": "navSwitch"
+            },
+            {
+              "id": "QA-SPEC-NAV-005-module-mapping-matches-current-project-2",
+              "file": "_site/_test/parallel-nav-switch-test.js",
+              "line": 133,
+              "anchor": "the newest kb:select-project carries the current project",
+              "kind": "browser",
+              "test": "navSwitch"
+            },
+            {
+              "id": "QA-SPEC-NAV-005-module-mapping-matches-current-project-3",
+              "file": "_site/_test/parallel-nav-switch-test.js",
+              "line": 134,
+              "anchor": "the newest kb:select-project carries the module project the product registered for it",
+              "kind": "browser+api",
+              "test": "navSwitch"
+            },
+            {
+              "id": "QA-SPEC-NAV-005-module-mapping-matches-current-project-4",
+              "file": "_site/_test/parallel-nav-switch-test.js",
+              "line": 136,
+              "anchor": "the terminal frame really received the mapping of the other project",
+              "kind": "browser",
+              "test": "navSwitch"
+            },
+            {
+              "id": "QA-SPEC-NAV-005-module-mapping-matches-current-project-5",
+              "file": "_site/_test/parallel-nav-switch-test.js",
+              "line": 137,
+              "anchor": "the mapping of the other project is the module project the product registered for it",
+              "kind": "browser+api",
+              "test": "navSwitch"
+            },
+            {
+              "id": "QA-SPEC-NAV-005-module-mapping-matches-current-project-6",
+              "file": "_site/_test/parallel-nav-switch-test.js",
+              "line": 139,
+              "anchor": "every mapping carries the shell request id",
+              "kind": "browser",
+              "test": "navSwitch"
+            },
+            {
+              "id": "QA-SPEC-NAV-005-module-mapping-matches-current-project-7",
+              "file": "_site/_test/parallel-nav-switch-test.js",
+              "line": 140,
+              "anchor": "the switch to the other project used a new request id",
+              "kind": "browser",
+              "test": "navSwitch"
+            },
+            {
+              "id": "QA-SPEC-NAV-005-module-mapping-matches-current-project-8",
+              "file": "_site/_test/parallel-nav-switch-test.js",
+              "line": 141,
+              "anchor": "no mapping carries a project that was never current",
+              "kind": "browser",
+              "test": "navSwitch"
+            }
+          ]
+        },
+        {
+          "key": "no-uncaught-exception",
+          "text": "（追加的批次卫生断言）执行期间没有未捕获的产品脚本异常。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-005-no-uncaught-exception-1",
+              "file": "_site/_test/parallel-nav-switch-test.js",
+              "line": 143,
+              "anchor": "no uncaught product JavaScript exceptions",
+              "kind": "browser",
+              "test": "navSwitch"
+            }
+          ]
+        }
+      ]
+    },
+    "NAV-006": {
+      "title": "可操作性（原生指针 + 键盘）",
+      "tests": [
+        {
+          "id": "navOperability",
+          "command": "node _site/_test/parallel-nav-operability-test.js",
+          "isolation": "独立产品实例 + 真实 Chrome（CDP）；指针走 Input.dispatchMouseEvent，键盘走 Input.dispatchKeyEvent，全程不用 element.click()。"
+        }
+      ],
+      "expected": [
+        {
+          "key": "hit-test-passes",
+          "text": "命中测试通过。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-006-hit-test-passes-1",
+              "file": "_site/_test/parallel-nav-operability-test.js",
+              "line": 126,
+              "anchor": "the page really received the click",
+              "kind": "browser",
+              "test": "navOperability"
+            },
+            {
+              "id": "QA-SPEC-NAV-006-hit-test-passes-2",
+              "file": "_site/_test/parallel-nav-operability-test.js",
+              "line": 129,
+              "anchor": "the click reached the navigation control",
+              "kind": "browser",
+              "test": "navOperability"
+            },
+            {
+              "id": "QA-SPEC-NAV-006-hit-test-passes-3",
+              "file": "_site/_test/parallel-nav-operability-test.js",
+              "line": 138,
+              "anchor": "the control is the hit target",
+              "kind": "browser",
+              "test": "navOperability"
+            },
+            {
+              "id": "QA-SPEC-NAV-006-hit-test-passes-4",
+              "file": "_site/_test/parallel-nav-operability-test.js",
+              "line": 144,
+              "anchor": "the memory navigation click is trusted too",
+              "kind": "browser",
+              "test": "navOperability"
+            },
+            {
+              "id": "QA-SPEC-NAV-006-hit-test-passes-5",
+              "file": "_site/_test/parallel-nav-operability-test.js",
+              "line": 145,
+              "anchor": "the memory navigation click reached the control",
+              "kind": "browser",
+              "test": "navOperability"
+            },
+            {
+              "id": "QA-SPEC-NAV-006-hit-test-passes-6",
+              "file": "_site/_test/parallel-nav-operability-test.js",
+              "line": 207,
+              "anchor": "the key press really produced a click",
+              "kind": "browser",
+              "test": "navOperability"
+            },
+            {
+              "id": "QA-SPEC-NAV-006-hit-test-passes-7",
+              "file": "_site/_test/parallel-nav-operability-test.js",
+              "line": 210,
+              "anchor": "the keyboard click reached the search control",
+              "kind": "browser",
+              "test": "navOperability"
+            }
+          ]
+        },
+        {
+          "key": "input-focus-visible",
+          "text": "输入焦点可见。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-006-input-focus-visible-1",
+              "file": "_site/_test/parallel-nav-operability-test.js",
+              "line": 163,
+              "anchor": "the keyboard walk reaches the main controls",
+              "kind": "browser",
+              "test": "navOperability"
+            },
+            {
+              "id": "QA-SPEC-NAV-006-input-focus-visible-2",
+              "file": "_site/_test/parallel-nav-operability-test.js",
+              "line": 165,
+              "anchor": "the keyboard focus really moves between controls",
+              "kind": "browser",
+              "test": "navOperability"
+            },
+            {
+              "id": "QA-SPEC-NAV-006-input-focus-visible-3",
+              "file": "_site/_test/parallel-nav-operability-test.js",
+              "line": 167,
+              "anchor": "the focused control is visible",
+              "kind": "browser",
+              "test": "navOperability"
+            },
+            {
+              "id": "QA-SPEC-NAV-006-input-focus-visible-4",
+              "file": "_site/_test/parallel-nav-operability-test.js",
+              "line": 168,
+              "anchor": "the focused control is on the screen",
+              "kind": "browser",
+              "test": "navOperability"
+            },
+            {
+              "id": "QA-SPEC-NAV-006-input-focus-visible-5",
+              "file": "_site/_test/parallel-nav-operability-test.js",
+              "line": 170,
+              "anchor": "the focused control shows a focus ring",
+              "kind": "browser",
+              "test": "navOperability"
+            },
+            {
+              "id": "QA-SPEC-NAV-006-input-focus-visible-6",
+              "file": "_site/_test/parallel-nav-operability-test.js",
+              "line": 182,
+              "anchor": "the focused control has a solid focus ring",
+              "kind": "browser",
+              "test": "navOperability"
+            },
+            {
+              "id": "QA-SPEC-NAV-006-input-focus-visible-7",
+              "file": "_site/_test/parallel-nav-operability-test.js",
+              "line": 183,
+              "anchor": "the focus ring is thick enough to see",
+              "kind": "browser",
+              "test": "navOperability"
+            },
+            {
+              "id": "QA-SPEC-NAV-006-input-focus-visible-8",
+              "file": "_site/_test/parallel-nav-operability-test.js",
+              "line": 199,
+              "anchor": "the keyboard reaches the search control",
+              "kind": "browser",
+              "test": "navOperability"
+            },
+            {
+              "id": "QA-SPEC-NAV-006-input-focus-visible-9",
+              "file": "_site/_test/parallel-nav-operability-test.js",
+              "line": 225,
+              "anchor": "the form field is visible",
+              "kind": "browser",
+              "test": "navOperability"
+            },
+            {
+              "id": "QA-SPEC-NAV-006-input-focus-visible-10",
+              "file": "_site/_test/parallel-nav-operability-test.js",
+              "line": 226,
+              "anchor": "the form field is on the screen",
+              "kind": "browser",
+              "test": "navOperability"
+            },
+            {
+              "id": "QA-SPEC-NAV-006-input-focus-visible-11",
+              "file": "_site/_test/parallel-nav-operability-test.js",
+              "line": 227,
+              "anchor": "the form field shows a focus ring",
+              "kind": "browser",
+              "test": "navOperability"
+            },
+            {
+              "id": "QA-SPEC-NAV-006-input-focus-visible-12",
+              "file": "_site/_test/parallel-nav-operability-test.js",
+              "line": 235,
+              "anchor": "the keyboard typed into the focused field",
+              "kind": "browser",
+              "test": "navOperability"
+            }
+          ]
+        },
+        {
+          "key": "no-transparent-overlay",
+          "text": "没有透明层拦截。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-006-no-transparent-overlay-1",
+              "file": "_site/_test/parallel-nav-operability-test.js",
+              "line": 149,
+              "anchor": "no transparent full-viewport layer covers the page",
+              "kind": "browser",
+              "test": "navOperability"
+            }
+          ]
+        },
+        {
+          "key": "no-dom-click-substitute",
+          "text": "不使用 DOM.click 代替。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-006-no-dom-click-substitute-1",
+              "file": "_site/_test/parallel-nav-operability-test.js",
+              "line": 128,
+              "anchor": "the click the page received is a trusted browser event",
+              "kind": "browser",
+              "test": "navOperability"
+            },
+            {
+              "id": "QA-SPEC-NAV-006-no-dom-click-substitute-2",
+              "file": "_site/_test/parallel-nav-operability-test.js",
+              "line": 209,
+              "anchor": "the keyboard click is a trusted browser event",
+              "kind": "browser",
+              "test": "navOperability"
+            },
+            {
+              "id": "QA-SPEC-NAV-006-no-dom-click-substitute-3",
+              "file": "_site/_test/parallel-nav-operability-test.js",
+              "line": 246,
+              "anchor": "the page received the clicks of the case",
+              "kind": "browser",
+              "test": "navOperability"
+            },
+            {
+              "id": "QA-SPEC-NAV-006-no-dom-click-substitute-4",
+              "file": "_site/_test/parallel-nav-operability-test.js",
+              "line": 247,
+              "anchor": "no synthesized click reached the page",
+              "kind": "browser",
+              "test": "navOperability"
+            }
+          ]
+        },
+        {
+          "key": "no-uncaught-exception",
+          "text": "（追加的批次卫生断言）执行期间没有未捕获的产品脚本异常。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-006-no-uncaught-exception-1",
+              "file": "_site/_test/parallel-nav-operability-test.js",
+              "line": 249,
+              "anchor": "no uncaught product JavaScript exceptions",
+              "kind": "browser",
+              "test": "navOperability"
+            }
+          ]
+        }
+      ]
+    },
+    "NAV-007": {
+      "title": "分辨率矩阵（4 视口 × 2 主题 × 6 页）",
+      "tests": [
+        {
+          "id": "navViewport",
+          "command": "node _site/_test/parallel-nav-viewport-test.js",
+          "isolation": "独立产品实例 + 真实 Chrome（CDP 设备度量覆盖）；48 张截图与像素统计写入证据目录，不写入仓库。"
+        }
+      ],
+      "expected": [
+        {
+          "key": "no-unexpected-horizontal-overflow-or-occlusion",
+          "text": "无非预期水平溢出、控件遮挡。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-007-no-unexpected-horizontal-overflow-or-occlusion-1",
+              "file": "_site/_test/parallel-nav-viewport-test.js",
+              "line": 197,
+              "anchor": "the open page is the one under test",
+              "kind": "browser",
+              "test": "navViewport"
+            },
+            {
+              "id": "QA-SPEC-NAV-007-no-unexpected-horizontal-overflow-or-occlusion-2",
+              "file": "_site/_test/parallel-nav-viewport-test.js",
+              "line": 199,
+              "anchor": "the page really shows the",
+              "kind": "browser",
+              "test": "navViewport"
+            },
+            {
+              "id": "QA-SPEC-NAV-007-no-unexpected-horizontal-overflow-or-occlusion-3",
+              "file": "_site/_test/parallel-nav-viewport-test.js",
+              "line": 202,
+              "anchor": "no container overflows horizontally",
+              "kind": "browser",
+              "test": "navViewport"
+            },
+            {
+              "id": "QA-SPEC-NAV-007-no-unexpected-horizontal-overflow-or-occlusion-4",
+              "file": "_site/_test/parallel-nav-viewport-test.js",
+              "line": 203,
+              "anchor": "the document does not scroll sideways",
+              "kind": "browser",
+              "test": "navViewport"
+            },
+            {
+              "id": "QA-SPEC-NAV-007-no-unexpected-horizontal-overflow-or-occlusion-5",
+              "file": "_site/_test/parallel-nav-viewport-test.js",
+              "line": 204,
+              "anchor": "the open page does not scroll sideways",
+              "kind": "browser",
+              "test": "navViewport"
+            },
+            {
+              "id": "QA-SPEC-NAV-007-no-unexpected-horizontal-overflow-or-occlusion-6",
+              "file": "_site/_test/parallel-nav-viewport-test.js",
+              "line": 206,
+              "anchor": "no visible control leaves the viewport sideways",
+              "kind": "browser",
+              "test": "navViewport"
+            },
+            {
+              "id": "QA-SPEC-NAV-007-no-unexpected-horizontal-overflow-or-occlusion-7",
+              "file": "_site/_test/parallel-nav-viewport-test.js",
+              "line": 210,
+              "anchor": "no visible control is covered",
+              "kind": "browser",
+              "test": "navViewport"
+            },
+            {
+              "id": "QA-SPEC-NAV-007-no-unexpected-horizontal-overflow-or-occlusion-8",
+              "file": "_site/_test/parallel-nav-viewport-test.js",
+              "line": 213,
+              "anchor": "the open page exposes controls",
+              "kind": "browser",
+              "test": "navViewport"
+            }
+          ]
+        },
+        {
+          "key": "screenshot-baseline-and-pixel-check-reported-separately",
+          "text": "截图人工基线与像素检查分别报告。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-007-screenshot-baseline-and-pixel-check-reported-separately-1",
+              "file": "_site/_test/parallel-nav-viewport-test.js",
+              "line": 221,
+              "anchor": "the screenshot has the viewport width",
+              "kind": "browser+pixel",
+              "test": "navViewport"
+            },
+            {
+              "id": "QA-SPEC-NAV-007-screenshot-baseline-and-pixel-check-reported-separately-2",
+              "file": "_site/_test/parallel-nav-viewport-test.js",
+              "line": 222,
+              "anchor": "the screenshot has the viewport height",
+              "kind": "browser+pixel",
+              "test": "navViewport"
+            },
+            {
+              "id": "QA-SPEC-NAV-007-screenshot-baseline-and-pixel-check-reported-separately-3",
+              "file": "_site/_test/parallel-nav-viewport-test.js",
+              "line": 223,
+              "anchor": "the screenshot shows a rendered page, not a blank surface",
+              "kind": "browser+pixel",
+              "test": "navViewport"
+            },
+            {
+              "id": "QA-SPEC-NAV-007-screenshot-baseline-and-pixel-check-reported-separately-4",
+              "file": "_site/_test/parallel-nav-viewport-test.js",
+              "line": 241,
+              "anchor": "the whole matrix was captured",
+              "kind": "browser+pixel",
+              "test": "navViewport"
+            },
+            {
+              "id": "QA-SPEC-NAV-007-screenshot-baseline-and-pixel-check-reported-separately-5",
+              "file": "_site/_test/parallel-nav-viewport-test.js",
+              "line": 249,
+              "anchor": "the matrix holds both themes of the page",
+              "kind": "browser+pixel",
+              "test": "navViewport"
+            },
+            {
+              "id": "QA-SPEC-NAV-007-screenshot-baseline-and-pixel-check-reported-separately-6",
+              "file": "_site/_test/parallel-nav-viewport-test.js",
+              "line": 250,
+              "anchor": "the dark theme really repaints the page",
+              "kind": "browser+pixel",
+              "test": "navViewport"
+            },
+            {
+              "id": "QA-SPEC-NAV-007-screenshot-baseline-and-pixel-check-reported-separately-7",
+              "file": "_site/_test/parallel-nav-viewport-test.js",
+              "line": 264,
+              "anchor": "state: 'PENDING_HUMAN_REVIEW'",
+              "kind": "manual-review",
+              "test": "navViewport"
+            }
+          ]
+        },
+        {
+          "key": "no-uncaught-exception",
+          "text": "（追加的批次卫生断言）执行期间没有未捕获的产品脚本异常。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-007-no-uncaught-exception-1",
+              "file": "_site/_test/parallel-nav-viewport-test.js",
+              "line": 272,
+              "anchor": "no uncaught product JavaScript exceptions",
+              "kind": "browser",
+              "test": "navViewport"
+            }
+          ]
+        }
+      ]
+    },
+    "NAV-008": {
+      "title": "断网恢复",
+      "tests": [
+        {
+          "id": "navOffline",
+          "command": "node _site/_test/parallel-nav-offline-test.js",
+          "isolation": "独立产品实例 + 真实 vendored 知识引擎；断网由 CDP Network.emulateNetworkConditions 真实切断浏览器网络。"
+        }
+      ],
+      "expected": [
+        {
+          "key": "old-stream-closed-snapshot-and-new-stream-restored",
+          "text": "关闭旧流，恢复快照及新流。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-008-old-stream-closed-snapshot-and-new-stream-restored-1",
+              "file": "_site/_test/parallel-nav-offline-test.js",
+              "line": 133,
+              "anchor": "the page opened one live socket",
+              "kind": "browser",
+              "test": "navOffline"
+            },
+            {
+              "id": "QA-SPEC-NAV-008-old-stream-closed-snapshot-and-new-stream-restored-2",
+              "file": "_site/_test/parallel-nav-offline-test.js",
+              "line": 134,
+              "anchor": "the live socket is open",
+              "kind": "browser",
+              "test": "navOffline"
+            },
+            {
+              "id": "QA-SPEC-NAV-008-old-stream-closed-snapshot-and-new-stream-restored-3",
+              "file": "_site/_test/parallel-nav-offline-test.js",
+              "line": 160,
+              "anchor": "the page still holds one socket object",
+              "kind": "browser",
+              "test": "navOffline"
+            },
+            {
+              "id": "QA-SPEC-NAV-008-old-stream-closed-snapshot-and-new-stream-restored-4",
+              "file": "_site/_test/parallel-nav-offline-test.js",
+              "line": 161,
+              "anchor": "the old stream is really closed by the browser",
+              "kind": "browser",
+              "test": "navOffline"
+            },
+            {
+              "id": "QA-SPEC-NAV-008-old-stream-closed-snapshot-and-new-stream-restored-5",
+              "file": "_site/_test/parallel-nav-offline-test.js",
+              "line": 204,
+              "anchor": "the page opened a second socket after the recovery",
+              "kind": "browser",
+              "test": "navOffline"
+            },
+            {
+              "id": "QA-SPEC-NAV-008-old-stream-closed-snapshot-and-new-stream-restored-6",
+              "file": "_site/_test/parallel-nav-offline-test.js",
+              "line": 205,
+              "anchor": "the old socket stays closed",
+              "kind": "browser",
+              "test": "navOffline"
+            },
+            {
+              "id": "QA-SPEC-NAV-008-old-stream-closed-snapshot-and-new-stream-restored-7",
+              "file": "_site/_test/parallel-nav-offline-test.js",
+              "line": 206,
+              "anchor": "the new socket is open",
+              "kind": "browser",
+              "test": "navOffline"
+            },
+            {
+              "id": "QA-SPEC-NAV-008-old-stream-closed-snapshot-and-new-stream-restored-8",
+              "file": "_site/_test/parallel-nav-offline-test.js",
+              "line": 223,
+              "anchor": "the shell read the snapshot after the recovery",
+              "kind": "network",
+              "test": "navOffline"
+            },
+            {
+              "id": "QA-SPEC-NAV-008-old-stream-closed-snapshot-and-new-stream-restored-9",
+              "file": "_site/_test/parallel-nav-offline-test.js",
+              "line": 225,
+              "anchor": "the last snapshot read really succeeded",
+              "kind": "network",
+              "test": "navOffline"
+            },
+            {
+              "id": "QA-SPEC-NAV-008-old-stream-closed-snapshot-and-new-stream-restored-10",
+              "file": "_site/_test/parallel-nav-offline-test.js",
+              "line": 232,
+              "anchor": "the run of before the outage is still on the page",
+              "kind": "browser",
+              "test": "navOffline"
+            },
+            {
+              "id": "QA-SPEC-NAV-008-old-stream-closed-snapshot-and-new-stream-restored-11",
+              "file": "_site/_test/parallel-nav-offline-test.js",
+              "line": 233,
+              "anchor": "the page shows the real records again",
+              "kind": "browser",
+              "test": "navOffline"
+            }
+          ]
+        },
+        {
+          "key": "no-duplicate-subscription",
+          "text": "不重复订阅。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-008-no-duplicate-subscription-1",
+              "file": "_site/_test/parallel-nav-offline-test.js",
+              "line": 135,
+              "anchor": "the shell holds two subscriptions",
+              "kind": "browser",
+              "test": "navOffline"
+            },
+            {
+              "id": "QA-SPEC-NAV-008-no-duplicate-subscription-2",
+              "file": "_site/_test/parallel-nav-offline-test.js",
+              "line": 137,
+              "anchor": "the shell subscribed two channels",
+              "kind": "browser",
+              "test": "navOffline"
+            },
+            {
+              "id": "QA-SPEC-NAV-008-no-duplicate-subscription-3",
+              "file": "_site/_test/parallel-nav-offline-test.js",
+              "line": 138,
+              "anchor": "the two baseline subscriptions are for two different streams",
+              "kind": "browser",
+              "test": "navOffline"
+            },
+            {
+              "id": "QA-SPEC-NAV-008-no-duplicate-subscription-4",
+              "file": "_site/_test/parallel-nav-offline-test.js",
+              "line": 212,
+              "anchor": "the new socket carries exactly two subscriptions",
+              "kind": "browser",
+              "test": "navOffline"
+            },
+            {
+              "id": "QA-SPEC-NAV-008-no-duplicate-subscription-5",
+              "file": "_site/_test/parallel-nav-offline-test.js",
+              "line": 213,
+              "anchor": "the two recovered subscriptions are for two different streams",
+              "kind": "browser",
+              "test": "navOffline"
+            },
+            {
+              "id": "QA-SPEC-NAV-008-no-duplicate-subscription-6",
+              "file": "_site/_test/parallel-nav-offline-test.js",
+              "line": 214,
+              "anchor": "the shell counts the live subscriptions exactly",
+              "kind": "browser",
+              "test": "navOffline"
+            },
+            {
+              "id": "QA-SPEC-NAV-008-no-duplicate-subscription-7",
+              "file": "_site/_test/parallel-nav-offline-test.js",
+              "line": 215,
+              "anchor": "the shell holds exactly one live connection",
+              "kind": "browser",
+              "test": "navOffline"
+            },
+            {
+              "id": "QA-SPEC-NAV-008-no-duplicate-subscription-8",
+              "file": "_site/_test/parallel-nav-offline-test.js",
+              "line": 217,
+              "anchor": "the engine holds one progress stream more, not more",
+              "kind": "network",
+              "test": "navOffline"
+            }
+          ]
+        },
+        {
+          "key": "content-does-not-pretend-to-be-live",
+          "text": "内容不伪装实时。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-008-content-does-not-pretend-to-be-live-1",
+              "file": "_site/_test/parallel-nav-offline-test.js",
+              "line": 167,
+              "anchor": "the shell does not claim a live connection while it is offline",
+              "kind": "browser",
+              "test": "navOffline"
+            },
+            {
+              "id": "QA-SPEC-NAV-008-content-does-not-pretend-to-be-live-2",
+              "file": "_site/_test/parallel-nav-offline-test.js",
+              "line": 168,
+              "anchor": "the shell reports the broken connection",
+              "kind": "browser",
+              "test": "navOffline"
+            },
+            {
+              "id": "QA-SPEC-NAV-008-content-does-not-pretend-to-be-live-3",
+              "file": "_site/_test/parallel-nav-offline-test.js",
+              "line": 170,
+              "anchor": "the home does not show stale updates as live information",
+              "kind": "browser",
+              "test": "navOffline"
+            },
+            {
+              "id": "QA-SPEC-NAV-008-content-does-not-pretend-to-be-live-4",
+              "file": "_site/_test/parallel-nav-offline-test.js",
+              "line": 179,
+              "anchor": "no snapshot read reached the product while the browser was offline",
+              "kind": "network",
+              "test": "navOffline"
+            }
+          ]
+        },
+        {
+          "key": "no-uncaught-exception",
+          "text": "（追加的批次卫生断言）执行期间没有未捕获的产品脚本异常。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-008-no-uncaught-exception-1",
+              "file": "_site/_test/parallel-nav-offline-test.js",
+              "line": 236,
+              "anchor": "no uncaught product JavaScript exceptions",
+              "kind": "browser",
+              "test": "navOffline"
             }
           ]
         }
