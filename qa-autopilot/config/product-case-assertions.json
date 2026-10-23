@@ -10,7 +10,8 @@
     "P-MEMORY-01",
     "P-WB-SUPPLEMENT-02",
     "P-ENGINE-CI-R5",
-    "P-WB-QA-INTEGRATION-5025"
+    "P-WB-QA-INTEGRATION-5025",
+    "P-QA-LOG-INTEGRATION-5025"
   ],
   "note": "产品用例（PRJ-*）→ 真实断言的可复用绑定表。本表只描述“哪条 expected 由哪个测试入口的哪一条断言覆盖”；不含任何一次运行的结果（退出码、状态、日志路径、私有路径）。每次运行的结果必须另存到被忽略的证据目录，不回写本表。文件级套件通过不构成用例级证据。",
   "definitionModel": {
@@ -6878,6 +6879,395 @@
               "anchor": "attachmentBytesInBrowserStorage: bytesAInStorage || bytesBInStorage",
               "kind": "evidence",
               "test": "integration-5025-drafts-probe"
+            }
+          ]
+        }
+      ]
+    },
+    "LOG-003": {
+      "title": "日志查询（唯一operationId+项目隔离）",
+      "tests": [
+        {
+          "id": "ui",
+          "command": "node _site/_test/parallel-logging-acceptance-log003-test.js",
+          "isolation": "入口先捕获浏览器可执行文件，再为 driver 与子进程重建环境白名单；双数据根、HOME、CODEX/Claude、AppData、TEMP、PS缓存文件与浏览器 profile 独立；模块使用独占替身或不可连接地址，无真实模型请求。"
+        }
+      ],
+      "expected": [
+        {
+          "key": "get-returns-same-as-ui",
+          "text": "GET返回与UI一致",
+          "bindings": [
+            {
+              "id": "QA-SPEC-LOG-003-get-returns-same-as-ui-1",
+              "file": "_site/_test/parallel-logging-acceptance-log003-test.js",
+              "line": 129,
+              "anchor": "getUiConsistencyProjectA",
+              "kind": "browser+api",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-LOG-003-get-returns-same-as-ui-2",
+              "file": "_site/_test/parallel-logging-acceptance-log003-test.js",
+              "line": 152,
+              "anchor": "getUiConsistencyOperationId",
+              "kind": "browser+api",
+              "test": "ui"
+            }
+          ]
+        },
+        {
+          "key": "no-cross-project-leak",
+          "text": "不含其他项目敏感信息",
+          "bindings": [
+            {
+              "id": "QA-SPEC-LOG-003-no-cross-project-leak-1",
+              "file": "_site/_test/parallel-logging-acceptance-log003-test.js",
+              "line": 116,
+              "anchor": "betaMarkerVisibleInA",
+              "kind": "browser",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-LOG-003-no-cross-project-leak-2",
+              "file": "_site/_test/parallel-logging-acceptance-log003-test.js",
+              "line": 175,
+              "anchor": "dom.count >= 8 && dom.status.includes('当前项目') && dom.records.every(record => record.projectId === PROJECT_B)",
+              "kind": "browser",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-LOG-003-no-cross-project-leak-3",
+              "file": "_site/_test/parallel-logging-acceptance-log003-test.js",
+              "line": 191,
+              "anchor": "alphaFileHasNoBeta",
+              "kind": "disk",
+              "test": "ui"
+            }
+          ]
+        }
+      ]
+    },
+    "LOG-004": {
+      "title": "查询-订阅交界+断流",
+      "tests": [
+        {
+          "id": "gap-r2",
+          "command": "node _site/_test/parallel-logging-fix-r2-gap-test.js",
+          "isolation": "入口先捕获浏览器可执行文件，再为 driver 与子进程重建环境白名单；双数据根、HOME、CODEX/Claude、AppData、TEMP、PS缓存文件与浏览器 profile 独立；模块使用独占替身或不可连接地址，无真实模型请求。"
+        },
+        {
+          "id": "close-r1",
+          "command": "node _site/_test/parallel-logging-acceptance-log004-test.js",
+          "isolation": "入口先捕获浏览器可执行文件，再为 driver 与子进程重建环境白名单；双数据根、HOME、CODEX/Claude、AppData、TEMP、PS缓存文件与浏览器 profile 独立；模块使用独占替身或不可连接地址，无真实模型请求。"
+        }
+      ],
+      "expected": [
+        {
+          "key": "boundary-no-loss-no-dup",
+          "text": "交界插入不丢失不重复（确定性：快照已产出未送达时写入，订阅尚未建立，放行原报文后经快照游标无缝续接）",
+          "bindings": [
+            {
+              "id": "QA-SPEC-LOG-004-boundary-no-loss-no-dup-1",
+              "file": "_site/_test/parallel-logging-fix-r2-gap-test.js",
+              "line": 236,
+              "anchor": "subscriptionAbsentWhileHeld",
+              "kind": "wire+browser",
+              "test": "gap-r2"
+            },
+            {
+              "id": "QA-SPEC-LOG-004-boundary-no-loss-no-dup-2",
+              "file": "_site/_test/parallel-logging-fix-r2-gap-test.js",
+              "line": 240,
+              "anchor": "subscribeAfterReleaseWithSnapshotCursor",
+              "kind": "wire",
+              "test": "gap-r2"
+            },
+            {
+              "id": "QA-SPEC-LOG-004-boundary-no-loss-no-dup-3",
+              "file": "_site/_test/parallel-logging-fix-r2-gap-test.js",
+              "line": 242,
+              "anchor": "boundaryInDomExactlyOnce",
+              "kind": "browser",
+              "test": "gap-r2"
+            },
+            {
+              "id": "QA-SPEC-LOG-004-boundary-no-loss-no-dup-4",
+              "file": "_site/_test/parallel-logging-fix-r2-gap-test.js",
+              "line": 244,
+              "anchor": "boundaryFrameExactlyOnce",
+              "kind": "wire",
+              "test": "gap-r2"
+            },
+            {
+              "id": "QA-SPEC-LOG-004-boundary-no-loss-no-dup-5",
+              "file": "_site/_test/parallel-logging-fix-r2-gap-test.js",
+              "line": 245,
+              "anchor": "boundaryFrameIsReplayCatchup",
+              "kind": "wire",
+              "test": "gap-r2"
+            },
+            {
+              "id": "QA-SPEC-LOG-004-boundary-no-loss-no-dup-6",
+              "file": "_site/_test/parallel-logging-fix-r2-gap-test.js",
+              "line": 246,
+              "anchor": "apiExactlyOnce",
+              "kind": "api",
+              "test": "gap-r2"
+            },
+            {
+              "id": "QA-SPEC-LOG-004-boundary-no-loss-no-dup-7",
+              "file": "_site/_test/parallel-logging-fix-r2-gap-test.js",
+              "line": 247,
+              "anchor": "diskExactlyOnce",
+              "kind": "disk",
+              "test": "gap-r2"
+            },
+            {
+              "id": "QA-SPEC-LOG-004-boundary-no-loss-no-dup-8",
+              "file": "_site/_test/parallel-logging-fix-r2-gap-test.js",
+              "line": 252,
+              "anchor": "steadyInDomExactlyOnce",
+              "kind": "browser",
+              "test": "gap-r2"
+            }
+          ]
+        },
+        {
+          "key": "close-stops-stream",
+          "text": "关闭窗口后流断开",
+          "bindings": [
+            {
+              "id": "QA-SPEC-LOG-004-close-stops-stream-1",
+              "file": "_site/_test/parallel-logging-acceptance-log004-test.js",
+              "line": 165,
+              "anchor": "subscriptionsDroppedByOne",
+              "kind": "browser",
+              "test": "close-r1"
+            },
+            {
+              "id": "QA-SPEC-LOG-004-close-stops-stream-2",
+              "file": "_site/_test/parallel-logging-acceptance-log004-test.js",
+              "line": 170,
+              "anchor": "logs stream subscription survived the dialog close",
+              "kind": "browser",
+              "test": "close-r1"
+            },
+            {
+              "id": "QA-SPEC-LOG-004-close-stops-stream-3",
+              "file": "_site/_test/parallel-logging-acceptance-log004-test.js",
+              "line": 171,
+              "anchor": "closed dialog still received streamed records",
+              "kind": "browser",
+              "test": "close-r1"
+            }
+          ]
+        }
+      ]
+    },
+    "LOG-005": {
+      "title": ">100条 DOM有界+历史可查",
+      "tests": [
+        {
+          "id": "ui",
+          "command": "node _site/_test/parallel-logging-acceptance-log005-test.js",
+          "isolation": "入口先捕获浏览器可执行文件，再为 driver 与子进程重建环境白名单；双数据根、HOME、CODEX/Claude、AppData、TEMP、PS缓存文件与浏览器 profile 独立；模块使用独占替身或不可连接地址，无真实模型请求。"
+        }
+      ],
+      "expected": [
+        {
+          "key": "dom-bounded-100",
+          "text": "DOM有界(≤100)",
+          "bindings": [
+            {
+              "id": "QA-SPEC-LOG-005-dom-bounded-100-1",
+              "file": "_site/_test/parallel-logging-acceptance-log005-test.js",
+              "line": 125,
+              "anchor": "cappedAt100",
+              "kind": "browser",
+              "test": "ui"
+            }
+          ]
+        },
+        {
+          "key": "oldest-reachable",
+          "text": "早期记录仍可查询",
+          "bindings": [
+            {
+              "id": "QA-SPEC-LOG-005-oldest-reachable-1",
+              "file": "_site/_test/parallel-logging-acceptance-log005-test.js",
+              "line": 139,
+              "anchor": "UI search finds the oldest (page-2) record",
+              "kind": "browser",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-LOG-005-oldest-reachable-2",
+              "file": "_site/_test/parallel-logging-acceptance-log005-test.js",
+              "line": 145,
+              "anchor": "page2 = await fetch(`${base}/api/logs?pageSize=100&cursor=",
+              "kind": "api",
+              "test": "ui"
+            }
+          ]
+        }
+      ]
+    },
+    "LOG-006": {
+      "title": "canary脱敏 写/查/导出",
+      "tests": [
+        {
+          "id": "ui",
+          "command": "node _site/_test/parallel-logging-acceptance-log006-test.js",
+          "isolation": "入口先捕获浏览器可执行文件，再为 driver 与子进程重建环境白名单；双数据根、HOME、CODEX/Claude、AppData、TEMP、PS缓存文件与浏览器 profile 独立；模块使用独占替身或不可连接地址，无真实模型请求。"
+        }
+      ],
+      "expected": [
+        {
+          "key": "write-path-redacted",
+          "text": "写入路径磁盘无canary明文",
+          "bindings": [
+            {
+              "id": "QA-SPEC-LOG-006-write-path-redacted-1",
+              "file": "_site/_test/parallel-logging-acceptance-log006-test.js",
+              "line": 129,
+              "anchor": "write path leaked canaries to disk",
+              "kind": "disk",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-LOG-006-write-path-redacted-2",
+              "file": "_site/_test/parallel-logging-acceptance-log006-test.js",
+              "line": 122,
+              "anchor": "redactedRecordCount",
+              "kind": "disk",
+              "test": "ui"
+            }
+          ]
+        },
+        {
+          "key": "query-export-ui-redacted",
+          "text": "查询/导出/API/UI全脱敏",
+          "bindings": [
+            {
+              "id": "QA-SPEC-LOG-006-query-export-ui-redacted-1",
+              "file": "_site/_test/parallel-logging-acceptance-log006-test.js",
+              "line": 141,
+              "anchor": "query path leaked canaries",
+              "kind": "api",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-LOG-006-query-export-ui-redacted-2",
+              "file": "_site/_test/parallel-logging-acceptance-log006-test.js",
+              "line": 169,
+              "anchor": "UI leaked canaries into the DOM",
+              "kind": "browser",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-LOG-006-query-export-ui-redacted-3",
+              "file": "_site/_test/parallel-logging-acceptance-log006-test.js",
+              "line": 171,
+              "anchor": "UI apiKey field is not the redaction placeholder",
+              "kind": "browser",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-LOG-006-query-export-ui-redacted-4",
+              "file": "_site/_test/parallel-logging-acceptance-log006-test.js",
+              "line": 186,
+              "anchor": "export path leaked canaries",
+              "kind": "api+disk",
+              "test": "ui"
+            }
+          ]
+        }
+      ]
+    },
+    "LOG-007": {
+      "title": "高级过滤核对（API vs UI vs README）",
+      "tests": [
+        {
+          "id": "ui",
+          "command": "node _site/_test/parallel-logging-acceptance-log007-test.js",
+          "isolation": "入口先捕获浏览器可执行文件，再为 driver 与子进程重建环境白名单；双数据根、HOME、CODEX/Claude、AppData、TEMP、PS缓存文件与浏览器 profile 独立；模块使用独占替身或不可连接地址，无真实模型请求。"
+        }
+      ],
+      "expected": [
+        {
+          "key": "api-vs-ui-controls",
+          "text": "API支持而UI未提供控件(差异已记录)",
+          "bindings": [
+            {
+              "id": "QA-SPEC-LOG-007-api-vs-ui-controls-1",
+              "file": "_site/_test/parallel-logging-acceptance-log007-test.js",
+              "line": 169,
+              "anchor": "const expected1 = apiSupported.levels",
+              "kind": "api+browser",
+              "test": "ui"
+            }
+          ]
+        },
+        {
+          "key": "readme-diff-recorded-no-fake-controls",
+          "text": "README与DOM差异已记录且未造按钮",
+          "bindings": [
+            {
+              "id": "QA-SPEC-LOG-007-readme-diff-recorded-no-fake-controls-1",
+              "file": "_site/_test/parallel-logging-acceptance-log007-test.js",
+              "line": 170,
+              "anchor": "const expected2 = claimLines.length > 0 && extraFilterControls.length === 0",
+              "kind": "browser+doc",
+              "test": "ui"
+            }
+          ]
+        }
+      ]
+    },
+    "LOG-008": {
+      "title": "网络失败反馈（超时/导出失败）",
+      "tests": [
+        {
+          "id": "ui",
+          "command": "node _site/_test/parallel-logging-acceptance-log008-test.js",
+          "isolation": "入口先捕获浏览器可执行文件，再为 driver 与子进程重建环境白名单；双数据根、HOME、CODEX/Claude、AppData、TEMP、PS缓存文件与浏览器 profile 独立；模块使用独占替身或不可连接地址，无真实模型请求。"
+        }
+      ],
+      "expected": [
+        {
+          "key": "ui-shows-failure",
+          "text": "UI显示失败(超时+导出)",
+          "bindings": [
+            {
+              "id": "QA-SPEC-LOG-008-ui-shows-failure-1",
+              "file": "_site/_test/parallel-logging-acceptance-log008-test.js",
+              "line": 106,
+              "anchor": "UI did not surface the query timeout",
+              "kind": "browser",
+              "test": "ui"
+            },
+            {
+              "id": "QA-SPEC-LOG-008-ui-shows-failure-2",
+              "file": "_site/_test/parallel-logging-acceptance-log008-test.js",
+              "line": 128,
+              "anchor": "dom.toastText.includes('诊断导出失败')",
+              "kind": "browser",
+              "test": "ui"
+            }
+          ]
+        },
+        {
+          "key": "no-fake-export-file",
+          "text": "未生成空文件冒充导出成功",
+          "bindings": [
+            {
+              "id": "QA-SPEC-LOG-008-no-fake-export-file-1",
+              "file": "_site/_test/parallel-logging-acceptance-log008-test.js",
+              "line": 139,
+              "anchor": "noFakeEmptyFile",
+              "kind": "disk",
+              "test": "ui"
             }
           ]
         }
