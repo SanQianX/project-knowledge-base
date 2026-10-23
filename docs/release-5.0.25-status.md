@@ -6,6 +6,6 @@
 
 隔离候选源码回归首轮为 187/196；Windows 测试目录过长及测试脚手架写死旧 Bridge 版本导致的八项失败，修正测试环境和声明版本绑定后，八项实际复测全部通过。当前为 195 项通过，官方 npm 全新安装用例尚待模块上传，不能记为通过。此数量属于源码回归，与 qa-autopilot 的 130 条逐 expected 行为验收不同；后者仍按 Leader 已审记录计数，不能以文件数量或计划代替覆盖。
 
-当前发布认证存在两个实际失败：Bridge [任务 39994682956](https://github.com/SanQianX/ai-coding-event-bridge/actions/runs/39994682956) 的旧发布 Token 返回 E404；Workbench [任务 39996364814](https://github.com/SanQianX/Claude-Ai-Workbench/actions/runs/39996364814) 在源码测试通过后，OIDC 身份交换返回 `package not found`、ENEEDAUTH。两次均未发布新版本。本机 npm 也未登录，须恢复有发布权限的认证后才能执行上传。不能据此宣称产品测试失败，也不能把 Git 提交视为 npm 发布完成。
+当前发布认证存在两个实际失败：Bridge [任务 39994682956](https://github.com/SanQianX/ai-coding-event-bridge/actions/runs/39994682956) 的旧发布 Token 返回 E404；Workbench [任务 39996364814](https://github.com/SanQianX/Claude-Ai-Workbench/actions/runs/39996364814) 在源码测试通过后，OIDC 身份交换返回 `package not found`、ENEEDAUTH。用户已完成本机 npm 登录；精确 TGZ 的实际上传随后返回 EOTP，仍需发布时的二次验证，版本尚未上传。验证码只在用户终端输入。认证失败与产品测试结果分别记录，Git 提交不代表 npm 发布完成。
 
-尚需完成：官方制品下载与哈希复核、实际 5.0.25 桌面包的 UI/原生依赖/启动重启/升级冒烟、最终源码提交与同 SHA CI、正式 registry 回执、全线检查点与备份、安装替换后核实际桌面/core/模块版本及原数据。早期测试误写的共享记忆向量索引已保全现场，由独占恢复任务处理；真实知识文件未被该误写覆盖。候选通过前继续保护运行中的 5.0.24。
+尚需完成：官方制品下载与哈希复核、实际 5.0.25 桌面包的 UI/原生依赖/启动重启/升级冒烟、最终源码提交与同 SHA CI、正式 registry 回执、全线检查点与备份、安装替换后核实际桌面/core/模块版本及原数据。导航测试脚手架曾遗漏引擎的独立向量 URL，候选回归因此再次触及真实向量端点；该共享索引已按精确范围恢复真实路径，八份恢复前后备份哈希已核对，真实知识文件未改动。脚手架正在修正并复测，原运行记录保留，不能据原先绿灯声称隔离验收完成。候选通过前继续保护运行中的 5.0.24。

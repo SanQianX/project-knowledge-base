@@ -9,7 +9,8 @@
     "P-NAV-CI-01",
     "P-MEMORY-01",
     "P-WB-SUPPLEMENT-02",
-    "P-ENGINE-CI-R5"
+    "P-ENGINE-CI-R5",
+    "P-WB-QA-INTEGRATION-5025"
   ],
   "note": "产品用例（PRJ-*）→ 真实断言的可复用绑定表。本表只描述“哪条 expected 由哪个测试入口的哪一条断言覆盖”；不含任何一次运行的结果（退出码、状态、日志路径、私有路径）。每次运行的结果必须另存到被忽略的证据目录，不回写本表。文件级套件通过不构成用例级证据。",
   "definitionModel": {
@@ -5303,17 +5304,13 @@
       ]
     },
     "WB-003": {
-      "title": "真实模型抽测",
+      "title": "真实模型抽测（MiniMax 正向验收）",
       "tests": [
         {
-          "id": "standalone-turn",
-          "command": "node _site/_test/parallel-workbench-standalone-turn.js",
-          "isolation": "每个入口自隔离：宿主子进程的 HOME/USERPROFILE/CLAUDE_CONFIG_DIR、KB_DATA_DIR/KB_KNOWLEDGE_DATA_DIR、Bridge home、临时目录、端口全部独立；夹具层拒绝 5757/5760/5789/5790/8787/8790 生产端口；清除环境中的模块地址与全部 ANTHROPIC_* 环境凭据，模型调用只能来自注入的原始订阅 profile。"
-        },
-        {
-          "id": "model-probe",
-          "command": "node _site/_test/parallel-workbench-model-probe.js",
-          "isolation": "每个入口自隔离：宿主子进程的 HOME/USERPROFILE/CLAUDE_CONFIG_DIR、KB_DATA_DIR/KB_KNOWLEDGE_DATA_DIR、Bridge home、临时目录、端口全部独立；夹具层拒绝 5757/5760/5789/5790/8787/8790 生产端口；清除环境中的模块地址与全部 ANTHROPIC_* 环境凭据，模型调用只能来自注入的原始订阅 profile。"
+          "id": "integration-5025-model-probe",
+          "command": "PK_WB_ALLOW_PAID_TURNS=1 node qa-autopilot/tools/product-probes/parallel-workbench-integration-5025-run.js --run model",
+          "kind": "explicitly-invoked real-subscription MiniMax positive acceptance probe (not collected by run-all; exactly one paid turn, real network to the provider); canonical copy of the accepted WB-003 entry",
+          "isolation": "显式入口；driver 与子进程完整环境白名单和独占数据/端口/浏览器。模型入口需显式启用及只读订阅 profile；无模型 UI 使用虚构 profile。运行结果另存 ignored 证据。"
         }
       ],
       "expected": [
@@ -5322,52 +5319,36 @@
           "text": "模型返回的确是MiniMax-M3.1-Flash。",
           "bindings": [
             {
-              "id": "QA-SPEC-WB-003-vendor-model-1",
-              "file": "_site/_test/parallel-workbench-model-probe.js",
-              "line": 123,
-              "anchor": "the MiniMax subscription quota is exhausted",
-              "kind": "blocked-recording",
-              "test": "model-probe"
-            },
-            {
-              "id": "QA-SPEC-WB-003-vendor-model-2",
-              "file": "_site/_test/parallel-workbench-model-probe.js",
-              "line": 256,
-              "anchor": "WB-003.d1-sdk-model-reported",
+              "id": "QA-SPEC-WB-003-i5025-vendor-1",
+              "file": "_site/_test/parallel-workbench-integration-5025-model-probe.js",
+              "line": 264,
+              "anchor": "record('WB-003.m4-vendor-returned-model'",
               "kind": "assert",
-              "test": "model-probe"
+              "test": "integration-5025-model-probe"
             },
             {
-              "id": "QA-SPEC-WB-003-vendor-model-3",
-              "file": "_site/_test/parallel-workbench-model-probe.js",
-              "line": 240,
-              "anchor": "sdkReportedModelMatchesRequest",
+              "id": "QA-SPEC-WB-003-i5025-vendor-2",
+              "file": "_site/_test/parallel-workbench-integration-5025-model-probe.js",
+              "line": 259,
+              "anchor": "const vendorModelProven = transcript.sessionCorrelated",
               "kind": "gate",
-              "test": "model-probe"
+              "test": "integration-5025-model-probe"
             },
             {
-              "id": "QA-SPEC-WB-003-vendor-model-4",
-              "file": "_site/_test/parallel-workbench-standalone-turn.js",
-              "line": 283,
-              "anchor": "WB-002.s6-vendor-model-from-transcript",
+              "id": "QA-SPEC-WB-003-i5025-vendor-3",
+              "file": "_site/_test/parallel-workbench-integration-5025-model-probe.js",
+              "line": 257,
+              "anchor": "scanTranscriptForVendorModel([layout.claudeConfigDir, path.join(layout.home, '.claude')]",
+              "kind": "evidence",
+              "test": "integration-5025-model-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-003-i5025-vendor-4",
+              "file": "_site/_test/parallel-workbench-integration-5025-model-probe.js",
+              "line": 134,
+              "anchor": "assistantModels.add(entry.message.model)",
               "kind": "assert",
-              "test": "standalone-turn"
-            },
-            {
-              "id": "QA-SPEC-WB-003-vendor-model-5",
-              "file": "_site/_test/parallel-workbench-standalone-turn.js",
-              "line": 286,
-              "anchor": "vendorModelMatchesRequest",
-              "kind": "gate",
-              "test": "standalone-turn"
-            },
-            {
-              "id": "QA-SPEC-WB-003-vendor-model-6",
-              "file": "_site/_test/parallel-workbench-standalone-turn.js",
-              "line": 140,
-              "anchor": "tokenEchoedInTranscript",
-              "kind": "assert",
-              "test": "standalone-turn"
+              "test": "integration-5025-model-probe"
             }
           ]
         },
@@ -5376,44 +5357,36 @@
           "text": "无替身。",
           "bindings": [
             {
-              "id": "QA-SPEC-WB-003-no-standin-1",
-              "file": "_site/_test/parallel-workbench-model-probe.js",
-              "line": 273,
-              "anchor": "standInEmbedderUsed: false",
+              "id": "QA-SPEC-WB-003-i5025-nostandin-1",
+              "file": "_site/_test/parallel-workbench-integration-5025-model-probe.js",
+              "line": 193,
+              "anchor": "record('WB-003.m1-profile-injected-readonly'",
               "kind": "assert",
-              "test": "model-probe"
+              "test": "integration-5025-model-probe"
             },
             {
-              "id": "QA-SPEC-WB-003-no-standin-2",
-              "file": "_site/_test/parallel-workbench-model-probe.js",
-              "line": 274,
-              "anchor": "mockProviderUsed: false",
-              "kind": "assert",
-              "test": "model-probe"
-            },
-            {
-              "id": "QA-SPEC-WB-003-no-standin-3",
-              "file": "_site/_test/parallel-workbench-model-probe.js",
-              "line": 272,
-              "anchor": "profileSource: 'original-subscription-store-read-only-in-memory'",
-              "kind": "assert",
-              "test": "model-probe"
-            },
-            {
-              "id": "QA-SPEC-WB-003-no-standin-4",
-              "file": "_site/_test/helpers/parallel-workbench-fixture.js",
-              "line": 274,
-              "anchor": "the profile store of this fixture is read-only",
-              "kind": "assert",
-              "test": "model-probe"
-            },
-            {
-              "id": "QA-SPEC-WB-003-no-standin-5",
-              "file": "_site/_test/parallel-workbench-standalone-turn.js",
-              "line": 330,
-              "anchor": "credentialWrittenAnywhere: false",
+              "id": "QA-SPEC-WB-003-i5025-nostandin-2",
+              "file": "_site/_test/parallel-workbench-integration-5025-model-probe.js",
+              "line": 199,
+              "anchor": "storeWritesPossible: false",
               "kind": "label",
-              "test": "standalone-turn"
+              "test": "integration-5025-model-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-003-i5025-nostandin-3",
+              "file": "_site/_test/parallel-workbench-integration-5025-model-probe.js",
+              "line": 222,
+              "anchor": "assert.equal(created.authSource, 'profile-injected')",
+              "kind": "assert",
+              "test": "integration-5025-model-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-003-i5025-nostandin-4",
+              "file": "_site/_test/parallel-workbench-integration-5025-model-probe.js",
+              "line": 303,
+              "anchor": "record('WB-003.m6-real-profiles-byte-identical'",
+              "kind": "assert",
+              "test": "integration-5025-model-probe"
             }
           ]
         },
@@ -5422,36 +5395,28 @@
           "text": "响应与本轮关联。",
           "bindings": [
             {
-              "id": "QA-SPEC-WB-003-correlation-1",
-              "file": "_site/_test/parallel-workbench-model-probe.js",
-              "line": 265,
-              "anchor": "tokenEchoedInAnswer",
+              "id": "QA-SPEC-WB-003-i5025-corr-1",
+              "file": "_site/_test/parallel-workbench-integration-5025-model-probe.js",
+              "line": 275,
+              "anchor": "record('WB-003.m5-response-correlated'",
               "kind": "assert",
-              "test": "model-probe"
+              "test": "integration-5025-model-probe"
             },
             {
-              "id": "QA-SPEC-WB-003-correlation-2",
-              "file": "_site/_test/parallel-workbench-model-probe.js",
-              "line": 243,
-              "anchor": "vendorClaudeSessionId",
-              "kind": "evidence",
-              "test": "model-probe"
+              "id": "QA-SPEC-WB-003-i5025-corr-2",
+              "file": "_site/_test/parallel-workbench-integration-5025-model-probe.js",
+              "line": 254,
+              "anchor": "const tokenEchoed = answer.includes(token)",
+              "kind": "gate",
+              "test": "integration-5025-model-probe"
             },
             {
-              "id": "QA-SPEC-WB-003-correlation-3",
-              "file": "_site/_test/parallel-workbench-model-probe.js",
-              "line": 287,
-              "anchor": "fixtureSawUniqueTokenInQuery",
+              "id": "QA-SPEC-WB-003-i5025-corr-3",
+              "file": "_site/_test/parallel-workbench-integration-5025-model-probe.js",
+              "line": 238,
+              "anchor": "record('WB-003.m3-unique-question-accepted'",
               "kind": "assert",
-              "test": "model-probe"
-            },
-            {
-              "id": "QA-SPEC-WB-003-correlation-4",
-              "file": "_site/_test/parallel-workbench-standalone-turn.js",
-              "line": 109,
-              "anchor": "sessionCorrelated",
-              "kind": "assert",
-              "test": "standalone-turn"
+              "test": "integration-5025-model-probe"
             }
           ]
         }
@@ -6508,6 +6473,411 @@
               "anchor": "no knowledge operation may be applied when one is illegal",
               "kind": "disk",
               "test": "eng012-origin-exclusion"
+            }
+          ]
+        }
+      ]
+    },
+    "WB-004": {
+      "title": "连续回复次序（真实浏览器 + 真实模型 + 故障注入）",
+      "tests": [
+        {
+          "id": "integration-5025-ordering-probe",
+          "command": "PK_WB_ALLOW_PAID_TURNS=1 node qa-autopilot/tools/product-probes/parallel-workbench-integration-5025-run.js --run ordering",
+          "kind": "behaviour (real browser + real model + real-event delayed replay fault injection; two paid turns, real network to the provider); canonical copy of the accepted WB-004 entry",
+          "isolation": "显式入口；driver 与子进程完整环境白名单和独占数据/端口/浏览器。模型入口需显式启用及只读订阅 profile；无模型 UI 使用虚构 profile。运行结果另存 ignored 证据。"
+        }
+      ],
+      "expected": [
+        {
+          "key": "stale-q1-frame-dropped-not-rendered",
+          "text": "过期的同会话历史帧不得渲染，也不得把进行中的回合错误置idle。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-WB-004-i5025-stale-1",
+              "file": "_site/_test/parallel-workbench-integration-5025-ordering-probe.js",
+              "line": 192,
+              "anchor": "record('WB-004.e-stale-q1-message-replayed-into-the-live-q2-turn'",
+              "kind": "assert",
+              "test": "integration-5025-ordering-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-004-i5025-stale-2",
+              "file": "_site/_test/parallel-workbench-integration-5025-ordering-probe.js",
+              "line": 190,
+              "anchor": "const staleDropped = q1AfterReplay === 1 && assistantCountAfter === assistantCountBefore",
+              "kind": "gate",
+              "test": "integration-5025-ordering-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-004-i5025-stale-3",
+              "file": "_site/_test/parallel-workbench-integration-5025-ordering-probe.js",
+              "line": 209,
+              "anchor": "the replayed Q1 message did not reach the product a second time",
+              "kind": "assert",
+              "test": "integration-5025-ordering-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-004-i5025-stale-4",
+              "file": "_site/_test/parallel-workbench-integration-5025-ordering-probe.js",
+              "line": 206,
+              "anchor": "decided by the product\\'s own session-sequence guard (apps/agent-terminal/app.js)",
+              "kind": "evidence",
+              "test": "integration-5025-ordering-probe"
+            }
+          ]
+        },
+        {
+          "key": "q2-owns-the-final-transcript",
+          "text": "连续两问最终各自恰一条回答且次序正确。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-WB-004-i5025-order-1",
+              "file": "_site/_test/parallel-workbench-integration-5025-ordering-probe.js",
+              "line": 221,
+              "anchor": "record('WB-004.f-q2-completed-with-its-own-answer'",
+              "kind": "assert",
+              "test": "integration-5025-ordering-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-004-i5025-order-2",
+              "file": "_site/_test/parallel-workbench-integration-5025-ordering-probe.js",
+              "line": 220,
+              "anchor": "const order = q1Final === 1 && q2Final === 1 && q1Indexes[0] < q2Indexes[0]",
+              "kind": "gate",
+              "test": "integration-5025-ordering-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-004-i5025-order-3",
+              "file": "_site/_test/parallel-workbench-integration-5025-ordering-probe.js",
+              "line": 161,
+              "anchor": "record('WB-004.d-q2-sent-immediately-after-q1'",
+              "kind": "assert",
+              "test": "integration-5025-ordering-probe"
+            }
+          ]
+        },
+        {
+          "key": "real-turn-and-real-ui",
+          "text": "问题与回答都来自真实浏览器里的真实模型回合。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-WB-004-i5025-real-1",
+              "file": "_site/_test/parallel-workbench-integration-5025-ordering-probe.js",
+              "line": 143,
+              "anchor": "record('WB-004.c-q1-answered-by-the-real-model'",
+              "kind": "assert",
+              "test": "integration-5025-ordering-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-004-i5025-real-2",
+              "file": "_site/_test/parallel-workbench-integration-5025-ordering-probe.js",
+              "line": 118,
+              "anchor": "record('WB-004.b-model-selected-through-the-real-ui'",
+              "kind": "assert",
+              "test": "integration-5025-ordering-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-004-i5025-real-3",
+              "file": "_site/_test/parallel-workbench-integration-5025-ordering-probe.js",
+              "line": 243,
+              "anchor": "record('WB-004.g-vendor-returned-model-from-the-real-transcript'",
+              "kind": "assert",
+              "test": "integration-5025-ordering-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-004-i5025-real-4",
+              "file": "_site/_test/parallel-workbench-integration-5025-ordering-probe.js",
+              "line": 240,
+              "anchor": "const vendorModelOk = transcript.assistantModelValues.length > 0",
+              "kind": "gate",
+              "test": "integration-5025-ordering-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-004-i5025-real-5",
+              "file": "_site/_test/parallel-workbench-integration-5025-ordering-probe.js",
+              "line": 271,
+              "anchor": "record('WB-004.h-real-profiles-byte-identical'",
+              "kind": "assert",
+              "test": "integration-5025-ordering-probe"
+            }
+          ]
+        }
+      ]
+    },
+    "WB-008": {
+      "title": "中止隔离（真实浏览器 + 真实模型 + 真实进程退出证明）",
+      "tests": [
+        {
+          "id": "integration-5025-abort-probe",
+          "command": "PK_WB_ALLOW_PAID_TURNS=1 node qa-autopilot/tools/product-probes/parallel-workbench-integration-5025-run.js --run abort",
+          "kind": "behaviour (real browser + real model, concurrent A/B sessions, abort via the product's own stop control; two paid turns, real network to the provider); canonical copy of the accepted WB-008 entry",
+          "isolation": "显式入口；driver 与子进程完整环境白名单和独占数据/端口/浏览器。模型入口需显式启用及只读订阅 profile；无模型 UI 使用虚构 profile。运行结果另存 ignored 证据。"
+        }
+      ],
+      "expected": [
+        {
+          "key": "two-sessions-run-concurrently",
+          "text": "A 与 B 同时真实进行，各自有独立 CLI runtime。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-WB-008-i5025-conc-1",
+              "file": "_site/_test/parallel-workbench-integration-5025-abort-probe.js",
+              "line": 166,
+              "anchor": "record('WB-008.d-two-sessions-run-at-the-same-time'",
+              "kind": "assert",
+              "test": "integration-5025-abort-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-008-i5025-conc-2",
+              "file": "_site/_test/parallel-workbench-integration-5025-abort-probe.js",
+              "line": 163,
+              "anchor": "const aPids = procsA.filter(entry => procsB.some(other => other.pid === entry.pid)).map(entry => entry.pid)",
+              "kind": "gate",
+              "test": "integration-5025-abort-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-008-i5025-conc-3",
+              "file": "_site/_test/parallel-workbench-integration-5025-abort-probe.js",
+              "line": 136,
+              "anchor": "record('WB-008.c-session-a-is-running'",
+              "kind": "assert",
+              "test": "integration-5025-abort-probe"
+            }
+          ]
+        },
+        {
+          "key": "only-b-aborted-and-terminated",
+          "text": "只中止 B，B 真终止，A 不受影响。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-WB-008-i5025-abort-1",
+              "file": "_site/_test/parallel-workbench-integration-5025-abort-probe.js",
+              "line": 133,
+              "anchor": "await harness.clickSend(browser);",
+              "kind": "evidence",
+              "test": "integration-5025-abort-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-008-i5025-abort-2",
+              "file": "_site/_test/parallel-workbench-integration-5025-abort-probe.js",
+              "line": 193,
+              "anchor": "const abortOk = bAborted && !bResulted && exitedPids.length >= 1",
+              "kind": "gate",
+              "test": "integration-5025-abort-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-008-i5025-abort-3",
+              "file": "_site/_test/parallel-workbench-integration-5025-abort-probe.js",
+              "line": 197,
+              "anchor": "record('WB-008.e-only-b-was-aborted'",
+              "kind": "assert",
+              "test": "integration-5025-abort-probe"
+            }
+          ]
+        },
+        {
+          "key": "a-survives-and-completes",
+          "text": "A 在 B 中止后继续并正常完成。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-WB-008-i5025-survive-1",
+              "file": "_site/_test/parallel-workbench-integration-5025-abort-probe.js",
+              "line": 227,
+              "anchor": "the result event of session A",
+              "kind": "gate",
+              "test": "integration-5025-abort-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-008-i5025-survive-2",
+              "file": "_site/_test/parallel-workbench-integration-5025-abort-probe.js",
+              "line": 240,
+              "anchor": "const aOk = aEventsAfterAbort.length > 0 && Boolean(aResult) && aFinishedAfterAbort",
+              "kind": "gate",
+              "test": "integration-5025-abort-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-008-i5025-survive-3",
+              "file": "_site/_test/parallel-workbench-integration-5025-abort-probe.js",
+              "line": 242,
+              "anchor": "record('WB-008.f-session-a-kept-running-and-completed'",
+              "kind": "assert",
+              "test": "integration-5025-abort-probe"
+            }
+          ]
+        },
+        {
+          "key": "ui-shows-both-facts",
+          "text": "产品自己的历史渲染同时给出 B 已停止与 A 的答案。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-WB-008-i5025-ui-1",
+              "file": "_site/_test/parallel-workbench-integration-5025-abort-probe.js",
+              "line": 271,
+              "anchor": "record('WB-008.g-the-ui-shows-the-abort-of-b-and-the-answer-of-a'",
+              "kind": "assert",
+              "test": "integration-5025-abort-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-008-i5025-ui-2",
+              "file": "_site/_test/parallel-workbench-integration-5025-abort-probe.js",
+              "line": 270,
+              "anchor": "const uiOk = bTranscriptStopped && bHasNoAnswer && aHasAnswer",
+              "kind": "gate",
+              "test": "integration-5025-abort-probe"
+            }
+          ]
+        }
+      ]
+    },
+    "WB-005": {
+      "title": "草稿与附件隔离（真实浏览器 + 真实 UI 操作；canonical 集成复测）",
+      "tests": [
+        {
+          "id": "integration-5025-drafts-probe",
+          "command": "node qa-autopilot/tools/product-probes/parallel-workbench-integration-5025-run.js --run drafts",
+          "kind": "behaviour (real browser, real UI draft/attachment lifecycle; zero model requests, no provider network, fictional profile/fake key; canonical retest of the accepted R5 probe)",
+          "isolation": "显式入口；driver 与子进程完整环境白名单和独占数据/端口/浏览器。模型入口需显式启用及只读订阅 profile；无模型 UI 使用虚构 profile。运行结果另存 ignored 证据。"
+        }
+      ],
+      "expected": [
+        {
+          "key": "drafts-restored-per-scope",
+          "text": "草稿分别恢复。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-WB-005-i5025-draft-1",
+              "file": "_site/_test/parallel-workbench-integration-5025-drafts-probe.js",
+              "line": 271,
+              "anchor": "assertTrue(backInA.inputValue === DRAFT_A",
+              "kind": "gate",
+              "test": "integration-5025-drafts-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-005-i5025-draft-2",
+              "file": "_site/_test/parallel-workbench-integration-5025-drafts-probe.js",
+              "line": 284,
+              "anchor": "record('WB005-5025.b-project-drafts-are-isolated'",
+              "kind": "assert",
+              "test": "integration-5025-drafts-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-005-i5025-draft-3",
+              "file": "_site/_test/parallel-workbench-integration-5025-drafts-probe.js",
+              "line": 292,
+              "anchor": "assertTrue(aAfter.inputValue === DRAFT_A",
+              "kind": "gate",
+              "test": "integration-5025-drafts-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-005-i5025-draft-4",
+              "file": "_site/_test/parallel-workbench-integration-5025-drafts-probe.js",
+              "line": 295,
+              "anchor": "assertTrue(bAfter.inputValue === DRAFT_B",
+              "kind": "gate",
+              "test": "integration-5025-drafts-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-005-i5025-draft-5",
+              "file": "_site/_test/parallel-workbench-integration-5025-drafts-probe.js",
+              "line": 303,
+              "anchor": "record('WB005-5025.c-drafts-survive-a-real-browser-refresh'",
+              "kind": "assert",
+              "test": "integration-5025-drafts-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-005-i5025-draft-6",
+              "file": "_site/_test/parallel-workbench-integration-5025-drafts-probe.js",
+              "line": 318,
+              "anchor": "assertTrue(tombstone.parsed && tombstone.parsed[tombstoneKey] === ''",
+              "kind": "gate",
+              "test": "integration-5025-drafts-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-005-i5025-draft-7",
+              "file": "_site/_test/parallel-workbench-integration-5025-drafts-probe.js",
+              "line": 334,
+              "anchor": "assertTrue(backInS2.inputValue === DRAFT_S2",
+              "kind": "gate",
+              "test": "integration-5025-drafts-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-005-i5025-draft-8",
+              "file": "_site/_test/parallel-workbench-integration-5025-drafts-probe.js",
+              "line": 346,
+              "anchor": "record('WB005-5025.d-session-drafts-are-isolated'",
+              "kind": "assert",
+              "test": "integration-5025-drafts-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-005-i5025-draft-9",
+              "file": "_site/_test/parallel-workbench-integration-5025-drafts-probe.js",
+              "line": 295,
+              "anchor": "assertTrue(bAfter.inputValue === DRAFT_B",
+              "kind": "gate",
+              "test": "integration-5025-drafts-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-005-i5025-draft-10",
+              "file": "_site/_test/parallel-workbench-integration-5025-drafts-probe.js",
+              "line": 425,
+              "anchor": "assertTrue(s1After.inputValue === DRAFT_A",
+              "kind": "gate",
+              "test": "integration-5025-drafts-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-005-i5025-draft-11",
+              "file": "_site/_test/parallel-workbench-integration-5025-drafts-probe.js",
+              "line": 447,
+              "anchor": "record('WB005-5025.f-own-host-restart-keeps-projects-and-drafts'",
+              "kind": "assert",
+              "test": "integration-5025-drafts-probe"
+            }
+          ]
+        },
+        {
+          "key": "attachment-lifecycle-and-isolation",
+          "text": "附件按当前会话生命周期，不跨项目泄漏。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-WB-005-i5025-attach-1",
+              "file": "_site/_test/parallel-workbench-integration-5025-drafts-probe.js",
+              "line": 363,
+              "anchor": "assertTrue(trayInB.attachments.length === 0 && trayInB.product.attachmentCount === 0",
+              "kind": "gate",
+              "test": "integration-5025-drafts-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-005-i5025-attach-2",
+              "file": "_site/_test/parallel-workbench-integration-5025-drafts-probe.js",
+              "line": 373,
+              "anchor": "assertTrue(!bytesAInStorage && !bytesBInStorage, 'attachment bytes entered the browser storage'",
+              "kind": "gate",
+              "test": "integration-5025-drafts-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-005-i5025-attach-3",
+              "file": "_site/_test/parallel-workbench-integration-5025-drafts-probe.js",
+              "line": 378,
+              "anchor": "assertTrue(!backInS1.attachments.join(' ').includes('i5025-b.txt')",
+              "kind": "gate",
+              "test": "integration-5025-drafts-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-005-i5025-attach-4",
+              "file": "_site/_test/parallel-workbench-integration-5025-drafts-probe.js",
+              "line": 388,
+              "anchor": "record('WB005-5025.e-attachment-lifecycle-and-isolation'",
+              "kind": "assert",
+              "test": "integration-5025-drafts-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-005-i5025-attach-5",
+              "file": "_site/_test/parallel-workbench-integration-5025-drafts-probe.js",
+              "line": 383,
+              "anchor": "attachmentBytesInBrowserStorage: bytesAInStorage || bytesBInStorage",
+              "kind": "evidence",
+              "test": "integration-5025-drafts-probe"
             }
           ]
         }
