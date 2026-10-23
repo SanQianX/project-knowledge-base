@@ -2,7 +2,8 @@
   "schema": "qa-autopilot/product-case-assertions/v2",
   "batches": [
     "L-PROD-01",
-    "L-PROD-02"
+    "L-PROD-02",
+    "L-NAV-02"
   ],
   "note": "产品用例（PRJ-*）→ 真实断言的可复用绑定表。本表只描述“哪条 expected 由哪个测试入口的哪一条断言覆盖”；不含任何一次运行的结果（退出码、状态、日志路径、私有路径）。每次运行的结果必须另存到被忽略的证据目录，不回写本表。文件级套件通过不构成用例级证据。",
   "definitionModel": {
@@ -1593,6 +1594,358 @@
           ]
         }
       ]
+    },
+    "NAV-001": {
+      "title": "六页导航",
+      "tests": [
+        {
+          "id": "navigation",
+          "command": "node _site/_test/product-navigation-test.js",
+          "isolation": "独立端口 + 独立 KB_DATA_DIR / KB_KNOWLEDGE_DATA_DIR / AI_CODING_EVENT_BRIDGE_HOME + 新 Chrome profile + TEMP/TMP/TMPDIR=D:/SanQian.Xu/.project-knowledge-test-temp；模块离线（127.0.0.1:0），只结束自有进程"
+        }
+      ],
+      "expected": [
+        {
+          "key": "only-active-view",
+          "text": "只有当前 view active。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-001-only-active-view-1",
+              "file": "_site/_test/product-navigation-test.js",
+              "line": 93,
+              "anchor": "only ${view} is the active navigation entry",
+              "kind": "browser",
+              "test": "navigation"
+            },
+            {
+              "id": "QA-SPEC-NAV-001-only-active-view-2",
+              "file": "_site/_test/product-navigation-test.js",
+              "line": 94,
+              "anchor": "only view-${view} is the visible page",
+              "kind": "browser",
+              "test": "navigation"
+            },
+            {
+              "id": "QA-SPEC-NAV-001-only-active-view-3",
+              "file": "_site/_test/product-navigation-test.js",
+              "line": 76,
+              "anchor": "the shell exposes six navigation entries",
+              "kind": "browser",
+              "test": "navigation"
+            },
+            {
+              "id": "QA-SPEC-NAV-001-only-active-view-4",
+              "file": "_site/_test/product-navigation-test.js",
+              "line": 77,
+              "anchor": "the shell owns six pages",
+              "kind": "browser",
+              "test": "navigation"
+            }
+          ]
+        },
+        {
+          "key": "title-hash-selection-agree",
+          "text": "标题、hash、选中导航一致。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-001-title-hash-selection-agree-1",
+              "file": "_site/_test/product-navigation-test.js",
+              "line": 95,
+              "anchor": "the page title matches ${view}",
+              "kind": "browser",
+              "test": "navigation"
+            },
+            {
+              "id": "QA-SPEC-NAV-001-title-hash-selection-agree-2",
+              "file": "_site/_test/product-navigation-test.js",
+              "line": 96,
+              "anchor": "the hash matches ${view}",
+              "kind": "browser",
+              "test": "navigation"
+            },
+            {
+              "id": "QA-SPEC-NAV-001-title-hash-selection-agree-3",
+              "file": "_site/_test/product-navigation-test.js",
+              "line": 93,
+              "anchor": "only ${view} is the active navigation entry",
+              "kind": "browser",
+              "test": "navigation",
+              "note": "被选中的导航项与当前 view 是同一个"
+            },
+            {
+              "id": "QA-SPEC-NAV-001-title-hash-selection-agree-4",
+              "file": "_site/_test/product-navigation-test.js",
+              "line": 142,
+              "anchor": "no uncaught product JavaScript exceptions",
+              "kind": "browser",
+              "test": "navigation"
+            }
+          ]
+        },
+        {
+          "key": "no-extra-business-write",
+          "text": "没有额外业务写入。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-001-no-extra-business-write-1",
+              "file": "_site/_test/product-navigation-test.js",
+              "line": 130,
+              "anchor": "navigation performs no business write",
+              "kind": "browser+network",
+              "test": "navigation"
+            },
+            {
+              "id": "QA-SPEC-NAV-001-no-extra-business-write-2",
+              "file": "_site/_test/product-navigation-test.js",
+              "line": 132,
+              "anchor": "navigation registers no project",
+              "kind": "api",
+              "test": "navigation"
+            },
+            {
+              "id": "QA-SPEC-NAV-001-no-extra-business-write-3",
+              "file": "_site/_test/product-navigation-test.js",
+              "line": 134,
+              "anchor": "navigation creates no domain",
+              "kind": "api",
+              "test": "navigation"
+            },
+            {
+              "id": "QA-SPEC-NAV-001-no-extra-business-write-4",
+              "file": "_site/_test/product-navigation-test.js",
+              "line": 138,
+              "anchor": "the project registry stays empty",
+              "kind": "disk",
+              "test": "navigation"
+            },
+            {
+              "id": "QA-SPEC-NAV-001-no-extra-business-write-5",
+              "file": "_site/_test/product-navigation-test.js",
+              "line": 141,
+              "anchor": "no project metadata directory is created",
+              "kind": "disk",
+              "test": "navigation"
+            }
+          ]
+        }
+      ]
+    },
+    "NAV-003": {
+      "title": "空项目",
+      "tests": [
+        {
+          "id": "empty-state",
+          "command": "node _site/_test/product-empty-state-test.js",
+          "isolation": "同上；登记读取故障由产品前置代理在传输层注入（HTTP 503），产品确实读不到答案，不写任何真实知识/凭据"
+        }
+      ],
+      "expected": [
+        {
+          "key": "show-empty-state",
+          "text": "展示空状态。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-003-show-empty-state-1",
+              "file": "_site/_test/product-empty-state-test.js",
+              "line": 100,
+              "anchor": "the work view shows its empty state",
+              "kind": "browser",
+              "test": "emptyState"
+            },
+            {
+              "id": "QA-SPEC-NAV-003-show-empty-state-2",
+              "file": "_site/_test/product-empty-state-test.js",
+              "line": 101,
+              "anchor": "the work empty state explains what is missing",
+              "kind": "browser",
+              "test": "emptyState"
+            },
+            {
+              "id": "QA-SPEC-NAV-003-show-empty-state-3",
+              "file": "_site/_test/product-empty-state-test.js",
+              "line": 102,
+              "anchor": "the work layout stays hidden without a project",
+              "kind": "browser",
+              "test": "emptyState"
+            },
+            {
+              "id": "QA-SPEC-NAV-003-show-empty-state-4",
+              "file": "_site/_test/product-empty-state-test.js",
+              "line": 107,
+              "anchor": "the search view shows its empty state",
+              "kind": "browser",
+              "test": "emptyState"
+            },
+            {
+              "id": "QA-SPEC-NAV-003-show-empty-state-5",
+              "file": "_site/_test/product-empty-state-test.js",
+              "line": 108,
+              "anchor": "the search empty state explains what is missing",
+              "kind": "browser",
+              "test": "emptyState"
+            },
+            {
+              "id": "QA-SPEC-NAV-003-show-empty-state-6",
+              "file": "_site/_test/product-empty-state-test.js",
+              "line": 113,
+              "anchor": "the project tree shows the empty group",
+              "kind": "browser",
+              "test": "emptyState"
+            },
+            {
+              "id": "QA-SPEC-NAV-003-show-empty-state-7",
+              "file": "_site/_test/product-empty-state-test.js",
+              "line": 114,
+              "anchor": "the empty project tree still shows the ungrouped domain",
+              "kind": "browser",
+              "test": "emptyState"
+            },
+            {
+              "id": "QA-SPEC-NAV-003-show-empty-state-8",
+              "file": "_site/_test/product-empty-state-test.js",
+              "line": 115,
+              "anchor": "the project detail shows the empty state",
+              "kind": "browser",
+              "test": "emptyState"
+            },
+            {
+              "id": "QA-SPEC-NAV-003-show-empty-state-9",
+              "file": "_site/_test/product-empty-state-test.js",
+              "line": 119,
+              "anchor": "a fresh instance owns no domain",
+              "kind": "api",
+              "test": "emptyState"
+            }
+          ]
+        },
+        {
+          "key": "read-failure-is-not-empty-library",
+          "text": "不能将未知/读取失败当作空库。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-003-read-failure-is-not-empty-library-1",
+              "file": "_site/_test/product-empty-state-test.js",
+              "line": 83,
+              "anchor": "the registry read really left the browser for the product proxy",
+              "kind": "network",
+              "test": "emptyState"
+            },
+            {
+              "id": "QA-SPEC-NAV-003-read-failure-is-not-empty-library-2",
+              "file": "_site/_test/product-empty-state-test.js",
+              "line": 84,
+              "anchor": "the proxy really answered the registry read with an HTTP 503 failure",
+              "kind": "network",
+              "test": "emptyState"
+            },
+            {
+              "id": "QA-SPEC-NAV-003-read-failure-is-not-empty-library-3",
+              "file": "_site/_test/product-empty-state-test.js",
+              "line": 85,
+              "anchor": "a failed read is not shown as an empty library",
+              "kind": "browser",
+              "test": "emptyState"
+            },
+            {
+              "id": "QA-SPEC-NAV-003-read-failure-is-not-empty-library-4",
+              "file": "_site/_test/product-empty-state-test.js",
+              "line": 86,
+              "anchor": "the failed read offers a real retry",
+              "kind": "browser",
+              "test": "emptyState"
+            },
+            {
+              "id": "QA-SPEC-NAV-003-read-failure-is-not-empty-library-5",
+              "file": "_site/_test/product-empty-state-test.js",
+              "line": 87,
+              "anchor": "the failed read is reported to the user",
+              "kind": "browser",
+              "test": "emptyState"
+            },
+            {
+              "id": "QA-SPEC-NAV-003-read-failure-is-not-empty-library-6",
+              "file": "_site/_test/product-empty-state-test.js",
+              "line": 93,
+              "anchor": "the recovered read clears the failure",
+              "kind": "browser",
+              "test": "emptyState"
+            }
+          ]
+        },
+        {
+          "key": "no-placeholder-project",
+          "text": "不创建占位项目。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-NAV-003-no-placeholder-project-1",
+              "file": "_site/_test/product-empty-state-test.js",
+              "line": 122,
+              "anchor": "the project tree offers no project",
+              "kind": "browser",
+              "test": "emptyState"
+            },
+            {
+              "id": "QA-SPEC-NAV-003-no-placeholder-project-2",
+              "file": "_site/_test/product-empty-state-test.js",
+              "line": 123,
+              "anchor": "the project selector stays disabled",
+              "kind": "browser",
+              "test": "emptyState"
+            },
+            {
+              "id": "QA-SPEC-NAV-003-no-placeholder-project-3",
+              "file": "_site/_test/product-empty-state-test.js",
+              "line": 124,
+              "anchor": "no project is selected",
+              "kind": "browser",
+              "test": "emptyState"
+            },
+            {
+              "id": "QA-SPEC-NAV-003-no-placeholder-project-4",
+              "file": "_site/_test/product-empty-state-test.js",
+              "line": 125,
+              "anchor": "no project id is remembered",
+              "kind": "browser+disk",
+              "test": "emptyState"
+            },
+            {
+              "id": "QA-SPEC-NAV-003-no-placeholder-project-5",
+              "file": "_site/_test/product-empty-state-test.js",
+              "line": 127,
+              "anchor": "the product registers no project",
+              "kind": "api",
+              "test": "emptyState"
+            },
+            {
+              "id": "QA-SPEC-NAV-003-no-placeholder-project-6",
+              "file": "_site/_test/product-empty-state-test.js",
+              "line": 131,
+              "anchor": "the project registry stays empty",
+              "kind": "disk",
+              "test": "emptyState"
+            },
+            {
+              "id": "QA-SPEC-NAV-003-no-placeholder-project-7",
+              "file": "_site/_test/product-empty-state-test.js",
+              "line": 134,
+              "anchor": "no project metadata directory is created",
+              "kind": "disk",
+              "test": "emptyState"
+            },
+            {
+              "id": "QA-SPEC-NAV-003-no-placeholder-project-8",
+              "file": "_site/_test/product-empty-state-test.js",
+              "line": 136,
+              "anchor": "the empty state never writes a project",
+              "kind": "browser+network",
+              "test": "emptyState"
+            }
+          ]
+        }
+      ]
     }
+  },
+  "batchResultDirs": {
+    "L-NAV-02": "qa-autopilot/artifacts/leader-20261023-nav/round2/evidence/"
   }
 }
