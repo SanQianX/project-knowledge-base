@@ -31,6 +31,11 @@ jobs:
       - run: npm ci
       - run: npm run release:verify
       - run: npm test -- --no-report
+        env:
+          # Step-level runner.temp: outside the checkout, so the knowledge
+          # lane fixtures never have to fall back to a temp root that lives
+          # inside the repository.
+          PK_TEST_TEMP_ROOT: ${{ runner.temp }}
       - run: npm pack --dry-run --json
 
   core-windows:
@@ -53,6 +58,12 @@ jobs:
         run: New-Item -ItemType Directory -Force -Path .tmp | Out-Null
       - name: Install and test web runtime
         shell: pwsh
+        env:
+          # Step-level runner.temp: a full-length path outside the checkout.
+          # The job-level TEMP/TMP stay on workspace\.tmp for the existing
+          # tests; the knowledge lane fixtures need a temp root that is
+          # outside the repository, so they read this variable first.
+          PK_TEST_TEMP_ROOT: ${{ runner.temp }}
         run: |
           npm ci
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

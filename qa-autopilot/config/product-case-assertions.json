@@ -4,7 +4,8 @@
     "L-PROD-01",
     "L-PROD-02",
     "L-NAV-02",
-    "P-TEST-NAV"
+    "P-TEST-NAV",
+    "P-TEST-KNOWLEDGE-R3"
   ],
   "note": "产品用例（PRJ-*）→ 真实断言的可复用绑定表。本表只描述“哪条 expected 由哪个测试入口的哪一条断言覆盖”；不含任何一次运行的结果（退出码、状态、日志路径、私有路径）。每次运行的结果必须另存到被忽略的证据目录，不回写本表。文件级套件通过不构成用例级证据。",
   "definitionModel": {
@@ -1602,7 +1603,7 @@
         {
           "id": "navigation",
           "command": "node _site/_test/product-navigation-test.js",
-          "isolation": "独立端口 + 独立 KB_DATA_DIR / KB_KNOWLEDGE_DATA_DIR / AI_CODING_EVENT_BRIDGE_HOME + 新 Chrome profile + TEMP/TMP/TMPDIR=D:/SanQian.Xu/.project-knowledge-test-temp；模块离线（127.0.0.1:0），只结束自有进程"
+          "isolation": "独立端口 + 独立 KB_DATA_DIR / KB_KNOWLEDGE_DATA_DIR / AI_CODING_EVENT_BRIDGE_HOME + 新 Chrome profile + TEMP/TMP/TMPDIR=<external-test-temp>；模块离线（127.0.0.1:0），只结束自有进程"
         }
       ],
       "expected": [
@@ -3008,6 +3009,1166 @@
           ]
         }
       ]
+    },
+    "RET-001": {
+      "title": "文本检索",
+      "tests": [
+        {
+          "id": "retrieval",
+          "command": "node _site/_test/parallel-knowledge-retrieval-test.js",
+          "isolation": "入口自隔离：清除环境中的模块地址、隔离 KB_DATA_DIR/KB_KNOWLEDGE_DATA_DIR/事件桥目录与真实 HOME；独立知识目录 + 独立真实 git 夹具仓库 + 真实 vendored engine 独立数据目录与端口 + 声明式空结果向量替身"
+        }
+      ],
+      "expected": [
+        {
+          "key": "hits-real-body-and-citation",
+          "text": "命中正文和真实引用。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-RET-001-hits-real-body-and-citation-1",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 141,
+              "anchor": "citation must point at the promoted relative entry",
+              "kind": "api",
+              "test": "retrieval"
+            },
+            {
+              "id": "QA-SPEC-RET-001-hits-real-body-and-citation-2",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 142,
+              "anchor": "the result must carry the real body text",
+              "kind": "api",
+              "test": "retrieval"
+            },
+            {
+              "id": "QA-SPEC-RET-001-hits-real-body-and-citation-3",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 143,
+              "anchor": "the returned body must contain the promoted fact sentence",
+              "kind": "api",
+              "test": "retrieval"
+            },
+            {
+              "id": "QA-SPEC-RET-001-hits-real-body-and-citation-4",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 145,
+              "anchor": "document hash must be recomputable from the real file",
+              "kind": "disk",
+              "test": "retrieval"
+            },
+            {
+              "id": "QA-SPEC-RET-001-hits-real-body-and-citation-5",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 146,
+              "anchor": "content hash must match the returned body",
+              "kind": "disk",
+              "test": "retrieval"
+            }
+          ]
+        },
+        {
+          "key": "no-template-placeholder-as-fact",
+          "text": "不能把模板占位当事实。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-RET-001-no-template-placeholder-as-fact-6",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 147,
+              "anchor": "template placeholders must not be presented as facts",
+              "kind": "api+disk",
+              "note": "同目录植入 changes/template.md（TODO: 待补充）作为对照",
+              "test": "retrieval"
+            }
+          ]
+        }
+      ],
+      "supportingAssertions": [
+        {
+          "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+          "line": 148,
+          "anchor": "no vector channel exists in this lane"
+        },
+        {
+          "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+          "line": 149,
+          "anchor": "assert.notEqual(response.health.index, 'ok')"
+        },
+        {
+          "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+          "line": 150,
+          "anchor": "retrieval must not mutate knowledge files"
+        }
+      ]
+    },
+    "RET-002": {
+      "title": "真实向量",
+      "entryPointNote": "本用例由显式调用的 probe 判定，不在 run-all 的 canonical 收集范围内；canonical 的 _site/_test/parallel-knowledge-vector-test.js 只覆盖 RET-006 的确定性子项，不覆盖本用例，也不得被计入向量证据。probe 现在跑的是真实通道：产品自带的 LocalEmbeddingService 产出真实向量 -> 真实 VectorHub.setEmbeddings -> 真实 upsertDocument 落盘 -> 真实 search 返回真实 cosine 分数，并回读磁盘上的真实向量索引。",
+      "tests": [
+        {
+          "id": "vector-probe",
+          "command": "node qa-autopilot/tools/product-probes/parallel-knowledge-vector.js",
+          "isolation": "显式调用的环境依赖 probe：入口自隔离；不进入 run-all 收集范围；默认不自动下载模型，不调用任何付费 provider；只接受产品自带的 LocalEmbeddingService 作为向量证据"
+        }
+      ],
+      "expected": [
+        {
+          "key": "non-empty-vector-and-real-channel-evidence",
+          "text": "检查非空向量与真实通道证据。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-RET-002-non-empty-vector-and-real-channel-evidence-7",
+              "file": "qa-autopilot/tools/product-probes/parallel-knowledge-vector.js",
+              "line": 96,
+              "anchor": "kind: 'product-local-embedding-service',",
+              "kind": "runtime",
+              "note": "向量只能由产品自带的本地 embedding 服务产生",
+              "test": "vector-probe"
+            },
+            {
+              "id": "QA-SPEC-RET-002-non-empty-vector-and-real-channel-evidence-8",
+              "file": "qa-autopilot/tools/product-probes/parallel-knowledge-vector.js",
+              "line": 108,
+              "anchor": "const vector = isBatch ? await service.embedPassage(text) : await service.embedQuery(text);",
+              "kind": "runtime",
+              "note": "真实 embedQuery / embedPassage 调用",
+              "test": "vector-probe"
+            },
+            {
+              "id": "QA-SPEC-RET-002-non-empty-vector-and-real-channel-evidence-9",
+              "file": "qa-autopilot/tools/product-probes/parallel-knowledge-vector.js",
+              "line": 316,
+              "anchor": "const usable = vector.length === EMBEDDING_DIMENSIONS && nonZero;",
+              "kind": "runtime",
+              "note": "维度必须是 512 且向量非零",
+              "test": "vector-probe"
+            },
+            {
+              "id": "QA-SPEC-RET-002-non-empty-vector-and-real-channel-evidence-10",
+              "file": "qa-autopilot/tools/product-probes/parallel-knowledge-vector.js",
+              "line": 157,
+              "anchor": "hub.setEmbeddings(embedder);",
+              "kind": "runtime",
+              "note": "真实 hub 被装上真实 embedder（R2 的 probe 从未 setEmbeddings）",
+              "test": "vector-probe"
+            },
+            {
+              "id": "QA-SPEC-RET-002-non-empty-vector-and-real-channel-evidence-11",
+              "file": "qa-autopilot/tools/product-probes/parallel-knowledge-vector.js",
+              "line": 158,
+              "anchor": "await hub.upsertDocument({ project: 'demo', uri: 'note.md', text: PASSAGE });",
+              "kind": "disk",
+              "note": "真实 hub upsert：文档真正写入向量索引",
+              "test": "vector-probe"
+            },
+            {
+              "id": "QA-SPEC-RET-002-non-empty-vector-and-real-channel-evidence-12",
+              "file": "qa-autopilot/tools/product-probes/parallel-knowledge-vector.js",
+              "line": 159,
+              "anchor": "const response = await hub.search(QUERY, { maxResults: 5, resultLevel: 'chunk' });",
+              "kind": "runtime",
+              "note": "真实语义查询",
+              "test": "vector-probe"
+            },
+            {
+              "id": "QA-SPEC-RET-002-non-empty-vector-and-real-channel-evidence-13",
+              "file": "qa-autopilot/tools/product-probes/parallel-knowledge-vector.js",
+              "line": 146,
+              "anchor": "dimensionsMatch: dimensions.length === 1 && dimensions[0] === EMBEDDING_DIMENSIONS,",
+              "kind": "disk",
+              "note": "回读磁盘上的真实索引，维度必须是 512",
+              "test": "vector-probe"
+            },
+            {
+              "id": "QA-SPEC-RET-002-non-empty-vector-and-real-channel-evidence-14",
+              "file": "qa-autopilot/tools/product-probes/parallel-knowledge-vector.js",
+              "line": 147,
+              "anchor": "allVectorsNonZero: vectors.length > 0 && vectors.every(vector => vector.some(value => value !== 0)),",
+              "kind": "disk",
+              "note": "回读磁盘上的真实索引，向量不得全零",
+              "test": "vector-probe"
+            }
+          ]
+        },
+        {
+          "key": "text-fallback-is-not-vector-pass",
+          "text": "文本回退不算向量PASS。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-RET-002-text-fallback-is-not-vector-pass-15",
+              "file": "qa-autopilot/tools/product-probes/parallel-knowledge-vector.js",
+              "line": 221,
+              "anchor": "const real = embedderKind === 'product-local-embedding-service';",
+              "kind": "runtime",
+              "note": "非产品 embedder 一律不得判定为 PASS",
+              "test": "vector-probe"
+            },
+            {
+              "id": "QA-SPEC-RET-002-text-fallback-is-not-vector-pass-16",
+              "file": "qa-autopilot/tools/product-probes/parallel-knowledge-vector.js",
+              "line": 227,
+              "anchor": "channelPassed = real",
+              "kind": "runtime",
+              "note": "通道结论同样受同一闸门约束",
+              "test": "vector-probe"
+            },
+            {
+              "id": "QA-SPEC-RET-002-text-fallback-is-not-vector-pass-17",
+              "file": "qa-autopilot/tools/product-probes/parallel-knowledge-vector.js",
+              "line": 428,
+              "anchor": "mockEmbeddingsUsed: false",
+              "kind": "runtime",
+              "note": "检测到 mock provider 但明确未使用",
+              "test": "vector-probe"
+            },
+            {
+              "id": "QA-SPEC-RET-002-text-fallback-is-not-vector-pass-18",
+              "file": "qa-autopilot/tools/product-probes/parallel-knowledge-vector.js",
+              "line": 429,
+              "anchor": "standInEmbedderUsed: false",
+              "kind": "runtime",
+              "note": "未使用替身 embedder",
+              "test": "vector-probe"
+            },
+            {
+              "id": "QA-SPEC-RET-002-text-fallback-is-not-vector-pass-19",
+              "file": "qa-autopilot/tools/product-probes/parallel-knowledge-vector.js",
+              "line": 430,
+              "anchor": "paidProviderCalled: false",
+              "kind": "runtime",
+              "note": "未调用任何付费 provider",
+              "test": "vector-probe"
+            },
+            {
+              "id": "QA-SPEC-RET-002-text-fallback-is-not-vector-pass-20",
+              "file": "qa-autopilot/tools/product-probes/parallel-knowledge-vector.js",
+              "line": 468,
+              "anchor": "status: allPassed ? 'PASS' : 'BLOCKED',",
+              "kind": "runtime",
+              "note": "任一子项未验证则整体记 BLOCKED 并以非 0 退出",
+              "test": "vector-probe"
+            }
+          ]
+        }
+      ],
+      "supportingAssertions": []
+    },
+    "RET-003": {
+      "title": "作用域隔离",
+      "tests": [
+        {
+          "id": "retrieval",
+          "command": "node _site/_test/parallel-knowledge-retrieval-test.js",
+          "isolation": "入口自隔离：清除环境中的模块地址、隔离 KB_DATA_DIR/KB_KNOWLEDGE_DATA_DIR/事件桥目录与真实 HOME；独立知识目录 + 独立真实 git 夹具仓库 + 真实 vendored engine 独立数据目录与端口 + 声明式空结果向量替身"
+        }
+      ],
+      "expected": [
+        {
+          "key": "scopes-match-authorised-sets",
+          "text": "项目/领域/brain返回集合符合授权范围。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-RET-003-scopes-match-authorised-sets-21",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 176,
+              "anchor": "engine project scope must stay inside the project",
+              "kind": "api",
+              "test": "retrieval"
+            },
+            {
+              "id": "QA-SPEC-RET-003-scopes-match-authorised-sets-22",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 178,
+              "anchor": "engine domain scope must expose the same-domain project only",
+              "kind": "api",
+              "test": "retrieval"
+            },
+            {
+              "id": "QA-SPEC-RET-003-scopes-match-authorised-sets-23",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 180,
+              "anchor": "engine brain scope must expose every project of the brain",
+              "kind": "api",
+              "test": "retrieval"
+            },
+            {
+              "id": "QA-SPEC-RET-003-scopes-match-authorised-sets-24",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 157,
+              "anchor": "project scope may only expose the project and its declared related projects",
+              "kind": "api",
+              "test": "retrieval"
+            },
+            {
+              "id": "QA-SPEC-RET-003-scopes-match-authorised-sets-25",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 158,
+              "anchor": "an unrelated project must never leak into the project scope",
+              "kind": "api",
+              "test": "retrieval"
+            }
+          ]
+        },
+        {
+          "key": "unknown-project-borrows-nothing",
+          "text": "未知项目不借别人的上下文。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-RET-003-unknown-project-borrows-nothing-26",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 182,
+              "anchor": "an unknown project must be refused by the engine",
+              "kind": "api",
+              "test": "retrieval"
+            },
+            {
+              "id": "QA-SPEC-RET-003-unknown-project-borrows-nothing-27",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 183,
+              "anchor": "the real engine reports the failure code as a string",
+              "kind": "api",
+              "test": "retrieval"
+            },
+            {
+              "id": "QA-SPEC-RET-003-unknown-project-borrows-nothing-28",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 161,
+              "anchor": "another project must not borrow this project context",
+              "kind": "api",
+              "test": "retrieval"
+            },
+            {
+              "id": "QA-SPEC-RET-003-unknown-project-borrows-nothing-29",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 162,
+              "anchor": "an unknown project must fail instead of borrowing a registered context",
+              "kind": "api",
+              "test": "retrieval"
+            }
+          ]
+        }
+      ],
+      "supportingAssertions": [
+        {
+          "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+          "line": 185,
+          "anchor": "an unknown scope must be refused"
+        },
+        {
+          "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+          "line": 229,
+          "anchor": "error.code === 'INVALID_ARGUMENT'"
+        }
+      ]
+    },
+    "RET-004": {
+      "title": "引用定位",
+      "tests": [
+        {
+          "id": "retrieval",
+          "command": "node _site/_test/parallel-knowledge-retrieval-test.js",
+          "isolation": "入口自隔离：清除环境中的模块地址、隔离 KB_DATA_DIR/KB_KNOWLEDGE_DATA_DIR/事件桥目录与真实 HOME；独立知识目录 + 独立真实 git 夹具仓库 + 真实 vendored engine 独立数据目录与端口 + 声明式空结果向量替身"
+        }
+      ],
+      "expected": [
+        {
+          "key": "relative-entry-and-full-commit-source",
+          "text": "相对条目和完整提交来源对应当前结果。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-RET-004-relative-entry-and-full-commit-source-30",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 215,
+              "anchor": "the citation path must be relative to the project knowledge root",
+              "kind": "api",
+              "test": "retrieval"
+            },
+            {
+              "id": "QA-SPEC-RET-004-relative-entry-and-full-commit-source-31",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 214,
+              "anchor": "the citation must carry the full commit source of the current result",
+              "kind": "api",
+              "test": "retrieval"
+            },
+            {
+              "id": "QA-SPEC-RET-004-relative-entry-and-full-commit-source-32",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 219,
+              "anchor": "reading the citation must return the real body",
+              "kind": "api+disk",
+              "test": "retrieval"
+            },
+            {
+              "id": "QA-SPEC-RET-004-relative-entry-and-full-commit-source-33",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 213,
+              "anchor": "the promoted entry must be retrievable",
+              "kind": "api",
+              "test": "retrieval"
+            }
+          ]
+        },
+        {
+          "key": "no-path-traversal",
+          "text": "不可路径越界。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-RET-004-no-path-traversal-34",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 221,
+              "anchor": "path traversal must be refused",
+              "kind": "api",
+              "test": "retrieval"
+            },
+            {
+              "id": "QA-SPEC-RET-004-no-path-traversal-35",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 183,
+              "anchor": "the real engine reports the failure code as a string",
+              "kind": "api",
+              "test": "retrieval"
+            },
+            {
+              "id": "QA-SPEC-RET-004-no-path-traversal-36",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 228,
+              "anchor": "error.code === 'PATH_OUTSIDE_ROOT' && !error.message.includes(repoA.head)",
+              "kind": "api",
+              "note": "产品侧客户端也必须保留真实失败码且不泄漏仓库路径",
+              "test": "retrieval"
+            }
+          ]
+        }
+      ],
+      "supportingAssertions": [
+        {
+          "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+          "line": 206,
+          "anchor": "the promoted Markdown must exist on disk"
+        },
+        {
+          "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+          "line": 208,
+          "anchor": "the promoted body must carry the real commit SHA"
+        }
+      ]
+    },
+    "RET-005": {
+      "title": "模型停用",
+      "tests": [
+        {
+          "id": "retrieval",
+          "command": "node _site/_test/parallel-knowledge-retrieval-test.js",
+          "isolation": "入口自隔离：清除环境中的模块地址、隔离 KB_DATA_DIR/KB_KNOWLEDGE_DATA_DIR/事件桥目录与真实 HOME；独立知识目录 + 独立真实 git 夹具仓库 + 真实 vendored engine 独立数据目录与端口 + 声明式空结果向量替身"
+        }
+      ],
+      "expected": [
+        {
+          "key": "markdown-fallback-still-visible",
+          "text": "真实Markdown回退可见。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-RET-005-markdown-fallback-still-visible-37",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 249,
+              "anchor": "assert.equal(disabledResponse.backend, 'markdown-hybrid-fallback')",
+              "kind": "api",
+              "test": "retrieval"
+            },
+            {
+              "id": "QA-SPEC-RET-005-markdown-fallback-still-visible-38",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 250,
+              "anchor": "assert.equal(disabledResponse.health.index, 'unavailable')",
+              "kind": "api",
+              "test": "retrieval"
+            },
+            {
+              "id": "QA-SPEC-RET-005-markdown-fallback-still-visible-39",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 251,
+              "anchor": "Markdown truth must stay visible when the embedding channel is off",
+              "kind": "api",
+              "test": "retrieval"
+            },
+            {
+              "id": "QA-SPEC-RET-005-markdown-fallback-still-visible-40",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 265,
+              "anchor": "assert.equal(failingResponse.health.index, 'degraded')",
+              "kind": "api",
+              "test": "retrieval"
+            },
+            {
+              "id": "QA-SPEC-RET-005-markdown-fallback-still-visible-41",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 266,
+              "anchor": "assert.equal(failingResponse.health.reason, 'index-query-failed')",
+              "kind": "api",
+              "test": "retrieval"
+            },
+            {
+              "id": "QA-SPEC-RET-005-markdown-fallback-still-visible-42",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 268,
+              "anchor": "a degraded index must still expose the Markdown truth",
+              "kind": "api",
+              "test": "retrieval"
+            }
+          ]
+        },
+        {
+          "key": "no-knowledge-deletion-no-vector-success-claim",
+          "text": "不删知识、不称向量成功。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-RET-005-no-knowledge-deletion-no-vector-success-claim-43",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 252,
+              "anchor": "no result may claim a vector channel",
+              "kind": "api",
+              "test": "retrieval"
+            },
+            {
+              "id": "QA-SPEC-RET-005-no-knowledge-deletion-no-vector-success-claim-44",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 269,
+              "anchor": "assert.ok(failingResponse.results.every(row => !row.match_channels.includes('index:vector-hub')))",
+              "kind": "api",
+              "test": "retrieval"
+            },
+            {
+              "id": "QA-SPEC-RET-005-no-knowledge-deletion-no-vector-success-claim-45",
+              "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+              "line": 270,
+              "anchor": "a disabled embedding channel must not delete or rewrite knowledge",
+              "kind": "disk",
+              "test": "retrieval"
+            }
+          ]
+        }
+      ],
+      "supportingAssertions": [
+        {
+          "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+          "line": 148,
+          "anchor": "no vector channel exists in this lane"
+        },
+        {
+          "file": "_site/_test/parallel-knowledge-retrieval-test.js",
+          "line": 149,
+          "anchor": "assert.notEqual(response.health.index, 'ok')"
+        }
+      ]
+    },
+    "RET-006": {
+      "title": "索引根切换",
+      "entryPointNote": "canonical 入口覆盖确定性子项 a-d（根切换被接受并上报、旧 writer 排空、旧索引根字节级保留、项目知识不被搬移）；probe 覆盖剩余子项（新根实际重建并可检索、旧根保留），二者合起来才构成 RET-006 的完整结论。probe 在没有可用模型时该子项记 BLOCKED 且退出码非 0。",
+      "tests": [
+        {
+          "id": "vector",
+          "command": "node _site/_test/parallel-knowledge-vector-test.js",
+          "isolation": "入口自隔离；真实 vector-hub 进程 + 独立根目录/配置/端口 + 独立数据目录；完全离线，不加载任何模型"
+        },
+        {
+          "id": "vector-probe",
+          "command": "node qa-autopilot/tools/product-probes/parallel-knowledge-vector.js",
+          "isolation": "显式调用的环境依赖 probe：入口自隔离；不进入 run-all 收集范围；默认不自动下载模型，不调用任何付费 provider；只接受产品自带的 LocalEmbeddingService 作为向量证据"
+        }
+      ],
+      "expected": [
+        {
+          "key": "root-switch-accepted-and-reported",
+          "text": "旧数据保留、排空旧writer、后续新根重建。（子项：根切换被接受并上报）",
+          "bindings": [
+            {
+              "id": "QA-SPEC-RET-006-root-switch-accepted-and-reported-46",
+              "file": "_site/_test/parallel-knowledge-vector-test.js",
+              "line": 83,
+              "anchor": "the hub must report the new index root",
+              "kind": "api",
+              "test": "vector"
+            },
+            {
+              "id": "QA-SPEC-RET-006-root-switch-accepted-and-reported-47",
+              "file": "_site/_test/parallel-knowledge-vector-test.js",
+              "line": 84,
+              "anchor": "the new index root must be created",
+              "kind": "disk",
+              "test": "vector"
+            },
+            {
+              "id": "QA-SPEC-RET-006-root-switch-accepted-and-reported-48",
+              "file": "_site/_test/parallel-knowledge-vector-test.js",
+              "line": 86,
+              "anchor": "the persisted configuration must point at the new root",
+              "kind": "disk",
+              "test": "vector"
+            }
+          ]
+        },
+        {
+          "key": "writer-drained-before-switch",
+          "text": "旧数据保留、排空旧writer、后续新根重建。（子项：旧 writer 排空）",
+          "bindings": [
+            {
+              "id": "QA-SPEC-RET-006-writer-drained-before-switch-49",
+              "file": "_site/_test/parallel-knowledge-vector-test.js",
+              "line": 135,
+              "anchor": "the root switch must wait for the old writer to drain",
+              "kind": "runtime",
+              "test": "vector"
+            },
+            {
+              "id": "QA-SPEC-RET-006-writer-drained-before-switch-50",
+              "file": "_site/_test/parallel-knowledge-vector-test.js",
+              "line": 136,
+              "anchor": "the root switch must not resolve before the pending write completes",
+              "kind": "runtime",
+              "test": "vector"
+            },
+            {
+              "id": "QA-SPEC-RET-006-writer-drained-before-switch-51",
+              "file": "_site/_test/parallel-knowledge-vector-test.js",
+              "line": 137,
+              "anchor": "the manager must point at the new root after the switch",
+              "kind": "runtime",
+              "test": "vector"
+            },
+            {
+              "id": "QA-SPEC-RET-006-writer-drained-before-switch-52",
+              "file": "_site/_test/parallel-knowledge-vector-test.js",
+              "line": 138,
+              "anchor": "the drained root must still exist",
+              "kind": "disk",
+              "test": "vector"
+            }
+          ]
+        },
+        {
+          "key": "old-data-retained",
+          "text": "旧数据保留、排空旧writer、后续新根重建。（子项：旧索引根数据保留）",
+          "bindings": [
+            {
+              "id": "QA-SPEC-RET-006-old-data-retained-53",
+              "file": "_site/_test/parallel-knowledge-vector-test.js",
+              "line": 97,
+              "anchor": "the old index root data must be retained byte-for-byte",
+              "kind": "disk",
+              "test": "vector"
+            }
+          ]
+        },
+        {
+          "key": "project-knowledge-not-moved",
+          "text": "项目知识不被搬移。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-RET-006-project-knowledge-not-moved-54",
+              "file": "_site/_test/parallel-knowledge-vector-test.js",
+              "line": 105,
+              "anchor": "the project knowledge must not be moved by an index root switch",
+              "kind": "disk",
+              "test": "vector"
+            }
+          ]
+        },
+        {
+          "key": "new-root-rebuild",
+          "text": "旧数据保留、排空旧writer、后续新根重建。（子项：新根重建写入）",
+          "bindings": [
+            {
+              "id": "QA-SPEC-RET-006-new-root-rebuild-55",
+              "file": "qa-autopilot/tools/product-probes/parallel-knowledge-vector.js",
+              "line": 192,
+              "anchor": "await manager.applyRuntimeSettings(null, newRoot);",
+              "kind": "runtime",
+              "note": "真实根切换",
+              "test": "vector-probe"
+            },
+            {
+              "id": "QA-SPEC-RET-006-new-root-rebuild-56",
+              "file": "qa-autopilot/tools/product-probes/parallel-knowledge-vector.js",
+              "line": 206,
+              "anchor": "rootMoved: switchedRoot === path.resolve(newRoot),",
+              "kind": "runtime",
+              "note": "切换后 hub 确实指向新根",
+              "test": "vector-probe"
+            },
+            {
+              "id": "QA-SPEC-RET-006-new-root-rebuild-57",
+              "file": "qa-autopilot/tools/product-probes/parallel-knowledge-vector.js",
+              "line": 197,
+              "anchor": "await manager.hub.upsertDocument({ project: 'demo', uri: 'new.md', text: NEW_PASSAGE });",
+              "kind": "disk",
+              "note": "真实向量索引写入新根",
+              "test": "vector-probe"
+            },
+            {
+              "id": "QA-SPEC-RET-006-new-root-rebuild-58",
+              "file": "qa-autopilot/tools/product-probes/parallel-knowledge-vector.js",
+              "line": 198,
+              "anchor": "const rebuilt = await manager.hub.search(QUERY, { maxResults: 5, resultLevel: 'chunk' });",
+              "kind": "runtime",
+              "note": "在新根上真实检索",
+              "test": "vector-probe"
+            },
+            {
+              "id": "QA-SPEC-RET-006-new-root-rebuild-59",
+              "file": "qa-autopilot/tools/product-probes/parallel-knowledge-vector.js",
+              "line": 246,
+              "anchor": "&& rebuild.detail.storedVectors.dimensionsMatch",
+              "kind": "disk",
+              "note": "新根里的真实索引维度必须是 512",
+              "test": "vector-probe"
+            },
+            {
+              "id": "QA-SPEC-RET-006-new-root-rebuild-60",
+              "file": "qa-autopilot/tools/product-probes/parallel-knowledge-vector.js",
+              "line": 247,
+              "anchor": "&& rebuild.detail.storedVectors.allVectorsNonZero;",
+              "kind": "disk",
+              "note": "新根里的真实索引向量不得全零",
+              "test": "vector-probe"
+            }
+          ]
+        },
+        {
+          "key": "old-root-kept-after-switch",
+          "text": "旧数据保留、排空旧writer、后续新根重建。（子项：切换后旧根数据仍在）",
+          "bindings": [
+            {
+              "id": "QA-SPEC-RET-006-old-root-kept-after-switch-61",
+              "file": "qa-autopilot/tools/product-probes/parallel-knowledge-vector.js",
+              "line": 213,
+              "anchor": "oldRootRetained: sameTree(oldHashBefore, oldHashAfter),",
+              "kind": "disk",
+              "note": "旧根在切换前后逐字节一致",
+              "test": "vector-probe"
+            },
+            {
+              "id": "QA-SPEC-RET-006-old-root-kept-after-switch-62",
+              "file": "qa-autopilot/tools/product-probes/parallel-knowledge-vector.js",
+              "line": 251,
+              "anchor": "&& retained.detail.oldRootRetained === true",
+              "kind": "runtime",
+              "note": "保留结论必须真实成立才计入",
+              "test": "vector-probe"
+            }
+          ]
+        }
+      ],
+      "supportingAssertions": []
+    },
+    "ENG-001": {
+      "title": "首次导入基线",
+      "tests": [
+        {
+          "id": "engine",
+          "command": "node _site/_test/parallel-knowledge-engine-test.js",
+          "isolation": "入口自隔离（环境与真实 HOME）；真实 git 夹具仓库 + 独立项目数据目录 + 独立知识目录 + 真实 vendored engine 独立数据目录与端口 + 声明式 analyzer stub"
+        }
+      ],
+      "expected": [
+        {
+          "key": "baseline-only",
+          "text": "只建基线。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-001-baseline-only-63",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 133,
+              "anchor": "the import must record the imported HEAD as the baseline",
+              "kind": "disk",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-001-baseline-only-64",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 135,
+              "anchor": "assert.equal(imported.state.trackingMode, 'normal')",
+              "kind": "disk",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-001-baseline-only-65",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 145,
+              "anchor": "the baseline must cover the whole imported history",
+              "kind": "runtime",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-001-baseline-only-66",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 146,
+              "anchor": "assert.equal(scan.pendingCount, 0)",
+              "kind": "runtime",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-001-baseline-only-67",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 161,
+              "anchor": "starting the engine must not create an analysis run for imported history",
+              "kind": "runtime",
+              "test": "engine"
+            }
+          ]
+        },
+        {
+          "key": "no-history-analysis-no-fake-knowledge-no-source-change",
+          "text": "不分析历史、不生成伪知识、不改源码。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-001-no-history-analysis-no-fake-knowledge-no-source-change-68",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 134,
+              "anchor": "an import must not claim an analysed commit",
+              "kind": "disk",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-001-no-history-analysis-no-fake-knowledge-no-source-change-69",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 137,
+              "anchor": "an import must not create knowledge files",
+              "kind": "disk",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-001-no-history-analysis-no-fake-knowledge-no-source-change-70",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 138,
+              "anchor": "the import must not touch the source repository",
+              "kind": "disk",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-001-no-history-analysis-no-fake-knowledge-no-source-change-71",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 162,
+              "anchor": "the source repository must stay byte-identical",
+              "kind": "disk",
+              "test": "engine"
+            }
+          ]
+        }
+      ],
+      "supportingAssertions": []
+    },
+    "ENG-003": {
+      "title": "空仓首提交",
+      "tests": [
+        {
+          "id": "engine",
+          "command": "node _site/_test/parallel-knowledge-engine-test.js",
+          "isolation": "入口自隔离（环境与真实 HOME）；真实 git 夹具仓库 + 独立项目数据目录 + 独立知识目录 + 真实 vendored engine 独立数据目录与端口 + 声明式 analyzer stub"
+        }
+      ],
+      "expected": [
+        {
+          "key": "first-commit-processable",
+          "text": "第一次后续提交可处理。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-003-first-commit-processable-72",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 221,
+              "anchor": "the first commit must reach a terminal state",
+              "kind": "runtime",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-003-first-commit-processable-73",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 223,
+              "anchor": "first commit failed",
+              "kind": "runtime",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-003-first-commit-processable-74",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 224,
+              "anchor": "assert.equal(engine.store.readRuntime('project-empty').lastAnalyzedCommit, firstSha)",
+              "kind": "disk",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-003-first-commit-processable-75",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 225,
+              "anchor": "the first commit must produce knowledge",
+              "kind": "disk",
+              "test": "engine"
+            }
+          ]
+        },
+        {
+          "key": "no-head-no-fake-analysis",
+          "text": "无HEAD阶段不假装已有分析。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-003-no-head-no-fake-analysis-76",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 199,
+              "anchor": "assert.equal(imported.state.trackingMode, 'empty-repo')",
+              "kind": "disk",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-003-no-head-no-fake-analysis-77",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 200,
+              "anchor": "a repository without HEAD must not get a baseline commit",
+              "kind": "disk",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-003-no-head-no-fake-analysis-78",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 205,
+              "anchor": "a repository without HEAD must be reported as empty, not as analysed",
+              "kind": "runtime",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-003-no-head-no-fake-analysis-79",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 206,
+              "anchor": "assert.deepEqual(emptyScan.commits, [])",
+              "kind": "runtime",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-003-no-head-no-fake-analysis-80",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 211,
+              "anchor": "no analysis may be invented before the first commit exists",
+              "kind": "runtime",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-003-no-head-no-fake-analysis-81",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 212,
+              "anchor": "assert.equal(engine.store.readRuntime('project-empty').lastAnalyzedCommit, null)",
+              "kind": "disk",
+              "test": "engine"
+            }
+          ]
+        }
+      ],
+      "supportingAssertions": []
+    },
+    "ENG-004": {
+      "title": "重复事件",
+      "tests": [
+        {
+          "id": "engine",
+          "command": "node _site/_test/parallel-knowledge-engine-test.js",
+          "isolation": "入口自隔离（环境与真实 HOME）；真实 git 夹具仓库 + 独立项目数据目录 + 独立知识目录 + 真实 vendored engine 独立数据目录与端口 + 声明式 analyzer stub"
+        }
+      ],
+      "expected": [
+        {
+          "key": "one-effective-analysis-and-promotion",
+          "text": "只产生一次有效分析/晋升。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-004-one-effective-analysis-and-promotion-82",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 252,
+              "anchor": "the same SHA must reuse one run",
+              "kind": "runtime",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-004-one-effective-analysis-and-promotion-83",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 257,
+              "anchor": "one SHA must produce exactly one analysis",
+              "kind": "runtime",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-004-one-effective-analysis-and-promotion-84",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 258,
+              "anchor": "one SHA must produce exactly one run",
+              "kind": "runtime",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-004-one-effective-analysis-and-promotion-85",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 274,
+              "anchor": "exactly one promotion must exist",
+              "kind": "disk",
+              "test": "engine"
+            }
+          ]
+        },
+        {
+          "key": "repeated-receipt-is-not-repeated-execution",
+          "text": "重复接收日志不等于重复执行。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-004-repeated-receipt-is-not-repeated-execution-86",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 263,
+              "anchor": "a repeated SHA must be reported as already completed",
+              "kind": "runtime",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-004-repeated-receipt-is-not-repeated-execution-87",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 264,
+              "anchor": "a repeated SHA must not analyse again",
+              "kind": "runtime",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-004-repeated-receipt-is-not-repeated-execution-88",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 270,
+              "anchor": "startup reconciliation must not re-analyse a completed SHA",
+              "kind": "runtime",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-004-repeated-receipt-is-not-repeated-execution-89",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 271,
+              "anchor": "startup reconciliation must not run the model again",
+              "kind": "runtime",
+              "test": "engine"
+            }
+          ]
+        }
+      ],
+      "supportingAssertions": []
+    },
+    "ENG-008": {
+      "title": "staging越界",
+      "tests": [
+        {
+          "id": "engine",
+          "command": "node _site/_test/parallel-knowledge-engine-test.js",
+          "isolation": "入口自隔离（环境与真实 HOME）；真实 git 夹具仓库 + 独立项目数据目录 + 独立知识目录 + 真实 vendored engine 独立数据目录与端口 + 声明式 analyzer stub"
+        }
+      ],
+      "expected": [
+        {
+          "key": "promotion-refused",
+          "text": "晋升拒绝。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-008-promotion-refused-90",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 304,
+              "anchor": "an out-of-bounds staging path must be refused",
+              "kind": "runtime",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-008-promotion-refused-91",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 305,
+              "anchor": "unexpected failure code",
+              "kind": "runtime",
+              "test": "engine"
+            }
+          ]
+        },
+        {
+          "key": "knowledge-and-source-hashes-unchanged",
+          "text": "最终知识与源码哈希不变。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-008-knowledge-and-source-hashes-unchanged-92",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 306,
+              "anchor": "the final knowledge must stay byte-identical",
+              "kind": "disk",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-008-knowledge-and-source-hashes-unchanged-93",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 162,
+              "anchor": "the source repository must stay byte-identical",
+              "kind": "disk",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-008-knowledge-and-source-hashes-unchanged-94",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 308,
+              "anchor": "nothing may be written outside the project knowledge root",
+              "kind": "disk",
+              "test": "engine"
+            }
+          ]
+        },
+        {
+          "key": "failure-evidence-retained",
+          "text": "失败证据保留。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-008-failure-evidence-retained-95",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 312,
+              "anchor": "the failed claim must be retained for diagnosis",
+              "kind": "disk",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-008-failure-evidence-retained-96",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 313,
+              "anchor": "the failure evidence must be retained",
+              "kind": "disk",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-008-failure-evidence-retained-97",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 317,
+              "anchor": "the frozen claim snapshot must be retained",
+              "kind": "disk",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-008-failure-evidence-retained-98",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 320,
+              "anchor": "the failure must stay visible in the run projection",
+              "kind": "api",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-008-failure-evidence-retained-99",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 328,
+              "anchor": "the failure must be written to the diagnostics log",
+              "kind": "disk",
+              "test": "engine"
+            },
+            {
+              "id": "QA-SPEC-ENG-008-failure-evidence-retained-100",
+              "file": "_site/_test/parallel-knowledge-engine-test.js",
+              "line": 310,
+              "anchor": "a refused promotion must not advance the analysed commit",
+              "kind": "disk",
+              "test": "engine"
+            }
+          ]
+        }
+      ],
+      "supportingAssertions": []
     }
   },
   "batchResultDirs": {

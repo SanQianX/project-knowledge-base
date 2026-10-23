@@ -31,7 +31,11 @@ class EngineKnowledgeClient {
       if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('invalid envelope');
     } catch { throw new DomainError('ENGINE_INVALID_RESPONSE', '知识引擎返回了无效响应。', { status: 502 }); }
     if (!response.ok || payload.ok === false) {
-      const code = /^[A-Z][A-Z0-9_]{0,79}$/.test(payload.error?.code || '') ? payload.error.code : 'ENGINE_REQUEST_FAILED';
+      // The engine reports a failed read as { ok:false, error:'<CODE>' }; some
+      // proxies wrap the same code as { error:{ code:'<CODE>' } }. Both carry
+      // the same contract, so the code must survive either envelope.
+      const raw = typeof payload.error === 'string' ? payload.error : payload.error?.code;
+      const code = /^[A-Z][A-Z0-9_]{0,79}$/.test(raw || '') ? raw : 'ENGINE_REQUEST_FAILED';
       throw new DomainError(code, '知识引擎未完成读取，请检查项目接线或请求参数。', { status: response.ok ? 502 : response.status });
     }
     return payload;
