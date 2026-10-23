@@ -1,7 +1,7 @@
 {
   "schema": "project-knowledge/module-content/v1",
   "productFiles": {
-    "ui/index.html": "00864e2015de1b6564c1a43b6853e1efbf8385744e3cda79f279027818858672",
+    "ui/index.html": "f7e87c2006f27f4d1824c0f3778a03160a530ccb15346323944a07584e05e8d8",
     "ui/knowledge-panel.html": "dfd85f15759472252d797853263e9da0054b251c56bb9ccdc8a75e6301334ca8",
     "ui/product.js": "26b2cc5438fdc331c0aeb1f77bdb1c8340ca1468211f78a5348d84706e953feb",
     "ui/live-client.js": "0d81fa894c629bb839e1931fc3c5ebad4d831aae8232d6ce8c0f542e9e3559e8",
@@ -13,7 +13,9 @@
     "plugins/project-knowledge/scripts/mcp-launcher.cjs": "7c68830b5c73eb53ef030756a4de33987f7eab6b1a6cc15602835aac3f954893",
     "plugins/project-knowledge/.claude-plugin/plugin.json": "165722ecd5a72aff781be24659c400694bac329ef421285813e255e492fd77f8",
     "plugins/project-knowledge/.codex-plugin/plugin.json": "b46889ec4d1f1353db43225db7bcb1306e367f6768d5c961010b4318dbd325ac",
-    "plugins/project-knowledge/.mcp.json": "7682f944421732a1c3e7c454b08c31f6b83d79ffa0dffa746f168874c3098c67"
+    "plugins/project-knowledge/.mcp.json": "7682f944421732a1c3e7c454b08c31f6b83d79ffa0dffa746f168874c3098c67",
+    "ui/version-info.js": "01a82217b031de54b80d6c7974da9c70888c4c90a046bd4248a808f7989ddce7",
+    "ui/version-info.css": "209fad8e42b661f72d2aba3280e1ca47768b5cefb776fe5459538d34fbad120f"
   },
   "modules": {
     "terminal": {

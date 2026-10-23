@@ -1,0 +1,44 @@
+/* 版本与模块（R2 简化版）——左上角商标悬停版本提示。只含 brand-version
+   前缀规则；主题色继承 product.css 变量（浅色默认 + 深色覆盖）。
+   默认 opacity:0 隐藏且不占布局空间——刻意不用 visibility:hidden，那会把
+   元素从 Tab 焦点序剔除，键盘 focus 查看将永远失效；.brand 悬停或自身
+   聚焦时展示；无轮询。 */
+
+.brand{position:relative}
+
+.brand-version{
+  position:absolute;
+  left:20px;
+  top:calc(100% - 6px);
+  z-index:30;
+  padding:4px 10px;
+  border:1px solid var(--line);
+  border-radius:6px;
+  background:var(--surface);
+  color:var(--muted);
+  font-size:11px;
+  line-height:1.5;
+  white-space:nowrap;
+  box-shadow:0 4px 14px rgba(0,0,0,.18);
+  opacity:0;
+  transform:translateY(-2px);
+  transition:opacity .12s ease, transform .12s ease;
+  pointer-events:none;
+}
+
+.brand:hover .brand-version,
+.brand-version:focus,
+.brand-version:focus-visible{
+  opacity:1;
+  transform:translateY(0);
+}
+
+.brand-version:focus{
+  pointer-events:auto;
+  outline:2px solid var(--accent);
+  outline-offset:2px;
+}
+
+@media (prefers-reduced-motion: reduce){
+  .brand-version{transition:none;transform:none}
+}

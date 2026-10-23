@@ -25,6 +25,7 @@ const { handlePostCommitEvent, recoverOrphanedClaims } = require('./post-commit-
 const { KnowledgePromotionService, hashBuffer } = require('./knowledge-promotion');
 const { resolveEffectiveAiProfile } = require('./ai-profile-resolver');
 const { ModuleBridge } = require('./module-bridge');
+const { coreVersionSnapshot } = require('./public-version-info');
 const { connectEngine, forwardCommitToBridge } = require('./engine-connection');
 const { initializeProductData } = require('./product-data');
 const { IndexService } = require('./index-service');
@@ -920,6 +921,9 @@ function createRequestHandler(runtime, options = {}) {
       }
       if (method === 'GET' && pathname === '/api/modules/health') {
         return send(res, 200, { ...await runtime.moduleBridge.modulesHealth(), ownership: runtime.ownership });
+      }
+      if (method === 'GET' && pathname === '/api/system/version') {
+        return send(res, 200, coreVersionSnapshot());
       }
       if (method === 'POST' && pathname === '/api/modules/configure') {
         await readJsonBody(req);

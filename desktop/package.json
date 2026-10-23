@@ -9,6 +9,14 @@
   },
   "author": "SanQianX",
   "license": "Apache-2.0",
+  "files": [
+    "main.cjs",
+    "preload.cjs",
+    "bin/",
+    "lib/",
+    "assets/",
+    "forge.config.cjs"
+  ],
   "scripts": {
     "start": "electron .",
     "package": "electron-forge package --arch=x64",
