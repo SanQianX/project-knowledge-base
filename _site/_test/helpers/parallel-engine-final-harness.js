@@ -35,8 +35,7 @@ const VENDORED_ENGINE_SERVER = path.join(REPO_ROOT, '_modules', 'knowledge-engin
 const VENDORED_ATOMIC_FILE = path.join(REPO_ROOT, '_modules', 'knowledge-engine', 'src', 'runtime', 'atomic-file.js');
 
 // Pinned runtime by default: the root repo's installed
-// @sanqianx/ai-coding-event-bridge-console@0.7.2 and @sanqianx/vector-hub@1.0.8-rc.8
-// (identity-checked below), so the drivers are portable to any checkout of this
+// versions declared by the root package (identity-checked below), so the drivers are portable to any checkout of this
 // repo. A sibling SOURCE checkout may be substituted only through the explicit
 // env overrides PK_TEST_BRIDGE_ROOT / PK_TEST_VECTOR_ROOT.
 function resolveRuntimeRoot(envVar, pinnedDir, pinnedVersion) {
@@ -50,8 +49,13 @@ function resolveRuntimeRoot(envVar, pinnedDir, pinnedVersion) {
   return { root, version: manifest.version, origin: fromEnv ? `env ${envVar}` : 'pinned package' };
 }
 
-const BRIDGE = resolveRuntimeRoot('PK_TEST_BRIDGE_ROOT', path.join(REPO_ROOT, 'node_modules', '@sanqianx', 'ai-coding-event-bridge-console'), '0.7.2');
-const VECTOR = resolveRuntimeRoot('PK_TEST_VECTOR_ROOT', path.join(REPO_ROOT, 'node_modules', '@sanqianx', 'vector-hub'), '1.0.8-rc.8');
+function declaredModuleVersion(name) {
+  const version = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8')).dependencies[name];
+  if (!/^\d+\.\d+\.\d+(?:-rc\.\d+)?$/.test(version || '')) throw new Error(`exact module dependency required: ${name}`);
+  return version;
+}
+const BRIDGE = resolveRuntimeRoot('PK_TEST_BRIDGE_ROOT', path.join(REPO_ROOT, 'node_modules', '@sanqianx', 'ai-coding-event-bridge-console'), declaredModuleVersion('@sanqianx/ai-coding-event-bridge-console'));
+const VECTOR = resolveRuntimeRoot('PK_TEST_VECTOR_ROOT', path.join(REPO_ROOT, 'node_modules', '@sanqianx', 'vector-hub'), declaredModuleVersion('@sanqianx/vector-hub'));
 const BRIDGE_ROOT = BRIDGE.root;
 const BRIDGE_CLI = path.join(BRIDGE_ROOT, 'src', 'bridge', 'bin', 'commit-boundary.js');
 const VECTOR_ROOT = VECTOR.root;
