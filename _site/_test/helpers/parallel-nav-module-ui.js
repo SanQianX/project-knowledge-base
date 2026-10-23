@@ -22,6 +22,8 @@
 
 const http = require('node:http');
 const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const PAGE = `<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><title>module ui fixture</title></head>
@@ -72,6 +74,13 @@ function createModuleUiFixture({ tag = 'module-ui' } = {}) {
       return;
     }
 
+    // Navigation owns no real journals. An enabled engine can safely poll
+    // this empty Bridge contract without reaching the production bridge.
+    if (req.method === 'GET' && url.pathname === '/api/journals') {
+      sendJson(res, 200, { journals: [] });
+      return;
+    }
+
     // The module registry API the product uses when it registers a project.
     if (req.method === 'GET' && url.pathname === '/api/claude-workbench/v1/projects') {
       sendJson(res, 200, { projects: state.projects });
@@ -99,6 +108,24 @@ function createModuleUiFixture({ tag = 'module-ui' } = {}) {
       const project = { name: body?.projectName || '', sourceDir: body?.sourceDir || '', hasIndex: true };
       state.projects.push(project);
       sendJson(res, 200, { ok: true, project: project.name });
+      return;
+    }
+    // The vector contract subset the REAL engine's index step calls
+    // (coordinator.js requestIndex -> POST /api/sync {project, sourceDir}).
+    // The vector module is NOT the subject under test — this double keeps the
+    // engine's index step off its built-in default vectorUrl (the LIVE
+    // desktop hub on 127.0.0.1:8787); every request body is recorded so the
+    // harness can assert project/sourceDir never leave the fixture.
+    if (req.method === 'POST' && url.pathname === '/api/sync') {
+      if (!body?.project || !body?.sourceDir) { sendJson(res, 400, { error: "Body must include 'project' and 'sourceDir'." }); return; }
+      let filesTracked = 0;
+      try {
+        filesTracked = fs.readdirSync(body.sourceDir, { withFileTypes: true })
+          .filter(entry => entry.isFile() && ['.md', '.txt', '.html'].includes(path.extname(entry.name).toLowerCase())).length;
+      } catch { filesTracked = 0; }
+      state.projects = state.projects.filter(project => project.name !== body.project);
+      state.projects.push({ name: body.project, sourceDir: body.sourceDir, hasIndex: true });
+      sendJson(res, 200, { ok: true, project: body.project, filesTracked });
       return;
     }
     if (req.method === 'DELETE' && url.pathname === '/api/project') {
@@ -140,6 +167,10 @@ function createModuleUiFixture({ tag = 'module-ui' } = {}) {
     state,
     /** How many times the embedded UI document was really served. */
     pageLoads: () => state.pageLoads,
+    /** Every POST /api/sync body the engine really sent (vector stand-in evidence). */
+    vectorSyncs: () => state.requests.filter(request => request.method === 'POST' && request.path === '/api/sync'),
+    /** Every POST /api/import body (the engine's scope-registration vector call). */
+    vectorImports: () => state.requests.filter(request => request.method === 'POST' && request.path === '/api/import'),
     async start() {
       await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
       this.url = `http://127.0.0.1:${server.address().port}`;

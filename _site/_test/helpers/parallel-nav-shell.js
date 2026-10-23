@@ -22,7 +22,6 @@
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
@@ -33,6 +32,7 @@ const { attachNetworkCapture } = require('../helpers/cdp-network-capture');
 const { createUpstreamProxy } = require('../helpers/module-fixture');
 const { createNavProductProxy } = require('./parallel-nav-proxy');
 const { createModuleUiFixture } = require('./parallel-nav-module-ui');
+const { enterNavIsolation } = require('./parallel-nav-isolation-env');
 const freePort = require('../helpers/free-port');
 
 const ROOT = path.resolve(__dirname, '../../..');
@@ -64,7 +64,12 @@ function makeRepo(root, name) {
  * and a real browser. The caller owns the cleanup through `harness.cleanup()`.
  */
 async function startHarness({ tag, viewport = { width: 1920, height: 1080 }, evidenceDir, withEngine = true, browserDirect = false } = {}) {
-  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), `pk-parallel-nav-${tag}-`));
+  // R7 incident premise: Chrome resolves under the REAL environment (read-only
+  // discovery) BEFORE isolation; the engine entry and every child load AFTER
+  // the driver enters the explicit environment whitelist.
+  const chromeExec = findChrome();
+  const isolation = enterNavIsolation({ tag: `pk-parallel-nav-${tag}` });
+  const fixture = isolation.root;
   const evidence = evidenceDir || path.join(fixture, 'evidence');
   fs.mkdirSync(evidence, { recursive: true });
   const dataDir = path.join(fixture, 'data');
@@ -77,19 +82,24 @@ async function startHarness({ tag, viewport = { width: 1920, height: 1080 }, evi
   let engineToken = null;
   let engineUrl = null;
 
+  // The vector stand-in starts BEFORE the engine: the engine constructor gets
+  // its URL explicitly, so its built-in default (127.0.0.1:8787 — a LIVE
+  // desktop hub here) is never reachable (R7 root-cause fix).
+  const moduleUi = createModuleUiFixture({ tag: `${tag}-module-ui` });
+  await moduleUi.start();
+
   if (withEngine) {
     engineToken = crypto.randomBytes(24).toString('hex');
     const { createEngineServer } = require(ENGINE_ENTRY);
-    engine = createEngineServer({ dataDir: path.join(fixture, 'engine'), runtimeToken: engineToken, debug: true, consume: false });
+    engine = createEngineServer({ dataDir: path.join(fixture, 'engine'), runtimeToken: engineToken, debug: true, consume: false, vectorUrl: moduleUi.url, bridgeUrl: moduleUi.url });
+    assert.equal(engine.coordinator.vectorUrl, moduleUi.url, 'the engine must run against the lane vector stand-in, never its 8787 default');
+    assert.equal(engine.coordinator.bridge.url, moduleUi.url, 'the engine bridge must use the lane stand-in even if a case enables consumption');
     await engine.ready;
     await new Promise(resolve => engine.server.listen(0, '127.0.0.1', resolve));
     engineUrl = `http://127.0.0.1:${engine.server.address().port}`;
     engineProxy = createUpstreamProxy({ target: engineUrl, token: engineToken, tag: 'engine' });
     await engineProxy.start();
   }
-
-  const moduleUi = createModuleUiFixture({ tag: `${tag}-module-ui` });
-  await moduleUi.start();
 
   const port = await freePort();
   const base = `http://127.0.0.1:${port}`;
@@ -144,7 +154,7 @@ async function startHarness({ tag, viewport = { width: 1920, height: 1080 }, evi
   let browser = null;
   try {
     browser = await launchCdpBrowser({
-      chrome: findChrome(),
+      chrome: chromeExec,
       profileDir: path.join(fixture, 'browser'),
       // The live channel is a WebSocket upgrade: a plain HTTP proxy cannot
       // carry it, so a case that needs the real live stream talks to the
@@ -162,6 +172,7 @@ async function startHarness({ tag, viewport = { width: 1920, height: 1080 }, evi
     if (engineProxy) await engineProxy.close();
     if (engine) await engine.close().catch(() => {});
     fs.rmSync(fixture, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    isolation.restore();
     throw error;
   }
 
@@ -283,6 +294,26 @@ async function startHarness({ tag, viewport = { width: 1920, height: 1080 }, evi
     throw new Error('the shell did not read the registry again');
   };
 
+  /**
+   * The engine's vector traffic stayed inside this run: every /api/sync and
+   * /api/import body the stand-in received must name a sourceDir inside the
+   * fixture root. The stand-in is the ONLY vector endpoint the engine can
+   * reach (constructor vectorUrl + whitelisted env), so this proves the run
+   * never touched the real 8787 hub's write surface.
+   */
+  const assertVectorIsolation = () => {
+    const calls = [...moduleUi.vectorSyncs(), ...moduleUi.vectorImports()];
+    const violations = [];
+    for (const entry of calls) {
+      const sourceDir = entry.body && entry.body.sourceDir;
+      if (!sourceDir) continue;
+      const inside = sourceDir === fixture || sourceDir.startsWith(fixture + path.sep);
+      if (!inside) violations.push({ path: entry.path, sourceDir });
+    }
+    assert.deepEqual(violations, [], `vector calls must stay inside the fixture root (${fixture})`);
+    return { calls: calls.length, bodies: calls.map(entry => entry.body), violations };
+  };
+
   const cleanup = async () => {
     await browser?.close();
     await server.cleanup();
@@ -291,6 +322,7 @@ async function startHarness({ tag, viewport = { width: 1920, height: 1080 }, evi
     if (engineProxy) await engineProxy.close();
     if (engine) await engine.close().catch(() => {});
     fs.rmSync(fixture, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    isolation.restore();
   };
 
   return {
@@ -320,6 +352,8 @@ async function startHarness({ tag, viewport = { width: 1920, height: 1080 }, evi
     modulePageLoads,
     requestRegistryRefresh,
     refreshRegistryAndWait,
+    assertVectorIsolation,
+    isolation,
     cleanup,
   };
 }
