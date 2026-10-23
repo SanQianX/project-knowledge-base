@@ -171,14 +171,16 @@ Commit pointer、日志和索引后才激活，completion marker 最后写。任
 活动记录保留结构化日志能力：
 
 - trace/debug/info/warn/error/fatal 六级；
-- 本地日期、项目、component、event、operation、Commit、全文过滤；
-- newest-first cursor 分页、暂停/自动刷新、按当前条件导出；
+- API 查询支持本地日期、项目、component、event、operation、Commit、全文过滤；
+  诊断窗口当前提供项目范围与全文搜索控件，其余维度暂以 API 为准；
+- newest-first cursor 分页、实时自动刷新（快照游标无缝续接，无暂停控件）、
+  按当前条件导出；
 - operation flow、结构化 error/stack、logger degraded 状态；
 - Hook/索引/项目状态、统一的浅深主题。
 
-日志使用 `log/v2` JSONL，按天和 50 MiB segment 轮转；默认保留 365 天，`0`
-表示不按时间删除，并受总容量策略约束。写入、查询、error 与 export 全部递归脱敏。
-日志根固定在内部数据目录，不能由 API 修改。
+日志使用 `log/v2` JSONL 按天分文件存储；写入、查询、error 与 export 全部
+递归脱敏。按容量 segment 轮转、保留期自动删除与总容量约束暂未实现（设置中
+的保留字段当前仅存储不生效）。日志根固定在内部数据目录，不能由 API 修改。
 
 ## API 安全
 

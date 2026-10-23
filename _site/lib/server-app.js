@@ -1285,7 +1285,11 @@ function createRequestHandler(runtime, options = {}) {
           operationId,
           conversationStore: runtime.conversationStore,
           bridgeConsumerService: runtime.bridgeConsumerService,
-        }), 'git-hook');
+        }), 'git-hook').catch(() => {
+          // Failure is already recorded as background.operation_failed by
+          // taskForProject; the 202 stands and one project's failure must not
+          // take down every project's server via unhandledRejection.
+        });
         await runtime.logger.info('hook.event_accepted', 'Hook event accepted for background reconciliation.', { projectId, operationId, phase: 'accepted' });
         return send(res, 202, { ok: true, accepted: true, projectId, operationId });
       }
