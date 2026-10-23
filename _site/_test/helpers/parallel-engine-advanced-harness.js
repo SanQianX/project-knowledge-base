@@ -174,11 +174,20 @@ async function startEngineChild({ label, dataDir, vectorUrl, planFile, eventsFil
     proc.on('exit', code => { clearTimeout(timer); reject(new Error(`engine child exited early (${code}); stderr: ${stderr}`)); });
   });
   async function killHard() {
-    if (proc.exitCode !== null) return proc.exitCode;
-    // On Windows, kill() terminates the process without graceful cleanup,
-    // leaving the single-writer lock behind - exactly the hard-crash state.
-    proc.kill();
-    return await new Promise(resolve => proc.on('exit', resolve));
+    if (proc.exitCode !== null || proc.signalCode !== null) return proc.exitCode;
+    // A HARD crash must not run the engine's graceful shutdown. On POSIX the
+    // default signal of kill() is SIGTERM, and the engine child traps SIGTERM
+    // to close the server gracefully - which releases the single-writer lock
+    // file, so the residual-lock state under test would never exist (root CI
+    // 39927630516 failed on Linux with ENOENT on engine-runtime.lock). SIGKILL
+    // cannot be trapped, so the process dies with the lock still on disk; on
+    // Windows Node maps SIGKILL to TerminateProcess, which is what kill()
+    // already did there.
+    proc.kill('SIGKILL');
+    return await new Promise(resolve => {
+      if (proc.exitCode !== null || proc.signalCode !== null) return resolve(proc.exitCode);
+      proc.on('exit', code => resolve(code));
+    });
   }
   async function stop() {
     if (proc.exitCode !== null) return;

@@ -8,7 +8,8 @@
     "P-TEST-KNOWLEDGE-R3",
     "P-NAV-CI-01",
     "P-MEMORY-01",
-    "P-WB-SUPPLEMENT-02"
+    "P-WB-SUPPLEMENT-02",
+    "P-ENGINE-CI-R5"
   ],
   "note": "产品用例（PRJ-*）→ 真实断言的可复用绑定表。本表只描述“哪条 expected 由哪个测试入口的哪一条断言覆盖”；不含任何一次运行的结果（退出码、状态、日志路径、私有路径）。每次运行的结果必须另存到被忽略的证据目录，不回写本表。文件级套件通过不构成用例级证据。",
   "definitionModel": {
@@ -5451,6 +5452,1062 @@
               "anchor": "sessionCorrelated",
               "kind": "assert",
               "test": "standalone-turn"
+            }
+          ]
+        }
+      ]
+    },
+    "ENG-002": {
+      "title": "真实Hook闭环",
+      "tests": [
+        {
+          "id": "eng002-hook-loop",
+          "command": "node _site/_test/parallel-engine-final-eng002-test.js",
+          "isolation": "lane独占temp root(仓外)+隔离HOME/USERPROFILE/TEMP+临时127.0.0.1端口+子进程env清洗；真实fixture git仓+真实post-commit hook(独立OS进程跑真实bridge commit-boundary CLI)+真实bridge console(隔离home)+真实vendored engine+真实vector-hub(确定性测试向量, 不触付费embedding API)；analyzer=确定性替身(不覆盖真实模型输出)；证据经PK_TEST_EVIDENCE_ROOT重定向"
+        }
+      ],
+      "expected": [
+        {
+          "key": "full-sha-binding",
+          "expectedIndex": 0,
+          "text": "按完整SHA绑定证据。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-002-full-sha-binding-1",
+              "file": "_site/_test/parallel-engine-final-eng002-test.js",
+              "line": 145,
+              "anchor": "journal binds the FULL SHA",
+              "kind": "disk",
+              "test": "eng002-hook-loop"
+            },
+            {
+              "id": "QA-SPEC-ENG-002-full-sha-binding-2",
+              "file": "_site/_test/parallel-engine-final-eng002-test.js",
+              "line": 148,
+              "anchor": "engine run binds the full SHA",
+              "kind": "runtime",
+              "test": "eng002-hook-loop"
+            },
+            {
+              "id": "QA-SPEC-ENG-002-full-sha-binding-3",
+              "file": "_site/_test/parallel-engine-final-eng002-test.js",
+              "line": 152,
+              "anchor": "pointer advanced to the full SHA",
+              "kind": "disk",
+              "test": "eng002-hook-loop"
+            },
+            {
+              "id": "QA-SPEC-ENG-002-full-sha-binding-4",
+              "file": "_site/_test/parallel-engine-final-eng002-test.js",
+              "line": 154,
+              "anchor": "processing ledger is keyed by the FULL SHA",
+              "kind": "disk",
+              "test": "eng002-hook-loop"
+            },
+            {
+              "id": "QA-SPEC-ENG-002-full-sha-binding-5",
+              "file": "_site/_test/parallel-engine-final-eng002-test.js",
+              "line": 160,
+              "anchor": "promotion journal binds the full SHA",
+              "kind": "disk",
+              "test": "eng002-hook-loop"
+            },
+            {
+              "id": "QA-SPEC-ENG-002-full-sha-binding-6",
+              "file": "_site/_test/parallel-engine-final-eng002-test.js",
+              "line": 173,
+              "anchor": "manifest evidence reference uses the full SHA",
+              "kind": "disk",
+              "test": "eng002-hook-loop"
+            }
+          ]
+        },
+        {
+          "key": "markdown-retrieval-consistent",
+          "expectedIndex": 1,
+          "text": "Markdown与检索引用一致。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-002-markdown-retrieval-consistent-1",
+              "file": "_site/_test/parallel-engine-final-eng002-test.js",
+              "line": 192,
+              "anchor": "promoted markdown cites the full SHA",
+              "kind": "disk",
+              "test": "eng002-hook-loop"
+            },
+            {
+              "id": "QA-SPEC-ENG-002-markdown-retrieval-consistent-2",
+              "file": "_site/_test/parallel-engine-final-eng002-test.js",
+              "line": 196,
+              "anchor": "retrieval returned no hit for the full SHA",
+              "kind": "runtime",
+              "test": "eng002-hook-loop"
+            },
+            {
+              "id": "QA-SPEC-ENG-002-markdown-retrieval-consistent-3",
+              "file": "_site/_test/parallel-engine-final-eng002-test.js",
+              "line": 199,
+              "anchor": "real vector index holds the promoted document",
+              "kind": "runtime",
+              "test": "eng002-hook-loop"
+            },
+            {
+              "id": "QA-SPEC-ENG-002-markdown-retrieval-consistent-4",
+              "file": "_site/_test/parallel-engine-final-eng002-test.js",
+              "line": 209,
+              "anchor": "retrieval entry id matches the promoted file",
+              "kind": "runtime",
+              "test": "eng002-hook-loop"
+            },
+            {
+              "id": "QA-SPEC-ENG-002-markdown-retrieval-consistent-5",
+              "file": "_site/_test/parallel-engine-final-eng002-test.js",
+              "line": 210,
+              "anchor": "index sync to the real vector service succeeded",
+              "kind": "runtime",
+              "test": "eng002-hook-loop"
+            }
+          ]
+        },
+        {
+          "key": "no-api-fabrication",
+          "expectedIndex": 2,
+          "text": "不能直接API造任务替代Hook验收。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-002-no-api-fabrication-1",
+              "file": "_site/_test/parallel-engine-final-eng002-test.js",
+              "line": 224,
+              "anchor": "run came from the journal/hook path, not from POST /api/runs",
+              "kind": "runtime",
+              "test": "eng002-hook-loop"
+            },
+            {
+              "id": "QA-SPEC-ENG-002-no-api-fabrication-2",
+              "file": "_site/_test/parallel-engine-final-eng002-test.js",
+              "line": 225,
+              "anchor": "engine consumed the journal (cursor advanced)",
+              "kind": "runtime",
+              "test": "eng002-hook-loop"
+            },
+            {
+              "id": "QA-SPEC-ENG-002-no-api-fabrication-3",
+              "file": "_site/_test/parallel-engine-final-eng002-test.js",
+              "line": 227,
+              "anchor": "exactly one run - no API-created duplicate",
+              "kind": "runtime",
+              "test": "eng002-hook-loop"
+            }
+          ]
+        }
+      ]
+    },
+    "ENG-005": {
+      "title": "单项目顺序",
+      "tests": [
+        {
+          "id": "eng005-sequential",
+          "command": "node _site/_test/parallel-engine-advanced-eng005-test.js",
+          "isolation": "lane独占temp root(仓外)+隔离HOME/USERPROFILE/TEMP+临时127.0.0.1端口+子进程env清洗(KB_*/KNOWLEDGE_*/ANTHROPIC_*/CLAUDE*/OPENAI_*/CODEX/MINIMAX/GLM/PK_TEST_*)；真实fixture git仓(GIT_CONFIG_NOSYSTEM=1)；vendored engine真实子进程；analyzer=声明式替身(不覆盖真实模型输出)；vector端点=环回double(vector-hub本身不覆盖)；证据经PK_TEST_EVIDENCE_ROOT重定向"
+        }
+      ],
+      "expected": [
+        {
+          "key": "abc-ordered-states",
+          "expectedIndex": 0,
+          "text": "A成功、B失败、C等待。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-005-abc-ordered-states-1",
+              "file": "_site/_test/parallel-engine-advanced-eng005-test.js",
+              "line": 65,
+              "anchor": "assert.equal(sA.state, 'succeeded')",
+              "kind": "runtime",
+              "test": "eng005-sequential"
+            },
+            {
+              "id": "QA-SPEC-ENG-005-abc-ordered-states-2",
+              "file": "_site/_test/parallel-engine-advanced-eng005-test.js",
+              "line": 66,
+              "anchor": "assert.equal(sB.state, 'failed'); assert.equal(sB.error.code, 'DEBUG_SIMULATED_FAILURE')",
+              "kind": "runtime",
+              "test": "eng005-sequential"
+            },
+            {
+              "id": "QA-SPEC-ENG-005-abc-ordered-states-3",
+              "file": "_site/_test/parallel-engine-advanced-eng005-test.js",
+              "line": 67,
+              "anchor": "assert.equal(sC.state, 'queued'); assert.equal(sC.phase, 'waiting-previous')",
+              "kind": "runtime",
+              "test": "eng005-sequential"
+            }
+          ]
+        },
+        {
+          "key": "no-skip-past-failed",
+          "expectedIndex": 1,
+          "text": "不能越过B宣告分析到C。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-005-no-skip-past-failed-1",
+              "file": "_site/_test/parallel-engine-advanced-eng005-test.js",
+              "line": 78,
+              "anchor": "B never reached the analyzer (engine refuses before stand-in)",
+              "kind": "runtime",
+              "test": "eng005-sequential"
+            },
+            {
+              "id": "QA-SPEC-ENG-005-no-skip-past-failed-2",
+              "file": "_site/_test/parallel-engine-advanced-eng005-test.js",
+              "line": 79,
+              "anchor": "C was never analyzed while B failed - no skipping past B",
+              "kind": "runtime",
+              "test": "eng005-sequential"
+            },
+            {
+              "id": "QA-SPEC-ENG-005-no-skip-past-failed-3",
+              "file": "_site/_test/parallel-engine-advanced-eng005-test.js",
+              "line": 80,
+              "anchor": "'no B knowledge file'",
+              "kind": "disk",
+              "test": "eng005-sequential"
+            },
+            {
+              "id": "QA-SPEC-ENG-005-no-skip-past-failed-4",
+              "file": "_site/_test/parallel-engine-advanced-eng005-test.js",
+              "line": 86,
+              "anchor": "pointer stays at A while B failed",
+              "kind": "runtime",
+              "test": "eng005-sequential"
+            },
+            {
+              "id": "QA-SPEC-ENG-005-no-skip-past-failed-5",
+              "file": "_site/_test/parallel-engine-advanced-eng005-test.js",
+              "line": 103,
+              "anchor": "C analysis started only after B finished",
+              "kind": "runtime",
+              "test": "eng005-sequential"
+            },
+            {
+              "id": "QA-SPEC-ENG-005-no-skip-past-failed-6",
+              "file": "_site/_test/parallel-engine-advanced-eng005-test.js",
+              "line": 108,
+              "anchor": "pointer ends at C after ordered recovery",
+              "kind": "runtime",
+              "test": "eng005-sequential"
+            }
+          ]
+        }
+      ]
+    },
+    "ENG-006": {
+      "title": "跨项目并发",
+      "tests": [
+        {
+          "id": "eng006-concurrency",
+          "command": "node _site/_test/parallel-engine-advanced-eng006-test.js",
+          "isolation": "lane独占temp root(仓外)+隔离HOME/USERPROFILE/TEMP+临时127.0.0.1端口+子进程env清洗(KB_*/KNOWLEDGE_*/ANTHROPIC_*/CLAUDE*/OPENAI_*/CODEX/MINIMAX/GLM/PK_TEST_*)；真实fixture git仓(GIT_CONFIG_NOSYSTEM=1)；vendored engine真实子进程；analyzer=声明式替身(不覆盖真实模型输出)；vector端点=环回double(vector-hub本身不覆盖)；证据经PK_TEST_EVIDENCE_ROOT重定向"
+        }
+      ],
+      "expected": [
+        {
+          "key": "queue-at-actual-limit",
+          "expectedIndex": 0,
+          "text": "按当前实际并发上限排队。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-006-queue-at-actual-limit-1",
+              "file": "_site/_test/parallel-engine-advanced-eng006-test.js",
+              "line": 78,
+              "anchor": "actual concurrency limit is 2, got",
+              "kind": "runtime",
+              "test": "eng006-concurrency"
+            },
+            {
+              "id": "QA-SPEC-ENG-006-queue-at-actual-limit-2",
+              "file": "_site/_test/parallel-engine-advanced-eng006-test.js",
+              "line": 104,
+              "anchor": "analyzer never exceeded the actual concurrency limit (peak=",
+              "kind": "runtime",
+              "test": "eng006-concurrency"
+            },
+            {
+              "id": "QA-SPEC-ENG-006-queue-at-actual-limit-3",
+              "file": "_site/_test/parallel-engine-advanced-eng006-test.js",
+              "line": 109,
+              "anchor": "same-project runs serialized",
+              "kind": "runtime",
+              "test": "eng006-concurrency"
+            }
+          ]
+        },
+        {
+          "key": "no-cross-project-write",
+          "expectedIndex": 1,
+          "text": "项目之间无文件串写。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-006-no-cross-project-write-1",
+              "file": "_site/_test/parallel-engine-advanced-eng006-test.js",
+              "line": 123,
+              "anchor": "knowledge tree contains exactly its own promoted files",
+              "kind": "disk",
+              "test": "eng006-concurrency"
+            },
+            {
+              "id": "QA-SPEC-ENG-006-no-cross-project-write-2",
+              "file": "_site/_test/parallel-engine-advanced-eng006-test.js",
+              "line": 128,
+              "anchor": "(no cross-write)",
+              "kind": "disk",
+              "test": "eng006-concurrency"
+            },
+            {
+              "id": "QA-SPEC-ENG-006-no-cross-project-write-3",
+              "file": "_site/_test/parallel-engine-advanced-eng006-test.js",
+              "line": 139,
+              "anchor": "four index syncs (one per promoted run)",
+              "kind": "runtime",
+              "test": "eng006-concurrency"
+            }
+          ]
+        }
+      ]
+    },
+    "ENG-007": {
+      "title": "离线提交补偿",
+      "tests": [
+        {
+          "id": "eng007-offline",
+          "command": "node _site/_test/parallel-engine-final-eng007-test.js",
+          "isolation": "lane独占temp root(仓外)+隔离HOME/USERPROFILE/TEMP+临时127.0.0.1端口+子进程env清洗；真实fixture git仓+真实post-commit hook(独立OS进程跑真实bridge commit-boundary CLI)+真实bridge console(隔离home)+真实vendored engine+真实vector-hub(确定性测试向量, 不触付费embedding API)；analyzer=确定性替身(不覆盖真实模型输出)；证据经PK_TEST_EVIDENCE_ROOT重定向"
+        },
+        {
+          "id": "eng007-reconcile",
+          "command": "node _site/_test/parallel-engine-advanced-eng007-reconcile-test.js",
+          "isolation": "lane独占temp root(仓外)+隔离HOME/USERPROFILE/TEMP+临时127.0.0.1端口+子进程env清洗(KB_*/KNOWLEDGE_*/ANTHROPIC_*/CLAUDE*/OPENAI_*/CODEX/MINIMAX/GLM/PK_TEST_*)；真实fixture git仓(GIT_CONFIG_NOSYSTEM=1)；vendored engine真实子进程；analyzer=声明式替身(不覆盖真实模型输出)；vector端点=环回double(vector-hub本身不覆盖)；证据经PK_TEST_EVIDENCE_ROOT重定向；真实post-commit hook(独立OS进程跑真实bridge CLI)+真实bridge journal"
+        }
+      ],
+      "expected": [
+        {
+          "key": "git-not-blocked-by-hook-fault",
+          "expectedIndex": 0,
+          "text": "Git不被Hook故障阻塞。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-007-git-not-blocked-1",
+              "file": "_site/_test/parallel-engine-final-eng007-test.js",
+              "line": 127,
+              "anchor": "Git must not be blocked by a failing hook (exit",
+              "kind": "runtime",
+              "test": "eng007-offline"
+            },
+            {
+              "id": "QA-SPEC-ENG-007-git-not-blocked-2",
+              "file": "_site/_test/parallel-engine-final-eng007-test.js",
+              "line": 130,
+              "anchor": "the hook really failed",
+              "kind": "runtime",
+              "test": "eng007-offline"
+            },
+            {
+              "id": "QA-SPEC-ENG-007-git-not-blocked-3",
+              "file": "_site/_test/parallel-engine-final-eng007-test.js",
+              "line": 133,
+              "anchor": "the commit itself exists despite the hook failure",
+              "kind": "disk",
+              "test": "eng007-offline"
+            }
+          ]
+        },
+        {
+          "key": "startup-reconcile-compensates",
+          "expectedIndex": 1,
+          "text": "启动对账补漏。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-007-startup-compensates-1",
+              "file": "_site/_test/parallel-engine-final-eng007-test.js",
+              "line": 159,
+              "anchor": "the compensated commit is written to the processing ledger",
+              "kind": "disk",
+              "test": "eng007-offline"
+            },
+            {
+              "id": "QA-SPEC-ENG-007-startup-compensates-2",
+              "file": "_site/_test/parallel-engine-final-eng007-test.js",
+              "line": 161,
+              "anchor": "the compensated commit produced promoted knowledge",
+              "kind": "disk",
+              "test": "eng007-offline"
+            },
+            {
+              "id": "QA-SPEC-ENG-007-startup-compensates-3",
+              "file": "_site/_test/parallel-engine-final-eng007-test.js",
+              "line": 176,
+              "anchor": "the compensated run came from the journal/hook path",
+              "kind": "runtime",
+              "test": "eng007-offline"
+            },
+            {
+              "id": "QA-SPEC-ENG-007-startup-compensates-4",
+              "file": "_site/_test/parallel-engine-final-eng007-test.js",
+              "line": 178,
+              "anchor": "the missed commit was analysed exactly once",
+              "kind": "runtime",
+              "test": "eng007-offline"
+            },
+            {
+              "id": "QA-SPEC-ENG-007-startup-compensates-5",
+              "file": "_site/_test/parallel-engine-final-eng007-test.js",
+              "line": 179,
+              "anchor": "a commit whose hook failed produced no evidence and was not analysed (documented boundary)",
+              "kind": "runtime",
+              "test": "eng007-offline"
+            },
+            {
+              "id": "QA-SPEC-ENG-007-startup-compensates-6",
+              "file": "_site/_test/parallel-engine-advanced-eng007-reconcile-test.js",
+              "line": 173,
+              "anchor": "B compensated exactly once",
+              "kind": "runtime",
+              "test": "eng007-reconcile"
+            },
+            {
+              "id": "QA-SPEC-ENG-007-startup-compensates-7",
+              "file": "_site/_test/parallel-engine-advanced-eng007-reconcile-test.js",
+              "line": 174,
+              "anchor": "A has no run: the startup drain found nothing for A (no boundary event, no Git-history scan)",
+              "kind": "runtime",
+              "test": "eng007-reconcile"
+            }
+          ]
+        },
+        {
+          "key": "completed-sha-not-rerun",
+          "expectedIndex": 2,
+          "text": "已完成SHA不重跑。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-007-completed-not-rerun-1",
+              "file": "_site/_test/parallel-engine-final-eng007-test.js",
+              "line": 216,
+              "anchor": "no second run for the completed SHA",
+              "kind": "runtime",
+              "test": "eng007-offline"
+            },
+            {
+              "id": "QA-SPEC-ENG-007-completed-not-rerun-2",
+              "file": "_site/_test/parallel-engine-final-eng007-test.js",
+              "line": 217,
+              "anchor": "the completed SHA was not analysed again",
+              "kind": "runtime",
+              "test": "eng007-offline"
+            },
+            {
+              "id": "QA-SPEC-ENG-007-completed-not-rerun-3",
+              "file": "_site/_test/parallel-engine-final-eng007-test.js",
+              "line": 218,
+              "anchor": "the completed SHA is still recorded in the processing ledger",
+              "kind": "disk",
+              "test": "eng007-offline"
+            },
+            {
+              "id": "QA-SPEC-ENG-007-completed-not-rerun-4",
+              "file": "_site/_test/parallel-engine-final-eng007-test.js",
+              "line": 219,
+              "anchor": "no duplicate promoted knowledge",
+              "kind": "disk",
+              "test": "eng007-offline"
+            },
+            {
+              "id": "QA-SPEC-ENG-007-completed-not-rerun-5",
+              "file": "_site/_test/parallel-engine-final-eng007-test.js",
+              "line": 236,
+              "anchor": "the restarted engine did not create a new run",
+              "kind": "runtime",
+              "test": "eng007-offline"
+            },
+            {
+              "id": "QA-SPEC-ENG-007-completed-not-rerun-6",
+              "file": "_site/_test/parallel-engine-advanced-eng007-reconcile-test.js",
+              "line": 199,
+              "anchor": "even with its boundary event delivered after the fact, A must not be re-analysed (ancestor guard)",
+              "kind": "runtime",
+              "test": "eng007-reconcile"
+            }
+          ]
+        }
+      ],
+      "coverageBoundary": "对账绑定限于已进入Bridge journal的恢复；未采集的Git提交及晚到提交的安全处理另行验收。"
+    },
+    "ENG-009": {
+      "title": "晋升中断恢复",
+      "tests": [
+        {
+          "id": "eng009-promotion-recovery",
+          "command": "node _site/_test/parallel-engine-advanced-eng009-test.js",
+          "isolation": "lane独占temp root(仓外)+隔离HOME/USERPROFILE/TEMP+临时127.0.0.1端口+子进程env清洗(KB_*/KNOWLEDGE_*/ANTHROPIC_*/CLAUDE*/OPENAI_*/CODEX/MINIMAX/GLM/PK_TEST_*)；真实fixture git仓(GIT_CONFIG_NOSYSTEM=1)；vendored engine真实子进程；analyzer=声明式替身(不覆盖真实模型输出)；vector端点=环回double(vector-hub本身不覆盖)；证据经PK_TEST_EVIDENCE_ROOT重定向；LayerA=真实引擎子进程被不可捕获硬杀(POSIX SIGKILL/Windows映射TerminateProcess, 不走优雅关闭)后同dataDir重启, 覆盖真实single-writer残留锁打破+recoverAll+claim重试；LayerB=vendored KnowledgePromotionService生产fault钩子(journal-prepared/operation-applied:0/promotion-verified)硬退出子进程"
+        }
+      ],
+      "expected": [
+        {
+          "key": "journal-recovery-consistent",
+          "expectedIndex": 0,
+          "text": "journal恢复一致。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-009-journal-consistent-1",
+              "file": "_site/_test/parallel-engine-advanced-eng009-test.js",
+              "line": 130,
+              "anchor": "promotion journal reaches terminal completed phase",
+              "kind": "disk",
+              "test": "eng009-promotion-recovery"
+            },
+            {
+              "id": "QA-SPEC-ENG-009-journal-consistent-2",
+              "file": "_site/_test/parallel-engine-advanced-eng009-test.js",
+              "line": 131,
+              "anchor": "all journal operations applied",
+              "kind": "disk",
+              "test": "eng009-promotion-recovery"
+            },
+            {
+              "id": "QA-SPEC-ENG-009-journal-consistent-3",
+              "file": "_site/_test/parallel-engine-advanced-eng009-test.js",
+              "line": 169,
+              "anchor": "journal rolled back consistently",
+              "kind": "disk",
+              "test": "eng009-promotion-recovery"
+            },
+            {
+              "id": "QA-SPEC-ENG-009-journal-consistent-4",
+              "file": "_site/_test/parallel-engine-advanced-eng009-test.js",
+              "line": 183,
+              "anchor": "second recovery is idempotent (skipped)",
+              "kind": "runtime",
+              "test": "eng009-promotion-recovery"
+            }
+          ]
+        },
+        {
+          "key": "no-half-promoted-fake-success",
+          "expectedIndex": 1,
+          "text": "不留下半晋升的假成功。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-009-no-fake-success-1",
+              "file": "_site/_test/parallel-engine-advanced-eng009-test.js",
+              "line": 96,
+              "anchor": "run was live when the writer was interrupted",
+              "kind": "disk",
+              "test": "eng009-promotion-recovery"
+            },
+            {
+              "id": "QA-SPEC-ENG-009-no-fake-success-2",
+              "file": "_site/_test/parallel-engine-advanced-eng009-test.js",
+              "line": 97,
+              "anchor": "single-writer lock belonged to the killed engine",
+              "kind": "disk",
+              "test": "eng009-promotion-recovery"
+            },
+            {
+              "id": "QA-SPEC-ENG-009-no-fake-success-3",
+              "file": "_site/_test/parallel-engine-advanced-eng009-test.js",
+              "line": 126,
+              "anchor": "no duplicate run created by recovery",
+              "kind": "runtime",
+              "test": "eng009-promotion-recovery"
+            },
+            {
+              "id": "QA-SPEC-ENG-009-no-fake-success-4",
+              "file": "_site/_test/parallel-engine-advanced-eng009-test.js",
+              "line": 127,
+              "anchor": "analyzer ran once pre-crash and once after restart (no fake success)",
+              "kind": "runtime",
+              "test": "eng009-promotion-recovery"
+            },
+            {
+              "id": "QA-SPEC-ENG-009-no-fake-success-5",
+              "file": "_site/_test/parallel-engine-advanced-eng009-test.js",
+              "line": 170,
+              "anchor": "knowledge restored - no half-promoted state",
+              "kind": "disk",
+              "test": "eng009-promotion-recovery"
+            },
+            {
+              "id": "QA-SPEC-ENG-009-no-fake-success-6",
+              "file": "_site/_test/parallel-engine-advanced-eng009-test.js",
+              "line": 171,
+              "anchor": "created file removed by rollback",
+              "kind": "disk",
+              "test": "eng009-promotion-recovery"
+            },
+            {
+              "id": "QA-SPEC-ENG-009-no-fake-success-7",
+              "file": "_site/_test/parallel-engine-advanced-eng009-test.js",
+              "line": 173,
+              "anchor": "claim retained for explicit retry, not silently faked",
+              "kind": "disk",
+              "test": "eng009-promotion-recovery"
+            },
+            {
+              "id": "QA-SPEC-ENG-009-no-fake-success-8",
+              "file": "_site/_test/parallel-engine-advanced-eng009-test.js",
+              "line": 175,
+              "anchor": "after-apply: journal completed forward",
+              "kind": "disk",
+              "test": "eng009-promotion-recovery"
+            }
+          ]
+        },
+        {
+          "key": "pointer-order-correct",
+          "expectedIndex": 2,
+          "text": "pointer顺序正确。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-009-pointer-order-1",
+              "file": "_site/_test/parallel-engine-advanced-eng009-test.js",
+              "line": 98,
+              "anchor": "pointer untouched before durable promotion",
+              "kind": "disk",
+              "test": "eng009-promotion-recovery"
+            },
+            {
+              "id": "QA-SPEC-ENG-009-pointer-order-2",
+              "file": "_site/_test/parallel-engine-advanced-eng009-test.js",
+              "line": 128,
+              "anchor": "pointer advanced exactly to X after recovery",
+              "kind": "runtime",
+              "test": "eng009-promotion-recovery"
+            },
+            {
+              "id": "QA-SPEC-ENG-009-pointer-order-3",
+              "file": "_site/_test/parallel-engine-advanced-eng009-test.js",
+              "line": 129,
+              "anchor": "exactly one promoted knowledge file",
+              "kind": "disk",
+              "test": "eng009-promotion-recovery"
+            },
+            {
+              "id": "QA-SPEC-ENG-009-pointer-order-4",
+              "file": "_site/_test/parallel-engine-advanced-eng009-test.js",
+              "line": 172,
+              "anchor": "pointer NOT advanced",
+              "kind": "disk",
+              "test": "eng009-promotion-recovery"
+            },
+            {
+              "id": "QA-SPEC-ENG-009-pointer-order-5",
+              "file": "_site/_test/parallel-engine-advanced-eng009-test.js",
+              "line": 178,
+              "anchor": "after-apply: pointer advanced exactly once via recovery",
+              "kind": "disk",
+              "test": "eng009-promotion-recovery"
+            }
+          ]
+        }
+      ]
+    },
+    "ENG-010": {
+      "title": "索引独立失败",
+      "tests": [
+        {
+          "id": "eng010-index-failure",
+          "command": "node _site/_test/parallel-engine-advanced-eng010-test.js",
+          "isolation": "lane独占temp root(仓外)+隔离HOME/USERPROFILE/TEMP+临时127.0.0.1端口+子进程env清洗(KB_*/KNOWLEDGE_*/ANTHROPIC_*/CLAUDE*/OPENAI_*/CODEX/MINIMAX/GLM/PK_TEST_*)；真实fixture git仓(GIT_CONFIG_NOSYSTEM=1)；vendored engine真实子进程；analyzer=声明式替身(不覆盖真实模型输出)；vector端点=环回double(vector-hub本身不覆盖)；证据经PK_TEST_EVIDENCE_ROOT重定向；vector double在索引时刻脚本化为HTTP 503 EMBEDDING_UNAVAILABLE"
+        }
+      ],
+      "expected": [
+        {
+          "key": "knowledge-vs-index-separated",
+          "expectedIndex": 0,
+          "text": "知识已更新/索引待修复分开。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-010-separated-1",
+              "file": "_site/_test/parallel-engine-advanced-eng010-test.js",
+              "line": 93,
+              "anchor": "index failure is a SEPARATE state, not failed",
+              "kind": "runtime",
+              "test": "eng010-index-failure"
+            },
+            {
+              "id": "QA-SPEC-ENG-010-separated-2",
+              "file": "_site/_test/parallel-engine-advanced-eng010-test.js",
+              "line": 96,
+              "anchor": "promotion timestamp recorded - knowledge IS updated",
+              "kind": "runtime",
+              "test": "eng010-index-failure"
+            },
+            {
+              "id": "QA-SPEC-ENG-010-separated-3",
+              "file": "_site/_test/parallel-engine-advanced-eng010-test.js",
+              "line": 98,
+              "anchor": "知识已更新，索引待修复。",
+              "kind": "runtime",
+              "test": "eng010-index-failure"
+            },
+            {
+              "id": "QA-SPEC-ENG-010-separated-4",
+              "file": "_site/_test/parallel-engine-advanced-eng010-test.js",
+              "line": 104,
+              "anchor": "pointer advanced - Markdown promotion committed",
+              "kind": "runtime",
+              "test": "eng010-index-failure"
+            },
+            {
+              "id": "QA-SPEC-ENG-010-separated-5",
+              "file": "_site/_test/parallel-engine-advanced-eng010-test.js",
+              "line": 105,
+              "anchor": "runtime index marked dirty while knowledge is current",
+              "kind": "runtime",
+              "test": "eng010-index-failure"
+            },
+            {
+              "id": "QA-SPEC-ENG-010-separated-6",
+              "file": "_site/_test/parallel-engine-advanced-eng010-test.js",
+              "line": 106,
+              "anchor": "promoted Markdown exists on disk",
+              "kind": "disk",
+              "test": "eng010-index-failure"
+            }
+          ]
+        },
+        {
+          "key": "no-rollback-no-duplicate-paid-analysis",
+          "expectedIndex": 1,
+          "text": "不回滚Markdown、不重复付费分析。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-010-no-rollback-1",
+              "file": "_site/_test/parallel-engine-advanced-eng010-test.js",
+              "line": 135,
+              "anchor": "promotion timestamp untouched by index retry",
+              "kind": "runtime",
+              "test": "eng010-index-failure"
+            },
+            {
+              "id": "QA-SPEC-ENG-010-no-rollback-2",
+              "file": "_site/_test/parallel-engine-advanced-eng010-test.js",
+              "line": 136,
+              "anchor": "Markdown bytes NOT rolled back or rewritten by index retry",
+              "kind": "disk",
+              "test": "eng010-index-failure"
+            },
+            {
+              "id": "QA-SPEC-ENG-010-no-rollback-3",
+              "file": "_site/_test/parallel-engine-advanced-eng010-test.js",
+              "line": 137,
+              "anchor": "no second analyzer run - no duplicate paid analysis",
+              "kind": "runtime",
+              "test": "eng010-index-failure"
+            },
+            {
+              "id": "QA-SPEC-ENG-010-no-rollback-4",
+              "file": "_site/_test/parallel-engine-advanced-eng010-test.js",
+              "line": 181,
+              "anchor": "restart did not re-promote",
+              "kind": "runtime",
+              "test": "eng010-index-failure"
+            },
+            {
+              "id": "QA-SPEC-ENG-010-no-rollback-5",
+              "file": "_site/_test/parallel-engine-advanced-eng010-test.js",
+              "line": 182,
+              "anchor": "Markdown bytes unchanged across restart auto-repair",
+              "kind": "disk",
+              "test": "eng010-index-failure"
+            },
+            {
+              "id": "QA-SPEC-ENG-010-no-rollback-6",
+              "file": "_site/_test/parallel-engine-advanced-eng010-test.js",
+              "line": 183,
+              "anchor": "restart auto-repair did NOT run the analyzer again",
+              "kind": "runtime",
+              "test": "eng010-index-failure"
+            }
+          ]
+        }
+      ]
+    },
+    "ENG-011": {
+      "title": "故障重试",
+      "tests": [
+        {
+          "id": "eng011-retry",
+          "command": "node _site/_test/parallel-engine-final-eng011-test.js",
+          "isolation": "lane独占temp root(仓外)+隔离HOME/USERPROFILE/TEMP+临时127.0.0.1端口+子进程env清洗；真实fixture git仓+真实post-commit hook(独立OS进程跑真实bridge commit-boundary CLI)+真实bridge console(隔离home)+真实vendored engine+真实vector-hub(确定性测试向量, 不触付费embedding API)；analyzer=确定性替身(不覆盖真实模型输出)；证据经PK_TEST_EVIDENCE_ROOT重定向；engine consume:false+死bridge URL(永不触生产bridge/vector端口)；analyzer替身仅首次尝试失败(瞬态故障)"
+        },
+        {
+          "id": "eng011-ui-probe",
+          "command": "node _site/_test/parallel-engine-advanced-eng011-ui-probe.js",
+          "isolation": "lane独占temp root(仓外)+隔离HOME/USERPROFILE/TEMP+临时127.0.0.1端口+子进程env清洗(KB_*/KNOWLEDGE_*/ANTHROPIC_*/CLAUDE*/OPENAI_*/CODEX/MINIMAX/GLM/PK_TEST_*)；真实fixture git仓(GIT_CONFIG_NOSYSTEM=1)；vendored engine真实子进程；analyzer=声明式替身(不覆盖真实模型输出)；vector端点=环回double(vector-hub本身不覆盖)；证据经PK_TEST_EVIDENCE_ROOT重定向；真实浏览器(CDP原生Input.dispatchMouseEvent点击)经lane独占ui-host反代；显式probe非canonical入口(-probe.js不被*-test.js收集)：对vendored/pinned UI字节为RED、对模块源候选(KB_ENG011_UI_DIR)为GREEN——目标身份为定义性说明, 非运行结果"
+        }
+      ],
+      "expected": [
+        {
+          "key": "no-duplicate-dispatch",
+          "expectedIndex": 0,
+          "text": "同一意图不会重复派发。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-011-no-duplicate-1",
+              "file": "_site/_test/parallel-engine-final-eng011-test.js",
+              "line": 115,
+              "anchor": "double click did not create a second run for the same commit",
+              "kind": "runtime",
+              "test": "eng011-retry"
+            },
+            {
+              "id": "QA-SPEC-ENG-011-no-duplicate-2",
+              "file": "_site/_test/parallel-engine-final-eng011-test.js",
+              "line": 116,
+              "anchor": "one intent dispatched once",
+              "kind": "runtime",
+              "test": "eng011-retry"
+            },
+            {
+              "id": "QA-SPEC-ENG-011-no-duplicate-3",
+              "file": "_site/_test/parallel-engine-advanced-eng011-ui-probe.js",
+              "line": 264,
+              "anchor": "the product dispatched the same retry intent twice across the detail re-render",
+              "kind": "runtime",
+              "test": "eng011-ui-probe"
+            },
+            {
+              "id": "QA-SPEC-ENG-011-no-duplicate-4",
+              "file": "_site/_test/parallel-engine-advanced-eng011-ui-probe.js",
+              "line": 375,
+              "anchor": "the product page dispatched the same retry intent",
+              "kind": "runtime",
+              "test": "eng011-ui-probe"
+            }
+          ]
+        },
+        {
+          "key": "active-state-correct",
+          "expectedIndex": 1,
+          "text": "活动状态正确。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-011-active-state-1",
+              "file": "_site/_test/parallel-engine-final-eng011-test.js",
+              "line": 122,
+              "anchor": "no run left active after the retry settled",
+              "kind": "runtime",
+              "test": "eng011-retry"
+            },
+            {
+              "id": "QA-SPEC-ENG-011-active-state-2",
+              "file": "_site/_test/parallel-engine-final-eng011-test.js",
+              "line": 125,
+              "anchor": "engine state machine did not record phase",
+              "kind": "runtime",
+              "test": "eng011-retry"
+            },
+            {
+              "id": "QA-SPEC-ENG-011-active-state-3",
+              "file": "_site/_test/parallel-engine-advanced-eng011-ui-probe.js",
+              "line": 382,
+              "anchor": "UI run detail badge must reach 可检索 after the retry",
+              "kind": "runtime",
+              "test": "eng011-ui-probe"
+            }
+          ]
+        },
+        {
+          "key": "query-first-on-unknown-result",
+          "expectedIndex": 2,
+          "text": "请求结果未知先查询。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-011-query-first-1",
+              "file": "_site/_test/parallel-engine-final-eng011-test.js",
+              "line": 142,
+              "anchor": "query after an unknown result returns the run",
+              "kind": "runtime",
+              "test": "eng011-retry"
+            },
+            {
+              "id": "QA-SPEC-ENG-011-query-first-2",
+              "file": "_site/_test/parallel-engine-final-eng011-test.js",
+              "line": 168,
+              "anchor": "lost-response retry dispatched exactly once",
+              "kind": "runtime",
+              "test": "eng011-retry"
+            },
+            {
+              "id": "QA-SPEC-ENG-011-query-first-3",
+              "file": "_site/_test/parallel-engine-final-eng011-test.js",
+              "line": 171,
+              "anchor": "repeat retry must be refused, got",
+              "kind": "runtime",
+              "test": "eng011-retry"
+            },
+            {
+              "id": "QA-SPEC-ENG-011-query-first-4",
+              "file": "_site/_test/parallel-engine-advanced-eng011-ui-probe.js",
+              "line": 332,
+              "anchor": "请求结果未知先查询 violated",
+              "kind": "runtime",
+              "test": "eng011-ui-probe"
+            },
+            {
+              "id": "QA-SPEC-ENG-011-query-first-5",
+              "file": "_site/_test/parallel-engine-advanced-eng011-ui-probe.js",
+              "line": 334,
+              "anchor": "the product client re-dispatched the retry after the unknown result",
+              "kind": "runtime",
+              "test": "eng011-ui-probe"
+            }
+          ]
+        }
+      ],
+      "coverageBoundary": "引擎API与UI探针分别覆盖；UI候选须显式指定来源，默认探针面向固定模块，不构成已安装UI修复的声明。"
+    },
+    "ENG-012": {
+      "title": "分析来源排除",
+      "tests": [
+        {
+          "id": "eng012-origin-exclusion",
+          "command": "node _site/_test/parallel-engine-final-eng012-test.js",
+          "isolation": "lane独占temp root(仓外)+隔离HOME/USERPROFILE/TEMP+临时127.0.0.1端口+子进程env清洗；真实fixture git仓+真实post-commit hook(独立OS进程跑真实bridge commit-boundary CLI)+真实bridge console(隔离home)+真实vendored engine+真实vector-hub(确定性测试向量, 不触付费embedding API)；analyzer=确定性替身(不覆盖真实模型输出)；证据经PK_TEST_EVIDENCE_ROOT重定向；同一session两条不同origin(workbench eventKey后缀: origin=human / origin=agent-delegation)的真实采集事件；analyzer替身故意同时给出两条候选(模拟过度热情的维护模型)"
+        }
+      ],
+      "expected": [
+        {
+          "key": "maintenance-not-auto-preference",
+          "expectedIndex": 0,
+          "text": "维护/委派不能自动成为人类长期偏好。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-012-no-auto-preference-1",
+              "file": "_site/_test/parallel-engine-final-eng012-test.js",
+              "line": 144,
+              "anchor": "the human origin is missing from the snapshot",
+              "kind": "disk",
+              "test": "eng012-origin-exclusion"
+            },
+            {
+              "id": "QA-SPEC-ENG-012-no-auto-preference-2",
+              "file": "_site/_test/parallel-engine-final-eng012-test.js",
+              "line": 145,
+              "anchor": "the delegated origin is missing from the snapshot",
+              "kind": "disk",
+              "test": "eng012-origin-exclusion"
+            },
+            {
+              "id": "QA-SPEC-ENG-012-no-auto-preference-3",
+              "file": "_site/_test/parallel-engine-final-eng012-test.js",
+              "line": 153,
+              "anchor": "the delegated candidate must be rejected as SOURCE_NOT_HUMAN",
+              "kind": "runtime",
+              "test": "eng012-origin-exclusion"
+            },
+            {
+              "id": "QA-SPEC-ENG-012-no-auto-preference-4",
+              "file": "_site/_test/parallel-engine-final-eng012-test.js",
+              "line": 157,
+              "anchor": "only the human candidate may exist",
+              "kind": "runtime",
+              "test": "eng012-origin-exclusion"
+            },
+            {
+              "id": "QA-SPEC-ENG-012-no-auto-preference-5",
+              "file": "_site/_test/parallel-engine-final-eng012-test.js",
+              "line": 159,
+              "anchor": "an automatically captured memory stays a candidate",
+              "kind": "runtime",
+              "test": "eng012-origin-exclusion"
+            },
+            {
+              "id": "QA-SPEC-ENG-012-no-auto-preference-6",
+              "file": "_site/_test/parallel-engine-final-eng012-test.js",
+              "line": 160,
+              "anchor": "the delegated/maintenance text never became a memory",
+              "kind": "runtime",
+              "test": "eng012-origin-exclusion"
+            },
+            {
+              "id": "QA-SPEC-ENG-012-no-auto-preference-7",
+              "file": "_site/_test/parallel-engine-final-eng012-test.js",
+              "line": 161,
+              "anchor": "nothing was confirmed automatically",
+              "kind": "runtime",
+              "test": "eng012-origin-exclusion"
+            }
+          ]
+        },
+        {
+          "key": "c01-open-item-no-auto-deletion",
+          "expectedIndex": 1,
+          "text": "C01未定项不得自动删除实现。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-ENG-012-c01-no-deletion-1",
+              "file": "_site/_test/parallel-engine-final-eng012-test.js",
+              "line": 169,
+              "anchor": "evidence injection must be refused",
+              "kind": "runtime",
+              "test": "eng012-origin-exclusion"
+            },
+            {
+              "id": "QA-SPEC-ENG-012-c01-no-deletion-2",
+              "file": "_site/_test/parallel-engine-final-eng012-test.js",
+              "line": 171,
+              "anchor": "the refusal states the C01 rule explicitly",
+              "kind": "runtime",
+              "test": "eng012-origin-exclusion"
+            },
+            {
+              "id": "QA-SPEC-ENG-012-c01-no-deletion-3",
+              "file": "_site/_test/parallel-engine-final-eng012-test.js",
+              "line": 181,
+              "anchor": "a manual record stores no evidence",
+              "kind": "runtime",
+              "test": "eng012-origin-exclusion"
+            },
+            {
+              "id": "QA-SPEC-ENG-012-c01-no-deletion-4",
+              "file": "_site/_test/parallel-engine-final-eng012-test.js",
+              "line": 279,
+              "anchor": "the deletion attempt must not succeed",
+              "kind": "runtime",
+              "test": "eng012-origin-exclusion"
+            },
+            {
+              "id": "QA-SPEC-ENG-012-c01-no-deletion-5",
+              "file": "_site/_test/parallel-engine-final-eng012-test.js",
+              "line": 280,
+              "anchor": "PATH_OUTSIDE_ROOT",
+              "kind": "runtime",
+              "test": "eng012-origin-exclusion"
+            },
+            {
+              "id": "QA-SPEC-ENG-012-c01-no-deletion-6",
+              "file": "_site/_test/parallel-engine-final-eng012-test.js",
+              "line": 283,
+              "anchor": "the repository implementation is byte-identical",
+              "kind": "disk",
+              "test": "eng012-origin-exclusion"
+            },
+            {
+              "id": "QA-SPEC-ENG-012-c01-no-deletion-7",
+              "file": "_site/_test/parallel-engine-final-eng012-test.js",
+              "line": 284,
+              "anchor": "the knowledge-root implementation is byte-identical",
+              "kind": "disk",
+              "test": "eng012-origin-exclusion"
+            },
+            {
+              "id": "QA-SPEC-ENG-012-c01-no-deletion-8",
+              "file": "_site/_test/parallel-engine-final-eng012-test.js",
+              "line": 287,
+              "anchor": "no knowledge operation may be applied when one is illegal",
+              "kind": "disk",
+              "test": "eng012-origin-exclusion"
             }
           ]
         }

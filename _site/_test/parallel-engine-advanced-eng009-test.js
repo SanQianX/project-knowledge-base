@@ -7,10 +7,11 @@
 //   expected: 1) journal恢复一致。 2) 不留下半晋升的假成功。 3) pointer顺序正确。
 //
 // Layer A (server-level real crash): the vendored engine child is HARD-KILLED
-// (Windows TerminateProcess via kill(), no graceful cleanup) while a real run is
-// mid-analysis, then a second engine child starts on the same data directory -
-// exercising the real single-writer stale-lock break, initialize() recoverAll(),
-// run recovery (running -> queued/recovering), and claim retry semantics.
+// (uncatchable SIGKILL on POSIX, TerminateProcess on Windows - no graceful
+// cleanup) while a real run is mid-analysis, then a second engine child starts
+// on the same data directory - exercising the real single-writer stale-lock
+// break, initialize() recoverAll(), run recovery (running -> queued/recovering),
+// and claim retry semantics.
 //
 // Layer B (fault-point crashes): the vendored KnowledgePromotionService's own
 // production `fault` constructor hook hard-exits a child process at three
@@ -84,6 +85,8 @@ async function main() {
     const promotionsDir = path.join(dataDir, 'runtime', 'promotions', PROJECT_ID);
     evidence.phases.layerACrash = {
       killExitCode: killCode,
+      killSignal: engine1.proc.signalCode,
+      killWasUncatchable: engine1.proc.signalCode === 'SIGKILL' || process.platform === 'win32',
       runStateOnDiskAfterKill: { state: crashedRun.state, phase: crashedRun.phase },
       lockOwnerPid: lockOwner.pid,
       lockOwnerPidWasEngineChild: lockOwner.pid === engine1.proc.pid,
