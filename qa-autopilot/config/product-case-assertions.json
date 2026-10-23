@@ -6,7 +6,8 @@
     "L-NAV-02",
     "P-TEST-NAV",
     "P-TEST-KNOWLEDGE-R3",
-    "P-NAV-CI-01"
+    "P-NAV-CI-01",
+    "P-MEMORY-01"
   ],
   "note": "产品用例（PRJ-*）→ 真实断言的可复用绑定表。本表只描述“哪条 expected 由哪个测试入口的哪一条断言覆盖”；不含任何一次运行的结果（退出码、状态、日志路径、私有路径）。每次运行的结果必须另存到被忽略的证据目录，不回写本表。文件级套件通过不构成用例级证据。",
   "definitionModel": {
@@ -4218,6 +4219,783 @@
         }
       ],
       "supportingAssertions": []
+    },
+    "MEM-001": {
+      "title": "手动添加",
+      "tests": [
+        {
+          "id": "memManual",
+          "command": "node _site/_test/parallel-memory-manual-test.js",
+          "isolation": "独立产品实例（独立端口、KB_DATA_DIR、知识根目录、Bridge journal home、Chrome profile）+ 真实 vendored 知识引擎；不读写用户真实数据。"
+        }
+      ],
+      "expected": [
+        {
+          "key": "post-saves-confirmed",
+          "text": "POST真实保存为confirmed。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-MEM-001-post-saves-confirmed-1",
+              "file": "_site/_test/parallel-memory-manual-test.js",
+              "line": 126,
+              "anchor": "the real POST answers 200",
+              "kind": "http",
+              "test": "memManual"
+            },
+            {
+              "id": "QA-SPEC-MEM-001-post-saves-confirmed-2",
+              "file": "_site/_test/parallel-memory-manual-test.js",
+              "line": 130,
+              "anchor": "the memory is saved as confirmed",
+              "kind": "http",
+              "test": "memManual"
+            },
+            {
+              "id": "QA-SPEC-MEM-001-post-saves-confirmed-3",
+              "file": "_site/_test/parallel-memory-manual-test.js",
+              "line": 131,
+              "anchor": "a manual memory has no model source",
+              "kind": "http",
+              "test": "memManual"
+            },
+            {
+              "id": "QA-SPEC-MEM-001-post-saves-confirmed-4",
+              "file": "_site/_test/parallel-memory-manual-test.js",
+              "line": 132,
+              "anchor": "a manual memory invents no evidence",
+              "kind": "http",
+              "test": "memManual"
+            },
+            {
+              "id": "QA-SPEC-MEM-001-post-saves-confirmed-5",
+              "file": "_site/_test/parallel-memory-manual-test.js",
+              "line": 135,
+              "anchor": "the scope target is the active project",
+              "kind": "http",
+              "test": "memManual"
+            },
+            {
+              "id": "QA-SPEC-MEM-001-post-saves-confirmed-6",
+              "file": "_site/_test/parallel-memory-manual-test.js",
+              "line": 153,
+              "anchor": "the memory file records the manual source",
+              "kind": "disk",
+              "test": "memManual"
+            }
+          ]
+        },
+        {
+          "key": "survives-reload",
+          "text": "刷新后保留。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-MEM-001-survives-reload-1",
+              "file": "_site/_test/parallel-memory-manual-test.js",
+              "line": 163,
+              "anchor": "the memory is still listed after a real reload",
+              "kind": "browser",
+              "test": "memManual"
+            },
+            {
+              "id": "QA-SPEC-MEM-001-survives-reload-2",
+              "file": "_site/_test/parallel-memory-manual-test.js",
+              "line": 169,
+              "anchor": "the memory survives the reload",
+              "kind": "engine",
+              "test": "memManual"
+            },
+            {
+              "id": "QA-SPEC-MEM-001-survives-reload-3",
+              "file": "_site/_test/parallel-memory-manual-test.js",
+              "line": 170,
+              "anchor": "the memory is still confirmed after the reload",
+              "kind": "engine",
+              "test": "memManual"
+            },
+            {
+              "id": "QA-SPEC-MEM-001-survives-reload-4",
+              "file": "_site/_test/parallel-memory-manual-test.js",
+              "line": 173,
+              "anchor": "the scope target survives the reload",
+              "kind": "engine",
+              "test": "memManual"
+            },
+            {
+              "id": "QA-SPEC-MEM-001-survives-reload-5",
+              "file": "_site/_test/parallel-memory-manual-test.js",
+              "line": 174,
+              "anchor": "the memory file is in sync",
+              "kind": "engine",
+              "test": "memManual"
+            }
+          ]
+        }
+      ]
+    },
+    "MEM-002": {
+      "title": "空白拒绝",
+      "tests": [
+        {
+          "id": "memManual",
+          "command": "node _site/_test/parallel-memory-manual-test.js",
+          "isolation": "同 MEM-001。"
+        }
+      ],
+      "expected": [
+        {
+          "key": "both-refuse-blank",
+          "text": "前后端均拒绝。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-MEM-002-both-refuse-blank-1",
+              "file": "_site/_test/parallel-memory-manual-test.js",
+              "line": 77,
+              "anchor": "the blank body really reached the textarea",
+              "kind": "browser",
+              "test": "memManual"
+            },
+            {
+              "id": "QA-SPEC-MEM-002-both-refuse-blank-2",
+              "file": "_site/_test/parallel-memory-manual-test.js",
+              "line": 87,
+              "anchor": "the shell names the missing content",
+              "kind": "browser",
+              "test": "memManual"
+            },
+            {
+              "id": "QA-SPEC-MEM-002-both-refuse-blank-3",
+              "file": "_site/_test/parallel-memory-manual-test.js",
+              "line": 89,
+              "anchor": "the shell must not send a request for a blank body",
+              "kind": "http",
+              "test": "memManual"
+            },
+            {
+              "id": "QA-SPEC-MEM-002-both-refuse-blank-4",
+              "file": "_site/_test/parallel-memory-manual-test.js",
+              "line": 93,
+              "anchor": "the engine refuses a blank body",
+              "kind": "http",
+              "test": "memManual"
+            },
+            {
+              "id": "QA-SPEC-MEM-002-both-refuse-blank-5",
+              "file": "_site/_test/parallel-memory-manual-test.js",
+              "line": 94,
+              "anchor": "the engine reports an invalid argument",
+              "kind": "http",
+              "test": "memManual"
+            },
+            {
+              "id": "QA-SPEC-MEM-002-both-refuse-blank-6",
+              "file": "_site/_test/parallel-memory-manual-test.js",
+              "line": 95,
+              "anchor": "the engine names the length rule",
+              "kind": "http",
+              "test": "memManual"
+            }
+          ]
+        },
+        {
+          "key": "no-blank-memory",
+          "text": "不出现空记忆。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-MEM-002-no-blank-memory-1",
+              "file": "_site/_test/parallel-memory-manual-test.js",
+              "line": 98,
+              "anchor": "a refused blank body creates no memory at all",
+              "kind": "engine",
+              "test": "memManual"
+            }
+          ]
+        }
+      ]
+    },
+    "MEM-003": {
+      "title": "候选保留",
+      "tests": [
+        {
+          "id": "memCandidate",
+          "command": "node _site/_test/parallel-memory-candidate-test.js",
+          "isolation": "独立产品实例 + 真实 vendored 知识引擎；候选由真实流水线产生（真实后续提交、真实冻结用户事件、真实 staged Markdown 晋升、引擎自身 MemoryService.capture 与来源门禁）。分析步骤是本线声明的替身 analyzer，诚实标明。"
+        }
+      ],
+      "expected": [
+        {
+          "key": "stays-candidate",
+          "text": "仍为candidate。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-MEM-003-stays-candidate-1",
+              "file": "_site/_test/parallel-memory-candidate-test.js",
+              "line": 84,
+              "anchor": "the automatic memory is saved as a candidate",
+              "kind": "engine",
+              "test": "memCandidate"
+            },
+            {
+              "id": "QA-SPEC-MEM-003-stays-candidate-2",
+              "file": "_site/_test/parallel-memory-candidate-test.js",
+              "line": 139,
+              "anchor": "the real edit reached the textarea",
+              "kind": "browser",
+              "test": "memCandidate"
+            },
+            {
+              "id": "QA-SPEC-MEM-003-stays-candidate-3",
+              "file": "_site/_test/parallel-memory-candidate-test.js",
+              "line": 149,
+              "anchor": "保存候选 sends no status at all",
+              "kind": "http",
+              "test": "memCandidate"
+            },
+            {
+              "id": "QA-SPEC-MEM-003-stays-candidate-4",
+              "file": "_site/_test/parallel-memory-candidate-test.js",
+              "line": 152,
+              "anchor": "保存候选 keeps the memory a candidate",
+              "kind": "http",
+              "test": "memCandidate"
+            },
+            {
+              "id": "QA-SPEC-MEM-003-stays-candidate-5",
+              "file": "_site/_test/parallel-memory-candidate-test.js",
+              "line": 153,
+              "anchor": "保存候选 keeps the edited text",
+              "kind": "http",
+              "test": "memCandidate"
+            },
+            {
+              "id": "QA-SPEC-MEM-003-stays-candidate-6",
+              "file": "_site/_test/parallel-memory-candidate-test.js",
+              "line": 154,
+              "anchor": "保存候选 keeps the frozen original summary",
+              "kind": "http",
+              "test": "memCandidate"
+            },
+            {
+              "id": "QA-SPEC-MEM-003-stays-candidate-7",
+              "file": "_site/_test/parallel-memory-candidate-test.js",
+              "line": 156,
+              "anchor": "the toast says the candidate is not yet effective",
+              "kind": "browser",
+              "test": "memCandidate"
+            },
+            {
+              "id": "QA-SPEC-MEM-003-stays-candidate-8",
+              "file": "_site/_test/parallel-memory-candidate-test.js",
+              "line": 164,
+              "anchor": "the stored memory is still a candidate after 保存候选",
+              "kind": "engine",
+              "test": "memCandidate"
+            },
+            {
+              "id": "QA-SPEC-MEM-003-stays-candidate-9",
+              "file": "_site/_test/parallel-memory-candidate-test.js",
+              "line": 167,
+              "anchor": "the edited candidate is listed in the candidate box",
+              "kind": "browser",
+              "test": "memCandidate"
+            }
+          ]
+        },
+        {
+          "key": "not-injected-unconfirmed",
+          "text": "不能注入长期任务偏好。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-MEM-003-not-injected-unconfirmed-1",
+              "file": "_site/_test/parallel-memory-candidate-test.js",
+              "line": 101,
+              "anchor": "an unconfirmed candidate is never injected",
+              "kind": "engine",
+              "test": "memCandidate"
+            },
+            {
+              "id": "QA-SPEC-MEM-003-not-injected-unconfirmed-2",
+              "file": "_site/_test/parallel-memory-candidate-test.js",
+              "line": 161,
+              "anchor": "a saved-but-unconfirmed candidate is never injected",
+              "kind": "engine",
+              "test": "memCandidate"
+            }
+          ]
+        }
+      ]
+    },
+    "MEM-004": {
+      "title": "确认目标",
+      "tests": [
+        {
+          "id": "memScope",
+          "command": "node _site/_test/parallel-memory-scope-test.js",
+          "isolation": "独立产品实例 + 真实 vendored 知识引擎；一个真实领域、三个真实项目（甲/乙在领域内，丙无领域），三条记忆全部经真实 UI 对话框添加。"
+        }
+      ],
+      "expected": [
+        {
+          "key": "scope-id-matches-type",
+          "text": "scopeId与scopeType匹配。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-MEM-004-scope-id-matches-type-1",
+              "file": "_site/_test/parallel-memory-scope-test.js",
+              "line": 122,
+              "anchor": "a global memory targets the brain itself",
+              "kind": "engine",
+              "test": "memScope"
+            },
+            {
+              "id": "QA-SPEC-MEM-004-scope-id-matches-type-2",
+              "file": "_site/_test/parallel-memory-scope-test.js",
+              "line": 123,
+              "anchor": "a domain memory targets the domain",
+              "kind": "engine",
+              "test": "memScope"
+            },
+            {
+              "id": "QA-SPEC-MEM-004-scope-id-matches-type-3",
+              "file": "_site/_test/parallel-memory-scope-test.js",
+              "line": 124,
+              "anchor": "a project memory targets the project",
+              "kind": "engine",
+              "test": "memScope"
+            },
+            {
+              "id": "QA-SPEC-MEM-004-scope-id-matches-type-4",
+              "file": "_site/_test/parallel-memory-scope-test.js",
+              "line": 135,
+              "anchor": "the engine refuses",
+              "kind": "http",
+              "test": "memScope"
+            },
+            {
+              "id": "QA-SPEC-MEM-004-scope-id-matches-type-5",
+              "file": "_site/_test/parallel-memory-scope-test.js",
+              "line": 137,
+              "anchor": "the engine names the missing target",
+              "kind": "http",
+              "test": "memScope"
+            },
+            {
+              "id": "QA-SPEC-MEM-004-scope-id-matches-type-6",
+              "file": "_site/_test/parallel-memory-scope-test.js",
+              "line": 140,
+              "anchor": "no mismatched memory was stored",
+              "kind": "engine",
+              "test": "memScope"
+            }
+          ]
+        },
+        {
+          "key": "only-target-scope-affected",
+          "text": "只影响指定范围。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-MEM-004-only-target-scope-affected-1",
+              "file": "_site/_test/parallel-memory-scope-test.js",
+              "line": 149,
+              "anchor": "the global memory reaches 丙",
+              "kind": "engine",
+              "test": "memScope"
+            },
+            {
+              "id": "QA-SPEC-MEM-004-only-target-scope-affected-2",
+              "file": "_site/_test/parallel-memory-scope-test.js",
+              "line": 151,
+              "anchor": "the domain memory reaches 乙",
+              "kind": "engine",
+              "test": "memScope"
+            },
+            {
+              "id": "QA-SPEC-MEM-004-only-target-scope-affected-3",
+              "file": "_site/_test/parallel-memory-scope-test.js",
+              "line": 152,
+              "anchor": "the domain memory does not reach 丙",
+              "kind": "engine",
+              "test": "memScope"
+            },
+            {
+              "id": "QA-SPEC-MEM-004-only-target-scope-affected-4",
+              "file": "_site/_test/parallel-memory-scope-test.js",
+              "line": 153,
+              "anchor": "the project memory reaches 甲",
+              "kind": "engine",
+              "test": "memScope"
+            },
+            {
+              "id": "QA-SPEC-MEM-004-only-target-scope-affected-5",
+              "file": "_site/_test/parallel-memory-scope-test.js",
+              "line": 154,
+              "anchor": "the project memory does not reach 乙",
+              "kind": "engine",
+              "test": "memScope"
+            },
+            {
+              "id": "QA-SPEC-MEM-004-only-target-scope-affected-6",
+              "file": "_site/_test/parallel-memory-scope-test.js",
+              "line": 170,
+              "anchor": "the UI names the global scope",
+              "kind": "browser",
+              "test": "memScope"
+            },
+            {
+              "id": "QA-SPEC-MEM-004-only-target-scope-affected-7",
+              "file": "_site/_test/parallel-memory-scope-test.js",
+              "line": 182,
+              "anchor": "the global memory file exists",
+              "kind": "disk",
+              "test": "memScope"
+            },
+            {
+              "id": "QA-SPEC-MEM-004-only-target-scope-affected-8",
+              "file": "_site/_test/parallel-memory-scope-test.js",
+              "line": 188,
+              "anchor": "the global file does not hold the domain memory",
+              "kind": "disk",
+              "test": "memScope"
+            },
+            {
+              "id": "QA-SPEC-MEM-004-only-target-scope-affected-9",
+              "file": "_site/_test/parallel-memory-scope-test.js",
+              "line": 193,
+              "anchor": "the project file does not hold the global memory",
+              "kind": "disk",
+              "test": "memScope"
+            }
+          ]
+        }
+      ]
+    },
+    "MEM-005": {
+      "title": "忽略候选",
+      "tests": [
+        {
+          "id": "memCandidate",
+          "command": "node _site/_test/parallel-memory-candidate-test.js",
+          "isolation": "同 MEM-003；忽略发生在真实 UI 候选箱里。"
+        }
+      ],
+      "expected": [
+        {
+          "key": "status-ignored",
+          "text": "状态ignored。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-MEM-005-status-ignored-1",
+              "file": "_site/_test/parallel-memory-candidate-test.js",
+              "line": 255,
+              "anchor": "the ignore only changes the status",
+              "kind": "http",
+              "test": "memCandidate"
+            },
+            {
+              "id": "QA-SPEC-MEM-005-status-ignored-2",
+              "file": "_site/_test/parallel-memory-candidate-test.js",
+              "line": 257,
+              "anchor": "the ignored memory is ignored",
+              "kind": "http",
+              "test": "memCandidate"
+            },
+            {
+              "id": "QA-SPEC-MEM-005-status-ignored-3",
+              "file": "_site/_test/parallel-memory-candidate-test.js",
+              "line": 261,
+              "anchor": "the stored memory carries the ignored status",
+              "kind": "engine",
+              "test": "memCandidate"
+            }
+          ]
+        },
+        {
+          "key": "frozen-source-untouched",
+          "text": "来源冻结记录不篡改。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-MEM-005-frozen-source-untouched-1",
+              "file": "_site/_test/parallel-memory-candidate-test.js",
+              "line": 262,
+              "anchor": "the ignored memory keeps the frozen commit",
+              "kind": "engine",
+              "test": "memCandidate"
+            },
+            {
+              "id": "QA-SPEC-MEM-005-frozen-source-untouched-2",
+              "file": "_site/_test/parallel-memory-candidate-test.js",
+              "line": 263,
+              "anchor": "the ignored memory keeps the frozen entry",
+              "kind": "engine",
+              "test": "memCandidate"
+            },
+            {
+              "id": "QA-SPEC-MEM-005-frozen-source-untouched-3",
+              "file": "_site/_test/parallel-memory-candidate-test.js",
+              "line": 264,
+              "anchor": "the ignored memory keeps the frozen quote",
+              "kind": "engine",
+              "test": "memCandidate"
+            },
+            {
+              "id": "QA-SPEC-MEM-005-frozen-source-untouched-4",
+              "file": "_site/_test/parallel-memory-candidate-test.js",
+              "line": 265,
+              "anchor": "the ignored memory keeps the frozen source event",
+              "kind": "engine",
+              "test": "memCandidate"
+            },
+            {
+              "id": "QA-SPEC-MEM-005-frozen-source-untouched-5",
+              "file": "_site/_test/parallel-memory-candidate-test.js",
+              "line": 266,
+              "anchor": "the ignored memory keeps the frozen source hash",
+              "kind": "engine",
+              "test": "memCandidate"
+            },
+            {
+              "id": "QA-SPEC-MEM-005-frozen-source-untouched-6",
+              "file": "_site/_test/parallel-memory-candidate-test.js",
+              "line": 267,
+              "anchor": "the ignored memory keeps the recorded reason",
+              "kind": "engine",
+              "test": "memCandidate"
+            },
+            {
+              "id": "QA-SPEC-MEM-005-frozen-source-untouched-7",
+              "file": "_site/_test/parallel-memory-candidate-test.js",
+              "line": 272,
+              "anchor": "an ignored memory is never injected",
+              "kind": "engine",
+              "test": "memCandidate"
+            },
+            {
+              "id": "QA-SPEC-MEM-005-frozen-source-untouched-8",
+              "file": "_site/_test/parallel-memory-candidate-test.js",
+              "line": 277,
+              "anchor": "ignoring one candidate does not change the confirmed memory",
+              "kind": "engine",
+              "test": "memCandidate"
+            }
+          ]
+        }
+      ]
+    },
+    "MEM-006": {
+      "title": "同步失败",
+      "tests": [
+        {
+          "id": "memSync",
+          "command": "node _site/_test/parallel-memory-sync-test.js",
+          "isolation": "独立产品实例 + 真实 vendored 知识引擎；写入失败是真实的：confirmed 记忆文件路径被一个目录占据，引擎自身的 materialize() 真的写不进去。"
+        }
+      ],
+      "expected": [
+        {
+          "key": "sync-pending-visible",
+          "text": "sync pending真实显示。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-MEM-006-sync-pending-visible-1",
+              "file": "_site/_test/parallel-memory-sync-test.js",
+              "line": 68,
+              "anchor": "the confirmed memory file path really is occupied by a directory",
+              "kind": "disk",
+              "test": "memSync"
+            },
+            {
+              "id": "QA-SPEC-MEM-006-sync-pending-visible-2",
+              "file": "_site/_test/parallel-memory-sync-test.js",
+              "line": 93,
+              "anchor": "the engine really answers syncStatus pending",
+              "kind": "http",
+              "test": "memSync"
+            },
+            {
+              "id": "QA-SPEC-MEM-006-sync-pending-visible-3",
+              "file": "_site/_test/parallel-memory-sync-test.js",
+              "line": 94,
+              "anchor": "the engine reports the real write error",
+              "kind": "http",
+              "test": "memSync"
+            },
+            {
+              "id": "QA-SPEC-MEM-006-sync-pending-visible-4",
+              "file": "_site/_test/parallel-memory-sync-test.js",
+              "line": 98,
+              "anchor": "the toast warns about the pending file",
+              "kind": "browser",
+              "test": "memSync"
+            },
+            {
+              "id": "QA-SPEC-MEM-006-sync-pending-visible-5",
+              "file": "_site/_test/parallel-memory-sync-test.js",
+              "line": 99,
+              "anchor": "the toast warns that the unsynced memory is not injected",
+              "kind": "browser",
+              "test": "memSync"
+            },
+            {
+              "id": "QA-SPEC-MEM-006-sync-pending-visible-6",
+              "file": "_site/_test/parallel-memory-sync-test.js",
+              "line": 106,
+              "anchor": "the card shows the pending write",
+              "kind": "browser",
+              "test": "memSync"
+            },
+            {
+              "id": "QA-SPEC-MEM-006-sync-pending-visible-7",
+              "file": "_site/_test/parallel-memory-sync-test.js",
+              "line": 107,
+              "anchor": "the card shows the pending sync state",
+              "kind": "browser",
+              "test": "memSync"
+            }
+          ]
+        },
+        {
+          "key": "unsynced-not-injected",
+          "text": "未同步内容不注入任务。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-MEM-006-unsynced-not-injected-1",
+              "file": "_site/_test/parallel-memory-sync-test.js",
+              "line": 114,
+              "anchor": "the unsynced memory is never injected",
+              "kind": "engine",
+              "test": "memSync"
+            },
+            {
+              "id": "QA-SPEC-MEM-006-unsynced-not-injected-2",
+              "file": "_site/_test/parallel-memory-sync-test.js",
+              "line": 118,
+              "anchor": "the stored memory still carries the pending sync state",
+              "kind": "engine",
+              "test": "memSync"
+            },
+            {
+              "id": "QA-SPEC-MEM-006-unsynced-not-injected-3",
+              "file": "_site/_test/parallel-memory-sync-test.js",
+              "line": 142,
+              "anchor": "the confirmed memory file is really written again",
+              "kind": "disk",
+              "test": "memSync"
+            },
+            {
+              "id": "QA-SPEC-MEM-006-unsynced-not-injected-4",
+              "file": "_site/_test/parallel-memory-sync-test.js",
+              "line": 150,
+              "anchor": "the recovered memory is injected again",
+              "kind": "engine",
+              "test": "memSync"
+            }
+          ]
+        }
+      ]
+    },
+    "MEM-008": {
+      "title": "来源边界",
+      "tests": [
+        {
+          "id": "memSource",
+          "command": "node _site/_test/parallel-memory-source-test.js",
+          "isolation": "独立产品实例 + 真实 vendored 知识引擎；四条候选都由真实流水线提出（真实提交、真实冻结事件带真实 inputOrigin、真实 staged Markdown 晋升、引擎自身 MemoryService.capture），分析步骤是本线声明的替身 analyzer。"
+        }
+      ],
+      "expected": [
+        {
+          "key": "not-auto-human-preference",
+          "text": "不得自动当作人类长期偏好。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-MEM-008-not-auto-human-preference-1",
+              "file": "_site/_test/parallel-memory-source-test.js",
+              "line": 77,
+              "anchor": "a delegated task order is not admitted",
+              "kind": "engine",
+              "test": "memSource"
+            },
+            {
+              "id": "QA-SPEC-MEM-008-not-auto-human-preference-2",
+              "file": "_site/_test/parallel-memory-source-test.js",
+              "line": 78,
+              "anchor": "the gate names the non-human source",
+              "kind": "engine",
+              "test": "memSource"
+            },
+            {
+              "id": "QA-SPEC-MEM-008-not-auto-human-preference-3",
+              "file": "_site/_test/parallel-memory-source-test.js",
+              "line": 89,
+              "anchor": "an unverifiable source is not admitted",
+              "kind": "engine",
+              "test": "memSource"
+            },
+            {
+              "id": "QA-SPEC-MEM-008-not-auto-human-preference-4",
+              "file": "_site/_test/parallel-memory-source-test.js",
+              "line": 105,
+              "anchor": "a candidate without a user event is not admitted",
+              "kind": "engine",
+              "test": "memSource"
+            },
+            {
+              "id": "QA-SPEC-MEM-008-not-auto-human-preference-5",
+              "file": "_site/_test/parallel-memory-source-test.js",
+              "line": 123,
+              "anchor": "a candidate citing an unknown event is not admitted",
+              "kind": "engine",
+              "test": "memSource"
+            },
+            {
+              "id": "QA-SPEC-MEM-008-not-auto-human-preference-6",
+              "file": "_site/_test/parallel-memory-source-test.js",
+              "line": 128,
+              "anchor": "no memory was stored",
+              "kind": "engine",
+              "test": "memSource"
+            },
+            {
+              "id": "QA-SPEC-MEM-008-not-auto-human-preference-7",
+              "file": "_site/_test/parallel-memory-source-test.js",
+              "line": 130,
+              "anchor": "nothing is injected",
+              "kind": "engine",
+              "test": "memSource"
+            },
+            {
+              "id": "QA-SPEC-MEM-008-not-auto-human-preference-8",
+              "file": "_site/_test/parallel-memory-source-test.js",
+              "line": 148,
+              "anchor": "the candidate box is really empty",
+              "kind": "browser",
+              "test": "memSource"
+            },
+            {
+              "id": "QA-SPEC-MEM-008-not-auto-human-preference-9",
+              "file": "_site/_test/parallel-memory-source-test.js",
+              "line": 160,
+              "anchor": "the home view states the boundary",
+              "kind": "browser",
+              "test": "memSource"
+            }
+          ]
+        },
+        {
+          "key": "c01-blocked-explicit",
+          "text": "C01未解决项明确阻断。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-MEM-008-c01-blocked-explicit-1",
+              "file": "_site/_test/parallel-memory-source-test.js",
+              "line": 177,
+              "anchor": "status: 'BLOCKED'",
+              "kind": "report",
+              "test": "memSource"
+            }
+          ],
+          "note": "C01（Workbench 用户事件是否等于本人在说话）依赖未解决的边界记录链，需要真实 Workbench 会话才能判定；本批没有真实 Workbench 会话，故该 expected 按委托记为 BLOCKED 并在 evidence JSON（mem008-source-boundary.json）里写明阻断原因与已证实的引擎侧部分，不冒充通过。"
+        }
+      ]
     }
   },
   "batchResultDirs": {
