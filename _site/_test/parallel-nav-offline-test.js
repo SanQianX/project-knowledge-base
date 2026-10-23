@@ -36,18 +36,28 @@ const EVIDENCE = process.env.PK_TEST_EVIDENCE_DIR ? path.resolve(process.env.PK_
 const SNAPSHOT = '/api/engine/snapshot';
 
 /**
- * Record every WebSocket the page opens and every subscription message it
- * sends. The hook is installed before the page's own scripts run, so the
- * first stream of the page is recorded too.
+ * Record every WebSocket the page opens, every subscription message it
+ * sends and every close the browser really performed. The hook is installed
+ * before the page's own scripts run, so the first stream of the page is
+ * recorded too.
+ *
+ * The close event is the evidence that the browser really closed the old
+ * stream: the shell drops its own bookkeeping as soon as it asks the socket
+ * to close, while the browser reaches the closed state only when the
+ * connection is really gone.
  */
 const SOCKET_HOOK = `(() => {
   window.__sockets = [];
   window.__sent = [];
+  window.__closed = [];
   const Native = window.WebSocket;
   const Wrapped = function (...args) {
     const ws = new Native(...args);
     const generation = window.__sockets.length;
     window.__sockets.push(ws);
+    ws.addEventListener('close', event => {
+      window.__closed.push({ generation, code: event.code, wasClean: event.wasClean, readyState: ws.readyState, at: Date.now() });
+    });
     const send = ws.send.bind(ws);
     ws.send = function (data) {
       try {
@@ -65,6 +75,7 @@ const SOCKET_HOOK = `(() => {
 
 const socketStates = harness => harness.run('window.__sockets.map(socket => socket.readyState)');
 const sentMessages = harness => harness.run('window.__sent || []');
+const closeEvents = harness => harness.run('window.__closed || []');
 const liveStats = harness => harness.run('window.KnowledgeLive.stats()');
 const connectionLabel = harness => harness.run("document.getElementById('activityConnection').textContent");
 const homeText = harness => harness.run("document.getElementById('homeContent').textContent");
@@ -158,7 +169,22 @@ async function main() {
 
     const offlineSockets = await socketStates(harness);
     assert.equal(offlineSockets.length, 1, `the page still holds one socket object: ${JSON.stringify(offlineSockets)}`);
-    assert.equal(offlineSockets[0], 3, 'the old stream is really closed by the browser');
+    // The browser closes the stream on its own schedule: the shell drops its
+    // bookkeeping as soon as it asks the socket to close, so the closed
+    // state has to be waited for instead of being sampled right away.
+    const closedOld = await harness.waitFor(
+      async () => {
+        const events = await closeEvents(harness);
+        const close = events.find(event => event.generation === 0);
+        if (!close) return null;
+        const states = await socketStates(harness);
+        return { close, states };
+      },
+      'the browser really closes the old stream',
+      20000,
+    );
+    assert.equal(closedOld.states[0], 3, `the old stream is really closed by the browser: ${JSON.stringify(closedOld)}`);
+    assert.equal(closedOld.close.readyState, 3, `the browser closed the old stream in the closed state: ${JSON.stringify(closedOld.close)}`);
 
     // NAV-008 expected 3: the content does not pretend to be live. The shell
     // says the connection is broken, and it does not show the update list as
@@ -201,9 +227,11 @@ async function main() {
     const recoveredStats = await liveStats(harness);
     const recoveredSockets = await socketStates(harness);
     const recoveredSent = await sentMessages(harness);
+    const recoveredClosed = await closeEvents(harness);
     assert.equal(recoveredSockets.length, 2, `the page opened a second socket after the recovery: ${JSON.stringify(recoveredSockets)}`);
-    assert.equal(recoveredSockets[0], 3, 'the old socket stays closed');
+    assert.equal(recoveredSockets[0], 3, `the old socket stays closed: ${JSON.stringify(recoveredSockets)} ${JSON.stringify(recoveredClosed)}`);
     assert.equal(recoveredSockets[1], 1, 'the new socket is open');
+    assert.equal(recoveredClosed.filter(event => event.generation === 1).length, 0, `the new stream was not closed by the outage: ${JSON.stringify(recoveredClosed)}`);
 
     // NAV-008 expected 2: no duplicated subscription. The subscriptions of
     // the new socket are exactly the two streams of the shell, each of them

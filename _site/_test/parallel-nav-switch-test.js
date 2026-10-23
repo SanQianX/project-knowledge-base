@@ -29,9 +29,75 @@ const EVIDENCE = process.env.PK_TEST_EVIDENCE_DIR ? path.resolve(process.env.PK_
 
 const SNAPSHOT = '/api/engine/snapshot';
 
+/**
+ * Ask the shell to read the registry again and wait until a new matching
+ * read really left the browser.
+ *
+ * The case owns this loop instead of the shared helper because the held
+ * read lives inside the shell's three second read timeout: every hundred
+ * milliseconds of polling is a hundred milliseconds less of the budget the
+ * late answer has to arrive in.
+ */
+async function refreshUntil(harness, match, timeoutMs = 20000) {
+  const before = harness.productProxy.requests.filter(match).length;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await harness.requestRegistryRefresh();
+    await harness.wait(50);
+    const now = harness.productProxy.requests.filter(match).length;
+    if (now > before) return now;
+  }
+  throw new Error('the shell did not make the expected read');
+}
+
+/**
+ * Record every read the page really made and how it ended.
+ *
+ * The late answer of the previous project is only evidence if it really
+ * reached the product's promise chain: a read that the shell abandons after
+ * its three second timeout never reaches the guard, so the case would pass
+ * without a late answer ever arriving. The hook therefore records the state
+ * of every read, and the case waits for the late answer to be consumed.
+ */
+const FETCH_HOOK = `(() => {
+  window.__fetches = [];
+  const nativeFetch = window.fetch;
+  window.fetch = function (input) {
+    const url = typeof input === 'string' ? input : (input && input.url) || '';
+    const entry = { url: String(url), state: 'pending', at: Date.now() };
+    window.__fetches.push(entry);
+    const args = arguments;
+    return nativeFetch.apply(this, args).then(response => {
+      entry.state = 'responded';
+      entry.status = response.status;
+      const originalJson = response.json.bind(response);
+      response.json = () => originalJson().then(data => {
+        entry.state = 'consumed';
+        entry.endedAt = Date.now();
+        return data;
+      }, error => {
+        entry.state = 'failed';
+        entry.endedAt = Date.now();
+        throw error;
+      });
+      return response;
+    }, error => {
+      entry.state = 'aborted';
+      entry.endedAt = Date.now();
+      throw error;
+    });
+  };
+})()`;
+
+/** The reads of the given project the page really made. */
+const projectReads = (harness, projectId, skip = 0) => harness.run(`(window.__fetches || []).filter(entry => entry.url.includes('/api/engine/snapshot') && entry.url.includes(${JSON.stringify(`projectId=${projectId}`)})).slice(${skip})`);
+
 async function main() {
   const harness = await startHarness({ tag: 'nav005', evidenceDir: EVIDENCE || undefined });
   try {
+    // The hook is installed before the case starts, so every read of the
+    // case is recorded.
+    await harness.run(FETCH_HOOK);
     const repoA = makeRepo(harness.fixture, 'nav005-a');
     const repoB = makeRepo(harness.fixture, 'nav005-b');
     const projectA = await harness.importProject(repoA, 'NAV005 甲');
@@ -69,10 +135,14 @@ async function main() {
 
     assert.equal(await currentProject(), projectA.projectId, 'the first project is the current one');
 
+    // How many reads of the first project the page already made: the held
+    // read is the next one, and the late answer is the one after it.
+    const readsBeforeHold = (await projectReads(harness, projectA.projectId)).length;
+
     // A registry refresh reads the snapshot of the current project; that read
     // is held so it can be released after the switch.
     harness.productProxy.hold(entry => entry.method === 'GET' && entry.path.startsWith(SNAPSHOT) && entry.path.includes(`projectId=${projectA.projectId}`), { once: true });
-    await harness.refreshRegistryAndWait(entry => entry.path.startsWith(SNAPSHOT) && entry.path.includes(`projectId=${projectA.projectId}`));
+    await refreshUntil(harness, entry => entry.path.startsWith(SNAPSHOT) && entry.path.includes(`projectId=${projectA.projectId}`));
     await harness.waitFor(
       () => harness.productProxy.heldCount() > 0,
       'the snapshot read of the current project is held',
@@ -96,21 +166,47 @@ async function main() {
     // NAV-005 expected 2: the late answer of the previous project must not
     // paint over the current project.
     //
-    // The snapshot reads are broken while the late answer is delivered, so
-    // that no automatic refresh can repair the page and hide a late answer
-    // that was wrongly applied. Without the shell's epoch and project guard
-    // the late snapshot of the other project would replace the current one,
-    // and the home would lose the run of the current project.
+    // The snapshot reads are broken from here on, so that no automatic
+    // refresh can repair the page and hide a late answer that was wrongly
+    // applied. Without the shell's epoch and project guard the late snapshot
+    // of the other project would replace the current one, and the home would
+    // lose the run of the current project.
     harness.productProxy.fail(entry => entry.method === 'GET' && entry.path.startsWith(SNAPSHOT), 503, '注入的快照读取故障');
     const released = harness.productProxy.releaseHeld();
     assert.ok(released >= 1, 'the held snapshot read is really delivered late');
-    await harness.wait(1000);
+
+    // The late answer must really have reached the page: a read the shell
+    // abandons after its three second timeout never reaches the guard, and
+    // the case would prove nothing about a late answer that never arrived.
+    const lateRead = await harness.waitFor(
+      async () => {
+        const reads = await projectReads(harness, projectA.projectId, readsBeforeHold);
+        const last = reads[reads.length - 1];
+        if (!last || last.state === 'pending' || last.state === 'responded') return null;
+        return last;
+      },
+      'the late answer really reached the page',
+      20000,
+    );
+    assert.equal(lateRead.state, 'consumed', `the late answer was really consumed by the page: ${JSON.stringify(lateRead)}`);
+    // Two frames: the page really painted the outcome of the late answer.
+    await harness.run('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))');
+
+    // The fault must really bite a real read. The shell reads the snapshot
+    // again on its own schedule, but the case does not wait for that: it
+    // asks the shell to read the registry again and waits until the proxy
+    // really saw a failed snapshot read. Without a failed read the case
+    // could not claim that no successful refresh was able to mask the late
+    // answer.
+    const failedReads = await refreshUntil(harness, entry => entry.path.startsWith(SNAPSHOT) && entry.status === 503);
+    assert.ok(failedReads >= 1, `the snapshot read really failed while the late answer was delivered: ${failedReads}`);
+
     text = await homeText();
     assert.equal(await currentProject(), projectB.projectId, 'the current project did not change because of the late answer');
     assert.ok(text.includes(shortB), 'the current project run is still shown after the late answer');
     assert.equal(text.includes(shortA), false, 'the late answer of the other project did not overwrite the current project');
     const failedSnapshotReads = harness.productProxy.requests.filter(entry => entry.path.startsWith(SNAPSHOT) && entry.status === 503).length;
-    assert.ok(failedSnapshotReads >= 1, 'the snapshot reads really failed while the late answer was delivered, so no refresh could mask it');
+    assert.ok(failedSnapshotReads >= 1, `the snapshot reads really failed while the late answer was delivered, so no refresh could mask it: ${failedSnapshotReads} failed reads`);
     harness.productProxy.clearFaults();
 
     // The switch back is a real pointer click as well.

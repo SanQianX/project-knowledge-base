@@ -80,11 +80,28 @@ const geometry = harness => harness.run(`(() => {
     if (style.display === 'none' || style.visibility === 'hidden') continue;
     const rect = el.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) continue;
-    const inViewport = rect.bottom > 0 && rect.top < innerHeight && rect.right > 0 && rect.left < innerWidth;
+    // The part of the control the user can really see. A control that
+    // crosses the lower edge of the viewport is not covered: the page
+    // scrolls, and the visible part of it must be reachable.
+    const visibleLeft = Math.max(rect.left, 0);
+    const visibleRight = Math.min(rect.right, innerWidth);
+    const visibleTop = Math.max(rect.top, 0);
+    const visibleBottom = Math.min(rect.bottom, innerHeight);
+    const visibleWidth = Math.round(visibleRight - visibleLeft);
+    const visibleHeight = Math.round(visibleBottom - visibleTop);
+    const inViewport = visibleWidth > 0 && visibleHeight > 0;
     let covered = false;
     let coveredBy = '';
+    let hitX = 0;
+    let hitY = 0;
     if (inViewport) {
-      const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      // The hit test runs on the centre of the VISIBLE part of the control.
+      // The centre of the whole control may lie below the fold, where the
+      // browser reports no element at all - that is a scroll position, not
+      // an occlusion.
+      hitX = Math.round((visibleLeft + visibleRight) / 2);
+      hitY = Math.round((visibleTop + visibleBottom) / 2);
+      const hit = document.elementFromPoint(hitX, hitY);
       covered = !(hit && (hit === el || el.contains(hit) || el.contains(hit.parentElement)));
       coveredBy = hit ? (hit.id || hit.tagName) : 'nothing';
     }
@@ -95,6 +112,9 @@ const geometry = harness => harness.run(`(() => {
       left: Math.round(rect.left), right: Math.round(rect.right),
       top: Math.round(rect.top), bottom: Math.round(rect.bottom),
       width: Math.round(rect.width), height: Math.round(rect.height),
+      visibleWidth, visibleHeight,
+      hitX, hitY,
+      belowFold: rect.top >= innerHeight,
       outsideHorizontally: rect.left < -1 || rect.right > innerWidth + 1,
       inViewport,
       covered,
@@ -151,6 +171,15 @@ async function pixelStats(harness, base64) {
   })()`);
 }
 
+/**
+ * One line per control: the geometry the case really measured. The runner
+ * shows only the last lines of a failure, so a dump of the whole array would
+ * hide the control that matters behind the tail of the list.
+ */
+const controlSummary = control => `${control.element}${control.id ? '#' + control.id : ''} "${control.label}" rect=[${control.left},${control.top} ${control.right},${control.bottom}] visible=${control.visibleWidth}x${control.visibleHeight} hit=(${control.hitX},${control.hitY}) coveredBy=${control.coveredBy}`;
+
+const overflowSummary = entry => `${entry.element} scrollWidth=${entry.scrollWidth} clientWidth=${entry.clientWidth}`;
+
 async function ensureTheme(harness, theme) {
   const current = await harness.run("document.documentElement.dataset.theme || ''");
   if (current === theme) return;
@@ -192,25 +221,26 @@ async function main() {
 
           const info = await geometry(harness);
           const label = `${viewport.name}-${theme}-${page.key}`;
+          const where = `${label} viewport=${info.viewport.width}x${info.viewport.height} theme=${info.theme} view=${info.activeView}`;
 
           // The page that is open is the page the matrix asked for.
-          assert.equal(info.activeView, `view-${page.view}`, `the open page is the one under test: ${label}`);
+          assert.equal(info.activeView, `view-${page.view}`, `the open page is the one under test: ${where}`);
           // The theme under test is the theme the page really shows.
-          assert.equal(info.theme, theme, `the page really shows the ${theme} theme: ${label}`);
+          assert.equal(info.theme, theme, `the page really shows the ${theme} theme: ${where}`);
 
           // NAV-007 expected 1: no unintended horizontal overflow.
-          assert.deepEqual(info.overflowing, [], `no container overflows horizontally: ${label} ${JSON.stringify(info.overflowing)}`);
-          assert.ok(info.docScrollWidth <= info.docClientWidth + 1, `the document does not scroll sideways: ${label} ${info.docScrollWidth}/${info.docClientWidth}`);
-          assert.ok(info.viewScrollWidth <= info.viewClientWidth + 1, `the open page does not scroll sideways: ${label} ${info.viewScrollWidth}/${info.viewClientWidth}`);
+          assert.equal(info.overflowing.length, 0, `no container overflows horizontally: ${where} ${info.overflowing.map(overflowSummary).join(' | ')}`);
+          assert.ok(info.docScrollWidth <= info.docClientWidth + 1, `the document does not scroll sideways: ${where} ${info.docScrollWidth}/${info.docClientWidth}`);
+          assert.ok(info.viewScrollWidth <= info.viewClientWidth + 1, `the open page does not scroll sideways: ${where} ${info.viewScrollWidth}/${info.viewClientWidth}`);
           const outside = info.controls.filter(control => control.outsideHorizontally);
-          assert.deepEqual(outside, [], `no visible control leaves the viewport sideways: ${label} ${JSON.stringify(outside)}`);
+          assert.equal(outside.length, 0, `no visible control leaves the viewport sideways: ${where} ${outside.map(controlSummary).join(' | ')}`);
 
           // NAV-007 expected 1 (continued): no control is covered by another.
           const covered = info.controls.filter(control => control.covered);
-          assert.deepEqual(covered, [], `no visible control is covered: ${label} ${JSON.stringify(covered)}`);
+          assert.equal(covered.length, 0, `no visible control is covered: ${where} ${covered.map(controlSummary).join(' | ')}`);
 
           // The page really has content: the controls of the open view exist.
-          assert.ok(info.controls.length > 0, `the open page exposes controls: ${label}`);
+          assert.ok(info.controls.length > 0, `the open page exposes controls: ${where} ${info.controls.length} controls`);
 
           // The screenshot of the real page, and its real pixels.
           const shot = await harness.browser.send('Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: false });
@@ -218,9 +248,9 @@ async function main() {
           fs.mkdirSync(path.dirname(file), { recursive: true });
           fs.writeFileSync(file, Buffer.from(shot.data, 'base64'));
           const pixels = await pixelStats(harness, shot.data);
-          assert.equal(pixels.width, viewport.width, `the screenshot has the viewport width: ${label}`);
-          assert.equal(pixels.height, viewport.height, `the screenshot has the viewport height: ${label}`);
-          assert.ok(pixels.distinctColors >= 3, `the screenshot shows a rendered page, not a blank surface: ${label} ${JSON.stringify(pixels)}`);
+          assert.equal(pixels.width, viewport.width, `the screenshot has the viewport width: ${where}`);
+          assert.equal(pixels.height, viewport.height, `the screenshot has the viewport height: ${where}`);
+          assert.ok(pixels.distinctColors >= 3, `the screenshot shows a rendered page, not a blank surface: ${where} ${JSON.stringify(pixels)}`);
 
           index.push({
             case: 'NAV-007',
