@@ -7,7 +7,8 @@
     "P-TEST-NAV",
     "P-TEST-KNOWLEDGE-R3",
     "P-NAV-CI-01",
-    "P-MEMORY-01"
+    "P-MEMORY-01",
+    "P-WB-SUPPLEMENT-02"
   ],
   "note": "产品用例（PRJ-*）→ 真实断言的可复用绑定表。本表只描述“哪条 expected 由哪个测试入口的哪一条断言覆盖”；不含任何一次运行的结果（退出码、状态、日志路径、私有路径）。每次运行的结果必须另存到被忽略的证据目录，不回写本表。文件级套件通过不构成用例级证据。",
   "definitionModel": {
@@ -4994,6 +4995,464 @@
             }
           ],
           "note": "C01（Workbench 用户事件是否等于本人在说话）依赖未解决的边界记录链，需要真实 Workbench 会话才能判定；本批没有真实 Workbench 会话，故该 expected 按委托记为 BLOCKED 并在 evidence JSON（mem008-source-boundary.json）里写明阻断原因与已证实的引擎侧部分，不冒充通过。"
+        }
+      ]
+    },
+    "WB-001": {
+      "title": "源码版本匹配",
+      "tests": [
+        {
+          "id": "source-match",
+          "command": "node _site/_test/parallel-workbench-source-match.js",
+          "isolation": "每个入口自隔离：宿主子进程的 HOME/USERPROFILE/CLAUDE_CONFIG_DIR、KB_DATA_DIR/KB_KNOWLEDGE_DATA_DIR、Bridge home、临时目录、端口全部独立；夹具层拒绝 5757/5760/5789/5790/8787/8790 生产端口；清除环境中的模块地址与全部 ANTHROPIC_* 环境凭据，模型调用只能来自注入的原始订阅 profile。"
+        },
+        {
+          "id": "provenance-trace",
+          "command": "node _site/_test/parallel-workbench-provenance-trace.js",
+          "isolation": "每个入口自隔离：宿主子进程的 HOME/USERPROFILE/CLAUDE_CONFIG_DIR、KB_DATA_DIR/KB_KNOWLEDGE_DATA_DIR、Bridge home、临时目录、端口全部独立；夹具层拒绝 5757/5760/5789/5790/8787/8790 生产端口；清除环境中的模块地址与全部 ANTHROPIC_* 环境凭据，模型调用只能来自注入的原始订阅 profile。"
+        },
+        {
+          "id": "offline-test",
+          "command": "node _site/_test/parallel-workbench-offline-test.js (collected by run-all-tests.js)",
+          "isolation": "每个入口自隔离：宿主子进程的 HOME/USERPROFILE/CLAUDE_CONFIG_DIR、KB_DATA_DIR/KB_KNOWLEDGE_DATA_DIR、Bridge home、临时目录、端口全部独立；夹具层拒绝 5757/5760/5789/5790/8787/8790 生产端口；清除环境中的模块地址与全部 ANTHROPIC_* 环境凭据，模型调用只能来自注入的原始订阅 profile。"
+        }
+      ],
+      "expected": [
+        {
+          "key": "file-ownership-traceable",
+          "text": "每一文件所有权可追溯。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-WB-001-file-ownership-1",
+              "file": "_site/_test/parallel-workbench-source-match.js",
+              "line": 70,
+              "anchor": "the pinned package does not match the manifest",
+              "kind": "assert",
+              "test": "source-match"
+            },
+            {
+              "id": "QA-SPEC-WB-001-file-ownership-2",
+              "file": "_site/_test/parallel-workbench-source-match.js",
+              "line": 75,
+              "anchor": "the pinned package version differs from the manifest",
+              "kind": "assert",
+              "test": "source-match"
+            },
+            {
+              "id": "QA-SPEC-WB-001-file-ownership-3",
+              "file": "_site/_test/parallel-workbench-source-match.js",
+              "line": 96,
+              "anchor": "the installed product copy does not match the manifest",
+              "kind": "assert",
+              "test": "source-match"
+            },
+            {
+              "id": "QA-SPEC-WB-001-file-ownership-4",
+              "file": "_site/_test/parallel-workbench-source-match.js",
+              "line": 131,
+              "anchor": "the source checkout is missing files the manifest ships",
+              "kind": "assert",
+              "test": "source-match"
+            },
+            {
+              "id": "QA-SPEC-WB-001-file-ownership-5",
+              "file": "_site/_test/parallel-workbench-source-match.js",
+              "line": 135,
+              "anchor": "the source comparison did not classify every manifest file",
+              "kind": "assert",
+              "test": "source-match"
+            },
+            {
+              "id": "QA-SPEC-WB-001-file-ownership-6",
+              "file": "_site/_test/parallel-workbench-provenance-trace.js",
+              "line": 117,
+              "anchor": "no examined commit matches the installed package byte for byte",
+              "kind": "assert",
+              "test": "provenance-trace"
+            },
+            {
+              "id": "QA-SPEC-WB-001-pin-identity-offline",
+              "file": "_site/_test/parallel-workbench-offline-test.js",
+              "line": 63,
+              "anchor": "the repository pin and the runtime manifest disagree",
+              "kind": "assert",
+              "test": "offline-test"
+            }
+          ]
+        },
+        {
+          "key": "mismatch-is-blocked-source-match",
+          "text": "不匹配则BLOCKED_SOURCE_MATCH。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-WB-001-mismatch-1",
+              "file": "_site/_test/parallel-workbench-source-match.js",
+              "line": 129,
+              "anchor": "verdict: matchesPackage ? 'SOURCE_MATCH' : 'BLOCKED_SOURCE_MATCH'",
+              "kind": "verdict",
+              "test": "source-match"
+            },
+            {
+              "id": "QA-SPEC-WB-001-mismatch-2",
+              "file": "_site/_test/parallel-workbench-source-match.js",
+              "line": 167,
+              "anchor": "the source checkout is not byte-identical to the installed package; the difference is recorded, not patched away",
+              "kind": "verdict",
+              "test": "source-match"
+            },
+            {
+              "id": "QA-SPEC-WB-001-mismatch-3",
+              "file": "_site/_test/parallel-workbench-provenance-trace.js",
+              "line": 117,
+              "anchor": "no examined commit matches the installed package byte for byte",
+              "kind": "assert",
+              "test": "provenance-trace"
+            }
+          ]
+        }
+      ]
+    },
+    "WB-002": {
+      "title": "独立宿主",
+      "tests": [
+        {
+          "id": "independent-host",
+          "command": "node _site/_test/parallel-workbench-independent-host.js",
+          "isolation": "每个入口自隔离：宿主子进程的 HOME/USERPROFILE/CLAUDE_CONFIG_DIR、KB_DATA_DIR/KB_KNOWLEDGE_DATA_DIR、Bridge home、临时目录、端口全部独立；夹具层拒绝 5757/5760/5789/5790/8787/8790 生产端口；清除环境中的模块地址与全部 ANTHROPIC_* 环境凭据，模型调用只能来自注入的原始订阅 profile。"
+        },
+        {
+          "id": "standalone-turn",
+          "command": "node _site/_test/parallel-workbench-standalone-turn.js",
+          "isolation": "每个入口自隔离：宿主子进程的 HOME/USERPROFILE/CLAUDE_CONFIG_DIR、KB_DATA_DIR/KB_KNOWLEDGE_DATA_DIR、Bridge home、临时目录、端口全部独立；夹具层拒绝 5757/5760/5789/5790/8787/8790 生产端口；清除环境中的模块地址与全部 ANTHROPIC_* 环境凭据，模型调用只能来自注入的原始订阅 profile。"
+        },
+        {
+          "id": "model-probe",
+          "command": "node _site/_test/parallel-workbench-model-probe.js",
+          "isolation": "每个入口自隔离：宿主子进程的 HOME/USERPROFILE/CLAUDE_CONFIG_DIR、KB_DATA_DIR/KB_KNOWLEDGE_DATA_DIR、Bridge home、临时目录、端口全部独立；夹具层拒绝 5757/5760/5789/5790/8787/8790 生产端口；清除环境中的模块地址与全部 ANTHROPIC_* 环境凭据，模型调用只能来自注入的原始订阅 profile。"
+        },
+        {
+          "id": "offline-test",
+          "command": "node _site/_test/parallel-workbench-offline-test.js (collected by run-all-tests.js)",
+          "isolation": "每个入口自隔离：宿主子进程的 HOME/USERPROFILE/CLAUDE_CONFIG_DIR、KB_DATA_DIR/KB_KNOWLEDGE_DATA_DIR、Bridge home、临时目录、端口全部独立；夹具层拒绝 5757/5760/5789/5790/8787/8790 生产端口；清除环境中的模块地址与全部 ANTHROPIC_* 环境凭据，模型调用只能来自注入的原始订阅 profile。"
+        }
+      ],
+      "expected": [
+        {
+          "key": "module-independent-of-knowledge-objects",
+          "text": "模块不依赖知识库业务对象才能工作。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-WB-002-independent-1",
+              "file": "_site/_test/parallel-workbench-independent-host.js",
+              "line": 96,
+              "anchor": "assert.equal(health.body.status, 'ok')",
+              "kind": "assert",
+              "test": "independent-host"
+            },
+            {
+              "id": "QA-SPEC-WB-002-independent-2",
+              "file": "_site/_test/parallel-workbench-independent-host.js",
+              "line": 103,
+              "anchor": "assert.equal(runtime.body.runtime, 'claude-code')",
+              "kind": "assert",
+              "test": "independent-host"
+            },
+            {
+              "id": "QA-SPEC-WB-002-independent-3",
+              "file": "_site/_test/parallel-workbench-independent-host.js",
+              "line": 109,
+              "anchor": "the claude-code agent is not listed",
+              "kind": "assert",
+              "test": "independent-host"
+            },
+            {
+              "id": "QA-SPEC-WB-002-independent-4",
+              "file": "_site/_test/parallel-workbench-independent-host.js",
+              "line": 119,
+              "anchor": "the standalone host must not see real profiles",
+              "kind": "assert",
+              "test": "independent-host"
+            },
+            {
+              "id": "QA-SPEC-WB-002-independent-5",
+              "file": "_site/_test/parallel-workbench-independent-host.js",
+              "line": 148,
+              "anchor": "assert.equal(knowledge.body.status, 'not-retrieved')",
+              "kind": "assert",
+              "test": "independent-host"
+            },
+            {
+              "id": "QA-SPEC-WB-002-independent-6",
+              "file": "_site/_test/parallel-workbench-independent-host.js",
+              "line": 157,
+              "anchor": "the standalone host wrote nothing into its isolated data directory",
+              "kind": "assert",
+              "test": "independent-host"
+            },
+            {
+              "id": "QA-SPEC-WB-002-independent-7",
+              "file": "_site/_test/parallel-workbench-standalone-turn.js",
+              "line": 248,
+              "anchor": "WB-002.s4-real-answer-on-standalone-host",
+              "kind": "assert",
+              "test": "standalone-turn"
+            },
+            {
+              "id": "QA-SPEC-WB-002-independent-8",
+              "file": "_site/_test/parallel-workbench-standalone-turn.js",
+              "line": 268,
+              "anchor": "WB-002.s5-conversation-without-knowledge-dependency",
+              "kind": "assert",
+              "test": "standalone-turn"
+            },
+            {
+              "id": "QA-SPEC-WB-002-independent-9",
+              "file": "_site/_test/parallel-workbench-offline-test.js",
+              "line": 100,
+              "anchor": "the isolated profile store must start empty",
+              "kind": "assert",
+              "test": "offline-test"
+            }
+          ]
+        },
+        {
+          "key": "integration-context-verified-separately",
+          "text": "集成上下文单独验证。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-WB-002-integration-1",
+              "file": "_site/_test/parallel-workbench-independent-host.js",
+              "line": 199,
+              "anchor": "the retrieved prompt did not carry the fixture marker",
+              "kind": "assert",
+              "test": "independent-host"
+            },
+            {
+              "id": "QA-SPEC-WB-002-integration-2",
+              "file": "_site/_test/parallel-workbench-independent-host.js",
+              "line": 200,
+              "anchor": "assert.equal(requestSeen.body.client, 'workbench'",
+              "kind": "assert",
+              "test": "independent-host"
+            },
+            {
+              "id": "QA-SPEC-WB-002-integration-3",
+              "file": "_site/_test/parallel-workbench-independent-host.js",
+              "line": 232,
+              "anchor": "the real workbench profile directory changed during the run",
+              "kind": "assert",
+              "test": "independent-host"
+            },
+            {
+              "id": "QA-SPEC-WB-002-integration-4",
+              "file": "_site/_test/parallel-workbench-standalone-turn.js",
+              "line": 311,
+              "anchor": "WB-002.s7-real-profiles-byte-identical",
+              "kind": "assert",
+              "test": "standalone-turn"
+            },
+            {
+              "id": "QA-SPEC-WB-002-integration-5",
+              "file": "_site/_test/parallel-workbench-offline-test.js",
+              "line": 149,
+              "anchor": "assert.equal(requestSeen.body.client, 'workbench')",
+              "kind": "assert",
+              "test": "offline-test"
+            }
+          ]
+        },
+        {
+          "key": "real-conversation-on-minimal-host",
+          "text": "使用0.13.6真实最小宿主配置模型并对话，再在宿主中重复。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-WB-002-conversation-1",
+              "file": "_site/_test/parallel-workbench-standalone-turn.js",
+              "line": 209,
+              "anchor": "assert.equal(created.authSource, 'profile-injected')",
+              "kind": "assert",
+              "test": "standalone-turn"
+            },
+            {
+              "id": "QA-SPEC-WB-002-conversation-2",
+              "file": "_site/_test/parallel-workbench-standalone-turn.js",
+              "line": 251,
+              "anchor": "tokenEchoedInAnswer",
+              "kind": "assert",
+              "test": "standalone-turn"
+            },
+            {
+              "id": "QA-SPEC-WB-002-conversation-3",
+              "file": "_site/_test/parallel-workbench-standalone-turn.js",
+              "line": 229,
+              "anchor": "assert.equal(send.status, 202)",
+              "kind": "assert",
+              "test": "standalone-turn"
+            },
+            {
+              "id": "QA-SPEC-WB-002-conversation-4",
+              "file": "_site/_test/parallel-workbench-model-probe.js",
+              "line": 279,
+              "anchor": "the integration context was consumed by the SAME real turn",
+              "kind": "label",
+              "test": "model-probe"
+            }
+          ]
+        }
+      ]
+    },
+    "WB-003": {
+      "title": "真实模型抽测",
+      "tests": [
+        {
+          "id": "standalone-turn",
+          "command": "node _site/_test/parallel-workbench-standalone-turn.js",
+          "isolation": "每个入口自隔离：宿主子进程的 HOME/USERPROFILE/CLAUDE_CONFIG_DIR、KB_DATA_DIR/KB_KNOWLEDGE_DATA_DIR、Bridge home、临时目录、端口全部独立；夹具层拒绝 5757/5760/5789/5790/8787/8790 生产端口；清除环境中的模块地址与全部 ANTHROPIC_* 环境凭据，模型调用只能来自注入的原始订阅 profile。"
+        },
+        {
+          "id": "model-probe",
+          "command": "node _site/_test/parallel-workbench-model-probe.js",
+          "isolation": "每个入口自隔离：宿主子进程的 HOME/USERPROFILE/CLAUDE_CONFIG_DIR、KB_DATA_DIR/KB_KNOWLEDGE_DATA_DIR、Bridge home、临时目录、端口全部独立；夹具层拒绝 5757/5760/5789/5790/8787/8790 生产端口；清除环境中的模块地址与全部 ANTHROPIC_* 环境凭据，模型调用只能来自注入的原始订阅 profile。"
+        }
+      ],
+      "expected": [
+        {
+          "key": "vendor-model-is-the-subscription-model",
+          "text": "模型返回的确是MiniMax-M3.1-Flash。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-WB-003-vendor-model-1",
+              "file": "_site/_test/parallel-workbench-model-probe.js",
+              "line": 123,
+              "anchor": "the MiniMax subscription quota is exhausted",
+              "kind": "blocked-recording",
+              "test": "model-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-003-vendor-model-2",
+              "file": "_site/_test/parallel-workbench-model-probe.js",
+              "line": 256,
+              "anchor": "WB-003.d1-sdk-model-reported",
+              "kind": "assert",
+              "test": "model-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-003-vendor-model-3",
+              "file": "_site/_test/parallel-workbench-model-probe.js",
+              "line": 240,
+              "anchor": "sdkReportedModelMatchesRequest",
+              "kind": "gate",
+              "test": "model-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-003-vendor-model-4",
+              "file": "_site/_test/parallel-workbench-standalone-turn.js",
+              "line": 283,
+              "anchor": "WB-002.s6-vendor-model-from-transcript",
+              "kind": "assert",
+              "test": "standalone-turn"
+            },
+            {
+              "id": "QA-SPEC-WB-003-vendor-model-5",
+              "file": "_site/_test/parallel-workbench-standalone-turn.js",
+              "line": 286,
+              "anchor": "vendorModelMatchesRequest",
+              "kind": "gate",
+              "test": "standalone-turn"
+            },
+            {
+              "id": "QA-SPEC-WB-003-vendor-model-6",
+              "file": "_site/_test/parallel-workbench-standalone-turn.js",
+              "line": 140,
+              "anchor": "tokenEchoedInTranscript",
+              "kind": "assert",
+              "test": "standalone-turn"
+            }
+          ]
+        },
+        {
+          "key": "no-stand-in",
+          "text": "无替身。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-WB-003-no-standin-1",
+              "file": "_site/_test/parallel-workbench-model-probe.js",
+              "line": 273,
+              "anchor": "standInEmbedderUsed: false",
+              "kind": "assert",
+              "test": "model-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-003-no-standin-2",
+              "file": "_site/_test/parallel-workbench-model-probe.js",
+              "line": 274,
+              "anchor": "mockProviderUsed: false",
+              "kind": "assert",
+              "test": "model-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-003-no-standin-3",
+              "file": "_site/_test/parallel-workbench-model-probe.js",
+              "line": 272,
+              "anchor": "profileSource: 'original-subscription-store-read-only-in-memory'",
+              "kind": "assert",
+              "test": "model-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-003-no-standin-4",
+              "file": "_site/_test/helpers/parallel-workbench-fixture.js",
+              "line": 274,
+              "anchor": "the profile store of this fixture is read-only",
+              "kind": "assert",
+              "test": "model-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-003-no-standin-5",
+              "file": "_site/_test/parallel-workbench-standalone-turn.js",
+              "line": 330,
+              "anchor": "credentialWrittenAnywhere: false",
+              "kind": "label",
+              "test": "standalone-turn"
+            }
+          ]
+        },
+        {
+          "key": "response-correlated-to-this-round",
+          "text": "响应与本轮关联。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-WB-003-correlation-1",
+              "file": "_site/_test/parallel-workbench-model-probe.js",
+              "line": 265,
+              "anchor": "tokenEchoedInAnswer",
+              "kind": "assert",
+              "test": "model-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-003-correlation-2",
+              "file": "_site/_test/parallel-workbench-model-probe.js",
+              "line": 243,
+              "anchor": "vendorClaudeSessionId",
+              "kind": "evidence",
+              "test": "model-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-003-correlation-3",
+              "file": "_site/_test/parallel-workbench-model-probe.js",
+              "line": 287,
+              "anchor": "fixtureSawUniqueTokenInQuery",
+              "kind": "assert",
+              "test": "model-probe"
+            },
+            {
+              "id": "QA-SPEC-WB-003-correlation-4",
+              "file": "_site/_test/parallel-workbench-standalone-turn.js",
+              "line": 109,
+              "anchor": "sessionCorrelated",
+              "kind": "assert",
+              "test": "standalone-turn"
+            }
+          ]
         }
       ]
     }
