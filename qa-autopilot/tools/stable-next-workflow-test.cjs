@@ -12,7 +12,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const WORKFLOW = path.join(__dirname, '..', '..', '.github', 'workflows', 'publish.yml');
-const raw = fs.readFileSync(WORKFLOW, 'utf8');
+const raw = fs.readFileSync(WORKFLOW, 'utf8').replace(/\r\n?/g, '\n');
 const code = raw.split('\n').filter(line => !line.trim().startsWith('#')).join('\n');
 
 function jobBlock(name) {
