@@ -101,7 +101,7 @@ jobs:
           TMP: ${{ runner.temp }}
           TEMP: ${{ runner.temp }}
       - name: Test exact candidate publishing guards
-        run: node --test qa-autopilot/tools/stable-next-prepare-test.cjs qa-autopilot/tools/stable-next-publish-test.cjs qa-autopilot/tools/stable-next-workflow-test.cjs
+        run: node --test qa-autopilot/tools/stable-next-prepare-test.cjs qa-autopilot/tools/stable-next-publish-test.cjs qa-autopilot/tools/stable-next-workflow-test.cjs qa-autopilot/tools/stable-promote-test.cjs
 
   qa-controller-windows:
     name: QA controller / Windows
@@ -120,4 +120,4 @@ jobs:
           TEMP: ${{ runner.temp }}
           TMP: ${{ runner.temp }}
       - name: Test exact candidate publishing guards
-        run: node --test qa-autopilot/tools/stable-next-prepare-test.cjs qa-autopilot/tools/stable-next-publish-test.cjs qa-autopilot/tools/stable-next-workflow-test.cjs
+        run: node --test qa-autopilot/tools/stable-next-prepare-test.cjs qa-autopilot/tools/stable-next-publish-test.cjs qa-autopilot/tools/stable-next-workflow-test.cjs qa-autopilot/tools/stable-promote-test.cjs

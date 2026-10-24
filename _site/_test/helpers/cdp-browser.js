@@ -251,7 +251,10 @@ async function launchBrowserAttempt(options) {
       "--user-data-dir=" + profileDir,
       "--window-size=" + Number(options.width || 1360) + "," + Number(options.height || 900),
       "about:blank",
-    ], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    ], {
+      stdio: ["ignore", "pipe", "pipe"], windowsHide: true,
+      ...(options.env ? { env: options.env } : {}),
+    });
     diagnostics.pid = child.pid;
 
     child.stdout.on("data", chunk => stdoutTail.push(chunk));

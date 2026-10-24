@@ -157,18 +157,90 @@ const endpointPid = (dir) => {
     }
   }
 
-  // Case E (R12) — startup patience deadline honored BELOW the 45s first
-  // checkpoint: with a 400ms patience cap the CLI must report an honest
-  // still-starting (typed, exit 0, no 启动失败), never spawn a second
-  // backend, and the first backend must actually finish booting afterwards.
+  // Case E (R12/R18) — startup patience deadline honored BELOW the 45s first
+  // checkpoint. R18: the deadline now fires while the real backend is HELD
+  // starting — a test-owned preload gate (runRoot/e-gate.cjs, --fg-guarded,
+  // delivered via a scoped NODE_OPTIONS --require so it reaches the --fg
+  // respawn, which argv cannot do: node strips exec args from process.argv)
+  // blocks the backend BEFORE its core entry until this test releases it
+  // AFTER the first CLI returns. Deterministic causal ordering, not the old
+  // >400ms boot-time assumption (fast CI booted before the cap, Windows job
+  // 120880881525). The 400ms deadline, the honest still-starting exit-0/
+  // no-failure assertions, and the same-PID reuse + stop proofs are
+  // unchanged; the finally ALWAYS releases the gate and stops the own tree.
   {
     const dataDir = path.join(runRoot, 'e-data');
     fs.mkdirSync(dataDir, { recursive: true });
     const ownPort = await harness.freePort();
+    const gate = {
+      file: path.join(runRoot, 'e-gate.cjs'),
+      entered: path.join(runRoot, 'e-gate-entered.json'),
+      release: path.join(runRoot, 'e-gate-release'),
+      error: path.join(runRoot, 'e-gate-error.json'),
+      deadlineMs: 30000,
+    };
+    for (const p of [gate.entered, gate.release, gate.error]) fs.rmSync(p, { force: true });
+    fs.writeFileSync(gate.file, [
+      "'use strict';",
+      "// R18 Case E test-owned startup gate (runRoot copy, never in the repo).",
+      "// Delivered via a scoped NODE_OPTIONS --require: it preloads in every",
+      "// child of the gated run but activates ONLY for the real --fg backend",
+      "// respawn (the parent CLI and any grandchild lack --fg and no-op).",
+      "// Holds the backend BEFORE its core entry until the owning test writes",
+      "// the release file; a 30s deadline fails loud if never released.",
+      "if (!process.argv.includes('--fg') || process.env.KB_R18_GATE !== '1') return;",
+      "const g = require('node:fs');",
+      "try { g.writeFileSync(process.env.KB_R18_GATE_ENTERED, JSON.stringify({ pid: process.pid, at: new Date().toISOString() })); } catch {}",
+      "const sab = new Int32Array(new SharedArrayBuffer(4));",
+      "const deadlineMs = Number(process.env.KB_R18_GATE_DEADLINE_MS || 30000);",
+      "const deadline = Date.now() + deadlineMs;",
+      "while (!g.existsSync(process.env.KB_R18_GATE_RELEASE)) {",
+      "  if (Date.now() >= deadline) {",
+      "    try { g.writeFileSync(process.env.KB_R18_GATE_ERROR, JSON.stringify({ pid: process.pid, waitedMs: deadlineMs, reason: 'parent never released the startup gate' })); } catch {}",
+      "    console.error('[r18-gate] startup gate deadline exceeded; parent never released');",
+      "    process.exit(70);",
+      "  }",
+      "  Atomics.wait(sab, 0, 0, 100);",
+      "}",
+    ].join('\n') + '\n', 'utf8');
+    // Test-only scoped spawn. argv --require cannot reach the backend: node
+    // strips exec args from process.argv (verified: `node --require x -e …`
+    // yields argv [node] only), and bin respawns with argv.slice(1) + '--fg'.
+    // NODE_OPTIONS is therefore the only propagation channel. The frozen env
+    // contract rightly forbids NODE_OPTIONS-shaped entries, so this Case-E
+    // wrapper adds it AFTER the contract-checked build as the single reviewed
+    // exception: it preloads only this run's own gate file, which no-ops in
+    // every process whose argv lacks '--fg'. All isolation substance (KB
+    // dirs, homes, TEMP, PATH floor) comes from the contract build unchanged.
+    const runGatedCli = (args, extraEnv, timeoutMs = 60000) => new Promise((resolve, reject) => {
+      const started = Date.now();
+      const env = harness.nodeEnv({ ...extraEnv, ELECTRON_RUN_AS_NODE: '1' });
+      env.NODE_OPTIONS = `--require ${JSON.stringify(gate.file)}`;
+      const child = spawn(process.execPath,
+        ['--require', harness.observerPath, BIN, ...args], { env, windowsHide: true });
+      let out = '', err = '';
+      child.stdout.on('data', d => { out += d; });
+      child.stderr.on('data', d => { err += d; });
+      const timer = setTimeout(() => { try { child.kill(); } catch {} reject(new Error('gated cli timeout')); }, timeoutMs);
+      child.once('exit', code => { clearTimeout(timer); resolve({ code, out, err, elapsedMs: Date.now() - started }); });
+    });
+    const gateEnv = {
+      KB_R18_GATE: '1',
+      KB_R18_GATE_ENTERED: gate.entered,
+      KB_R18_GATE_RELEASE: gate.release,
+      KB_R18_GATE_ERROR: gate.error,
+      KB_R18_GATE_DEADLINE_MS: String(gate.deadlineMs),
+    };
     try {
-      const first = await runCli(['start', '--data', dataDir, '--no-open'],
-        { KB_MODULES_AUTOSTART: '0', KB_SITE_PORT: String(ownPort), KB_LAUNCHER_STARTUP_PATIENCE_MS: '400' }, 60000);
+      const first = await runGatedCli(['start', '--data', dataDir, '--no-open'],
+        { KB_MODULES_AUTOSTART: '0', KB_SITE_PORT: String(ownPort), KB_LAUNCHER_STARTUP_PATIENCE_MS: '400', ...gateEnv });
       const stillStarting = first.code === 0 && /未判定失败/.test(first.out) && !/启动失败/.test(first.out + first.err);
+      // Causal proof: the backend ENTERED the gate (held before core entry)
+      // while the first CLI had already returned its still-starting report —
+      // and only then does this test release it to boot for real.
+      const gateInfo = await waitMarker(gate.entered, 10000);
+      const heldWhileReported = !fs.existsSync(gate.release) && !fs.existsSync(gate.error);
+      fs.writeFileSync(gate.release, String(Date.now()));
       const endpointFile = path.join(dataDir, 'runtime-endpoint.json');
       const bootedPid = await (async () => {
         const deadline = Date.now() + 30000;
@@ -189,17 +261,38 @@ const endpointPid = (dir) => {
       results.caseE = {
         exit: first.code, output: (first.out + first.err).trim(),
         stillStartingHonest: stillStarting,
-        backendActuallyBooted: bootedPid !== null, bootedPid,
+        deadlineFiredWhileHeld: heldWhileReported,
+        gateHeldPid: gateInfo.pid, bootedPid,
+        heldPidIsBootedPid: bootedPid === gateInfo.pid,
+        backendActuallyBooted: bootedPid !== null,
         noFalseFailure: !/启动失败/.test(first.out + first.err),
         reuseSamePid: !!(reuse && reuse.code === 0 && /Already running \(PID (\d+)\)/.exec(reuse.out)?.[1] === String(bootedPid)),
         stopExit: stop ? stop.code : null,
+        gateErrorFile: fs.existsSync(gate.error),
       };
       assert.equal(results.caseE.stillStartingHonest, true, 'patience cap below the first checkpoint must be an honest still-starting report (typed, exit 0): ' + results.caseE.output);
+      assert.equal(results.caseE.deadlineFiredWhileHeld, true, 'the deadline must fire while the real backend is HELD starting (gate entered, not yet released, no gate error)');
+      assert.equal(results.caseE.heldPidIsBootedPid, true, 'the backend that boots after release must be the very PID the gate held');
       assert.equal(results.caseE.backendActuallyBooted, true, 'the first backend must still finish booting after the honest report');
       assert.equal(results.caseE.reuseSamePid, true, 'a second start must reuse the SAME backend PID (never a second spawn)');
       assert.equal(results.caseE.stopExit, 0, 'stop must succeed after the honest-report boot');
+      assert.equal(results.caseE.gateErrorFile, false, 'the gate must never hit its 30s deadline in the green path');
     } finally {
-      await runCli(['stop', '--data', dataDir], { KB_MODULES_AUTOSTART: '0' }, 30000).catch(() => {});
+      // ALWAYS release a held backend, then stop — and if the own backend is
+      // still alive (boot race or control stall), retry stop and finally
+      // hard-kill exactly that own tree. Nothing may leak on any failure.
+      try { fs.writeFileSync(gate.release, String(Date.now())); } catch {}
+      const gateInfo = (() => { try { return JSON.parse(fs.readFileSync(gate.entered, 'utf8')); } catch { return null; } })();
+      const backendPid = (gateInfo && gateInfo.pid) || endpointPid(dataDir);
+      try { await runCli(['stop', '--data', dataDir], { KB_MODULES_AUTOSTART: '0' }, 30000); } catch {}
+      if (backendPid && harness.pidAlive(backendPid)) {
+        const deadline = Date.now() + 15000;
+        while (Date.now() < deadline && harness.pidAlive(backendPid)) {
+          await sleep(300);
+          try { await runCli(['stop', '--data', dataDir], { KB_MODULES_AUTOSTART: '0' }, 30000); } catch {}
+        }
+        if (harness.pidAlive(backendPid)) harness.taskkillTree(backendPid);
+      }
     }
   }
 

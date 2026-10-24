@@ -1,7 +1,7 @@
 # .github/workflows/publish.yml: automatic tag publishing remains RC-only.
 # RC_ONLY_DURING_QA: stable candidates use the manual next-only route below.
 #
-# Three manual modes exist under one workflow file, and they are selected by
+# Four manual modes exist under one workflow file, and they are selected by
 # the "mode" dispatch input (default: auth-probe):
 #
 #   auth-probe       - ASSESSMENT ONLY. Asks npm whether the EXISTING GitHub
@@ -17,11 +17,17 @@
 #                      successful stable-prepare run produced, to the "next"
 #                      tag only. It never rebuilds, never moves "latest" and
 #                      never prepares anything.
+#   stable-promote  - moves "latest" to the version that is ALREADY published
+#                      under "next" and that a human accepted from an official
+#                      download/install/UI/restart. It never publishes a
+#                      version, never moves "next" and never touches another
+#                      package.
 #
-# The two stable modes are separate manual runs on purpose: the candidate must
+# The three stable modes are separate manual runs on purpose: the candidate must
 # be downloaded and independently reviewed BEFORE it can be published, so the
 # publish route takes the prepare run id plus the reviewed sha256/SRI from the
-# caller and never derives them from the artifact it is about to publish.
+# caller and never derives them from the artifact it is about to publish. The
+# promotion route runs only after the acceptance of the published candidate.
 name: Publish reviewed QA candidate
 on:
   push:
@@ -38,6 +44,7 @@ on:
           - 'auth-probe'
           - 'stable-prepare'
           - 'stable-publish-next'
+          - 'stable-promote'
       package:
         description: 'npm package whose existing trusted-publisher identity is probed'
         required: true
@@ -69,11 +76,19 @@ on:
         required: false
         type: string
       expected_tarball_sri:
-        description: 'stable-publish-next only: reviewed tarball integrity (sha512-...)'
+        description: 'stable-publish-next and stable-promote only: reviewed tarball integrity (sha512-...)'
+        required: false
+        type: string
+      expected_current_latest:
+        description: 'stable-promote only: the latest version observed at review time (x.y.z)'
+        required: false
+        type: string
+      acceptance_ack:
+        description: 'stable-promote only: the official acceptance attestation phrase'
         required: false
         type: string
       reviewer:
-        description: 'stable-publish-next only: identity of the reviewer of the prepared artifact'
+        description: 'stable-publish-next and stable-promote only: identity of the reviewer'
         required: false
         type: string
 permissions:
@@ -270,5 +285,75 @@ jobs:
         with:
           name: stable-next-publication
           path: ${{ runner.temp }}/stable-next
+          if-no-files-found: warn
+          retention-days: 30
+  stable-promote:
+    # Phase 3 of 3, and the FINAL phase of the stable procedure: the candidate
+    # is published under "next", a human accepted it from an OFFICIAL
+    # download/install/UI/restart, and only now may "latest" move.
+    # This job never publishes a version, never moves "next", never removes a
+    # dist-tag and never touches a package other than the core one. The
+    # dispatch package choice is checked by the core-only guard.
+    # The write is the npm CLI itself, so the npm side "Allow npm dist-tag"
+    # grant is exercised exactly as npm would exercise it. A successful
+    # publish proves nothing about that grant: it stays unproven until this
+    # route performs a real authorized write.
+    # The acceptance phrase is the reviewer's own attestation. It is not
+    # machine proof, and the tool records it as such.
+    if: github.repository == 'SanQianX/project-knowledge-base' && github.event_name == 'workflow_dispatch' && inputs.mode == 'stable-promote'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: npm-stable-promote
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.x'
+      - name: Verify the reviewed source identity and version
+        env:
+          EXPECTED_SOURCE_SHA: ${{ inputs.source_sha }}
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+          node -e 'if (require("./package.json").version !== process.env.EXPECTED_VERSION) throw new Error("Reviewed source version differs from promotion target")'
+      - name: Select the npm version that can use OIDC for a dist-tag write
+        run: npm install -g npm@11.21.1 && npm --version
+      - name: Verify every promotion precondition without writing
+        env:
+          TARGET_PACKAGE: ${{ inputs.package }}
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+          EXPECTED_SRI: ${{ inputs.expected_tarball_sri }}
+          EXPECTED_SOURCE_SHA: ${{ inputs.source_sha }}
+          EXPECTED_CURRENT_LATEST: ${{ inputs.expected_current_latest }}
+          ACCEPTANCE_ACK: ${{ inputs.acceptance_ack }}
+          REVIEWER: ${{ inputs.reviewer }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node qa-autopilot/tools/stable-promote.cjs check
+      - name: Promote the accepted version to latest
+        env:
+          TARGET_PACKAGE: ${{ inputs.package }}
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+          EXPECTED_SRI: ${{ inputs.expected_tarball_sri }}
+          EXPECTED_SOURCE_SHA: ${{ inputs.source_sha }}
+          EXPECTED_CURRENT_LATEST: ${{ inputs.expected_current_latest }}
+          ACCEPTANCE_ACK: ${{ inputs.acceptance_ack }}
+          REVIEWER: ${{ inputs.reviewer }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUNNER_TEMP: ${{ runner.temp }}
+        run: node qa-autopilot/tools/stable-promote.cjs promote
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stable-promotion
+          path: ${{ runner.temp }}/stable-promotion
           if-no-files-found: warn
           retention-days: 30
