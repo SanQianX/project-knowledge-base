@@ -320,15 +320,24 @@ function enterNavIsolation({ tag = 'run' } = {}) {
  * placement must not fail the scan. Canonical containment decides; a raw
  * substring match outside the owned root still flags (values that merely
  * mention the real home are suspect even when not resolvable paths).
+ *
+ * R7 correction: the canonical-containment arms (both the owned-root pardon
+ * and the real-home accusation) apply ONLY to path-shaped values. Resolving a
+ * non-path value such as a numeric flag ('0'/'1') anchors it at the process
+ * CWD, and on Linux runners the CWD lives under the real home — that turned
+ * KB_MODULES_AUTOSTART='0' into a phantom path leak. Non-path values keep the
+ * substring mention test only.
  */
+const PATH_SHAPED_RE = /^(?:[A-Za-z]:[\\/]|\\\\|\/|~[\\/\\]|\.{1,2}[\\/\\])/;
 function realHomeReferenceKeys(env, { root = null, realHome = REAL_HOME, realUserProfile = REAL_USERPROFILE } = {}) {
   return Object.entries(env)
     .filter(([key]) => !isOsWhitelisted(key))
     .filter(([, value]) => {
       const text = String(value);
-      if (root && isInside(path.resolve(text), root)) return false;
+      const pathShaped = PATH_SHAPED_RE.test(text);
+      if (pathShaped && root && isInside(path.resolve(text), root)) return false;
       return text.includes(realHome) || text.includes(realUserProfile)
-        || isInside(path.resolve(text), realHome) || isInside(path.resolve(text), realUserProfile);
+        || (pathShaped && (isInside(path.resolve(text), realHome) || isInside(path.resolve(text), realUserProfile)));
     })
     .map(([key]) => key);
 }

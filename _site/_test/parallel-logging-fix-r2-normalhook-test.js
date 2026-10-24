@@ -19,6 +19,16 @@
 // use. Without it the isolated instance has a cold model cache and the real
 // embedding path tries to fetch the ONNX model from the network, which stalls
 // the background operation past the run-all budget.
+//
+// P-LINUX-CI-CLOSEOUT-R7 corrections: (1) a health-timeout failure now prints
+// the server's own exit cause, its captured stdout/stderr tails, and whether
+// the port ever answered — /api/health is a synchronous responder behind the
+// HTTP listener, so a 30s timeout means initializeRuntime never reached
+// listen, and the stderr tail is the only way the CI log can name the hanging
+// await; (2) the failure path force-kills a wedged server child — a surviving
+// child process handle keeps this process alive (the linux22 CI shape: FAIL
+// printed at 30s, hang until the 80s hard timer); (3) the hard timer dumps
+// the captured server IO before exit(2). The 30s health budget is unchanged.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -45,6 +55,13 @@ const PROJECT_A = 'project-logfixr2-normal';
 // stall still lets this entry write its own evidence before the runner kills
 // the child.
 const HARD_TIMEOUT_MS = 80000;
+
+// Module scope so the hard-timeout timer can kill the spawned server and dump
+// its IO before exit(2) (see the R7 note in the header).
+let server = null;
+let exitInfo = null;
+let serverStdout = '';
+let serverStderr = '';
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const now = () => new Date().toISOString();
@@ -120,17 +137,14 @@ async function main() {
 
   const port = await freePort();
   const base = `http://127.0.0.1:${port}`;
-  const server = spawnServer({
+  server = spawnServer({
     root: ROOT,
     port,
     dataDir: fixture.dataDir,
     tag: 'logfixr2normal',
     extraEnv: { KB_AUTOMATION_FAKE_CLAUDE: '1', KB_EMBEDDING_FAKE: '1' },
   });
-  let exitInfo = null;
   server.child.once('exit', (code, signal) => { exitInfo = { code, signal, at: now() }; });
-  let serverStdout = '';
-  let serverStderr = '';
   server.child.stdout.on('data', chunk => { serverStdout += chunk; });
   server.child.stderr.on('data', chunk => { serverStderr += chunk; });
 
@@ -242,14 +256,36 @@ async function main() {
     process.exitCode = 0;
   } catch (error) {
     evidence.verdict = { failed: String((error && error.stack) || error) };
+    // Failure-path visibility: the CI console is the only artifact the runner
+    // keeps. A health timeout must name the server's own exit cause, its
+    // captured stdout/stderr tails, and whether the port ever answered.
+    let probeAfterFailure = null;
+    try {
+      const response = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(1500) });
+      probeAfterFailure = { answered: true, ok: response.ok, status: response.status };
+    } catch (probeError) {
+      probeAfterFailure = { answered: false, code: (probeError && probeError.cause && (probeError.cause.code || probeError.cause.message)) || String(probeError && probeError.message || probeError) };
+    }
+    evidence.debugFailureProbe = probeAfterFailure;
     console.error(`R2 normalhook FAIL: ${error.message}`);
+    console.error(`R2 normalhook server state: ${JSON.stringify({ port, pid: server.child.pid, exitInfo, probeAfterFailure })}`);
+    console.error(`R2 normalhook server stderr tail:\n${serverStderr.slice(-1600)}`);
+    console.error(`R2 normalhook server stdout tail:\n${serverStdout.slice(-1600)}`);
     process.exitCode = 1;
   } finally {
     evidence.debugServerIo = { exitInfo, stdoutTail: serverStdout.slice(-4000), stderrTail: serverStderr.slice(-4000) };
     evidence.finishedAt = now();
     fs.mkdirSync(ARTIFACTS, { recursive: true });
     fs.writeFileSync(path.join(ARTIFACTS, 'normalhook-evidence.json'), JSON.stringify(evidence, null, 2) + '\n');
-    try { await server.cleanup(); } finally { fixture.cleanup(); }
+    try {
+      await server.cleanup();
+      // cleanup() stops the control channel and kills, but a child wedged
+      // mid-startup can survive the signal — and its process handle keeps
+      // THIS process alive (the linux22 CI shape: FAIL at 30s, hang to the
+      // 80s hard timer). The exit decision belongs to this test, not to the
+      // child.
+      if (exitInfo === null) { try { server.child.kill('SIGKILL'); } catch {} }
+    } finally { fixture.cleanup(); }
     lane.cleanup();
   }
 }
@@ -257,8 +293,9 @@ async function main() {
 const hardTimer = setTimeout(() => {
   try {
     fs.mkdirSync(ARTIFACTS, { recursive: true });
-    fs.writeFileSync(path.join(ARTIFACTS, 'hard-timeout.json'), JSON.stringify({ at: now() }, null, 2) + '\n');
+    fs.writeFileSync(path.join(ARTIFACTS, 'hard-timeout.json'), JSON.stringify({ at: now(), exitInfo, stdoutTail: serverStdout.slice(-1600), stderrTail: serverStderr.slice(-1600) }, null, 2) + '\n');
   } catch {}
+  try { if (server && exitInfo === null) server.child.kill('SIGKILL'); } catch {}
   console.error('normalhook HARD TIMEOUT');
   process.exit(2);
 }, HARD_TIMEOUT_MS);

@@ -31,7 +31,8 @@
 //      browser executable is still resolvable after HOME/LOCALAPPDATA moved.
 //   8. (P-LOGGING-PS-BROWSER-R3) The remaining isolation details are proven
 //      as well: PSModuleAnalysisCachePath is a FILE path whose parent
-//      directory exists and that a normal own PowerShell child can use; the
+//      directory exists (structural contract asserted on EVERY platform;
+//      the own-PowerShell-child proof runs on Windows only); the
 //      browser default profile Chrome derives from USERPROFILE is scaffolded
 //      inside the owned home (never the developer's real profile); and the
 //      lane tree is really removed when the entry releases it.
@@ -213,7 +214,20 @@ function main() {
   //    process. The poison below is fabricated - no real key is read.
   const realHome = process.env.USERPROFILE || process.env.HOME;
   const ambientLocalAppData = process.env.LOCALAPPDATA;
-  const ambientTmp = os.tmpdir();
+  // The poison/temp base must be OUTSIDE the repository: on the Windows CI
+  // job os.tmpdir() is the in-workspace .tmp directory, and a tool root built
+  // from it is exactly the in-repo temp shape the helper must refuse. The
+  // runner-provided PK_TEST_TEMP_ROOT (runner.temp) is the documented
+  // outside-repo root; a normal dev machine's tmpdir is outside as well.
+  const ambientTmp = (() => {
+    const candidates = [process.env.PK_TEST_TEMP_ROOT, os.tmpdir()];
+    for (const candidate of candidates) {
+      if (candidate && path.isAbsolute(path.resolve(candidate)) && !isInsideRepo(path.resolve(candidate))) {
+        return path.resolve(candidate);
+      }
+    }
+    return path.resolve(ROOT, '..');
+  })();
   const poisonPaths = {};
   for (const key of POISON_PATH_KEYS) {
     poisonPaths[key] = path.join(ambientTmp, `poison-${key.toLowerCase()}`);
@@ -361,15 +375,17 @@ function main() {
   if (process.env.LOCALAPPDATA === ambientLocalAppData) chromeProblems.push('LOCALAPPDATA still points at the ambient directory');
 
   // The PowerShell module analysis cache must be a FILE path whose parent
-  // directory exists; a directory target is wrong. A normal own PowerShell
-  // child must be able to use it.
+  // directory exists; a directory target is wrong. The helper installs the
+  // same isolated cache FILE inside the owned parent on EVERY platform, so the
+  // structural contract (absolute owned parent, file-shaped target, never the
+  // poisoned ambient value) is asserted platform-independently; only the
+  // powershell.exe child probe is Windows-specific.
   const psProblems = [];
   const psCache = installed.PSModuleAnalysisCachePath;
   const psCacheParent = path.dirname(psCache);
   let psProbe = null;
-  if (process.platform !== 'win32') {
-    psProblems.push('PSModuleAnalysisCachePath is only meaningful on Windows');
-  } else {
+  if (!psCache || !path.isAbsolute(psCache)) psProblems.push(`the PowerShell cache path is not absolute: ${psCache}`);
+  else {
     if (!fs.existsSync(psCacheParent) || !fs.statSync(psCacheParent).isDirectory()) {
       psProblems.push(`the PowerShell cache parent directory is missing: ${psCacheParent}`);
     }
@@ -377,6 +393,9 @@ function main() {
       psProblems.push('the PowerShell cache path is a directory, not a file path');
     }
     if (!psCache.startsWith(lane.laneTmp)) psProblems.push('the PowerShell cache path is outside the lane tree');
+    if (psCache === poisonPaths.PSModuleAnalysisCachePath) psProblems.push('the PowerShell cache path kept the poisoned ambient value');
+  }
+  if (process.platform === 'win32') {
     // The child prints one status word only - no environment values.
     psProbe = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
       "$ErrorActionPreference='Stop'; Get-Module -ListAvailable | Out-Null; Write-Output 'PS-CACHE-OK'"], {

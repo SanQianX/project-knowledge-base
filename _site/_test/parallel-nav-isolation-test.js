@@ -258,11 +258,38 @@ const EVIDENCE = process.env.PK_R7_EVIDENCE_DIR ? path.resolve(process.env.PK_R7
       ['CODEX_HOME', 'KB_DATA_DIR', 'RELEASE_NOTE'],
       'leaks outside the owned root stay flagged even when the owned root sits under the real home',
     );
+
+    // R7: numeric and other NON-PATH values must never be classified as path
+    // leaks. On the Linux runners the test CWD is /home/runner/work/... —
+    // under the real home — so the unguarded path.resolve('0') of the R9
+    // classifier canonically landed inside /home/runner and flagged
+    // KB_MODULES_AUTOSTART at nav-isolation-test line 99. Path-shape gating
+    // removes the phantom; every real leak above stays flagged.
+    const flagsEnv = {
+      ...ownedEnv,
+      KB_MODULES_AUTOSTART: '0',
+      KB_MODULES_REGISTER: '0',
+      KB_EMBEDDING_FAKE: '1',
+      FORCE_COLOR: '0',
+      CI: 'true',
+      KB_TERMINAL_URL: 'http://127.0.0.1:9',
+      KB_TERMINAL_COMMAND: '',
+    };
+    assert.deepEqual(realHomeReferenceKeys(flagsEnv, { root: ownedRoot, realHome: runnerHome, realUserProfile: runnerHome }), [],
+      'non-path values (numeric flags, booleans, dead URLs, empty strings) are never path leaks even when the CWD sits under the real home');
+    const flagsWithRealLeak = { ...flagsEnv, KB_DATA_DIR: '/home/runner/.project-knowledge' };
+    assert.deepEqual(
+      realHomeReferenceKeys(flagsWithRealLeak, { root: ownedRoot, realHome: runnerHome, realUserProfile: runnerHome }),
+      ['KB_DATA_DIR'],
+      'the path-shape gate pardons flags without blinding the scan to a real home leak in the same environment',
+    );
     proof.placementAwareRealHomeScan = {
       ownedRootUnderRealHome: ownedRoot,
       ownedValuesFlagged: 0,
       trueLeaksFlagged: ['CODEX_HOME', 'KB_DATA_DIR', 'RELEASE_NOTE'],
+      nonPathFlagKeysUnflagged: Object.keys(flagsEnv).filter(key => !Object.keys(ownedEnv).includes(key)),
       ciFalsePositiveShape: 'PSModuleAnalysisCachePath under the owned RUNNER_TEMP no longer fails isolation-test line 82',
+      r7CiFalsePositiveShape: "numeric flag '0' no longer resolves against the CWD into a phantom home leak (KB_MODULES_AUTOSTART at line 99)",
     };
   }
 

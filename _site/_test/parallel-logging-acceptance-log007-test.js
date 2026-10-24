@@ -30,9 +30,10 @@ const { launchCdpBrowser, waitFor } = require('./helpers/cdp-browser');
 const freePort = require('./helpers/free-port');
 const { createLoggingAcceptanceFixture, writeProjectLogs } = require('./helpers/parallel-logging-acceptance-fixture');
 const { createObservationProxy } = require('./helpers/parallel-logging-acceptance-proxy');
-// The API filters from/to are compared against the record's LOCAL day; the
-// probe windows must use the same clock, not the UTC day (a UTC+8 machine
-// runs 00:00-08:00 on the previous UTC date).
+// The API filters from/to are compared against the record's LOCAL day
+// (LogRepository.matches recomputes localDay(record.ts)). The day probes are
+// anchored to the record ts the server itself echoes — never to a second
+// clock — so day boundaries and machine zones cannot desynchronize them.
 const { localDay } = require('../lib/structured-logger');
 
 const ROOT = path.resolve(__dirname, '../..');
@@ -81,29 +82,52 @@ async function main() {
     const query = async params => {
       const res = await fetch(`${base}/api/logs?${params}`);
       const body = await res.json();
-      return { status: res.status, count: (body.entries || []).length, events: (body.entries || []).map(entry => entry.event).sort(), levels: [...new Set((body.entries || []).map(entry => entry.level))] };
+      return { status: res.status, count: (body.entries || []).length, events: (body.entries || []).map(entry => entry.event).sort(), levels: [...new Set((body.entries || []).map(entry => entry.level))], entries: body.entries || [] };
     };
     const apiAll = await query(`pageSize=100&projectId=${PROJECT_A}`);
     const apiWarn = await query(`pageSize=100&projectId=${PROJECT_A}&levels=warn`);
     const apiError = await query(`pageSize=100&projectId=${PROJECT_A}&levels=error`);
     const apiComponent = await query(`pageSize=100&projectId=${PROJECT_A}&component=log007-comp-b`);
     // from/to are local-day strings by design (LogRepository.matches compares
-    // localDay(record.ts)); probe them at their real granularity.
-    const today = localDay();
-    const tomorrow = localDay(new Date(Date.now() + 86400000));
-    const yesterday = localDay(new Date(Date.now() - 86400000));
-    const apiFromToday = await query(`pageSize=100&projectId=${PROJECT_A}&from=${today}&to=${today}`);
-    const apiFromTomorrow = await query(`pageSize=100&projectId=${PROJECT_A}&from=${tomorrow}&to=${tomorrow}`);
-    const apiToYesterday = await query(`pageSize=100&projectId=${PROJECT_A}&from=${yesterday}&to=${yesterday}`);
+    // localDay(record.ts)). The day windows are anchored to the records the
+    // server itself echoed (never a second clock, never now±24h) and moved by
+    // pure day-string arithmetic. The live server ALSO writes project-scoped
+    // startup records (bridge_consumer.identity_backfilled lands in the same
+    // day file ~0.2-1s after health), so a bare count===4 is a race against
+    // the server's own async writes — the R7 CI failure on both Linux jobs.
+    // The actual contract: every entry of a from=X&to=X window carries
+    // localDay(ts)===X, and the four fixture records appear in exactly their
+    // own day's window.
+    const fixtureEvents = [...early, ...late].map(record => record.event);
+    const fixtureDay = localDay(apiError.entries[0].ts);
+    const shiftDay = (day, delta) => new Date(Date.UTC(Number(day.slice(0, 4)), Number(day.slice(5, 7)) - 1, Number(day.slice(8, 10)) + delta)).toISOString().slice(0, 10);
+    const nextDay = shiftDay(fixtureDay, 1);
+    const prevDay = shiftDay(fixtureDay, -1);
+    const apiFromToday = await query(`pageSize=100&projectId=${PROJECT_A}&from=${fixtureDay}&to=${fixtureDay}`);
+    const apiFromTomorrow = await query(`pageSize=100&projectId=${PROJECT_A}&from=${nextDay}&to=${nextDay}`);
+    const apiToYesterday = await query(`pageSize=100&projectId=${PROJECT_A}&from=${prevDay}&to=${prevDay}`);
     const apiEvent = await query(`pageSize=100&projectId=${PROJECT_A}&event=log007.late.error`);
     const apiOperation = await query(`pageSize=100&projectId=${PROJECT_A}&operationId=op-log007-early-warn-${run}`);
     const apiCommit = await query(`pageSize=100&projectId=${PROJECT_A}&commitSha=${'d'.repeat(40)}`);
     const apiFullTextMarker = await query(`pageSize=100&projectId=${PROJECT_A}&q=${encodeURIComponent(`LOG007-EARLY-WARN-${run}`)}`);
-    evidence.phases.apiFilters = { apiAll, apiWarn, apiError, apiComponent, apiFromToday, apiFromTomorrow, apiToYesterday, apiEvent, apiOperation, apiCommit, apiFullTextMarker };
+    evidence.phases.apiFilters = { apiAll, apiWarn, apiError, apiComponent, apiEvent, apiOperation, apiCommit, apiFullTextMarker };
+    evidence.phases.apiDayWindows = {
+      fixtureDay, nextDay, prevDay,
+      today: { count: apiFromToday.count, events: apiFromToday.events, nonFixtureRecords: apiFromToday.entries.filter(entry => !fixtureEvents.includes(entry.event)).map(entry => ({ event: entry.event, component: entry.component, ts: entry.ts })) },
+      tomorrow: { count: apiFromTomorrow.count, events: apiFromTomorrow.events },
+      yesterday: { count: apiToYesterday.count, events: apiToYesterday.events },
+    };
+    const everyEntryOnDay = (result, day) => result.entries.every(entry => localDay(entry.ts) === day);
+    const containsAllEvents = (result, events) => events.every(event => result.events.includes(event));
+    const excludesFixtureEvents = result => result.entries.every(entry => !fixtureEvents.includes(entry.event));
     const apiSupported = {
       levels: apiWarn.count === 2 && apiWarn.levels.every(level => level === 'warn') && apiError.count === 1,
       component: apiComponent.count === 2 && apiComponent.events.filter(event => event.endsWith('warn')).length === 2,
-      timeDayGranularity: apiFromToday.count === 4 && apiFromTomorrow.count === 0 && apiToYesterday.count === 0,
+      timeDayGranularity: apiFromToday.count >= fixtureEvents.length
+        && containsAllEvents(apiFromToday, fixtureEvents)
+        && everyEntryOnDay(apiFromToday, fixtureDay)
+        && excludesFixtureEvents(apiFromTomorrow) && everyEntryOnDay(apiFromTomorrow, nextDay)
+        && excludesFixtureEvents(apiToYesterday) && everyEntryOnDay(apiToYesterday, prevDay),
       event: apiEvent.count === 1,
       operationId: apiOperation.count === 1,
       commitSha: apiCommit.count === 1,
