@@ -1,5 +1,6 @@
 'use strict';
 const path = require('node:path');
+const fs = require('node:fs');
 const { spawn } = require('node:child_process');
 const {
   app,
@@ -32,12 +33,19 @@ let mainWindow = null;
 let tray = null;
 let ownedBackend = null;
 let ownedLogPath = null;
+let ownedStartupPending = false;
 let activeEndpoint = null;
 let isQuitting = false;
 let starting = false;
 
 app.setName('Project Knowledge');
 if (process.platform === 'win32') app.setAppUserModelId('com.sanqian.projectknowledge.desktop');
+// Isolation hook for tests/CI: a separate userData dir also gives the
+// instance its own single-instance-lock domain (the machine's real desktop
+// app may be running). Must run before requestSingleInstanceLock.
+if (process.env.KB_DESKTOP_USER_DATA_DIR) {
+  try { app.setPath('userData', process.env.KB_DESKTOP_USER_DATA_DIR); } catch {}
+}
 
 const singleInstance = app.requestSingleInstanceLock();
 if (!singleInstance) {
@@ -68,15 +76,18 @@ const SPLASH_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>
 body{margin:0;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0c1118;color:#e6edf3;font-family:system-ui,sans-serif;gap:14px}
 h1{font-size:18px;font-weight:600;margin:0}p{color:#8b98a5;font-size:13px;margin:0}
 .spin{width:26px;height:26px;border:3px solid #263041;border-top-color:#4f8cff;border-radius:50%;animation:r 1s linear infinite}@keyframes r{to{transform:rotate(360deg)}}
-</style></head><body><div class="spin"></div><h1>Project Knowledge 正在启动</h1><p>正在连接本机知识库服务…</p></body></html>`;
+#status{min-height:1em;max-width:640px;text-align:center}
+</style></head><body><div class="spin"></div><h1>Project Knowledge 正在启动</h1><p>正在连接本机知识库服务…</p><p id="status"></p><script>window.__kbStatus=function(t){document.getElementById('status').textContent=t;};</script></body></html>`;
 
-function errorPage(message, logPath) {
+function statusPage(kind, message, logPath) {
+  const heading = kind === 'starting' ? '仍在启动' : '后台连接失败';
+  const note = kind === 'starting' ? '后台进程仍在初始化（未判定失败），可等待或重试连接。' : '后台未能启动或已退出，详情见下方日志。';
   return `<!doctype html><html><head><meta charset="utf-8"><style>
 body{margin:0;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0c1118;color:#e6edf3;font-family:system-ui,sans-serif;gap:12px;padding:24px}
 h1{font-size:18px;font-weight:600;margin:0}p{color:#8b98a5;font-size:13px;margin:0;max-width:560px;text-align:center;white-space:pre-wrap}
 button{margin-top:8px;padding:8px 22px;background:#1f6feb;border:0;border-radius:6px;color:#fff;font-size:14px;cursor:pointer}
 code{color:#6e7681;font-size:11px;word-break:break-all}
-</style></head><body><h1>后台连接失败</h1><p>${String(message).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))}</p>${logPath ? `<code>${logPath}</code>` : ''}<button onclick="desktopBridge.retry()">重试连接</button></body></html>`;
+</style></head><body><h1>${heading}</h1><p>${String(message).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))}</p><p>${note}</p>${logPath ? `<code>${logPath}</code>` : ''}<button onclick="desktopBridge.retry()">重试连接</button></body></html>`;
 }
 
 function configureSecurity() {
@@ -125,20 +136,78 @@ function dataDir(override) {
   return runtime.coreDataDir(coreRoot, override || process.env.KB_DATA_DIR_DESKTOP);
 }
 
+// R10 slow-startup patience: a live-but-not-yet-answering backend is STARTING,
+// never a failure. All waits below fail fast only when a process actually
+// dies, and surface honest still-starting states at the patience deadline.
+function connectPatienceMs() {
+  // R12: a NaN budget (malformed env) would disable every deadline at once;
+  // invalid values fall back and absurd values clamp to one hour.
+  const value = Number(process.env.KB_DESKTOP_CONNECT_PATIENCE_MS);
+  if (!Number.isFinite(value) || value <= 0) return 600000;
+  return Math.min(value, 3600000);
+}
+
+function setStartupStatus(text) {
+  console.log(`[desktop] ${text}`);
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  try {
+    const url = mainWindow.webContents.getURL();
+    if (!url.startsWith('data:')) return;
+    mainWindow.webContents.executeJavaScript(`window.__kbStatus ? window.__kbStatus(${JSON.stringify(text)}) : 0`).catch(() => {});
+  } catch {}
+}
+
+function tailLog(logPath, maxChars = 1200) {
+  try {
+    const stat = fs.statSync(logPath);
+    const length = Math.min(stat.size, maxChars * 3);
+    const fd = fs.openSync(logPath, 'r');
+    const buffer = Buffer.alloc(length);
+    fs.readSync(fd, buffer, 0, length, stat.size - length);
+    fs.closeSync(fd);
+    return buffer.toString('utf8').slice(-maxChars).trim();
+  } catch {
+    return '';
+  }
+}
+
+function versionMismatchError(existing) {
+  return Object.assign(new Error(
+    `已有一个 ${existing.version} 版本的知识库后台正在运行（PID ${existing.pid}，端口 ${existing.port}）。` +
+    `桌面版内置核心为 ${corePkg.version}，为避免双写已拒绝启动第二个后台。` +
+    `请先停止旧实例（project-knowledge stop）或升级后再试。`
+  ), { code: 'DESKTOP_VERSION_MISMATCH' });
+}
+
+async function connectExistingInstance(dir, live) {
+  const result = await runtime.waitForInstanceControl({
+    probe: () => instances.current(dir),
+    endpoint: live,
+    isAlive: pid => endpointStore.isProcessAlive(pid),
+    timeoutMs: connectPatienceMs(),
+    intervalMs: 750,
+    onProgress: elapsed => setStartupStatus(`检测到现有后台（PID ${live.pid}）正在初始化或繁忙，正在连接… 已等待 ${Math.round(elapsed / 1000)}s`),
+  });
+  if (result.status === 'answered') {
+    if (runtime.versionState(corePkg.version, result.instance.version) === 'mismatch') throw versionMismatchError(result.instance);
+    return { endpoint: { host: result.instance.host, port: result.instance.port }, owned: false };
+  }
+  if (result.status === 'refused') throw result.error;
+  if (result.status === 'gone') return null;
+  throw Object.assign(new Error(
+    `现有后台（PID ${live.pid}，端口 ${live.port}）仍在启动或繁忙，控制通道暂未响应（已等待 ${Math.round(result.elapsedMs / 1000)}s）。` +
+    `为避免双写未启动第二个后台。`
+  ), { code: 'DESKTOP_BACKEND_BUSY' });
+}
+
 async function resolveBackend() {
   const dir = dataDir();
-  const existing = await instances.current(dir);
-  if (existing) {
-    const state = runtime.versionState(corePkg.version, existing.version);
-    if (state === 'mismatch') {
-      throw Object.assign(new Error(
-        `已有一个 ${existing.version} 版本的知识库后台正在运行（PID ${existing.pid}，端口 ${existing.port}）。` +
-        `桌面版内置核心为 ${corePkg.version}，为避免双写已拒绝启动第二个后台。` +
-        `请先停止旧实例（project-knowledge stop）或升级后再试。`
-      ), { code: 'DESKTOP_VERSION_MISMATCH' });
-    }
-    // Verified compatible instance (typically the web CLI): reuse it.
-    return { endpoint: { host: existing.host, port: existing.port }, owned: false };
+  const live = endpointStore.readLiveEndpoint(dir, { removeStale: false });
+  // A live endpoint proves some backend owns this data directory: never spawn
+  // a second one, even while its control channel is busy starting up.
+  if (live) {
+    const reused = await connectExistingInstance(dir, live);
+    if (reused) return reused;
   }
 
   const started = runtime.spawnBackend({
@@ -149,22 +218,64 @@ async function resolveBackend() {
   });
   ownedBackend = started.child;
   ownedLogPath = started.logPath;
+  ownedStartupPending = true;
   ownedBackend.once('exit', () => {
+    // showErrorBox is a blocking modal on Windows: while the startup waits
+    // below still own the process they surface exits honestly on the status
+    // page; the modal is reserved for post-ready crashes.
+    if (ownedStartupPending) return;
     if (!isQuitting && mainWindow && !mainWindow.isDestroyed()) {
       dialog.showErrorBox('Project Knowledge 后端已停止', `桌面后端意外退出。诊断日志：${ownedLogPath}`);
     }
   });
+  const childAlive = () => ownedBackend.exitCode === null;
 
-  const deadline = Date.now() + 180000;
-  let endpoint = null;
-  while (Date.now() < deadline && !endpoint) {
-    const found = endpointStore.readLiveEndpoint(dir, { removeStale: false });
-    if (found && found.pid === ownedBackend.pid) endpoint = found;
-    else await new Promise(resolve => setTimeout(resolve, 250));
+  try {
+    const publication = await runtime.waitForBackendEndpoint({
+      readEndpoint: () => endpointStore.readLiveEndpoint(dir, { removeStale: false }),
+      ownedPid: ownedBackend.pid,
+      isAlive: childAlive,
+      timeoutMs: connectPatienceMs(),
+      intervalMs: 250,
+      onProgress: elapsed => setStartupStatus(`等待后台发布运行端点… 已等待 ${Math.round(elapsed / 1000)}s（进程运行中）`),
+    });
+    if (publication.status === 'exited') {
+      const tail = tailLog(ownedLogPath);
+      throw Object.assign(new Error(`后台进程在发布端点前退出（exit ${ownedBackend.exitCode}）。${tail ? `日志尾部：\n${tail}` : `诊断日志：${ownedLogPath}`}`), { code: 'DESKTOP_BACKEND_EXITED' });
+    }
+    if (publication.status === 'taken') {
+      const reused = await connectExistingInstance(dir, publication.endpoint);
+      if (reused) return reused;
+      throw Object.assign(new Error(`端口被另一实例占用且控制通道不可用（PID ${publication.endpoint.pid}）。`), { code: 'DESKTOP_BACKEND_BUSY' });
+    }
+    if (publication.status === 'timeout') {
+      throw Object.assign(new Error(
+        `后台进程 ${Math.round(publication.elapsedMs / 1000)}s 内未能发布运行端点（进程仍存活，未判定失败）。诊断日志：${ownedLogPath}`
+      ), { code: 'DESKTOP_BACKEND_STILL_STARTING' });
+    }
+
+    const endpoint = publication.endpoint;
+    setStartupStatus('后台端点已发布，正在确认服务响应…');
+    try {
+      await runtime.waitForHttpReadyGuarded({
+        host: endpoint.host,
+        port: endpoint.port,
+        timeoutMs: connectPatienceMs(),
+        intervalMs: 250,
+        isAlive: childAlive,
+        onProgress: (elapsed, lastError) => setStartupStatus(`等待本机服务响应… 已等待 ${Math.round(elapsed / 1000)}s（进程运行中${lastError ? '，' + lastError.message : ''}）`),
+      });
+    } catch (error) {
+      if (error.code === 'DESKTOP_BACKEND_EXITED') {
+        const tail = tailLog(ownedLogPath);
+        error.message += tail ? `\n日志尾部：\n${tail}` : `\n诊断日志：${ownedLogPath}`;
+      }
+      throw error;
+    }
+    return { endpoint, owned: true };
+  } finally {
+    ownedStartupPending = false;
   }
-  if (!endpoint) throw Object.assign(new Error('后台进程未能发布运行端点。'), { code: 'DESKTOP_BACKEND_TIMEOUT' });
-  await runtime.waitForHttpReady({ host: endpoint.host, port: endpoint.port, timeoutMs: 120000 });
-  return { endpoint, owned: true };
 }
 
 async function boot() {
@@ -185,7 +296,13 @@ async function boot() {
       return;
     }
     if (!mainWindow || mainWindow.isDestroyed()) createWindow();
-    await mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(errorPage(error.message, ownedLogPath)));
+    // Still-starting states are honest progress pages, not failures; only
+    // definitive outcomes (process exited, semantic refusal, core missing)
+    // render the failure page.
+    const kind = ['DESKTOP_BACKEND_BUSY', 'DESKTOP_BACKEND_STILL_STARTING'].includes(error.code) ? 'starting' : 'failed';
+    if (kind === 'starting') console.log(`[desktop] still starting: ${error.message}`);
+    else console.error(`[desktop] backend failed: ${error.message}`);
+    await mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(statusPage(kind, error.message, ownedLogPath)));
   } finally {
     starting = false;
   }

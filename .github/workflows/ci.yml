@@ -71,6 +71,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm test -- --no-report
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node desktop/test/slow-startup-runtime-test.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node desktop/test/slow-startup-cli-test.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm pack --dry-run --json
 
   qa-controller:

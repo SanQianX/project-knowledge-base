@@ -68,14 +68,48 @@ function openBrowser(url) {
   exec(command, () => {});
 }
 function notify(message) { if (process.connected) process.send(message, () => {}); }
-function waitForStartup(child, log) {
+// Patience knobs must never produce NaN/Infinity budgets (a NaN comparison
+// is always false, which silently disables the deadline and loops forever).
+// Invalid or missing values fall back; absurd values clamp to one hour.
+function parsePatienceMs(raw, fallbackMs) {
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) return fallbackMs;
+  return Math.min(value, 3600000);
+}
+function waitForStartup(child, log, options = {}) {
   return new Promise((resolve, reject) => {
+    const initialBudgetMs = options.initialBudgetMs ?? 45000;
+    const progressIntervalMs = options.progressIntervalMs ?? 15000;
+    const patienceMs = options.patienceMs !== undefined
+      ? parsePatienceMs(options.patienceMs, 300000)
+      : parsePatienceMs(process.env.KB_LAUNCHER_STARTUP_PATIENCE_MS, 300000);
+    const startedAt = Date.now();
+    let timer = null;
     const finish = (error, value) => {
       clearTimeout(timer); child.removeAllListeners('message'); child.removeAllListeners('exit');
       if (child.connected) child.disconnect();
       if (error) reject(error); else resolve(value);
     };
-    const timer = setTimeout(() => finish(new Error(`启动尚未完成，请运行 project-knowledge status 并查看 ${log}`)), 45000);
+    // R10: a slow init is STARTING, not a failure. The old fixed 45s budget
+    // reported 启动失败 while the detached backend kept initializing and
+    // opened the browser minutes later. Keep waiting (with progress lines)
+    // while the child lives; only a child exit or a real launcher-failed
+    // message is definitive. The patience cap stays an honest give-up-waiting
+    // report that explicitly does not claim the backend failed; R12: the
+    // schedule honors a patience deadline BELOW the first checkpoint (the cap
+    // fires at min(checkpoint, patience)) and the cap error is TYPED so the
+    // CLI reports it as still-starting instead of 启动失败.
+    const onBudget = () => {
+      const elapsed = Date.now() - startedAt;
+      if (child.exitCode !== null) return;
+      if (elapsed >= patienceMs) {
+        finish(Object.assign(new Error(`启动仍在进行：后台进程存活但 ${Math.round(elapsed / 1000)}s 内未就绪（未判定失败）。请运行 project-knowledge status 并查看 ${log}`), { code: 'KB_STARTUP_STILL_STARTING' }));
+        return;
+      }
+      console.log(`仍在启动（已等待 ${Math.round(elapsed / 1000)}s，进程存活）…诊断: ${log}`);
+      timer = setTimeout(onBudget, Math.max(50, Math.min(progressIntervalMs, patienceMs - elapsed)));
+    };
+    timer = setTimeout(onBudget, Math.max(50, Math.min(initialBudgetMs, patienceMs)));
     child.on('message', message => {
       if (message?.type === 'kb:launcher-ready') finish(null, message);
       else if (message?.type === 'kb:launcher-failed') finish(new Error(message.message));
@@ -100,6 +134,30 @@ async function freePort(port, host) {
   throw new Error(`No free port found near ${port}.`);
 }
 function show(info) { console.log(`project-knowledge is ${info.status === 'stopping' ? 'stopping' : 'running'} (PID ${info.pid}) at ${instances.url(info)} [${info.version}]\nData dir: ${info.dataDir}`); }
+function isRetryableProbeError(error) {
+  if (!error) return false;
+  if (['ETIMEDOUT', 'ECONNRESET', 'EAGAIN'].includes(error.code)) return true;
+  if (error.code) return false;
+  return /超时|断开连接/.test(String(error.message || ''));
+}
+// R10: `start` must not report 启动失败 while an existing instance is alive
+// but its control channel is stalled (large-data busy windows exceed the
+// short probe budget, and a timeout error carries no code). Retry while the
+// endpoint PID lives; a dead record falls through to a normal spawn.
+async function resolveExistingForStart(dataDir) {
+  const patienceMs = parsePatienceMs(process.env.KB_LAUNCHER_CONNECT_PATIENCE_MS, 300000);
+  const startedAt = Date.now();
+  while (true) {
+    let current = null;
+    try { current = await instances.current(dataDir); }
+    catch (error) { if (!isRetryableProbeError(error)) throw error; }
+    if (current) return { instance: current };
+    const live = endpoint.readLiveEndpoint(dataDir, { removeStale: false });
+    if (!live || !endpoint.isProcessAlive(live.pid)) return { instance: null };
+    if (Date.now() - startedAt >= patienceMs) return { busy: live };
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+}
 
 async function main() {
   const options = parse(process.argv.slice(2));
@@ -118,9 +176,23 @@ async function main() {
     for (const info of found) show(info);
     return;
   }
-  const existing = options.command !== 'start' && options.portExplicit ? await instances.atPort(options.port) : await instances.current(dataDir);
-  const unverified = !existing && endpoint.readLiveEndpoint(dataDir, { removeStale: false });
-  if (unverified) throw new Error(`数据目录已有实例记录（PID ${unverified.pid}，端口 ${unverified.port}），但控制通道不可用。请先确认该实例，不会重复启动、误停止或报告已停止。`);
+  let existing;
+  if (options.command === 'start') {
+    // R10: live-but-busy instance → honest retry, never 启动失败 and never a
+    // second spawn. stop/status keep their strict refusal semantics below.
+    const resolved = await resolveExistingForStart(dataDir);
+    if (resolved.busy) {
+      const info = resolved.busy;
+      console.log(`现有实例（PID ${info.pid}，端口 ${info.port}）正在启动或繁忙，控制通道暂未响应（未判定失败，未重复启动）。` +
+        `\n可稍后重试，或直接访问 ${instances.url(info)}`);
+      return;
+    }
+    existing = resolved.instance;
+  } else {
+    existing = options.portExplicit ? await instances.atPort(options.port) : await instances.current(dataDir);
+    const unverified = !existing && endpoint.readLiveEndpoint(dataDir, { removeStale: false });
+    if (unverified) throw new Error(`数据目录已有实例记录（PID ${unverified.pid}，端口 ${unverified.port}），但控制通道不可用。请先确认该实例，不会重复启动、误停止或报告已停止。`);
+  }
   if (existing && options.dataDir && options.command !== 'start' && path.resolve(existing.dataDir).toLowerCase() !== dataDir.toLowerCase()) throw new Error('指定端口不属于指定数据目录，已拒绝控制。');
   if (options.command === 'status') {
     if (existing) show(existing);
@@ -146,7 +218,16 @@ async function main() {
     const child = spawn(process.execPath, [...process.argv.slice(1), '--fg'], { detached: true, stdio: ['ignore', fd, fd, 'ipc'], windowsHide: true });
     fs.closeSync(fd); child.unref();
     console.log(`project-knowledge starting in background\nDiagnostics: ${log}`);
-    const ready = await waitForStartup(child, log);
+    const ready = await waitForStartup(child, log).catch(error => {
+      // R12: the patience cap while the child lives is an honest
+      // still-starting report, never 启动失败 — the backend keeps booting.
+      if (error && error.code === 'KB_STARTUP_STILL_STARTING') {
+        console.log(`${error.message}\n后台进程将继续初始化（未重复启动，未判定失败）。`);
+        return null;
+      }
+      throw error;
+    });
+    if (!ready) return;
     console.log(`project-knowledge is ready at ${ready.url}\nUse "project-knowledge status" to check, "project-knowledge stop" to stop.`);
     return;
   }
@@ -162,9 +243,14 @@ async function main() {
   console.log(`Listening at ${url}`); notify({ type: 'kb:launcher-ready', url });
   if (options.open) setTimeout(() => openBrowser(url), 500);
 }
-main().catch(error => {
-  const control = ['stop', 'status'].includes(process.argv[2]?.toLowerCase());
-  console.error(process.argv.includes('--fg') ? `[project-knowledge] startup failed: ${error.message}` : `${control ? '控制失败' : '启动失败'}：${error.message}`);
-  notify({ type: 'kb:launcher-failed', message: error.message });
-  process.exitCode = 1;
-});
+// R12: the module doubles as the CLI entry AND a testable unit surface;
+// require() must never run the CLI.
+module.exports = { waitForStartup, parsePatienceMs };
+if (require.main === module) {
+  main().catch(error => {
+    const control = ['stop', 'status'].includes(process.argv[2]?.toLowerCase());
+    console.error(process.argv.includes('--fg') ? `[project-knowledge] startup failed: ${error.message}` : `${control ? '控制失败' : '启动失败'}：${error.message}`);
+    notify({ type: 'kb:launcher-failed', message: error.message });
+    process.exitCode = 1;
+  });
+}
