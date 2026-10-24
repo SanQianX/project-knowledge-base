@@ -21,15 +21,15 @@
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { spawnServer } = require('./helpers/spawn-server');
 const { createModuleFixture, createUpstreamProxy } = require('./helpers/module-fixture');
 const freePort = require('./helpers/free-port');
+const { applyDriverIsolation } = require('./helpers/parallel-qa-engine-endpoint-isolate');
+const { guardedCreateEngineServer } = require('./helpers/parallel-qa-engine-endpoint-guard');
 
 const ROOT = path.resolve(__dirname, '../..');
-const ENGINE_ENTRY = path.join(ROOT, '_modules', 'knowledge-engine', 'src', 'server.js');
 
 function git(cwd, args) {
   const result = spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });
@@ -77,7 +77,9 @@ async function waitForHealth(base, timeoutMs = 20000) {
 }
 
 async function main() {
-  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-prj-unbind-'));
+  // Driver isolation FIRST, before any product module is required.
+  const applied = applyDriverIsolation({ prefix: 'pk-qa-prj-unbind' });
+  const fixture = fs.mkdtempSync(path.join(applied.layout.temp, 'pk-prj-unbind-'));
   const dataDir = path.join(fixture, 'data');
   const knowledgeRoot = path.join(fixture, 'knowledge');
   const first = makeRepo(fixture, 'repo-queued');
@@ -87,14 +89,8 @@ async function main() {
   fs.mkdirSync(firstKnowledge, { recursive: true }); fs.mkdirSync(secondKnowledge, { recursive: true });
 
   const engineToken = crypto.randomBytes(24).toString('hex');
-  const { createEngineServer } = require(ENGINE_ENTRY);
-  const engine = createEngineServer({ dataDir: path.join(fixture, 'engine'), runtimeToken: engineToken, debug: true, consume: false });
-  await engine.ready;
-  await new Promise(resolve => engine.server.listen(0, '127.0.0.1', resolve));
-  const engineUrl = `http://127.0.0.1:${engine.server.address().port}`;
-  const engineProxy = createUpstreamProxy({ target: engineUrl, token: engineToken, tag: 'engine' });
-  await engineProxy.start();
-
+  // OWN fixtures first, then the engine constructed against them: the
+  // coordinator ignores env and would otherwise fall back to LIVE 8787/8790.
   const terminal = createModuleFixture({ kind: 'terminal' });
   const vectorHub = createModuleFixture({ kind: 'vectorHub' });
   const eventBridge = createModuleFixture({ kind: 'eventBridge' });
@@ -102,6 +98,12 @@ async function main() {
     await fixtureService.start();
     fixtureService.setOnline(false);
   }
+  const engine = guardedCreateEngineServer({ dataDir: path.join(fixture, 'engine'), runtimeToken: engineToken, debug: true, consume: false, vectorUrl: vectorHub.url, bridgeUrl: eventBridge.url });
+  await engine.ready;
+  await new Promise(resolve => engine.server.listen(0, '127.0.0.1', resolve));
+  const engineUrl = `http://127.0.0.1:${engine.server.address().port}`;
+  const engineProxy = createUpstreamProxy({ target: engineUrl, token: engineToken, tag: 'engine' });
+  await engineProxy.start();
 
   const port = await freePort();
   const base = `http://127.0.0.1:${port}`;

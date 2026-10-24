@@ -34,6 +34,23 @@
 // URLs, model-provider credentials, proxy variables and CLI-injection
 // variables are deleted; the harness adds its explicit lane endpoints only
 // AFTER the whitelist is in place.
+//
+// P-NAV-POSIX-CI-R9: on POSIX the fixture path length is a hard correctness
+// constraint, not cosmetics. Chrome places its SingletonSocket under TMPDIR
+// (<root>/com.google.Chrome.<rand>/SingletonSocket) and the product's
+// runtime-control channel lives at <dataDir>/runtime-control.sock
+// (_site/lib/runtime-control.js) — both are UNIX domain sockets bound by the
+// 108-byte sun_path limit. The descriptive R7 component names
+// (pk-nav-r7-<pid>-<rand>/<full-tag>-<rand>) blew that budget on GH runners
+// (CI 40011886791: a 120-char SingletonSocket aborted Chrome with SIGABRT
+// and starved product bootstrap). POSIX now uses short components (pkn…/n…/t
+// layout), keeps the full tag in an on-disk owner.json, prefers the external
+// configured temp root when one is available, and fails fast when the
+// worst-case socket path would exceed the budget. The real-home leak scan is
+// also placement-aware: on hosted runners the owned temp root legitimately
+// lives UNDER the real home (/home/runner/work/_temp), so a value is a leak
+// only when it is outside the owned root while still referencing the real
+// home (canonical containment), never merely because of a shared prefix.
 
 'use strict';
 
@@ -105,13 +122,62 @@ const isOsWhitelisted = key => OS_WHITELIST_UPPER().has(upper(key));
  */
 const LOADED_TEMP_ROOT = (process.env.PK_TEST_TEMP_ROOT || process.env.TEMP || process.env.TMP || os.tmpdir());
 
+// R9 POSIX socket budget: sun_path is 108 bytes including the NUL terminator,
+// so 107 characters is the hard ceiling. The worst-case consumer is Chrome's
+// SingletonSocket under the isolated TMPDIR; the suffix rand is observed at
+// ~6 chars but budgeted at 12, and the budget counts UTF-8 BYTES, not chars.
+const POSIX_SOCKET_CHAR_LIMIT = 107;
+const CHROME_RAND_MAX_CHARS = 12;
+
+/** Worst-case POSIX socket paths the fixture root must be able to host. */
+function worstCasePosixSocketPaths(root) {
+  const base = String(root).replaceAll('\\', '/').replace(/\/+$/, '');
+  return {
+    chromeSingletonSocket: `${base}/t/com.google.Chrome.${'x'.repeat(CHROME_RAND_MAX_CHARS)}/SingletonSocket`,
+    productRuntimeControlSock: `${base}/data/runtime-control.sock`,
+  };
+}
+
+function posixSocketBudgetVerdict(root, limit = POSIX_SOCKET_CHAR_LIMIT) {
+  const paths = worstCasePosixSocketPaths(root);
+  const chromeSocketBytes = Buffer.byteLength(paths.chromeSingletonSocket, 'utf8');
+  const controlSocketBytes = Buffer.byteLength(paths.productRuntimeControlSock, 'utf8');
+  return {
+    ok: chromeSocketBytes <= limit && controlSocketBytes <= limit,
+    limit, chromeSocketBytes, controlSocketBytes, paths,
+  };
+}
+
+/** Fail fast — with the computed path in the message — when the budget cannot hold. */
+function assertPosixSocketBudget(root, what) {
+  const verdict = posixSocketBudgetVerdict(root);
+  if (!verdict.ok) {
+    throw new Error(
+      `POSIX socket path budget exceeded for ${what}: worst-case Chrome SingletonSocket is ${verdict.chromeSocketBytes} UTF-8 bytes, limit is ${verdict.limit} — ${verdict.paths.chromeSingletonSocket}`,
+    );
+  }
+  return verdict;
+}
+
+const IS_POSIX = process.platform !== 'win32';
+
 function resolveNavTempRoot() {
   const sharedRoot = path.join(path.dirname(REPO_ROOT), '.project-knowledge-test-temp');
-  const candidates = [
-    LOADED_TEMP_ROOT === process.env.PK_TEST_TEMP_ROOT ? LOADED_TEMP_ROOT : null,
-    fs.existsSync(sharedRoot) ? sharedRoot : null,
-    LOADED_TEMP_ROOT,
-  ];
+  // Windows keeps the R7 order (shared sibling root first). POSIX prefers the
+  // external configured temp (PK_TEST_TEMP_ROOT, then the OS temp captured at
+  // module load) over the long sibling shared root: every byte of the root is
+  // spent by every socket beneath it (R9).
+  const candidates = IS_POSIX
+    ? [
+      LOADED_TEMP_ROOT === process.env.PK_TEST_TEMP_ROOT ? LOADED_TEMP_ROOT : null,
+      LOADED_TEMP_ROOT,
+      fs.existsSync(sharedRoot) ? sharedRoot : null,
+    ]
+    : [
+      LOADED_TEMP_ROOT === process.env.PK_TEST_TEMP_ROOT ? LOADED_TEMP_ROOT : null,
+      fs.existsSync(sharedRoot) ? sharedRoot : null,
+      LOADED_TEMP_ROOT,
+    ];
   const chosen = candidates.find(value => value && String(value).trim());
   const root = path.resolve(String(chosen).trim());
   if (isInside(root, REPO_ROOT)) throw new Error(`refusing to use a temp root inside the repository: ${root}`);
@@ -123,7 +189,8 @@ let exitHookArmed = false;
 /** Per-process parent temp: stable across serial harness runs, removed at process exit. */
 function stableTempRoot() {
   if (!stableRoot) {
-    stableRoot = fs.mkdtempSync(path.join(resolveNavTempRoot(), `pk-nav-r7-${process.pid}-`));
+    const prefix = IS_POSIX ? `pkn${process.pid.toString(36)}` : `pk-nav-r7-${process.pid}-`;
+    stableRoot = fs.mkdtempSync(path.join(resolveNavTempRoot(), prefix));
     if (!exitHookArmed) {
       exitHookArmed = true;
       process.on('exit', () => { try { fs.rmSync(stableRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* best effort */ } });
@@ -139,7 +206,8 @@ function buildLayout(root) {
     claudeConfigDir: path.join(root, 'claude-config'),
     appData: path.join(root, 'appdata'),
     localAppData: path.join(root, 'localappdata'),
-    temp: path.join(root, 'temp'),
+    // 't' on POSIX: three fewer bytes on every Chrome socket path (R9).
+    temp: path.join(root, IS_POSIX ? 't' : 'temp'),
     dataDir: path.join(root, 'kb-data'),
     knowledgeDataDir: path.join(root, 'kb-knowledge-data'),
     bridgeHome: path.join(root, 'bridge-home'),
@@ -186,11 +254,44 @@ function isolationEnvMap(layout) {
  * the stable parent temp, which is only removed at process exit).
  */
 function enterNavIsolation({ tag = 'run' } = {}) {
-  const root = fs.mkdtempSync(path.join(stableTempRoot(), `${tag}-`));
+  // POSIX shortens the case component to 'n<rand6>' (R9 socket budget);
+  // Windows keeps the descriptive '<tag>-<rand6>' names.
+  const casePrefix = IS_POSIX ? 'n' : `${tag}-`;
+  const root = fs.mkdtempSync(path.join(stableTempRoot(), casePrefix));
+  if (IS_POSIX) {
+    try {
+      assertPosixSocketBudget(root, `isolation root for tag ${tag}`);
+    } catch (error) {
+      try { fs.rmSync(root, { recursive: true, force: true }); } catch { /* best effort */ }
+      throw error;
+    }
+  }
   const layout = buildLayout(root);
+
+  // The shortened POSIX component names must not cost post-mortem ownership
+  // binding anything: the full tag, pid and creation time stay on disk.
+  fs.writeFileSync(path.join(root, 'owner.json'), JSON.stringify({
+    schema: 'qa-autopilot/nav-isolation-owner/v1',
+    tag,
+    platform: process.platform,
+    pid: process.pid,
+    createdAt: new Date().toISOString(),
+  }, null, 2) + '\n', 'utf8');
 
   const previous = {};
   for (const key of Object.keys(process.env)) previous[key] = process.env[key];
+
+  // R9 redirection evidence (booleans only — original values may carry real
+  // secrets): which isolation keys pointed at the real home BEFORE the
+  // whitelist, so the report can prove every one was redirected into the
+  // owned root rather than merely overwritten with another leak.
+  const originalInsideRealHome = {};
+  for (const key of ISOLATION_KEYS) {
+    const original = previous[key];
+    originalInsideRealHome[key] = original !== undefined
+      && (isInside(path.resolve(String(original)), REAL_HOME) || isInside(path.resolve(String(original)), REAL_USERPROFILE));
+  }
+
   for (const key of Object.keys(process.env)) {
     if (!isOsWhitelisted(key)) delete process.env[key];
   }
@@ -198,6 +299,8 @@ function enterNavIsolation({ tag = 'run' } = {}) {
 
   return {
     tag, root, layout,
+    posixShortRoot: IS_POSIX,
+    originalInsideRealHome,
     envMap: isolationEnvMap(layout),
     realHome: REAL_HOME,
     realUserProfile: REAL_USERPROFILE,
@@ -207,6 +310,27 @@ function enterNavIsolation({ tag = 'run' } = {}) {
       Object.assign(process.env, previous);
     },
   };
+}
+
+/**
+ * Placement-aware real-home scan (R9). A non-OS-whitelisted env value is a
+ * leak ONLY when it references the real home while NOT being canonically
+ * inside the owned isolation root: on hosted runners the owned temp root
+ * legitimately lives UNDER the real home (/home/runner/work/_temp), and that
+ * placement must not fail the scan. Canonical containment decides; a raw
+ * substring match outside the owned root still flags (values that merely
+ * mention the real home are suspect even when not resolvable paths).
+ */
+function realHomeReferenceKeys(env, { root = null, realHome = REAL_HOME, realUserProfile = REAL_USERPROFILE } = {}) {
+  return Object.entries(env)
+    .filter(([key]) => !isOsWhitelisted(key))
+    .filter(([, value]) => {
+      const text = String(value);
+      if (root && isInside(path.resolve(text), root)) return false;
+      return text.includes(realHome) || text.includes(realUserProfile)
+        || isInside(path.resolve(text), realHome) || isInside(path.resolve(text), realUserProfile);
+    })
+    .map(([key]) => key);
 }
 
 /**
@@ -226,12 +350,20 @@ function navIsolationReport(env = process.env, isolation = null) {
     noAmbientSurvives: [...AMBIENT_DELETES].every(key => !Object.keys(env).some(name => upper(name) === upper(key))),
     osWhitelistHeld: Object.keys(env).filter(key => !isOsWhitelisted(key) && !ISOLATION_KEYS.includes(key) && key !== 'KB_MODULES_AUTOSTART'),
     // Real-home references are tolerated ONLY inside the OS allowlist (the
-    // real PATH names real tool locations); every directory/module/provider
-    // variable must be free of them.
-    referencesRealHome: Object.entries(env)
-      .filter(([key]) => !isOsWhitelisted(key))
-      .filter(([, value]) => String(value).includes(REAL_HOME) || String(value).includes(REAL_USERPROFILE))
-      .map(([key]) => key),
+    // real PATH names real tool locations) or, since R9, inside the owned
+    // isolation root itself (hosted runners place RUNNER_TEMP under the real
+    // home — placement, not identity); every other variable must be free of
+    // them. See realHomeReferenceKeys for the canonical rule.
+    referencesRealHome: realHomeReferenceKeys(env, { root }),
+    // Keys that pointed at the real home before the whitelist and have NOT
+    // been redirected into the owned root (empty list = redirection proven).
+    redirectionFailures: layout && isolation && isolation.originalInsideRealHome
+      ? Object.entries(isolation.originalInsideRealHome)
+        .filter(([, wasReal]) => wasReal)
+        .filter(([key]) => !(env[key] && isInside(path.resolve(String(env[key])), root)))
+        .map(([key]) => key)
+      : null,
+    posixSocketBudget: root ? posixSocketBudgetVerdict(root) : null,
     chromeDefaultProfileDirExists: layout ? fs.existsSync(layout.chromeDefaultProfileDir) : null,
     psCacheParentExists: layout ? fs.existsSync(path.dirname(layout.psCachePath)) : null,
   };
@@ -240,7 +372,9 @@ function navIsolationReport(env = process.env, isolation = null) {
 }
 
 module.exports = {
-  enterNavIsolation, navIsolationReport, isolationEnvMap,
+  enterNavIsolation, navIsolationReport, isolationEnvMap, realHomeReferenceKeys,
   OS_WHITELIST, ISOLATION_KEYS, AMBIENT_DELETES,
   REAL_HOME, REAL_USERPROFILE, resolveNavTempRoot,
+  worstCasePosixSocketPaths, posixSocketBudgetVerdict, assertPosixSocketBudget,
+  POSIX_SOCKET_CHAR_LIMIT, CHROME_RAND_MAX_CHARS,
 };

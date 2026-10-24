@@ -441,14 +441,20 @@ async function startVectorHubStandIn() {
 
 // The REAL knowledge engine, in-process, on its own isolated data dir.
 async function startRealEngine({ dataDir, runtimeToken, debug = true, consume = false, bridgeUrl, vectorUrl }) {
+  // Fail-closed endpoint guard: the coordinator ignores env and silently
+  // defaults its vector/bridge legs to LIVE 8787/8790, so an engine without
+  // explicit OWN endpoints is refused instead of defaulting live.
+  const { assertOwnedEndpoint } = require('./parallel-qa-engine-endpoint-guard');
+  assertOwnedEndpoint(vectorUrl, { role: 'vectorUrl' });
+  assertOwnedEndpoint(bridgeUrl, { role: 'bridgeUrl' });
   const { createEngineServer } = require(ENGINE_ENTRY);
   const engine = createEngineServer({
     dataDir,
     runtimeToken,
     debug: debug === true,
     consume: consume === true,
-    ...(bridgeUrl ? { bridgeUrl } : {}),
-    ...(vectorUrl ? { vectorUrl } : {}),
+    bridgeUrl,
+    vectorUrl,
   });
   await engine.ready;
   await new Promise(resolve => engine.server.listen(0, '127.0.0.1', resolve));

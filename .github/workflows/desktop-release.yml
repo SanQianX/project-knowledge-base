@@ -1,9 +1,12 @@
 name: Publish Windows desktop
 
-# Desktop releases are paused by product decision (2026-08-18): the packaged
-# runtime has a known baseline defect (folder-picker ASAR unpack on CI) and
-# web-only development is in progress. Re-enable the tag trigger when desktop
-# development resumes.
+# Manual-trigger only by design: publishing stays a Leader decision. The
+# 2026-08-18 pause cited a packaged-runtime ASAR defect; that root cause is now
+# understood (@electron/asar 3.4.1 matches unpack patterns against absolute
+# backslash paths on Windows, so the old `**/*.{node,dll,ps1}` unpacked
+# nothing and natives sat inside app.asar where Electron 43 cannot dlopen
+# them) and is fixed in the make wrapper below. Keep workflow_dispatch as the
+# only trigger; add a tag trigger only as an explicit release-policy change.
 on:
   workflow_dispatch:
     inputs:
@@ -24,6 +27,8 @@ jobs:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag }}
 
       - uses: actions/setup-node@v6
         with:
@@ -36,6 +41,9 @@ jobs:
       - name: Verify release version
         shell: pwsh
         run: |
+          if ($env:RELEASE_TAG -notmatch '^v\d+\.\d+\.\d+$') {
+            throw 'An existing stable release tag is required'
+          }
           $core = node -p "require('./package.json').version"
           $desktop = node -p "require('./desktop/package.json').version"
           if ($core -ne $desktop) {
@@ -57,19 +65,59 @@ jobs:
       - name: Install and test desktop
         shell: pwsh
         run: |
-          npm ci --prefix desktop --omit=optional
+          # No --omit=optional: @lancedb/lancedb ships its win32-x64-msvc
+          # native binding as an optionalDependency, so omitting optionals
+          # installs a desktop tree that can never package a working LanceDB.
+          npm ci --prefix desktop
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm test --prefix desktop
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Download exact official release inputs
+        shell: pwsh
+        run: |
+          $inputsDir = Join-Path $env:RUNNER_TEMP 'desktop-release-inputs'
+          New-Item -ItemType Directory -Path $inputsDir -Force | Out-Null
+          $wb = node -p "require('./package.json').dependencies['claude-ai-workbench'].replace(/^npm:/, '')"
+          $bridge = node -p "require('./package.json').dependencies['@sanqianx/ai-coding-event-bridge-console']"
+          $inputs = @(
+            @{ Key = 'CORE'; Spec = "@sanqianx/project-knowledge@$env:RELEASE_VERSION" },
+            @{ Key = 'WB'; Spec = $wb },
+            @{ Key = 'BRIDGE'; Spec = "@sanqianx/ai-coding-event-bridge-console@$bridge" }
+          )
+          foreach ($inputPackage in $inputs) {
+            $packed = npm pack $inputPackage.Spec --json --ignore-scripts --registry=https://registry.npmjs.org --pack-destination $inputsDir
+            if ($LASTEXITCODE -ne 0) { throw "Official download failed: $($inputPackage.Key)" }
+            $receipt = @($packed | ConvertFrom-Json)[0]
+            $tarball = Join-Path $inputsDir $receipt.filename
+            "$($inputPackage.Key)_TARBALL=$tarball" | Out-File -FilePath $env:GITHUB_ENV -Append
+          }
+
       - name: Build Windows x64 installer
-        run: npm run make --prefix desktop
+        # Wrapper instead of `npm run make`: it stages a build-only manifest
+        # (electron in devDependencies where forge looks for it; apache-arrow
+        # pinned so packager's prune — which does not auto-install peers —
+        # cannot drop lancedb's only peer) and corrects the asar unpack
+        # pattern for @electron/asar's Windows path handling. Squirrel outputs
+        # are copied back to desktop/out/make, so asset paths are unchanged.
+        run: node desktop/test/release-preflight-5025-make.cjs --desktop-source desktop --core-tarball "$env:CORE_TARBALL" --wb-tarball "$env:WB_TARBALL" --bridge-tarball "$env:BRIDGE_TARBALL"
 
-      - name: Test packaged application and LanceDB
-        run: npm run test:packaged --prefix desktop
+      - name: Verify package audit rejects broken bundles
+        # Includes a negative self-test that builds synthetic broken bundles
+        # (missing binding / packed binding / unpacked binding) and requires
+        # each to be rejected.
+        run: node desktop/test/release-preflight-5025-package-audit.cjs --self-test-negative
 
-      - name: Audit packaged runtimes and size
-        run: npm run audit:package --prefix desktop
+      - name: Audit actual app.asar against official release inputs
+        run: node desktop/test/release-preflight-5025-package-audit.cjs --expect-core-version "$env:RELEASE_VERSION" --core-tarball "$env:CORE_TARBALL" --wb-tarball "$env:WB_TARBALL" --bridge-tarball "$env:BRIDGE_TARBALL"
+
+      - name: Verify packaged application runtime (real exe)
+        # Launches the packaged exe end-to-end: desktop-mode backend endpoint,
+        # /api/state + /api/runtime/identity against the pinned core version,
+        # byte-identical served UI, second-instance yield, apache-arrow +
+        # LanceDB native load from app.asar, core CLI stop protocol, and the
+        # tray-resident-by-design lifecycle after backend loss.
+        run: node desktop/test/release-preflight-5025-packaged-verify.cjs --core-tarball "$env:CORE_TARBALL" --wb-tarball "$env:WB_TARBALL" --bridge-tarball "$env:BRIDGE_TARBALL"
 
       - name: Prepare release assets
         shell: pwsh
@@ -107,8 +155,7 @@ jobs:
           }
           $assets = Get-ChildItem -LiteralPath release-assets -File | ForEach-Object { $_.FullName }
           gh release upload $env:RELEASE_TAG @assets `
-            --repo $env:GITHUB_REPOSITORY `
-            --clobber
+            --repo $env:GITHUB_REPOSITORY
           if ($LASTEXITCODE -ne 0) { throw "Failed to upload desktop installer" }
 
       - name: Upload package size report

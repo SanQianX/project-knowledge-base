@@ -2,20 +2,27 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const os = require('node:os');
-const { createEngineServer } = require('../../_modules/knowledge-engine/src/server');
-const { SettingsStore } = require('../lib/settings-store');
-const { ModuleBridge } = require('../lib/module-bridge');
+const { applyDriverIsolation } = require('./helpers/parallel-qa-engine-endpoint-isolate');
+const { guardedCreateEngineServer, createEngineVectorStandin, createEngineBridgeDouble } = require('./helpers/parallel-qa-engine-endpoint-guard');
 
 (async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-shared-bindings-'));
+  const applied = applyDriverIsolation({ prefix: 'pk-qa-shared-scope' });
+  // Product modules load only after the driver environment is isolated.
+  const { SettingsStore } = require('../lib/settings-store');
+  const { ModuleBridge } = require('../lib/module-bridge');
+  const root = fs.mkdtempSync(path.join(applied.layout.temp, 'kb-shared-bindings-'));
   const oldRoot = path.join(root, '原知识根目录'), newRoot = path.join(root, '新知识根目录');
   const settings = new SettingsStore({ dataDir: path.join(root, 'shell') });
   await settings.initialize({ knowledge: { rootPath: oldRoot } });
   await settings.addDomain({ id: 'domain-tools', name: '开发工具' });
+  // OWN vector stand-in and bridge double exist BEFORE any engine construction:
+  // the coordinator ignores env and falls back to LIVE 8787/8790 otherwise.
+  const vectorStandin = createEngineVectorStandin();
+  await vectorStandin.ready;
+  const bridgeDouble = createEngineBridgeDouble();
   let engine;
   async function start() {
-    engine = createEngineServer({ dataDir: path.join(root, 'engine'), consume: false, runtimeToken: 'scope-binding-test' });
+    engine = guardedCreateEngineServer({ dataDir: path.join(root, 'engine'), consume: false, runtimeToken: 'scope-binding-test', vectorUrl: vectorStandin.url, bridge: bridgeDouble });
     await engine.ready;
     await new Promise(resolve => engine.server.listen(0, '127.0.0.1', resolve));
     return `http://127.0.0.1:${engine.server.address().port}`;
@@ -63,5 +70,5 @@ const { ModuleBridge } = require('../lib/module-bridge');
     assert.ok(logs.some(entry => entry[0] === 'modules.scopes.pending'));
     assert.equal(settings.read().brain.knowledgePath, brain.knowledgePath);
     console.log('shared-scope-root-binding-test PASS');
-  } finally { if (engine) await engine.close(); }
+  } finally { if (engine) await engine.close(); await vectorStandin.close().catch(() => {}); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

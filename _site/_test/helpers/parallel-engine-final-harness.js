@@ -204,6 +204,12 @@ function startVector(root) {
 // Real vendored knowledge-engine, in-process, isolated data dir.
 function startEngine({ dataDir, bridgeUrl, vectorUrl, analyzer, debug = true, consume = true, runtimeToken = null }) {
   fs.mkdirSync(dataDir, { recursive: true });
+  // Fail-closed endpoint guard: the coordinator ignores env and silently
+  // defaults its vector/bridge legs to LIVE 8787/8790, so an engine without
+  // explicit OWN endpoints is refused instead of defaulting live.
+  const { assertOwnedEndpoint } = require('./parallel-qa-engine-endpoint-guard');
+  assertOwnedEndpoint(vectorUrl, { role: 'vectorUrl' });
+  assertOwnedEndpoint(bridgeUrl, { role: 'bridgeUrl' });
   const { createEngineServer } = require(VENDORED_ENGINE_SERVER);
   const runtime = createEngineServer({ dataDir, consume, debug, analyzer, bridgeUrl, vectorUrl, runtimeToken });
   return {

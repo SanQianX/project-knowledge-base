@@ -20,7 +20,6 @@
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
@@ -32,27 +31,11 @@ const { createModuleFixture, createUpstreamProxy } = require('../helpers/module-
 const freePort = require('../helpers/free-port');
 const { createMemoryStandinAnalyzer } = require('./parallel-memory-analyzer');
 const { createEventBridgeStandin } = require('./parallel-memory-event-bridge');
+const { applyDriverIsolation } = require('./parallel-qa-engine-endpoint-isolate');
+const { guardedCreateEngineServer, createEngineVectorStandin } = require('./parallel-qa-engine-endpoint-guard');
 
 const ROOT = path.resolve(__dirname, '../../..');
-const ENGINE_ENTRY = path.join(ROOT, '_modules', 'knowledge-engine', 'src', 'server.js');
 const LIVE_PORTS = new Set([5757, 5790, 8787, 8790]);
-
-function isInside(candidate, parent) {
-  const relative = path.relative(parent, candidate);
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
-}
-
-/**
- * The lane temp root. It must live outside the repository: the knowledge
- * fixture refuses an in-repo temp root, and the lane rule is that every
- * artefact of a test lives outside the checkout.
- */
-function resolveTempRoot() {
-  const chosen = process.env.PK_TEST_TEMP_ROOT || process.env.TEMP || process.env.TMP || process.env.TMPDIR || os.tmpdir();
-  const root = path.resolve(String(chosen));
-  if (isInside(root, ROOT)) throw new Error(`refusing to use a temp root inside the repository: ${root}`);
-  return root;
-}
 
 function git(cwd, args) {
   const result = spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });
@@ -93,14 +76,12 @@ function commitFile(repo, file, content, message = 'follow-up') {
 }
 
 async function startHarness({ tag, evidenceDir, viewport = { width: 1600, height: 900 } } = {}) {
-  const tempRoot = resolveTempRoot();
-  fs.mkdirSync(tempRoot, { recursive: true });
-  // The shared spawn-server helper and every other lane helper create their
-  // directories with os.tmpdir(); point that at the lane temp root so nothing
-  // is written inside the checkout.
-  process.env.TEMP = tempRoot;
-  process.env.TMP = tempRoot;
-  process.env.TMPDIR = tempRoot;
+  // Full driver isolation FIRST, before any product module load or fixture
+  // directory: the environment is rebuilt from a system whitelist with every
+  // product surface pointed at a per-run layout. Chrome is captured from the
+  // REAL environment before the wipe and carried through as KB_CHROME_PATH.
+  const applied = applyDriverIsolation({ prefix: `pk-qa-memory-${tag}`, captureChrome: true });
+  const tempRoot = applied.layout.temp;
 
   const fixture = fs.mkdtempSync(path.join(tempRoot, `pk-parallel-memory-${tag}-`));
   const evidence = evidenceDir || path.join(fixture, 'evidence');
@@ -111,21 +92,13 @@ async function startHarness({ tag, evidenceDir, viewport = { width: 1600, height
 
   const plan = { document: '', memoryCandidates: [] };
   const engineToken = crypto.randomBytes(24).toString('hex');
-  const { createEngineServer } = require(ENGINE_ENTRY);
-  const engine = createEngineServer({
-    dataDir: path.join(fixture, 'engine'),
-    runtimeToken: engineToken,
-    debug: true,
-    consume: false,
-    analyzer: createMemoryStandinAnalyzer({ plan }),
-  });
-  await engine.ready;
-  await new Promise(resolve => engine.server.listen(0, '127.0.0.1', resolve));
-  const engineUrl = `http://127.0.0.1:${engine.server.address().port}`;
-  assert.equal(LIVE_PORTS.has(engine.server.address().port), false, 'the lane engine must never use a live port');
-  const engineProxy = createUpstreamProxy({ target: engineUrl, token: engineToken, tag: 'engine' });
-  await engineProxy.start();
-
+  // OWN fixtures exist BEFORE the engine. The coordinator ignores env and its
+  // defaults are LIVE 8787/8790, so the engine must be constructed with an
+  // explicit OWN vector endpoint (the full-contract stand-in, because run
+  // maintenance ends in POST /api/sync which the module fixture lacks) and the
+  // lane's own event bridge.
+  const engineVector = createEngineVectorStandin({ label: 'memory-shell-engine-vector' });
+  await engineVector.ready;
   const terminal = createModuleFixture({ kind: 'terminal', tag: `${tag}-terminal` });
   const vectorHub = createModuleFixture({ kind: 'vectorHub', tag: `${tag}-vectorhub` });
   // The shared event-bridge fixture answers with `bridge-1`, a journal id the
@@ -135,6 +108,22 @@ async function startHarness({ tag, evidenceDir, viewport = { width: 1600, height
   await terminal.start();
   await vectorHub.start();
   await eventBridge.start();
+
+  const engine = guardedCreateEngineServer({
+    dataDir: path.join(fixture, 'engine'),
+    runtimeToken: engineToken,
+    debug: true,
+    consume: false,
+    analyzer: createMemoryStandinAnalyzer({ plan }),
+    vectorUrl: engineVector.url,
+    bridgeUrl: eventBridge.url,
+  });
+  await engine.ready;
+  await new Promise(resolve => engine.server.listen(0, '127.0.0.1', resolve));
+  const engineUrl = `http://127.0.0.1:${engine.server.address().port}`;
+  assert.equal(LIVE_PORTS.has(engine.server.address().port), false, 'the lane engine must never use a live port');
+  const engineProxy = createUpstreamProxy({ target: engineUrl, token: engineToken, tag: 'engine' });
+  await engineProxy.start();
 
   const port = await freePort();
   const base = `http://127.0.0.1:${port}`;
@@ -421,13 +410,14 @@ async function startHarness({ tag, evidenceDir, viewport = { width: 1600, height
     await vectorHub.close();
     await eventBridge.close();
     await engine.close().catch(() => {});
+    await engineVector.close().catch(() => {});
     fs.rmSync(fixture, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   };
 
   return {
     fixture, evidence, dataDir, knowledgeRoot, tempRoot, plan,
     base, server, productApi, engineApi, engine, engineUrl, engineProxy,
-    terminal, vectorHub, eventBridge,
+    terminal, vectorHub, eventBridge, engineVector,
     browser, run, wait, waitFor, network,
     requestRegistryRefresh, reload, pressBackspace, selectOption,
     nativeClick, pressKey, pressTab, pressEnter, typeText,
