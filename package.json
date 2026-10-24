@@ -89,7 +89,7 @@
     "@huggingface/transformers": "3.8.1",
     "@lancedb/lancedb": "0.31.0",
     "@modelcontextprotocol/sdk": "1.29.0",
-    "@sanqianx/ai-coding-event-bridge-console": "0.7.3",
+    "@sanqianx/ai-coding-event-bridge-console": "0.7.4",
     "@sanqianx/vector-hub": "1.0.8-rc.8",
     "buffer": "^6.0.3",
     "cheerio": "^1.2.0",

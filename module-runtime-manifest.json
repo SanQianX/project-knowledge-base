@@ -219,14 +219,14 @@
     "eventBridge": {
       "name": "@sanqianx/ai-coding-event-bridge-console",
       "installName": "@sanqianx/ai-coding-event-bridge-console",
-      "version": "0.7.3",
+      "version": "0.7.4",
       "files": {
         "LICENSE": "840af13edfd18287d0528f2cc40d04d7e8ad9e5f1bf4eab8a6bb9e5be24cbce6",
         "README.md": "7f3825dae8937c536ada4217db01cbf80c00a87d916839082bf304492c43bad4",
         "console/index.html": "0b8a3eca11e4728195b4e92f436333e58f770ca184ceda7f80316ae8cde5544d",
-        "package.json": "a6e886699c6d50b99cd7d69f489f1fe3c8ff695df00d564647387d0f74362f9e",
+        "package.json": "2029b0c82b035e941ecea1f499fb60b20361cc7bf3eed4707c138b708cb6ea24",
         "src/agent-detect.js": "844ef148fd803260e2c35c269176ba80f35bbd97e8226477c0f70c3282f91bd5",
-        "src/bin.js": "21f5b99f1c95ec8836a852c5495e2c3ea349f86ed4111e0f7a0defd3c3583d67",
+        "src/bin.js": "e443cfabb8df1a694c9e2415a292db81f183d9e31b7fe8f5f9a14d2a09d03052",
         "src/bridge/bin/commit-boundary.js": "14870417292f743771a2d87d3ed605b8239dcf61bd377e9a0de4ce7c0d9e37c8",
         "src/bridge/connectors/capture-guard.js": "0bc0bfa5dee021e265eb48cd76f460dda1e4597cc37564e41cd8a762dbaebe39",
         "src/bridge/connectors/claude-code/hook-entry.js": "0e2d0580d53e75143551da30288115b5ea8cb4da7c047fa0d329e62b86af640d",
