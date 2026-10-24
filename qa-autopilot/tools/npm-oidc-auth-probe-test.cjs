@@ -10,9 +10,14 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const probeModule = require('./npm-oidc-auth-probe.cjs');
+const stableCommon = require('./stable-next-common.cjs');
+const stablePrepare = require('./stable-next-prepare.cjs');
+const stablePublish = require('./stable-next-publish.cjs');
 
 const CORE = probeModule.CORE_PACKAGE;
 const DESKTOP = probeModule.DESKTOP_PACKAGE;
+const WORKBENCH = probeModule.WORKBENCH_PACKAGE;
+const BRIDGE = probeModule.BRIDGE_CONSOLE_PACKAGE;
 
 const FAKE_ID_TOKEN = 'eyJhbGciOiJSUzI1NiJ9.fake-id-token-payload.fake-signature';
 const FAKE_REQUEST_TOKEN = 'ghs_fake_actions_request_token';
@@ -82,10 +87,11 @@ test('a URL-like or scope-escaping target is rejected before any request', async
   }
 });
 
-test('both approved packages are accepted by the allowlist', async () => {
-  assert.deepStrictEqual([...probeModule.ALLOWED_PACKAGES], [CORE, DESKTOP]);
-  assert.strictEqual(probeModule.isAllowedPackage(CORE), true);
-  assert.strictEqual(probeModule.isAllowedPackage(DESKTOP), true);
+test('the four assessment packages are exactly the allowlist', async () => {
+  assert.deepStrictEqual([...probeModule.ALLOWED_PACKAGES], [CORE, DESKTOP, WORKBENCH, BRIDGE]);
+  for (const name of [CORE, DESKTOP, WORKBENCH, BRIDGE]) {
+    assert.strictEqual(probeModule.isAllowedPackage(name), true, name + ' must be assessable');
+  }
 });
 
 test('a foreign repository or another workflow file is refused', async () => {
@@ -284,4 +290,72 @@ test('the probe source contains no publish, dist-tag or credential write path', 
   for (const forbidden of ['npm publish', 'dist-tag', 'npm access', 'npm login', 'npmrc', 'NODE_AUTH_TOKEN', 'NPM_TOKEN']) {
     assert.ok(!code.includes(forbidden), 'the probe must not contain: ' + forbidden);
   }
+});
+
+// ---- module-origin assessment scope (ROOT identity only) ---------------------
+
+test('a module package is assessed with its own escaped exchange path', async () => {
+  for (const [name, escaped] of [[WORKBENCH, '@sanqianx%2fclaude-ai-workbench'], [BRIDGE, '@sanqianx%2fai-coding-event-bridge-console']]) {
+    const fetchImpl = makeFetch([okIdToken(), okExchange()]);
+    const { exitCode, receipt } = await probeModule.probe({ packageName: name, env: RUNNER_ENV, fetchImpl });
+    assert.strictEqual(exitCode, probeModule.EXIT.OK, name + ' must reach the exchange');
+    assert.strictEqual(fetchImpl.calls.length, 2);
+    assert.strictEqual(fetchImpl.calls[1].url, 'https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/' + escaped);
+    assert.strictEqual(receipt.package, name);
+    assert.deepStrictEqual(Object.keys(receipt).sort(), [...probeModule.RECEIPT_FIELDS].sort());
+    const serialized = JSON.stringify(receipt);
+    assert.ok(!serialized.includes(FAKE_REGISTRY_TOKEN), 'the registry token must never reach the receipt');
+    assert.ok(!serialized.includes(FAKE_ID_TOKEN), 'the id token must never reach the receipt');
+  }
+});
+
+test('the workflow package choices are exactly the four assessment names', () => {
+  const file = path.join(__dirname, '..', '..', '.github', 'workflows', 'publish.yml');
+  const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
+  const start = lines.findIndex(line => /^ {6}package:\s*$/.test(line));
+  assert.ok(start >= 0, 'the workflow must declare a package input');
+  const choices = [];
+  for (const line of lines.slice(start + 1)) {
+    if (/^ {0,6}\S/.test(line)) break;
+    const match = /^ {10}- '([^']+)'$/.exec(line);
+    if (match) choices.push(match[1]);
+  }
+  assert.deepStrictEqual(choices, [...probeModule.ALLOWED_PACKAGES]);
+});
+
+test('the module names are assessment-only: the stable routes still refuse them', () => {
+  assert.strictEqual(stableCommon.ALLOWED_PACKAGES.includes(WORKBENCH), false);
+  assert.strictEqual(stableCommon.ALLOWED_PACKAGES.includes(BRIDGE), false);
+
+  const prepareInput = over => Object.assign({
+    repository: stableCommon.REPOSITORY,
+    workflowRef: stableCommon.WORKFLOW_REF_PREFIX + 'main',
+    eventName: 'workflow_dispatch',
+    sourceSha: 'a'.repeat(40),
+    expectedVersion: '5.0.25',
+  }, over);
+
+  const publishInput = over => Object.assign({
+    repository: stableCommon.REPOSITORY,
+    workflowRef: stableCommon.WORKFLOW_REF_PREFIX + 'main',
+    eventName: 'workflow_dispatch',
+    expectedSha256: 'a'.repeat(64),
+    expectedSRI: 'sha512-' + Buffer.alloc(64, 7).toString('base64'),
+    expectedSourceSha: 'a'.repeat(40),
+    prepareRunId: '40000000001',
+    reviewer: 'lead-reviewer',
+    expectedVersion: '5.0.25',
+  }, over);
+
+  for (const name of [WORKBENCH, BRIDGE]) {
+    const prepared = stablePrepare.checkPrepareSource(prepareInput({ packageName: name }));
+    assert.strictEqual(prepared.ok, false, name + ' must not be preparable');
+    assert.strictEqual(prepared.code, 'PACKAGE_NAME');
+    const published = stablePublish.checkPublishBinding(publishInput({ packageName: name }));
+    assert.strictEqual(published.ok, false, name + ' must not be publishable');
+    assert.strictEqual(published.code, 'PACKAGE_NAME');
+  }
+
+  assert.strictEqual(stablePrepare.checkPrepareSource(prepareInput({ packageName: stableCommon.CORE_PACKAGE })).code, 'VERSION_INPUT');
+  assert.strictEqual(stablePublish.checkPublishBinding(publishInput({ packageName: stableCommon.CORE_PACKAGE })).ok, true);
 });

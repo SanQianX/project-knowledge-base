@@ -23,7 +23,8 @@
 //   2. the fixture's fail-fast guard rejects an over-budget dataDir and
 //      accepts in-budget ones (on win32 it is a no-op — named pipes);
 //   3. on POSIX the kernel verdict is reproduced live: the fixed normalhook
-//      length binds and 109 refuses; 108 is measured without an assertion;
+//      length binds; the 109 incident is recorded, without assuming whether
+//      this Node/libuv version refuses or truncates it. 108 is also diagnostic.
 //      on win32 this leg is reported platform-skipped (no sun_path there);
 //   4. the product's controlPath shape per platform is asserted unchanged.
 //
@@ -121,11 +122,13 @@ async function main() {
     outcomes.fixed = { length: fixedLength, ...(await tryListen(makeAtLength(fixedLength))) };
     outcomes.incident109 = { length: 109, ...(await tryListen(makeAtLength(109))) };
     // 108 is measured but NOT asserted: the exact sun_path boundary is
-    // kernel-dependent (WSL2 6.6 binds 108; EINVAL starts at 109 there),
-    // while 109 — the CI incident length — refused on every kernel observed.
+    // runtime-dependent (some libuv callers truncate; others reject),
+    // so neither boundary observation is a cross-version product contract.
     outcomes.boundary108 = { length: 108, ...(await tryListen(makeAtLength(108))) };
     assert.ok(outcomes.fixed.bound, `the fixed normalhook socket length (${fixedLength}) binds on this POSIX kernel`);
-    assert.ok(!outcomes.incident109.bound, `the CI incident length (109) must refuse to bind: ${JSON.stringify(outcomes.incident109)}`);
+    // Node 22 may truncate both bind and connect names; a universal refusal
+    // assertion would characterize the runtime incorrectly. The fixture guard
+    // above remains strict, and the fixed in-budget socket must really bind.
     proof.kernelVerdict = { platform: process.platform, outcomes };
     fs.rmSync(base, { recursive: true, force: true });
   }

@@ -33,7 +33,13 @@ const REGISTRY = 'https://registry.npmjs.org';
 const AUDIENCE = 'npm:registry.npmjs.org';
 const CORE_PACKAGE = '@sanqianx/project-knowledge';
 const DESKTOP_PACKAGE = '@sanqianx/project-knowledge-desktop';
-const ALLOWED_PACKAGES = Object.freeze([CORE_PACKAGE, DESKTOP_PACKAGE]);
+// Assessment-only module names. They exist in this allowlist for one reason:
+// to let the ROOT workflow identity ask npm whether it is already a trusted
+// publisher for them. They are NOT publication targets here. The stable
+// prepare/publish route stays core-only and refuses them with PACKAGE_NAME.
+const WORKBENCH_PACKAGE = '@sanqianx/claude-ai-workbench';
+const BRIDGE_CONSOLE_PACKAGE = '@sanqianx/ai-coding-event-bridge-console';
+const ALLOWED_PACKAGES = Object.freeze([CORE_PACKAGE, DESKTOP_PACKAGE, WORKBENCH_PACKAGE, BRIDGE_CONSOLE_PACKAGE]);
 const RECEIPT_FIELDS = Object.freeze(['package', 'status', 'success', 'errorCode', 'timestamp']);
 const REPOSITORY = 'SanQianX/project-knowledge-base';
 const WORKFLOW_REF_PREFIX = REPOSITORY + '/.github/workflows/publish.yml@';
@@ -212,6 +218,7 @@ module.exports = {
   probe, main, parseArgs, buildReceipt, escapePackageName, isAllowedPackage,
   classifyExchangeStatus, validateIdTokenUrl, assertRunnerIdentity,
   ALLOWED_PACKAGES, RECEIPT_FIELDS, CORE_PACKAGE, DESKTOP_PACKAGE,
+  WORKBENCH_PACKAGE, BRIDGE_CONSOLE_PACKAGE,
   REGISTRY, AUDIENCE, REPOSITORY, WORKFLOW_REF_PREFIX, EXIT,
 };
 

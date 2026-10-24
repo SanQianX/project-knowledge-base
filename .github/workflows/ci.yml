@@ -64,6 +64,8 @@ jobs:
           # tests; the knowledge lane fixtures need a temp root that is
           # outside the repository, so they read this variable first.
           PK_TEST_TEMP_ROOT: ${{ runner.temp }}
+          # The startup harness uses a separate, explicit isolation root.
+          KB_PREFLIGHT_ISO_ROOT: ${{ runner.temp }}
         run: |
           npm ci
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

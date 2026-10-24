@@ -43,8 +43,15 @@ on:
         required: true
         type: choice
         options:
+          # The core package: the only publication target of this workflow.
           - '@sanqianx/project-knowledge'
+          # The optional desktop package: assessment and core-only guards only.
           - '@sanqianx/project-knowledge-desktop'
+          # Assessment only: module packages whose npm-side publisher binding is
+          # being located. They are NEVER published here; the stable
+          # prepare/publish route below refuses them with PACKAGE_NAME.
+          - '@sanqianx/claude-ai-workbench'
+          - '@sanqianx/ai-coding-event-bridge-console'
       source_sha:
         description: 'stable modes only: exact 40-hex reviewed commit to build from'
         required: false
