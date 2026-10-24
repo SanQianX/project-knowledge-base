@@ -203,6 +203,41 @@ const endpointPid = (dir) => {
     }
   }
 
+  // Case F (R13) — unverified legacy endpoint: alive recorded PID (this test
+  // process), a foreign 404 server on the recorded port, and NO startedAt
+  // stamp (the live writer always stamps it; hand-written or legacy records
+  // do not) while the control channel is definitively refused. start must
+  // reject FAST and nonzero — no busy-trust of an unverified PID through the
+  // patience budget, no kill, no second spawn, endpoint bytes untouched, and
+  // both the foreign server and the recorded PID still alive afterwards.
+  {
+    const foreign = http.createServer((_req, res) => { res.writeHead(404); res.end('not knowledge'); });
+    await new Promise(resolve => foreign.listen(0, '127.0.0.1', resolve));
+    const foreignPort = foreign.address().port;
+    const dataDir = path.join(runRoot, 'f-data');
+    fs.mkdirSync(dataDir, { recursive: true });
+    const endpointFile = path.join(dataDir, 'runtime-endpoint.json');
+    const record = { schema: 'project-knowledge/runtime-endpoint/v1', pid: process.pid, host: '127.0.0.1', port: foreignPort };
+    fs.writeFileSync(endpointFile, JSON.stringify(record, null, 2) + '\n', 'utf8');
+    const bytesBefore = fs.readFileSync(endpointFile);
+    try {
+      const refused = await runCli(['start', '--data', dataDir, '--no-open'], {}, 20000);
+      const bytesAfter = fs.readFileSync(endpointFile);
+      results.caseF = {
+        exit: refused.code, elapsedMs: refused.elapsedMs, foreignPort,
+        output: (refused.out + refused.err).trim(),
+        refusedFastNonzero: refused.code === 1 && refused.elapsedMs < 10000 && /缺少 startedAt 启动标识/.test(refused.out + refused.err),
+        notKilled: foreign.listening && harness.pidAlive(process.pid),
+        endpointUntouched: bytesAfter.equals(bytesBefore),
+        noSecondSpawn: !fs.existsSync(path.join(dataDir, 'launcher.log')),
+      };
+      assert.equal(results.caseF.refusedFastNonzero, true, 'an unstamped endpoint with a refused control channel must be rejected fast and nonzero: ' + results.caseF.output);
+      assert.equal(results.caseF.notKilled, true, 'neither the foreign server nor the recorded PID may be signaled');
+      assert.equal(results.caseF.endpointUntouched, true, 'the refusal must not rewrite or delete the endpoint record');
+      assert.equal(results.caseF.noSecondSpawn, true, 'the refusal must never spawn a backend');
+    } finally { foreign.closeAllConnections?.(); await new Promise(resolve => foreign.close(resolve)); }
+  }
+
   // Isolation proofs: observer booleans for the CLI + real-backend chain, and
   // the protected-port listener set must be untouched.
   const proof = harness.observerProof();

@@ -77,6 +77,22 @@ async function main() {
     await harness.typeText(MEMORY_TEXT);
     await harness.selectOption('#memoryScope', 'global');
     const postsBefore = harness.network.find(entry => entry.method === 'POST' && entry.url.includes('/api/engine/memories')).length;
+    // Passive DOM observation installed BEFORE the real click. The product's
+    // confirm handler closes the dialog BEFORE its post-save refreshSnapshot()
+    // and shows the toast only after that refresh resolves (ui/product.js:
+    // 'close(); await refreshSnapshot(); toast(...)'), so a one-shot read
+    // gated on 'dialog closed' can land inside the refresh gap and see an
+    // empty toast (CI 40080404131, line 98: empty text). The observer records
+    // every REAL toast mutation the REAL click produces — text, visibility
+    // and time — nothing is fabricated or forced.
+    await harness.run(`(() => {
+      const el = document.getElementById('toast');
+      window.__pkToastLog = [{ text: el.textContent, hidden: el.hidden, at: Date.now() }];
+      new MutationObserver(() => {
+        window.__pkToastLog.push({ text: el.textContent, hidden: el.hidden, at: Date.now() });
+      }).observe(el, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
+      return true;
+    })()`);
     await harness.nativeClick('#confirmMemory');
     await harness.waitFor(
       () => harness.run("document.getElementById('memoryDialog').open === false"),
@@ -93,15 +109,47 @@ async function main() {
     assert.equal(created.syncStatus, 'pending', `the engine really answers syncStatus pending: ${JSON.stringify(created)}`);
     assert.ok(created.syncError, `the engine reports the real write error: ${JSON.stringify(created.syncError)}`);
 
-    // The real UI shows the pending state.
-    const toast = await harness.run("document.getElementById('toast').textContent");
+    // The real UI shows the pending state. The wait is on the OBSERVED toast
+    // record (installed before the click), so the assertion holds no matter
+    // when the shell's post-save refreshSnapshot() finishes — the observed
+    // toast is the real one the real click produced. The toast's text also
+    // persists after its 4s auto-hide (product toast() flips only `hidden`),
+    // so a late match is still the real text; requiring hidden === false in
+    // the same record proves it was actually VISIBLE when shown.
+    const debugUiFailure = async stage => {
+      try {
+        const dump = await harness.run(`(() => ({
+          toasts: window.__pkToastLog || null,
+          feedback: document.getElementById('memoryFeedback').textContent,
+          feedbackHidden: document.getElementById('memoryFeedback').hidden,
+          dialogOpen: document.getElementById('memoryDialog').open,
+          activeView: (document.querySelector('.view.active') || {}).id || null,
+        }))()`);
+        console.error(`MEM-006 UI failure at ${stage}: ${JSON.stringify(dump)}`);
+        if (harness.evidence) await harness.browser.screenshot(path.join(harness.evidence, `mem006-failure-${stage}.png`));
+      } catch {}
+    };
+    let toastRecord;
+    try {
+      toastRecord = await harness.waitFor(
+        () => harness.run(`(window.__pkToastLog || []).find(t => !t.hidden && t.text.includes('记忆文件待恢复')) || null`),
+        'the toast warns about the pending file',
+        10000,
+      );
+    } catch (error) { await debugUiFailure('toast-pending'); throw error; }
+    assert.equal(toastRecord.hidden, false, `the pending toast was really visible when shown: ${JSON.stringify(toastRecord)}`);
+    const toast = toastRecord.text;
     assert.match(String(toast), /记忆文件待恢复/, `the toast warns about the pending file: ${toast}`);
     assert.match(String(toast), /未同步内容不会注入任务。/, 'the toast warns that the unsynced memory is not injected');
 
-    const card = await harness.run(`(() => {
-      const el = document.querySelector('[data-memory-card=${JSON.stringify(created.id)}]');
-      return el ? el.textContent : null;
-    })()`);
+    let card;
+    try {
+      card = await harness.run(`(() => {
+        const el = document.querySelector('[data-memory-card=${JSON.stringify(created.id)}]');
+        return el ? el.textContent : null;
+      })()`);
+    } catch (error) { await debugUiFailure('card-read'); throw error; }
+    if (!card) await debugUiFailure('card-listed');
     assert.ok(card, 'the confirmed memory is really listed');
     assert.match(card, /写入待恢复/, `the card shows the pending write: ${card}`);
     assert.match(card, /待同步/, 'the card shows the pending sync state');
@@ -121,7 +169,7 @@ async function main() {
       case: 'MEM-006',
       request: { method: post.method, url: post.url.replace(harness.base, ''), status: post.status, response: postBody },
       memory: { id: created.id, status: created.status, syncStatus: created.syncStatus, syncError: created.syncError, scopeType: created.scopeType, scopeId: created.scopeId },
-      ui: { toast, card },
+      ui: { toast, toastObserved: { visibleWhenShown: toastRecord.hidden === false, at: toastRecord.at }, card },
       injectedWhilePending: injected.map(entry => entry.memoryId),
       blockedPath: memoryFile,
     });

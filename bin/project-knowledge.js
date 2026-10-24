@@ -149,11 +149,20 @@ async function resolveExistingForStart(dataDir) {
   const startedAt = Date.now();
   while (true) {
     let current = null;
-    try { current = await instances.current(dataDir); }
+    let answered = false; // the probe definitively reported "no control channel"
+    try { current = await instances.current(dataDir); answered = true; }
     catch (error) { if (!isRetryableProbeError(error)) throw error; }
     if (current) return { instance: current };
     const live = endpoint.readLiveEndpoint(dataDir, { removeStale: false });
     if (!live || !endpoint.isProcessAlive(live.pid)) return { instance: null };
+    // R13: the live writer ALWAYS stamps startedAt (writeEndpoint/claimEndpoint
+    // default it). A live PID behind an unstamped record while the probe
+    // answered a definitive refusal (ENOENT/ECONNREFUSED/EPIPE, not a busy
+    // timeout) is a legacy or hand-written claim, not a busy window: refuse
+    // fast like stop/status instead of trusting the unverified PID through the
+    // whole patience budget. A stalled-but-present channel (retryable timeout)
+    // keeps the honest retry below.
+    if (answered && !live.startedAt) return { unverified: live };
     if (Date.now() - startedAt >= patienceMs) return { busy: live };
     await new Promise(resolve => setTimeout(resolve, 500));
   }
@@ -181,6 +190,10 @@ async function main() {
     // R10: live-but-busy instance → honest retry, never 启动失败 and never a
     // second spawn. stop/status keep their strict refusal semantics below.
     const resolved = await resolveExistingForStart(dataDir);
+    if (resolved.unverified) {
+      const info = resolved.unverified;
+      throw new Error(`数据目录已有实例记录（PID ${info.pid}，端口 ${info.port}），但该记录缺少 startedAt 启动标识且控制通道无响应（未验证的遗留记录）。已拒绝启动：不会重复启动、误停止或报告已停止。`);
+    }
     if (resolved.busy) {
       const info = resolved.busy;
       console.log(`现有实例（PID ${info.pid}，端口 ${info.port}）正在启动或繁忙，控制通道暂未响应（未判定失败，未重复启动）。` +
