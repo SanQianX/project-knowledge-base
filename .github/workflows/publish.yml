@@ -5,6 +5,19 @@ on:
   push:
     tags:
       - 'qa-rc/*'
+  # Assessment only: asks the npm registry whether the EXISTING GitHub
+  # identity of this workflow file already has a trusted publisher for the
+  # selected package. It never publishes, never moves a dist-tag, never
+  # changes npm access and never creates or broadens trust.
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'npm package whose existing trusted-publisher identity is probed'
+        required: true
+        type: choice
+        options:
+          - '@sanqianx/project-knowledge'
+          - '@sanqianx/project-knowledge-desktop'
 permissions:
   contents: read
 concurrency:
@@ -12,7 +25,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish:
-    if: github.repository == 'SanQianX/project-knowledge-base'
+    # The RC path stays exactly as it was; the manual dispatch route never
+    # reaches this job.
+    if: github.repository == 'SanQianX/project-knowledge-base' && github.event_name == 'push'
     runs-on: ubuntu-latest
     # Configure protected reviewers and matching npm OIDC identity FIRST.
     environment: npm-rc-gate
@@ -50,4 +65,39 @@ jobs:
         with:
           name: qa-rc-receipt
           path: ${{ runner.temp }}/qa-rc
+          if-no-files-found: warn
+  auth-probe:
+    # Assessment only. The job asks npm ONE question through the documented
+    # OIDC token exchange: is the identity of this workflow file already
+    # authorized to publish the selected package?
+    # It deliberately has NO environment claim (so it matches a connection
+    # registered without an environment, like the historical core one), NO
+    # registry-url and NO NODE_AUTH_TOKEN placeholder, and it never writes an
+    # npm credential file. The short-lived registry token stays in the
+    # probe's memory and never reaches stdout, a log or the receipt.
+    if: github.repository == 'SanQianX/project-knowledge-base' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: npm-auth-probe
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.x'
+      - name: Probe the existing npm trusted-publisher identity
+        env:
+          PROBE_PACKAGE: ${{ inputs.package }}
+        run: node qa-autopilot/tools/npm-oidc-auth-probe.cjs --package "$PROBE_PACKAGE" --receipt "$RUNNER_TEMP/npm-oidc-auth-probe/receipt.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: npm-oidc-auth-probe-receipt
+          path: ${{ runner.temp }}/npm-oidc-auth-probe/receipt.json
           if-no-files-found: warn
