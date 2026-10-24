@@ -41,7 +41,12 @@ function spawnServer({ root, port, host = '127.0.0.1', dataDir, extraEnv = {}, t
   // production entry point still defaults to engine ownership; product tests
   // explicitly request it and run the real module services.
   const entry = path.join(root, '_site', 'lib', 'server-app.js');
-  const bootstrap = `const {startServer,installProcessHandlers}=require(${JSON.stringify(entry)});const instance=startServer({analysisOwner:${JSON.stringify(analysisOwner)}});installProcessHandlers(instance);instance.then(s=>process.stdout.write('Project Knowledge listening on http://'+s.host+':'+s.port+'\\n')).catch(()=>{process.exitCode=1});`;
+  // CI 40075242420 (normalhook, linux24): a startup rejection used to vanish —
+  // exit 1 with empty stdout/stderr — because this catch swallowed the reason.
+  // The failure path below prints the child's stderr tail, so emit one bounded
+  // JSON line of own metadata (code / message head / first stack frame's file
+  // only; never logs, keys or transcripts) and keep exit 1.
+  const bootstrap = `const {startServer,installProcessHandlers}=require(${JSON.stringify(entry)});const instance=startServer({analysisOwner:${JSON.stringify(analysisOwner)}});installProcessHandlers(instance);instance.then(s=>process.stdout.write('Project Knowledge listening on http://'+s.host+':'+s.port+'\\n')).catch(e=>{const frame=String(e&&e.stack||'').split('\\n')[1]||'';const fm=/([^\\\\/]+\\.[a-z]+):/i.exec(frame);process.stderr.write(JSON.stringify({event:'server.startup-fatal',code:e&&e.code||null,message:String(e&&e.message||e).slice(0,300),stackFile:fm?fm[1]:null})+'\\n');process.exitCode=1});`;
   const child = spawn(process.execPath, ['-e', bootstrap], {
     cwd: cwd || root,
     env: {

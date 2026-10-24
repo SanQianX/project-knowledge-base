@@ -267,8 +267,34 @@ async function main() {
       probeAfterFailure = { answered: false, code: (probeError && probeError.cause && (probeError.cause.code || probeError.cause.message)) || String(probeError && probeError.message || probeError) };
     }
     evidence.debugFailureProbe = probeAfterFailure;
+    // The child's OWN structured logs hold its account of its death: on a
+    // startup rejection stop() logs server.shutdown_started with the reason
+    // (CI 40075242420: 'control-startup-failed' from an unbindable POSIX
+    // control socket) before the error reaches the bootstrap catch. Bounded
+    // metadata only — level, event, reason, error code, first stack frame's
+    // file — never raw context or transcripts.
+    let ownStartupRecords = null;
+    try {
+      ownStartupRecords = allLogRecords(fixture.dataDir)
+        .filter(r => ['fatal', 'error', 'warn'].includes(r.level) || String(r.event || '').startsWith('server.'))
+        .slice(-5)
+        .map(r => ({
+          level: r.level || null,
+          event: r.event || null,
+          reason: (r.context && r.context.reason) || null,
+          code: (r.error && r.error.code) || null,
+          stackFile: (String((r.error && r.error.stack) || '').split('\n')[1] || '').match(/([^\\/]+)\.[a-z]+:/i)?.[0] || null,
+        }));
+    } catch {}
+    evidence.debugOwnStartupRecords = ownStartupRecords;
+    let posixControlSocket = 'named-pipe (win32)';
+    try {
+      const { controlPath } = require('../lib/runtime-control');
+      if (process.platform !== 'win32') posixControlSocket = `${controlPath(fixture.dataDir).length} chars (POSIX budget 103)`;
+    } catch {}
     console.error(`R2 normalhook FAIL: ${error.message}`);
-    console.error(`R2 normalhook server state: ${JSON.stringify({ port, pid: server.child.pid, exitInfo, probeAfterFailure })}`);
+    console.error(`R2 normalhook server state: ${JSON.stringify({ port, pid: server.child.pid, exitInfo, probeAfterFailure, posixControlSocket })}`);
+    console.error(`R2 normalhook own structured-log tail (bounded): ${JSON.stringify(ownStartupRecords)}`);
     console.error(`R2 normalhook server stderr tail:\n${serverStderr.slice(-1600)}`);
     console.error(`R2 normalhook server stdout tail:\n${serverStdout.slice(-1600)}`);
     process.exitCode = 1;

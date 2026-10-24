@@ -15,11 +15,32 @@ const { SettingsStore } = require('../../lib/settings-store');
 const { ProjectRegistryStore } = require('../../lib/project-registry-store');
 const { ProjectStore } = require('../../lib/project-store');
 const { Logger } = require('../../lib/structured-logger');
+const { controlPath } = require('../../lib/runtime-control');
 const { makeRepo } = require('../fixtures/make-git-repos');
+
+// The product's runtime-control listens on a filesystem unix socket at
+// <dataDir>/runtime-control.sock on POSIX (runtime-control.js:14; Windows uses
+// a hashed named pipe). Linux sun_path allows 107 chars (macOS 103), so the
+// dataDir path this fixture builds under os.tmpdir() must leave room for the
+// 21-char socket name. CI 40075242420 (linux24): the old 'pk-logging-acc-'
+// prefix made the logfixr2-normal dataDir 88 chars -> a 109-char socket ->
+// net.listen refused it, the server exited 1 before the health gate with empty
+// pipes, and normalhook timed out. 'pk-la-' keeps every lane case <= 100 even
+// on the CI temp root (/home/runner/work/_temp, 23 chars).
+const POSIX_SOCKET_CHAR_LIMIT = 103; // strictest common budget (macOS); all lane cases fit
+
+function assertPosixSocketBudget(dataDir) {
+  if (process.platform === 'win32') return dataDir; // named pipe, no sun_path
+  const socketPath = controlPath(dataDir);
+  if (socketPath.length > POSIX_SOCKET_CHAR_LIMIT) {
+    throw new Error(`fixture dataDir makes the POSIX control socket ${socketPath.length} chars (limit ${POSIX_SOCKET_CHAR_LIMIT}): ${dataDir}`);
+  }
+  return dataDir;
+}
 
 async function createLoggingAcceptanceFixture(options = {}) {
   const caseId = options.caseId || 'case';
-  const dataDir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), `pk-logging-acc-${caseId}-`));
+  const dataDir = assertPosixSocketBudget(fs.mkdtempSync(path.join(require('node:os').tmpdir(), `pk-la-${caseId}-`)));
   if (options.freshProduct !== false) require('../../lib/product-data').initializeProductData(dataDir);
   const knowledgeRoot = path.join(dataDir, 'knowledge-root');
   fs.mkdirSync(knowledgeRoot, { recursive: true });
@@ -87,4 +108,4 @@ async function writeProjectLogs(logger, projectId, records) {
   }
 }
 
-module.exports = { createLoggingAcceptanceFixture, writeProjectLogs };
+module.exports = { createLoggingAcceptanceFixture, writeProjectLogs, assertPosixSocketBudget, POSIX_SOCKET_CHAR_LIMIT };

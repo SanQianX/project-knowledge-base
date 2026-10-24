@@ -102,7 +102,9 @@ const EVIDENCE = process.env.PK_R7_EVIDENCE_DIR ? path.resolve(process.env.PK_R7
     assert.ok(report.chromeDefaultProfileDirExists, 'the Chrome default-profile shape exists under the isolated USERPROFILE');
     assert.ok(report.psCacheParentExists, 'the PS module-analysis cache parent directory exists');
     assert.deepEqual(report.osWhitelistHeld, [], `nothing outside the OS whitelist and the isolation map survives: ${JSON.stringify(report.osWhitelistHeld)}`);
-    assert.ok('SystemRoot' in process.env && 'PATH' in process.env, 'OS-critical variables survive the whitelist');
+    // SystemRoot exists only on Windows; POSIX's OS floor is PATH alone.
+    const osCritical = process.platform === 'win32' ? ['SystemRoot', 'PATH'] : ['PATH'];
+    for (const key of osCritical) assert.ok(key in process.env, `OS-critical variable ${key} survives the whitelist (${process.platform})`);
     assert.notEqual(process.env.HOME, REAL_HOME, 'HOME must not be the real home');
     proof.poisonedEnvWhitelisted = {
       poisonKeys: Object.keys(POISON).length,
