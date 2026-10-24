@@ -251,6 +251,15 @@ try {
   if (!global.__KB_R5_OBSERVER_HOOK) {
     global.__KB_R5_OBSERVER_HOOK = true;
     const isRunAsNode = (o) => o && o.env && String(o.env.ELECTRON_RUN_AS_NODE) === '1';
+    // R8 harness fix: the backend itself RUNS with ELECTRON_RUN_AS_NODE=1, so
+    // any child it spawns with a spread env (e.g. runGit's git) carries the
+    // marker without actually being a node process — injecting --require
+    // there broke git ("unknown option: --require", run-3 import 400). Only
+    // node/electron targets get the observer now.
+    // NOTE: this source is embedded in a template literal — the class needs
+    // four backslashes in the file so the delivered source keeps [\\/] and
+    // Windows backslash paths match (run-4 lesson: two collapsed to [/]).
+    const isNodeCommand = (c) => /(^|[\\\\/])(node|electron)(\\.exe)?$/i.test(String(c || ''));
     const rewriteEnv = (env) => {
       const e = Object.assign({}, env, {
         USERPROFILE: OWN.userProfile, APPDATA: OWN.appdata,
@@ -261,7 +270,7 @@ try {
     };
     const wrap = (orig) => function (cmd, args, opts) {
       try {
-        if (isRunAsNode(opts)) {
+        if (isRunAsNode(opts) && isNodeCommand(cmd)) {
           const newArgs = (Array.isArray(args) ? args : []).slice();
           if (newArgs.indexOf(OWN.observer) === -1) newArgs.unshift('--require', OWN.observer);
           return orig.call(this, cmd, newArgs, Object.assign({}, opts, { env: rewriteEnv(opts.env) }));
@@ -288,6 +297,11 @@ function mainHookExpression(own, observerPath) {
   if (typeof req !== 'function') return 'hook-error:no-require';
   const cp = req('node:child_process');
   const isRunAsNode = (o) => o && o.env && String(o.env.ELECTRON_RUN_AS_NODE) === '1';
+  // R8 harness fix (see observerSource): never inject --require into non-node
+  // children (git et al.) even when their env carries the RUN_AS_NODE marker.
+  // Template-literal escape: four backslashes deliver [\\/] to this evaluated
+  // source so Windows backslash exec paths match (run-4 lesson).
+  const isNodeCommand = (c) => /(^|[\\\\/])(node|electron)(\\.exe)?$/i.test(String(c || ''));
   const rewriteEnv = (env) => {
     const e = Object.assign({}, env, {
       USERPROFILE: OWN.userProfile, APPDATA: OWN.appdata,
@@ -298,7 +312,7 @@ function mainHookExpression(own, observerPath) {
   };
   const wrap = (orig) => function (cmd, args, opts) {
     try {
-      if (isRunAsNode(opts)) {
+      if (isRunAsNode(opts) && isNodeCommand(cmd)) {
         const newArgs = (Array.isArray(args) ? args : []).slice();
         if (newArgs.indexOf(OBSERVER) === -1) newArgs.unshift('--require', OBSERVER);
         return orig.call(this, cmd, newArgs, Object.assign({}, opts, { env: rewriteEnv(opts.env) }));
@@ -389,6 +403,59 @@ async function attachInspectHook(inspectPort, hookExpression, entryRegex) {
   }
 }
 
+// R6 renderer acceptance: attach to the REAL Electron renderer page of the
+// running GUI (Chromium remote-debugging target on an own loopback port —
+// the same GUI process the candidate launched; never a driver-local page or
+// fabricated DOM) and drive ACTUAL input: real CDP mouse moves for the brand
+// tooltip, the focus path for keyboard behavior, a real click that opens the
+// Model Management UI, and screenshots saved under the run root (outside
+// Git). No provider refresh, no quota API, no model requests.
+async function attachRendererSession(rdpPort, sitePort) {
+  const deadline = Date.now() + 30000;
+  let target = null;
+  while (Date.now() < deadline && !target) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${rdpPort}/json/list`);
+      const list = await res.json();
+      const pages = (Array.isArray(list) ? list : []).filter((t) => t.type === 'page' && t.webSocketDebuggerUrl);
+      target = pages.find((t) => String(t.url).includes(`127.0.0.1:${sitePort}`)) || pages[0] || null;
+    } catch {}
+    if (!target) await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  if (!target) throw new Error('renderer page target not found on the remote-debugging port');
+  const ws = new WebSocket(target.webSocketDebuggerUrl);
+  const pending = new Map();
+  let nextId = 0;
+  ws.onmessage = (event) => {
+    let msg;
+    try { msg = JSON.parse(String(event.data)); } catch { return; }
+    if (msg.id && pending.has(msg.id)) { pending.get(msg.id)(msg); pending.delete(msg.id); }
+  };
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('renderer websocket open timeout')), 15000);
+    ws.onopen = () => { clearTimeout(timer); resolve(); };
+    ws.onerror = () => { clearTimeout(timer); reject(new Error('renderer websocket error')); };
+  });
+  const call = (method, params) => new Promise((resolve, reject) => {
+    const id = ++nextId;
+    const timer = setTimeout(() => { pending.delete(id); reject(new Error(`${method} timeout`)); }, 20000);
+    pending.set(id, (msg) => {
+      clearTimeout(timer);
+      msg.error ? reject(new Error(`${method}: ${msg.error.message || JSON.stringify(msg.error)}`)) : resolve(msg.result);
+    });
+    ws.send(JSON.stringify({ id, method, params: params || {} }));
+  });
+  const evaluate = async (expression) => {
+    const r = await call('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
+    if (r.exceptionDetails) {
+      const ex = r.exceptionDetails.exception || {};
+      throw new Error(`renderer evaluate threw: ${ex.description || ex.value || r.exceptionDetails.text}`);
+    }
+    return r.result && r.result.value;
+  };
+  return { pageUrl: target.url, call, evaluate, close: () => { try { ws.close(); } catch {} } };
+}
+
 function readObserverLog(logPath) {
   if (!fs.existsSync(logPath)) return [];
   return fs.readFileSync(logPath, 'utf8').split('\n').filter(Boolean)
@@ -427,7 +494,9 @@ async function main() {
   if (!rel || (!rel.startsWith('..') && !path.isAbsolute(rel))) {
     throw new Error('smoke temp root must be outside the source repository');
   }
-  fs.mkdirSync(shortTempBase, { recursive: true });
+  // A Windows drive root exists but mkdirSync(recursive) on it throws EPERM —
+  // only create the base when it does not exist yet.
+  if (!fs.existsSync(shortTempBase)) fs.mkdirSync(shortTempBase, { recursive: true });
   const runRoot = fs.mkdtempSync(path.join(shortTempBase, 'pkr5-'));
   const ambient = envLib.hardenProcessEnv(runRoot, { gui: false });
 
@@ -603,10 +672,21 @@ async function main() {
       && probeLine('CORE_PATH').includes(path.join('node_modules', '@sanqianx', 'project-knowledge')),
   `exit ${probe.status}: ${['CORE_VERSION', 'ENGINE_VENDOR_VERSION', 'APACHE_ARROW_LOAD', 'LANCEDB_LOAD', 'LANCEDB_NATIVE_LOAD', 'WB_QUOTA_LOAD', 'BRIDGE_LOAD'].map((k) => probeLine(k)).filter(Boolean).join(' | ').slice(0, 400)}`);
 
-  // synthetic own source project + knowledge markers under the SHORT root
+  // synthetic own source project + knowledge markers under the SHORT root.
+  // R8: a REAL git repository (canonical import fixture shape, makeRepo in
+  // _site/_test/helpers) so the product can import it through its own API.
   const ownProject = path.join(runRoot, 'ownproject');
   fs.mkdirSync(ownProject, { recursive: true });
   fs.writeFileSync(path.join(ownProject, 'hello.py'), 'print("r5 synthetic project")\n');
+  const ownKnowledge = path.join(runRoot, 'ownknowledge');
+  fs.mkdirSync(ownKnowledge, { recursive: true });
+  const gitIn = (args) => spawnSync('git', args, { cwd: ownProject, encoding: 'utf8', windowsHide: true, timeout: 60000 });
+  gitIn(['init', '-q', '-b', 'main']);
+  gitIn(['config', 'user.email', 'r8-ownproject@local.invalid']);
+  gitIn(['config', 'user.name', 'R8 Own Project']);
+  gitIn(['config', 'commit.gpgsign', 'false']);
+  gitIn(['add', '.']);
+  const ownCommit = gitIn(['commit', '-qm', 'r8 own project baseline']);
   const protectedBefore = protectedPortSnapshot();
 
   const endpointPath = path.join(envDirs.data, 'runtime-endpoint.json');
@@ -616,30 +696,34 @@ async function main() {
   const launchGui = async (round) => {
     const inspectPort = await freePort();
     if (PROTECTED_PORTS.includes(inspectPort)) throw new Error('inspect port collided with a protected port');
+    const rdpPort = await freePort();
+    if (PROTECTED_PORTS.includes(rdpPort) || rdpPort === inspectPort) throw new Error('renderer debug port collided');
     const child = spawn(electronExe,
-      [`--user-data-dir=${dirs.userData}`, `--inspect-brk=127.0.0.1:${inspectPort}`, desktopDir], {
+      [`--user-data-dir=${dirs.userData}`, `--inspect-brk=127.0.0.1:${inspectPort}`,
+        `--remote-debugging-port=${rdpPort}`, desktopDir], {
         cwd: desktopDir, env: guiEnv, detached: false, stdio: ['ignore', guiLogFd, guiLogFd],
       });
     census.spawned.push(child.pid);
-    let hook = { round, inspectPort, attached: false, error: 'not attempted' };
+    let hook = { round, inspectPort, rdpPort, attached: false, error: 'not attempted' };
     try {
       const value = await attachInspectHook(inspectPort, hookExpression);
-      hook = { round, inspectPort, attached: true, hookResult: value };
+      hook = { round, inspectPort, rdpPort, attached: true, hookResult: value };
     } catch (error) {
-      hook = { round, inspectPort, attached: false, error: error.message };
+      hook = { round, inspectPort, rdpPort, attached: false, error: error.message };
     }
     inspectorLog.push(hook);
-    return { child, hook };
+    return { child, hook, rdpPort };
   };
 
   // 6. GUI round 1: endpoint -> HTTP contract -> four REAL modules
   const roundMarker = path.join(envDirs.data, 'r5-round1-marker.txt');
   const knowledgeMarker = path.join(envDirs.knowledge, 'r5-round1-marker.txt');
-  const { child: gui1 } = await launchGui(1);
+  const { child: gui1, rdpPort: rdpPort1 } = await launchGui(1);
   let endpoint = null;
   let healthJson = null;
   let moduleProcesses = [];
   let quotaUiLive = null;
+  let rendererEvidence = null;
   try {
     endpoint = await waitFor(() => {
       if (!fs.existsSync(endpointPath)) return null;
@@ -654,7 +738,16 @@ async function main() {
     fs.writeFileSync(knowledgeMarker, `round1 knowledge ${new Date().toISOString()}\n`);
 
     const baseUrl = `http://${endpoint.host === '::1' ? '[::1]' : endpoint.host}:${endpoint.port}`;
-    const state = await httpGet(`${baseUrl}/api/state`);
+    // The endpoint file can appear a beat before the backend accepts
+    // connections (observed once as a bare 'fetch failed' first connect —
+    // run preserved at the first-failure root) — probe with a short retry
+    // window instead of a single attempt.
+    const state = await waitFor(async () => {
+      try {
+        const response = await httpGet(`${baseUrl}/api/state`, 5000);
+        return response.status === 200 ? response : null;
+      } catch { return null; }
+    }, 15000, 'backend state endpoint accepting connections');
     const stateJson = JSON.parse(state.body.toString('utf8'));
     record('api-state', state.status === 200 && stateJson.schema === 'server-state/v2',
       `http ${state.status} schema ${stateJson.schema}`);
@@ -802,6 +895,256 @@ async function main() {
       servedResults.every((r) => r.bytesMatch),
     `served by the REAL WB ${byId.wb.version} via product proxy /modules/terminal/profile-settings/: ${servedResults.map((r) => `${r.name} http ${r.status} bytes-match=${r.bytesMatch}`).join(', ')}`);
 
+    // R6: ACTUAL RENDERER UI verification on the running candidate. The
+    // tooltip text must be filled by the renderer's OWN /api/system/version
+    // fetch; the driver independently GETs the same endpoint and both must
+    // equal the candidate core version (machine-derived, no literals). All
+    // interaction is real CDP input on the real Electron renderer page — no
+    // fabricated DOM, no driver-local rendering. Screenshots land in the run
+    // root (outside Git). NO provider refresh, NO quota API, NO model calls.
+    const versionResp = await httpGet(`${baseUrl}/api/system/version`);
+    let versionBody = null;
+    try { versionBody = JSON.parse(versionResp.body.toString('utf8')); } catch {}
+    const actualVersion = versionBody && versionBody.core && versionBody.core.version || null;
+    record('renderer-version-endpoint-actual',
+      versionResp.status === 200 && actualVersion === byId.core.version,
+    `GET /api/system/version http ${versionResp.status} -> core.version ${JSON.stringify(actualVersion)}; candidate core ${byId.core.version}`);
+
+    const coreUiDir = path.join(nmDir, '@sanqianx', 'project-knowledge', 'ui');
+    const widgetByteResults = [];
+    for (const name of ['version-info.js', 'version-info.css']) {
+      const localSha = sha256(fs.readFileSync(path.join(coreUiDir, name)));
+      const served = await httpGet(`${baseUrl}/${name}`);
+      widgetByteResults.push({ name, status: served.status, bytesMatch: served.status === 200 && sha256(served.body) === localSha, sha256: localSha });
+    }
+    record('renderer-widget-byte-sources',
+      widgetByteResults.every((w) => w.bytesMatch),
+    `tooltip widget bytes served by the actual site: ${widgetByteResults.map((w) => `${w.name} http ${w.status} bytes-match=${w.bytesMatch} sha256 ${w.sha256.slice(0, 12)}…`).join(', ')}`);
+
+    // R8: a fresh desktop instance ships knowledge.rootPath "" and the import
+    // API rejects with "Knowledge root is not configured." (run-2 transaction
+    // journal). The product's own first-run path for that setting is
+    // PATCH /api/settings, so the fixture seeds a self-owned brain root
+    // through that same real API — never by editing candidate bytes or
+    // weakening the import validation.
+    const brainRoot = path.join(runRoot, 'brainroot');
+    const seedResp = await fetch(`${baseUrl}/api/settings`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ knowledge: { rootPath: brainRoot } }),
+    });
+    let seedRootPath = null;
+    try { const sb = JSON.parse(await seedResp.text()); seedRootPath = sb.settings && sb.settings.knowledge && sb.settings.knowledge.rootPath || null; } catch {}
+    // R8: seed the own project through the REAL same-origin product API
+    // (canonical import fixture shape: POST /api/projects/import with
+    // localPath/knowledgePath/displayName) so the real root UI gets an
+    // actually-selected project BEFORE StartWork/providers. This is an API
+    // setup fixture only — it is NOT the audited import-dialog UI case.
+    const importResp = await fetch(`${baseUrl}/api/projects/import`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ localPath: ownProject, knowledgePath: ownKnowledge, displayName: 'R8 Own Project' }),
+    });
+    let importBody = null;
+    try { importBody = JSON.parse(await importResp.text()); } catch {}
+    const importedProjectId = importBody && importBody.projectId || null;
+    const wiring = importBody && importBody.modules
+      ? Object.entries(importBody.modules).map(([k, v]) => `${k}=${v && v.ok === true ? 'ok' : 'pending'}`).join(', ')
+      : 'n/a';
+    record('own-project-imported-api',
+      seedResp.status === 200 && !!seedRootPath && importResp.status === 201 && !!importedProjectId && ownCommit.status === 0,
+    `git fixture ownproject (commit exit ${ownCommit.status}) + PATCH /api/settings knowledge.rootPath -> http ${seedResp.status} rootPath=${JSON.stringify(seedRootPath)} + POST /api/projects/import -> http ${importResp.status} projectId=${JSON.stringify(importedProjectId)} displayName "R8 Own Project"; module wiring ${wiring} (API setup fixture, not the import-dialog UI case)`);
+
+    rendererEvidence = { rdpPort: rdpPort1, pageUrl: null, screenshots: [], quota: null };
+    try {
+      const renderer = await attachRendererSession(rdpPort1, sitePort);
+      rendererEvidence.pageUrl = renderer.pageUrl;
+      await renderer.call('Page.enable');
+      await renderer.call('Page.bringToFront');
+      // The candidate ships a prefers-reduced-motion block that drops the
+      // tooltip transition; emulating it makes computed visibility
+      // deterministic even when the GUI window is occluded (the compositor
+      // clock stalls CSS transitions on occluded windows).
+      await renderer.call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+      const shot = async (name) => {
+        try {
+          const r = await renderer.call('Page.captureScreenshot', { format: 'png' });
+          const p = path.join(runRoot, name);
+          fs.writeFileSync(p, Buffer.from(r.data, 'base64'));
+          rendererEvidence.screenshots.push(p);
+          return p;
+        } catch { return null; }
+      };
+      const TOOLTIP_STATE = "(() => { const el = document.getElementById('brandVersion'); const cs = getComputedStyle(el); return { text: el.textContent, opacity: cs.opacity, position: cs.position, tabindex: el.getAttribute('tabindex'), role: el.getAttribute('role') }; })()";
+      const PAGE_FACTS = "(() => ({ title: document.title, brand: (document.querySelector('.brand strong') || {}).textContent || '', hasBrandVersion: !!document.getElementById('brandVersion'), readyState: document.readyState }))()";
+
+      const pageFacts = await renderer.evaluate(PAGE_FACTS);
+      record('renderer-page-smoke',
+        pageFacts.title === 'Project Knowledge · 我的智脑' && pageFacts.brand === 'Project Knowledge' && pageFacts.hasBrandVersion,
+      `real renderer page ${JSON.stringify(renderer.pageUrl)}: title ${JSON.stringify(pageFacts.title)}, brand ${JSON.stringify(pageFacts.brand)}, #brandVersion present=${pageFacts.hasBrandVersion}, readyState ${pageFacts.readyState}`);
+
+      // R8 determinism fix (run-6 first failure): the REAL OS cursor can rest
+      // inside .brand (the window's top-left 232x72 box), leaving the tooltip
+      // legitimately visible before any synthetic input ("opacity 1 before").
+      // Park the pointer at the elementFromPoint-proven away point FIRST so
+      // the pre-state is deterministic; every assertion stays unchanged.
+      const away = await renderer.evaluate("(() => { const b = document.querySelector('.brand').getBoundingClientRect(); const p = { x: Math.round(Math.min(b.right + 160, innerWidth - 8)), y: Math.round(b.top + 24) }; const hit = document.elementFromPoint(p.x, p.y); return Object.assign(p, { outsideBrand: !(hit && hit.closest('.brand')) }); })()");
+      if (away && away.outsideBrand) {
+        await renderer.call('Input.dispatchMouseEvent', { type: 'mouseMoved', x: away.x, y: away.y, button: 'none', pointerType: 'mouse' });
+        await waitFor(async () => Number((await renderer.evaluate(TOOLTIP_STATE)).opacity) === 0 ? true : null, 2000, 'pointer parked away before sampling').catch(() => null);
+      }
+      const state0 = await renderer.evaluate(TOOLTIP_STATE);
+      const settledState = await waitFor(async () => {
+        const s = await renderer.evaluate(TOOLTIP_STATE);
+        return s.text === `知识库 v${actualVersion}` ? s : null;
+      }, 8000, `renderer tooltip text 知识库 v${actualVersion}`).catch(() => null);
+      record('renderer-version-tooltip-text',
+        !!settledState && state0.tabindex === '0',
+      `the renderer's OWN fetch filled #brandVersion: ${JSON.stringify(settledState && settledState.text)} from /api/system/version value ${JSON.stringify(actualVersion)}; tabindex=${JSON.stringify(state0.tabindex)} role=${JSON.stringify(state0.role)}; failure state would read 知识库 版本未知 (honest)`);
+
+      const center = await renderer.evaluate("(() => { const r = document.querySelector('.brand').getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + Math.min(r.height / 2, 24)) }; })()");
+      const hiddenBefore = Number(state0.opacity) === 0;
+      await renderer.call('Input.dispatchMouseEvent', { type: 'mouseMoved', x: center.x, y: center.y, button: 'none', pointerType: 'mouse' });
+      const hoverState = await waitFor(async () => {
+        const s = await renderer.evaluate(TOOLTIP_STATE);
+        return Number(s.opacity) === 1 ? s : null;
+      }, 4000, 'tooltip visible on real hover').catch(() => null);
+      await shot('renderer-tooltip-hover.png');
+      // away was computed and proven (elementFromPoint) BEFORE parking the
+      // pointer there — see the determinism fix above.
+      await renderer.call('Input.dispatchMouseEvent', { type: 'mouseMoved', x: away.x, y: away.y, button: 'none', pointerType: 'mouse' });
+      const hiddenAfter = await waitFor(async () => {
+        const s = await renderer.evaluate(TOOLTIP_STATE);
+        return Number(s.opacity) === 0 ? s : null;
+      }, 4000, 'tooltip hidden after move-away').catch(() => null);
+      record('renderer-tooltip-hover',
+        hiddenBefore && !!hoverState && !!hiddenAfter && away.outsideBrand,
+      `opacity ${state0.opacity} before -> real CDP mouseMoved over .brand -> ${hoverState ? hoverState.opacity : 'never shown'} (text ${JSON.stringify(hoverState && hoverState.text)}) -> move-away to (${away.x},${away.y}) proven outside .brand via elementFromPoint -> ${hiddenAfter ? '0' : 'still visible'}; screenshot renderer-tooltip-hover.png`);
+
+      await renderer.evaluate("document.getElementById('brandVersion').focus()");
+      const focusShown = await waitFor(async () => {
+        const s = await renderer.evaluate("(() => { const el = document.getElementById('brandVersion'); return { active: document.activeElement === el, opacity: getComputedStyle(el).opacity }; })()");
+        return s.active && Number(s.opacity) === 1 ? s : null;
+      }, 4000, 'tooltip visible on focus').catch(() => null);
+      await renderer.evaluate("document.getElementById('brandVersion').blur()");
+      const blurHidden = await waitFor(async () => {
+        const s = await renderer.evaluate("(() => { return Number(getComputedStyle(document.getElementById('brandVersion')).opacity); })()");
+        return Number(s) === 0 ? true : null;
+      }, 4000, 'tooltip hidden after blur').catch(() => null);
+      record('renderer-tooltip-focus',
+        !!focusShown && Number(focusShown.opacity) === 1 && !!blurHidden,
+      `keyboard path: focus() -> active with opacity ${focusShown ? focusShown.opacity : 'never shown'}; blur() -> hidden ${!!blurHidden} (polled; tabindex=0 keeps the label in the real tab order and the CSS carries the :focus rules)`);
+
+      // R8 VISIBLE-UI gate (leader desktop-r7-visible-review-checkpoint): the
+      // own project is imported through the real product API (driver side) and
+      // must be VISIBLE and SELECTED in the real UI first; then real input
+      // opens StartWork, the system drawer, and 管理模型供应商. The WB providers
+      // panel only passes when the iframe AND every ancestor are actually
+      // visible (nonzero rect, display/visibility/opacity, active work view,
+      // on-screen viewport intersection, hit-test at the frame center) and the
+      // 模型供应商 heading renders inside the visible frame; the screenshot is
+      // taken WHILE the panel is visible. A hidden frame can never pass. No
+      // provider refresh, no quota API, no model calls; the empty owned
+      // profile's empty provider list is the honest expected state.
+      const realInput = async (sel, condExpr, label, ms = 4000) => {
+        const selJson = JSON.stringify(sel);
+        const pt = await renderer.evaluate(`(() => { const el = document.querySelector(${selJson}); if (!el) return null; const r = el.getBoundingClientRect(); if (r.width <= 0 || r.height <= 0) return null; return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`).catch(() => null);
+        if (!pt) return { path: 'element-missing-or-invisible', activated: false };
+        await renderer.call('Input.dispatchMouseEvent', { type: 'mouseMoved', x: pt.x, y: pt.y, button: 'none', pointerType: 'mouse' });
+        await renderer.call('Input.dispatchMouseEvent', { type: 'mousePressed', x: pt.x, y: pt.y, button: 'left', clicks: 1, pointerType: 'mouse' });
+        await renderer.call('Input.dispatchMouseEvent', { type: 'mouseReleased', x: pt.x, y: pt.y, button: 'left', clicks: 1, pointerType: 'mouse' });
+        if (await waitFor(async () => (await renderer.evaluate(condExpr)) ? true : null, Math.min(ms, 3000), `${label} (mouse)`).catch(() => null)) return { path: 'cdp-mouse-click', activated: true };
+        await renderer.evaluate(`(() => { const el = document.querySelector(${selJson}); if (el) el.focus(); })()`);
+        await renderer.call('Input.dispatchKeyEvent', { type: 'keyDown', key: ' ', code: 'Space', windowsVirtualKeyCode: 32, nativeVirtualKeyCode: 32 });
+        await renderer.call('Input.dispatchKeyEvent', { type: 'keyUp', key: ' ', code: 'Space', windowsVirtualKeyCode: 32, nativeVirtualKeyCode: 32 });
+        if (await waitFor(async () => (await renderer.evaluate(condExpr)) ? true : null, ms, `${label} (keyboard)`).catch(() => null)) return { path: 'cdp-keyboard-space', activated: true };
+        return { path: 'failed', activated: false };
+      };
+
+      // 1. the API-imported project must surface as the VISIBLE selected
+      //    project. The app auto-refreshes over /api/registry/events (SSE);
+      //    if that never fires (e.g. the page is treated as hidden) the
+      //    driver honestly falls back to reloading the REAL app page — never
+      //    DOM injection or class forcing.
+      const selState = () => renderer.evaluate("(() => { const s = document.getElementById('projectSelect'); if (!s) return { missing: true }; let opt = null; for (let i = 0; i < s.options.length; i++) if (s.options[i].value === s.value) opt = s.options[i]; return { disabled: s.disabled, optionCount: s.options.length, value: s.value, label: opt ? opt.textContent.trim() : '' }; })()");
+      let selection = await waitFor(async () => {
+        const s = await selState();
+        return s && !s.missing && !s.disabled && s.value === importedProjectId ? s : null;
+      }, 8000, 'imported project visible+selected (registry SSE)').catch(() => null);
+      let selectionPath = 'registry-sse-auto-refresh';
+      if (!selection) {
+        selectionPath = 'cdp-page-reload (honest fallback: registry SSE auto-refresh did not surface the selection)';
+        await renderer.call('Page.reload');
+        selection = await waitFor(async () => {
+          const s = await selState();
+          return s && !s.missing && !s.disabled && s.value === importedProjectId ? s : null;
+        }, 15000, 'imported project visible+selected after page reload').catch(() => null);
+      }
+      record('renderer-project-selection-visible',
+        !!selection,
+      `the API-imported own project is VISIBLE and SELECTED in the real top bar: #projectSelect disabled=${selection ? selection.disabled : 'n/a'} options=${selection ? selection.optionCount : 0} selected=${JSON.stringify(selection && selection.value)} label=${JSON.stringify(selection && selection.label)} (pickup path: ${selectionPath})`);
+
+      // 2. real input enters StartWork with the project selected — the work
+      //    layout (not the empty-import notice) must be the visible surface.
+      const workExpr = "(() => { const v = document.getElementById('view-work'); const empty = document.getElementById('workEmpty'); const layout = document.getElementById('workLayout'); return !!(v && v.classList.contains('active') && empty && empty.hidden && layout && !layout.hidden); })()";
+      const workView = await realInput("button[data-view='work']", workExpr, 'StartWork view');
+
+      // 3. real input opens the system drawer (#configureProviders stays
+      //    hidden/unfocusable until the drawer is open — R7 lesson).
+      const drawerOpen = await realInput('#openSystem', "(() => { const d = document.getElementById('systemDrawer'); return !!(d && !d.hidden); })()", 'system drawer');
+
+      // 4. full VISIBLE-state probe: iframe + all ancestors in BOTH documents,
+      //    active work view, on-screen viewport intersection, hit-test at the
+      //    frame center, providers heading rendered inside the frame.
+      const quotaProbe = "(() => { const f = document.getElementById('workFrame'); const out = { hasFrame: !!f, frameSrc: f && f.src ? f.src : '', frameRect: null, frameRectNonZero: false, ancestorChainVisible: false, workViewActive: false, onScreen: false, hitTest: false, docLoaded: false, settingsActive: false, settingsChainVisible: false, providersActive: false, heading: '', headingVisible: false, providerListChildren: -1, bodyHasProviderText: false }; if (!f) return out; const r = f.getBoundingClientRect(); out.frameRect = { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }; out.frameRectNonZero = r.width >= 50 && r.height >= 50; let chain = true; for (let n = f; n && n.nodeType === 1; n = n.parentElement) { const cs = getComputedStyle(n); if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) <= 0.05) chain = false; const nr = n.getBoundingClientRect(); if (n !== document.documentElement && n !== document.body && (nr.width <= 0 || nr.height <= 0)) chain = false; } out.ancestorChainVisible = chain; const vw = document.getElementById('view-work'); out.workViewActive = !!(vw && vw.classList.contains('active')); const ix0 = Math.max(r.left, 0), iy0 = Math.max(r.top, 0), ix1 = Math.min(r.right, window.innerWidth), iy1 = Math.min(r.bottom, window.innerHeight); const inter = Math.max(0, ix1 - ix0) * Math.max(0, iy1 - iy0); out.onScreen = inter >= 0.5 * r.width * r.height; const cx = ix0 + (ix1 - ix0) / 2, cy = iy0 + (iy1 - iy0) / 2; const hit = document.elementFromPoint(cx, cy); out.hitTest = !!(hit && (hit === f || f.contains(hit))); let doc = null; try { doc = f.contentDocument; } catch (e) {} if (doc) { out.docLoaded = doc.readyState === 'complete'; const vs = doc.getElementById('view-settings'); out.settingsActive = !!(vs && vs.classList.contains('active') && !vs.inert); let sChain = true; if (vs) { for (let n = vs; n && n.nodeType === 1; n = n.parentElement) { const cs = doc.defaultView.getComputedStyle(n); if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) <= 0.05) sChain = false; } } out.settingsChainVisible = sChain; const panel = doc.getElementById('s-providers'); out.providersActive = !!(panel && panel.classList.contains('active')); const h2 = panel ? panel.querySelector('h2') : null; out.heading = h2 ? h2.textContent.trim() : ''; if (h2) { const hr = h2.getBoundingClientRect(); const dw = doc.documentElement.clientWidth, dh = doc.documentElement.clientHeight; out.headingVisible = hr.width > 0 && hr.height > 0 && hr.top >= 0 && hr.left >= 0 && hr.bottom <= dh && hr.right <= dw; } const list = doc.getElementById('provider-list'); out.providerListChildren = list ? list.children.length : -1; out.bodyHasProviderText = String(doc.body && doc.body.textContent || '').includes('模型供应商'); } return out; })()";
+      const quotaReady = (s) => !!(s && s.hasFrame && s.frameRectNonZero && s.ancestorChainVisible && s.workViewActive && s.onScreen && s.hitTest && s.docLoaded && s.settingsActive && s.settingsChainVisible && s.providersActive);
+      let activation = 'not-attempted';
+      let quotaState = null;
+      let btnText = '(button not reachable)';
+      if (drawerOpen.activated) {
+        const btnPt = await renderer.evaluate(`(() => { const el = document.querySelector('#configureProviders'); if (!el) return null; const r = el.getBoundingClientRect(); if (r.width <= 0 || r.height <= 0) return null; return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), text: el.textContent.trim() }; })()`).catch(() => null);
+        if (btnPt) {
+          btnText = btnPt.text;
+          activation = 'cdp-mouse-click';
+          await renderer.call('Input.dispatchMouseEvent', { type: 'mouseMoved', x: btnPt.x, y: btnPt.y, button: 'none', pointerType: 'mouse' });
+          await renderer.call('Input.dispatchMouseEvent', { type: 'mousePressed', x: btnPt.x, y: btnPt.y, button: 'left', clicks: 1, pointerType: 'mouse' });
+          await renderer.call('Input.dispatchMouseEvent', { type: 'mouseReleased', x: btnPt.x, y: btnPt.y, button: 'left', clicks: 1, pointerType: 'mouse' });
+          quotaState = await waitFor(async () => { const s = await renderer.evaluate(quotaProbe); return quotaReady(s) ? s : null; }, 3000, 'visible providers panel (mouse)').catch(() => null);
+          if (!quotaState) {
+            activation = 'cdp-keyboard-space';
+            await renderer.evaluate("(() => { const el = document.querySelector('#configureProviders'); if (el) el.focus(); })()");
+            await renderer.call('Input.dispatchKeyEvent', { type: 'keyDown', key: ' ', code: 'Space', windowsVirtualKeyCode: 32, nativeVirtualKeyCode: 32 });
+            await renderer.call('Input.dispatchKeyEvent', { type: 'keyUp', key: ' ', code: 'Space', windowsVirtualKeyCode: 32, nativeVirtualKeyCode: 32 });
+            quotaState = await waitFor(async () => { const s = await renderer.evaluate(quotaProbe); return quotaReady(s) ? s : null; }, 20000, 'visible providers panel (keyboard)').catch(() => null);
+          }
+        }
+      }
+      const stagedFail = quotaState ? null : await renderer.evaluate(quotaProbe).catch(() => null);
+      const quotaShot = await shot('renderer-quota-ui.png');
+      const failBits = [];
+      if (stagedFail) {
+        for (const k of ['hasFrame', 'frameRectNonZero', 'ancestorChainVisible', 'workViewActive', 'onScreen', 'hitTest', 'docLoaded', 'settingsActive', 'settingsChainVisible', 'providersActive']) if (!stagedFail[k]) failBits.push(k);
+      }
+      const failReason = !selection
+        ? 'imported project never became visible+selected'
+        : (!workView.activated
+          ? 'StartWork work layout never became visible via real input'
+          : (!drawerOpen.activated
+            ? 'system drawer never opened via real input'
+            : (btnText === '(button not reachable)'
+              ? 'configureProviders not visible inside the open drawer'
+              : (failBits.length ? `visible-UI gate not satisfied: ${failBits.join(',')}` : 'providers panel state unknown'))));
+      rendererEvidence.quota = quotaState
+        ? { opened: true, visibleProof: true, selectionPath, workViewActivation: workView.path, drawerActivation: drawerOpen.path, activation, ...quotaState }
+        : { opened: false, visibleProof: false, selectionPath, workViewActivation: workView.path, drawerActivation: drawerOpen.path, activation, staged: stagedFail, reason: failReason };
+      record('renderer-quota-ui-live',
+        !!(quotaState && quotaState.providersActive && quotaState.heading === '模型供应商' && quotaState.headingVisible),
+      `visible-UI proof: real input (${workView.path}) entered StartWork with the imported project selected (work layout visible, empty-import notice hidden), (${drawerOpen.path}) opened the system drawer, (${activation}) activated ${JSON.stringify(btnText)}; the WB ${byId.wb.version} providers panel is REALLY VISIBLE inside the agent-terminal iframe: frameRect=${quotaState ? JSON.stringify(quotaState.frameRect) : 'n/a'} ancestorChainVisible=${quotaState ? quotaState.ancestorChainVisible : false} workViewActive=${quotaState ? quotaState.workViewActive : false} onScreen>=50%=${quotaState ? quotaState.onScreen : false} hitTest=${quotaState ? quotaState.hitTest : false} settingsActive=${quotaState ? quotaState.settingsActive : 'never'} heading=${JSON.stringify(quotaState && quotaState.heading)} headingVisible=${quotaState ? quotaState.headingVisible : false} providerListChildren=${quotaState ? quotaState.providerListChildren : '-'} (empty owned profile — honest empty state; no provider refresh, no quota API, no model calls); screenshot taken while visible: ${quotaShot || 'n/a'}${quotaState ? '' : `; ${failReason}`}`);
+      renderer.close();
+    } catch (error) {
+      record('renderer-ui-verification', false, error.message);
+    }
+
     // F3 proof: the actual Node children (backend + module grandchildren)
     // report owned roots from INSIDE themselves (booleans only, no secrets).
     await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -852,8 +1195,22 @@ async function main() {
       }, 180000, 'runtime-endpoint.json (round 2)');
       census.spawned.push(endpoint2.pid);
       const baseUrl2 = `http://${endpoint2.host === '::1' ? '[::1]' : endpoint2.host}:${endpoint2.port}`;
-      const state2 = await httpGet(`${baseUrl2}/api/state`);
-      const identity2 = await httpGet(`${baseUrl2}/api/runtime/identity`);
+      // R8 harness fix (run-5 first failure): same boot-race class as round 1 —
+      // the endpoint file can appear a beat before the listener accepts, so a
+      // single-attempt fetch dies with "fetch failed" (run-5 evidence: backend
+      // pid 46056 logged Listening at 127.0.0.1:50549). Retry both fetches.
+      const state2 = await waitFor(async () => {
+        try {
+          const response = await httpGet(`${baseUrl2}/api/state`, 5000);
+          return response.status === 200 ? response : null;
+        } catch { return null; }
+      }, 15000, 'round-2 state endpoint accepting connections');
+      const identity2 = await waitFor(async () => {
+        try {
+          const response = await httpGet(`${baseUrl2}/api/runtime/identity`, 5000);
+          return response.status === 200 ? response : null;
+        } catch { return null; }
+      }, 15000, 'round-2 identity endpoint accepting connections');
       const identity2Json = JSON.parse(identity2.body.toString('utf8'));
       const health2 = await waitFor(async () => {
         const response = await httpGet(`${baseUrl2}/api/modules/health`);
@@ -904,7 +1261,7 @@ async function main() {
   const backendLog = path.join(envDirs.data, 'desktop-backend.log');
   const report = {
     schema: 'release-preflight-5025-thin-smoke-r5/v1',
-    labeling: 'REAL 5.0.25 candidate bytes (exact TGZ extractions + owned-cache junction reuse) with ALL FOUR REAL module processes spawned by the candidate supervisor on reserved own URL-string ports; GUI keeps the real USERPROFILE (audited Electron exception) while every ELECTRON_RUN_AS_NODE child is isolated and proven from inside via the observer; vector-hub/bridge health endpoints expose no version field — labeled honestly and proven via running entry-file hashes',
+    labeling: 'REAL 5.0.25 candidate bytes (exact TGZ extractions + owned-cache junction reuse) with ALL FOUR REAL module processes spawned by the candidate supervisor on reserved own URL-string ports; GUI keeps the real USERPROFILE (audited Electron exception) while every ELECTRON_RUN_AS_NODE child is isolated and proven from inside via the observer; vector-hub/bridge health endpoints expose no version field — labeled honestly and proven via running entry-file hashes; R6 renderer checks drive REAL CDP input on the real Electron renderer page (tooltip via the renderer\'s own /api/system/version fetch, hover/focus visibility under prefers-reduced-motion emulation, Model Management opened with the activation path recorded honestly); R8: the own project is imported through the real product API (canonical fixture) and must be VISIBLE+SELECTED before StartWork, and the WB providers panel only passes when the iframe and every ancestor are actually visible (nonzero rect, display/visibility/opacity, active work view, on-screen viewport intersection, hit-test) with the 模型供应商 heading rendered inside the frame and the screenshot taken while visible — no fabricated DOM, no quota API, no model calls',
     inputs: inputHashes,
     tools: toolHashes,
     ownedCache: {
@@ -934,6 +1291,7 @@ async function main() {
     },
     moduleProcesses,
     quotaUiLive,
+    rendererEvidence,
     backendLog: fs.existsSync(backendLog) ? { path: backendLog, bytes: fs.statSync(backendLog).size } : null,
     guiLog: path.join(runRoot, 'gui.log'),
     results,
