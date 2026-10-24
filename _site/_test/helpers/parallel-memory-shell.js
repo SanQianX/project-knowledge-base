@@ -198,14 +198,53 @@ async function startHarness({ tag, evidenceDir, viewport = { width: 1600, height
 
   const run = expression => browser.evaluate(expression);
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const reloadLog = [];
 
   /** Ask the shell to read the project registry again. */
   const requestRegistryRefresh = () => run("document.dispatchEvent(new Event('visibilitychange'))");
 
   /** A real page reload, so "it survives a refresh" is proven by the browser. */
   const reload = async () => {
+    // Mark the OUTGOING document first. Page.reload is acknowledged before the
+    // navigation commits, and Runtime.evaluate keeps answering in the old
+    // context while it stays attached — so a bare readyState gate is satisfied
+    // by the outgoing page (CI 40062048045: the nav click right after
+    // reload() was dispatched into the commit gap and lost, and the memory
+    // view never activated). The marker exists only in the old context, so
+    // the gate below can only pass on the FRESH document; the active-view
+    // clause additionally proves the product's synchronous boot finished
+    // (ui/product.js attaches its click delegation before the boot setView
+    // that marks the initial view active).
+    const startedAt = Date.now();
+    await run('window.__pkShellReloadMark = Date.now(), true');
     await browser.send('Page.reload', {});
-    await waitFor(() => run("document.readyState === 'complete'"), 'the page reload', 20000);
+    await waitFor(
+      () => run("document.readyState === 'complete' && typeof window.__pkShellReloadMark === 'undefined' && document.querySelector('.view.active') !== null"),
+      'the reloaded page is the fresh document and its boot finished',
+      20000,
+    );
+    reloadLog.push({ at: new Date().toISOString(), freshBootGateMs: Date.now() - startedAt });
+  };
+
+  /**
+   * Readiness snapshot for failure diagnostics: what the page really looks
+   * like when a navigation assertion is about to fail (small metadata).
+   */
+  const navigationState = async () => {
+    try {
+      return await run(`(() => ({
+        readyState: document.readyState,
+        href: location.href,
+        activeView: (document.querySelector('.view.active') || {}).id || null,
+        activeNav: document.querySelector('nav [data-view].active') ? document.querySelector('nav [data-view].active').dataset.view : null,
+        reloadMark: typeof window.__pkShellReloadMark,
+        openDialogs: [...document.querySelectorAll('dialog[open]')].map(dialog => dialog.id),
+        toastHidden: document.getElementById('toast') ? document.getElementById('toast').hidden : null,
+        toastText: document.getElementById('toast') ? document.getElementById('toast').textContent.trim().slice(0, 80) : null,
+      }))()`);
+    } catch (error) {
+      return { unreachable: String(error && error.message || error) };
+    }
   };
 
   const pressBackspace = async (count = 1) => {
@@ -418,7 +457,7 @@ async function startHarness({ tag, evidenceDir, viewport = { width: 1600, height
     fixture, evidence, dataDir, knowledgeRoot, tempRoot, plan,
     base, server, productApi, engineApi, engine, engineUrl, engineProxy,
     terminal, vectorHub, eventBridge, engineVector,
-    browser, run, wait, waitFor, network,
+    browser, run, wait, waitFor, network, reloadLog, navigationState,
     requestRegistryRefresh, reload, pressBackspace, selectOption,
     nativeClick, pressKey, pressTab, pressEnter, typeText,
     importProject, addDomain, ingestUserEvent, triggerRun,

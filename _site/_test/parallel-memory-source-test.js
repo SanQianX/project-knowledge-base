@@ -131,19 +131,44 @@ async function main() {
 
     // The real UI shows an empty candidate box and says the shell does not
     // turn project behaviour into the owner's preferences.
+    //
+    // Failure-path visibility (CI 40062048045 kept only a bare timeout): on a
+    // navigation failure, capture the page's real readiness state, the reload
+    // gate log, the product's uncaught exceptions and a screenshot (small
+    // metadata; the CI console is the only artifact the runner keeps).
+    const debugNavigationFailure = async stage => {
+      try {
+        const state = await harness.navigationState();
+        const exceptions = harness.browser.exceptions
+          .map(entry => String((entry.exceptionDetails && (entry.exceptionDetails.exception && entry.exceptionDetails.exception.description || entry.exceptionDetails.text)) || ''))
+          .filter(Boolean).slice(0, 3);
+        console.error(`MEM-008 navigation failure at ${stage}: ${JSON.stringify(state)} reloadGate=${JSON.stringify(harness.reloadLog)} exceptions=${JSON.stringify(exceptions)}`);
+        if (harness.evidence) await harness.browser.screenshot(path.join(harness.evidence, `mem008-failure-${stage}.png`));
+      } catch {}
+    };
     await harness.reload();
     await harness.nativeClick('nav [data-view="memory"]');
-    await harness.waitFor(
-      () => harness.run("document.getElementById('view-memory').classList.contains('active')"),
-      'the memory view is open',
-      10000,
-    );
+    try {
+      await harness.waitFor(
+        () => harness.run("document.getElementById('view-memory').classList.contains('active')"),
+        'the memory view is open',
+        10000,
+      );
+    } catch (error) {
+      await debugNavigationFailure('memory-view-open');
+      throw error;
+    }
     await harness.nativeClick('[data-memory-tab="candidate"]');
-    await harness.waitFor(
-      () => harness.run("document.getElementById('memoryContent').textContent.includes('候选箱为空。')"),
-      'the candidate box is really empty once the engine answered again',
-      20000,
-    );
+    try {
+      await harness.waitFor(
+        () => harness.run("document.getElementById('memoryContent').textContent.includes('候选箱为空。')"),
+        'the candidate box is really empty once the engine answered again',
+        20000,
+      );
+    } catch (error) {
+      await debugNavigationFailure('candidate-box-empty');
+      throw error;
+    }
     const candidateBox = await harness.run("document.getElementById('memoryContent').textContent");
     assert.match(candidateBox, /候选箱为空。/, `the candidate box is really empty: ${candidateBox}`);
     assert.ok(!candidateBox.includes(DELEGATED_TEXT), 'the delegated order is not listed');
@@ -151,11 +176,16 @@ async function main() {
     if (harness.evidence) await harness.browser.screenshot(path.join(harness.evidence, 'mem008-candidate-empty.png'));
 
     await harness.nativeClick('nav [data-view="home"]');
-    await harness.waitFor(
-      () => harness.run("document.getElementById('view-home').classList.contains('active')"),
-      'the home view is open',
-      10000,
-    );
+    try {
+      await harness.waitFor(
+        () => harness.run("document.getElementById('view-home').classList.contains('active')"),
+        'the home view is open',
+        10000,
+      );
+    } catch (error) {
+      await debugNavigationFailure('home-view-open');
+      throw error;
+    }
     const home = await harness.run("document.getElementById('homeContent').textContent");
     assert.match(home, /没有待确认记忆。智脑不会自动把项目行为当作你的偏好。/, `the home view states the boundary: ${home}`);
     if (harness.evidence) await harness.browser.screenshot(path.join(harness.evidence, 'mem008-home.png'));
