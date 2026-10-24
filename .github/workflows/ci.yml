@@ -98,6 +98,8 @@ jobs:
           TMPDIR: ${{ runner.temp }}
           TMP: ${{ runner.temp }}
           TEMP: ${{ runner.temp }}
+      - name: Test exact candidate publishing guards
+        run: node --test qa-autopilot/tools/stable-next-prepare-test.cjs qa-autopilot/tools/stable-next-publish-test.cjs qa-autopilot/tools/stable-next-workflow-test.cjs
 
   qa-controller-windows:
     name: QA controller / Windows
@@ -115,3 +117,5 @@ jobs:
           # form), outside the workspace; no job-level runner expressions.
           TEMP: ${{ runner.temp }}
           TMP: ${{ runner.temp }}
+      - name: Test exact candidate publishing guards
+        run: node --test qa-autopilot/tools/stable-next-prepare-test.cjs qa-autopilot/tools/stable-next-publish-test.cjs qa-autopilot/tools/stable-next-workflow-test.cjs

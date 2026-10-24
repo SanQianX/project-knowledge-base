@@ -1,16 +1,43 @@
-# REVIEW TEMPLATE ONLY. Install as .github/workflows/publish.yml after T04 approval.
-# RC_ONLY_DURING_QA: no stable trigger and no latest command exists here.
+# .github/workflows/publish.yml: automatic tag publishing remains RC-only.
+# RC_ONLY_DURING_QA: stable candidates use the manual next-only route below.
+#
+# Three manual modes exist under one workflow file, and they are selected by
+# the "mode" dispatch input (default: auth-probe):
+#
+#   auth-probe       - ASSESSMENT ONLY. Asks npm whether the EXISTING GitHub
+#                      identity of this workflow file is already a trusted
+#                      publisher for the selected package. It never publishes,
+#                      never moves a dist-tag, never changes npm access and
+#                      never creates or broadens trust.
+#   stable-prepare   - builds ONE reviewed candidate tarball from ONE reviewed
+#                      commit and records an immutable receipt. It never
+#                      publishes and never touches the registry.
+#   stable-publish-next
+#                    - publishes EXACTLY the artifact that an earlier
+#                      successful stable-prepare run produced, to the "next"
+#                      tag only. It never rebuilds, never moves "latest" and
+#                      never prepares anything.
+#
+# The two stable modes are separate manual runs on purpose: the candidate must
+# be downloaded and independently reviewed BEFORE it can be published, so the
+# publish route takes the prepare run id plus the reviewed sha256/SRI from the
+# caller and never derives them from the artifact it is about to publish.
 name: Publish reviewed QA candidate
 on:
   push:
     tags:
       - 'qa-rc/*'
-  # Assessment only: asks the npm registry whether the EXISTING GitHub
-  # identity of this workflow file already has a trusted publisher for the
-  # selected package. It never publishes, never moves a dist-tag, never
-  # changes npm access and never creates or broadens trust.
   workflow_dispatch:
     inputs:
+      mode:
+        description: 'Manual mode of this workflow file'
+        required: true
+        type: choice
+        default: 'auth-probe'
+        options:
+          - 'auth-probe'
+          - 'stable-prepare'
+          - 'stable-publish-next'
       package:
         description: 'npm package whose existing trusted-publisher identity is probed'
         required: true
@@ -18,6 +45,30 @@ on:
         options:
           - '@sanqianx/project-knowledge'
           - '@sanqianx/project-knowledge-desktop'
+      source_sha:
+        description: 'stable modes only: exact 40-hex reviewed commit to build from'
+        required: false
+        type: string
+      expected_version:
+        description: 'stable modes only: exact expected version (x.y.z)'
+        required: false
+        type: string
+      prepare_run_id:
+        description: 'stable-publish-next only: run id of the successful prepare run'
+        required: false
+        type: string
+      expected_tarball_sha256:
+        description: 'stable-publish-next only: reviewed tarball sha256 (64 hex)'
+        required: false
+        type: string
+      expected_tarball_sri:
+        description: 'stable-publish-next only: reviewed tarball integrity (sha512-...)'
+        required: false
+        type: string
+      reviewer:
+        description: 'stable-publish-next only: identity of the reviewer of the prepared artifact'
+        required: false
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -75,7 +126,7 @@ jobs:
     # registry-url and NO NODE_AUTH_TOKEN placeholder, and it never writes an
     # npm credential file. The short-lived registry token stays in the
     # probe's memory and never reaches stdout, a log or the receipt.
-    if: github.repository == 'SanQianX/project-knowledge-base' && github.event_name == 'workflow_dispatch'
+    if: github.repository == 'SanQianX/project-knowledge-base' && github.event_name == 'workflow_dispatch' && inputs.mode == 'auth-probe'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:
@@ -101,3 +152,116 @@ jobs:
           name: npm-oidc-auth-probe-receipt
           path: ${{ runner.temp }}/npm-oidc-auth-probe/receipt.json
           if-no-files-found: warn
+  stable-prepare:
+    # Phase 1 of 2. Builds ONE candidate tarball from ONE reviewed commit in a
+    # clean tracked checkout and records an immutable receipt next to it.
+    # It NEVER publishes, never touches the registry and never moves a tag.
+    # It has NO id-token permission and NO environment claim, so it cannot
+    # obtain a publishing identity even by accident.
+    if: github.repository == 'SanQianX/project-knowledge-base' && github.event_name == 'workflow_dispatch' && inputs.mode == 'stable-prepare'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: npm-stable-prepare
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Validate the manual source commit input
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: node -e "if(!/^[a-f0-9]{40}$/.test(process.env.SOURCE_SHA||'')){console.error('source_sha must be a 40-hex commit id');process.exit(1);}"
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.x'
+      - name: Restore the reviewed lockfile exactly
+        run: npm ci
+      - name: Verify the reviewed version lockstep
+        run: node _site/scripts/sync-release-version.js --check --web-only
+      - name: Verify the vendored runtime integrity
+        run: node _site/scripts/verify-module-runtime.js
+      - name: Build the reviewed candidate and write its receipt
+        env:
+          TARGET_PACKAGE: ${{ inputs.package }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node qa-autopilot/tools/stable-next-prepare.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stable-next-candidate
+          path: ${{ runner.temp }}/stable-next
+          if-no-files-found: error
+          retention-days: 30
+  stable-publish-next:
+    # Phase 2 of 2. Publishes EXACTLY the artifact that an earlier successful
+    # stable-prepare run produced, to the "next" tag only. It never rebuilds
+    # and never prepares. "latest" is never moved and no other dist-tag is
+    # touched. It uses the EXISTING trusted-publisher identity of this
+    # workflow file: NO environment claim, NO registry-url, NO
+    # NODE_AUTH_TOKEN and no npm credential file.
+    if: github.repository == 'SanQianX/project-knowledge-base' && github.event_name == 'workflow_dispatch' && inputs.mode == 'stable-publish-next'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: npm-stable-publish-next
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.x'
+      - name: Select the npm major that supports trusted publishing
+        run: npm install -g npm@11 && npm --version
+      - name: Verify the prepare run belongs to this repository and workflow
+        id: prepare
+        env:
+          TARGET_PACKAGE: ${{ inputs.package }}
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+          EXPECTED_SHA256: ${{ inputs.expected_tarball_sha256 }}
+          EXPECTED_SRI: ${{ inputs.expected_tarball_sri }}
+          EXPECTED_SOURCE_SHA: ${{ inputs.source_sha }}
+          PREPARE_RUN_ID: ${{ inputs.prepare_run_id }}
+          REVIEWER: ${{ inputs.reviewer }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node qa-autopilot/tools/stable-next-publish.cjs verify-run
+      - name: Download the reviewed candidate from the prepare run
+        uses: actions/download-artifact@v4
+        with:
+          name: stable-next-candidate
+          run-id: ${{ steps.prepare.outputs.prepare_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ${{ runner.temp }}/stable-next-candidate
+      - name: Publish the reviewed bytes to next only
+        env:
+          TARGET_PACKAGE: ${{ inputs.package }}
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+          EXPECTED_SHA256: ${{ inputs.expected_tarball_sha256 }}
+          EXPECTED_SRI: ${{ inputs.expected_tarball_sri }}
+          EXPECTED_SOURCE_SHA: ${{ inputs.source_sha }}
+          PREPARE_RUN_ID: ${{ inputs.prepare_run_id }}
+          REVIEWER: ${{ inputs.reviewer }}
+          ARTIFACT_DIR: ${{ runner.temp }}/stable-next-candidate
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node qa-autopilot/tools/stable-next-publish.cjs publish
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stable-next-publication
+          path: ${{ runner.temp }}/stable-next
+          if-no-files-found: warn
+          retention-days: 30
