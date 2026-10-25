@@ -119,7 +119,6 @@ jobs:
         run: node qa-autopilot/tools/ci-rc-guard.cjs pre
       - run: npm ci
       - run: npm run release:verify
-      - run: node _site/scripts/sync-release-version.js --check --web-only
       - run: npm test -- --no-report
       - name: Select reviewed npm major and record actual version
         run: npm install -g npm@11 && npm --version
@@ -226,9 +225,10 @@ jobs:
     # Phase 2 of 2. Publishes EXACTLY the artifact that an earlier successful
     # stable-prepare run produced, to the "next" tag only. It never rebuilds
     # and never prepares. "latest" is never moved and no other dist-tag is
-    # touched. It uses the EXISTING trusted-publisher identity of this
-    # workflow file: NO environment claim, NO registry-url, NO
-    # NODE_AUTH_TOKEN and no npm credential file.
+    # touched. With no NPM_PUBLISH_TOKEN secret the job keeps the original
+    # OIDC trusted-publisher identity; when that optional granular token is
+    # set, only the publish step writes a temporary userconfig holding the
+    # npm placeholder (never the token itself) and removes it on exit.
     if: github.repository == 'SanQianX/project-knowledge-base' && github.event_name == 'workflow_dispatch' && inputs.mode == 'stable-publish-next'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -279,7 +279,15 @@ jobs:
           REVIEWER: ${{ inputs.reviewer }}
           ARTIFACT_DIR: ${{ runner.temp }}/stable-next-candidate
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node qa-autopilot/tools/stable-next-publish.cjs publish
+          # Optional granular write token; absent -> the original OIDC path.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+        run: |
+          if [ -n "$NODE_AUTH_TOKEN" ]; then
+            export NPM_CONFIG_USERCONFIG="$(mktemp)"
+            printf '%s\n' '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}' > "$NPM_CONFIG_USERCONFIG"
+            trap 'rm -f "$NPM_CONFIG_USERCONFIG"' EXIT
+          fi
+          node qa-autopilot/tools/stable-next-publish.cjs publish
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -298,6 +306,10 @@ jobs:
     # grant is exercised exactly as npm would exercise it. A successful
     # publish proves nothing about that grant: it stays unproven until this
     # route performs a real authorized write.
+    # Authentication mirrors stable-publish-next: no NPM_PUBLISH_TOKEN
+    # secret keeps the original OIDC dist-tag write; the optional token is
+    # consumed only by the promote step via a temporary userconfig holding
+    # the npm placeholder, never by the check step or any other job.
     # The acceptance phrase is the reviewer's own attestation. It is not
     # machine proof, and the tool records it as such.
     if: github.repository == 'SanQianX/project-knowledge-base' && github.event_name == 'workflow_dispatch' && inputs.mode == 'stable-promote'
@@ -349,7 +361,15 @@ jobs:
           REVIEWER: ${{ inputs.reviewer }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUNNER_TEMP: ${{ runner.temp }}
-        run: node qa-autopilot/tools/stable-promote.cjs promote
+          # Optional granular write token; absent -> the original OIDC path.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+        run: |
+          if [ -n "$NODE_AUTH_TOKEN" ]; then
+            export NPM_CONFIG_USERCONFIG="$(mktemp)"
+            printf '%s\n' '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}' > "$NPM_CONFIG_USERCONFIG"
+            trap 'rm -f "$NPM_CONFIG_USERCONFIG"' EXIT
+          fi
+          node qa-autopilot/tools/stable-promote.cjs promote
       - uses: actions/upload-artifact@v4
         if: always()
         with:

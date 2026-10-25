@@ -1,26 +1,27 @@
 'use strict';
-// GLM independent QA for the web part of docs/plans/ui-refresh-electron-plan-2026-10-13.md.
+// GLM QA regression for the web part of docs/plans/ui-refresh-electron-plan-2026-10-13.md.
 // Node/HTTP/VM only: no browser, no CDP; stubs listen on 127.0.0.1:0; no product process.
-// Temp data stays in .local-test-data/ui-refresh-2026-10-15/ and is never deleted here.
 //
-// Every risk is probed twice: baseline = the pre-fix sources from git HEAD (first-failure
-// evidence), current = the working tree (post-fix verification, the Leader is fixing
-// production code concurrently). Gates encode the plan's desired behavior.
-// A first screen / B slow module / C engine takeover / D config sync / E 8-tab SSE.
+// Current-behavior regression only. The 2026-10-15 baseline-vs-current comparison
+// experiment (git-show 55e1627 baseline gates + first-failure summary) has
+// concluded; its full history stays recoverable from Git (as of 9ddf0db) and from
+// the verified external backup recorded in docs/ci-maintenance-20261025.md. Gate
+// names (A2..E2) are kept unchanged for traceability with that record.
+// A first screen / B slow module / C engine takeover + dedupe / D config sync / E 8-tab SSE.
+// Temp data lives in an exclusive os.tmpdir() mkdtemp per run; real homes are never touched.
 
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
 const vm = require('node:vm');
-const { execFileSync } = require('node:child_process');
 
 const ROOT = path.resolve(__dirname, '../..');
 const { ModuleBridge } = require('../lib/module-bridge');
 const { connectEngine } = require('../lib/engine-connection');
 
-const TEMP_DATA = path.join(ROOT, '.local-test-data', 'ui-refresh-2026-10-15');
-fs.mkdirSync(TEMP_DATA, { recursive: true });
+const TEMP_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'glm-ui-refresh-current-'));
 
 const allServers = [];
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -29,36 +30,6 @@ const gates = [];
 async function gate(section, name, run) {
   try { await run(); gates.push({ section, name, ok: true }); console.log('[PASS] ' + section + ' ' + name); }
   catch (error) { gates.push({ section, name, ok: false, message: error && error.message }); console.log('[FAIL] ' + section + ' ' + name + ' :: ' + (error && error.message)); }
-}
-
-const BASELINE_COMMIT = '55e162762950a069cf00e826c9f9b8eea5c768e5';
-// CI checks out with actions/checkout's default fetch-depth=1, so the pinned
-// baseline commit may not exist there. Baseline gates are first-failure
-// evidence already recorded with the plan review; when the commit is absent
-// they degrade to a skip instead of crashing the whole run.
-let baselineReady = true;
-try { execFileSync('git', ['cat-file', '-e', `${BASELINE_COMMIT}^{commit}`], { cwd: ROOT, stdio: 'ignore' }); }
-catch { baselineReady = false; }
-
-function headSource(relPath) {
-  return execFileSync('git', ['show', BASELINE_COMMIT + ':' + relPath], { encoding: 'utf8', cwd: ROOT, maxBuffer: 16 * 1024 * 1024 });
-}
-
-const headModuleCache = new Map();
-function loadHeadModule(relPath) {
-  if (headModuleCache.has(relPath)) return headModuleCache.get(relPath);
-  const moduleObject = { exports: {} };
-  const directory = path.dirname(path.join(ROOT, relPath));
-  const sandboxRequire = request => require(request.startsWith('.') ? path.join(directory, request) : request);
-  const sandbox = {
-    require: sandboxRequire, module: moduleObject, exports: moduleObject.exports,
-    fetch, AbortController, setTimeout, clearTimeout, setInterval, clearInterval, Buffer, URL, URLSearchParams, console,
-    process: { env: {}, versions: { node: process.versions.node }, platform: process.platform },
-  };
-  sandbox.globalThis = sandbox;
-  vm.runInNewContext(headSource(relPath), sandbox, { filename: relPath });
-  headModuleCache.set(relPath, moduleObject.exports);
-  return moduleObject.exports;
 }
 
 function startStub(routes) {
@@ -89,8 +60,8 @@ function startStub(routes) {
 
 async function makeEnv(options = {}) {
   const failProjects = options.engineFailProjects || [];
-  const BridgeClass = options.baseline ? loadHeadModule('_site/lib/module-bridge.js').ModuleBridge : ModuleBridge;
-  const connect = options.baseline ? loadHeadModule('_site/lib/engine-connection.js').connectEngine : connectEngine;
+  const BridgeClass = ModuleBridge;
+  const connect = connectEngine;
   const terminal = await startStub([
     { method: 'GET', path: /\/projects\/?$/, name: 'terminal-list', handle: () => ({ projects: options.terminalProjects || [] }) },
     { method: 'POST', path: /\/claude-workbench\/v1\/projects\/?$/, name: 'terminal-register', handle: () => ({ id: 't1' }) },
@@ -186,14 +157,6 @@ async function sectionA() {
     if (target.includes('/api/engine/snapshot')) return jsonOk({ projects: [], runs: [], events: [], memories: [] });
     return jsonOk({ ok: true });
   };
-  if (baselineReady) {
-    const readBaseline = await runScenario(headSource('ui/product.js'), hungFetch);
-    console.log('  baseline(HEAD) systemTitle after 2.5s with a hanging projects read: ' + JSON.stringify(readBaseline('systemTitle')));
-    await gate('A', 'A1 baseline(HEAD): health region renders while the projects read hangs', async () => {
-      const value = readBaseline('systemTitle');
-      assert.ok(value !== undefined && value !== '' && value !== '正在检查系统', 'systemTitle never updated: the first screen is one Promise.all behind the slowest read (refreshRegistry), so brain/health regions cannot render');
-    });
-  }
   const currentSource = fs.readFileSync(path.join(ROOT, 'ui', 'product.js'), 'utf8');
   const readCurrent = await runScenario(currentSource, hungFetch);
   console.log('  current systemTitle after 2.5s with a hanging projects read: ' + JSON.stringify(readCurrent('systemTitle')));
@@ -214,16 +177,6 @@ async function sectionB() {
     terminalProjects: [{ id: 't0', rootPath: 'D:/qa/p1' }],
     engineProjects: [{ projectId: 'p1', repoPath: 'D:/qa/p1', knowledgePath: 'D:/qa/knowledge/p1' }],
   };
-  if (baselineReady) {
-    const baseline = await makeEnv({ ...hungOptions, baseline: true });
-    const baselineStarted = Date.now();
-    await baseline.bridge.aggregatedProjects();
-    const baselineMs = Date.now() - baselineStarted;
-    console.log('  baseline(HEAD) aggregatedProjects() with one hung module: ' + baselineMs + 'ms');
-    await gate('B', 'B1 baseline(HEAD): aggregated read within 3.5s despite one hung module', async () => {
-      assert.ok(baselineMs <= 3500, 'baseline took ' + baselineMs + 'ms (10s list timeout + sequential 2s availability probes): one slow module stalls the whole first screen');
-    });
-  }
   const current = await makeEnv(hungOptions);
   const currentStarted = Date.now();
   const aggregated = await current.bridge.aggregatedProjects();
@@ -245,21 +198,6 @@ async function sectionB() {
 }
 
 async function sectionC() {
-  if (baselineReady) {
-    const baseline = await makeEnv({ baseline: true, projectIds: ['proj-bad', 'proj-good'], engineFailProjects: ['proj-bad'] });
-    const baselineRuntime = baseline.makeRuntime();
-    await baseline.connect(baselineRuntime);
-    console.log('  baseline(HEAD) engine counters with one failing project: ' + JSON.stringify(baseline.stubs.engine.counters));
-    await gate('C', 'C1 baseline(HEAD): healthy project is wired when another project fails', async () => {
-      assert.ok((baseline.stubs.engine.counters['engine-register:proj-good'] || 0) >= 1, 'proj-good never reached engine POST /api/projects: sequential wiring aborted at proj-bad');
-    });
-    await gate('C', 'C2 baseline(HEAD): ownership not globally pending because of one project', async () => {
-      assert.ok(baselineRuntime.ownership.ready, 'ownership stayed not-ready (' + JSON.stringify(baselineRuntime.ownership.error || null) + '): one failing project keeps the whole product in global "待恢复"');
-    });
-    await gate('C', 'C3 baseline(HEAD): engine activation happens with one failing project', async () => {
-      assert.ok((baseline.stubs.engine.counters['engine-control'] || 0) >= 1, 'engine POST /api/control never happened: activation is gated behind all-project wiring');
-    });
-  }
   const current = await makeEnv({ projectIds: ['proj-bad', 'proj-good'], engineFailProjects: ['proj-bad'] });
   const currentRuntime = current.makeRuntime();
   await current.connect(currentRuntime);
@@ -277,18 +215,6 @@ async function sectionC() {
 }
 
 async function sectionC4() {
-  if (baselineReady) {
-    const baseline = await makeEnv({ baseline: true, projectIds: ['p-a', 'p-b'] });
-    await baseline.connect(baseline.makeRuntime());
-    await baseline.connect(baseline.makeRuntime());
-    console.log('  baseline(HEAD) counters after two takeover passes: ' + JSON.stringify(baseline.stubs.engine.counters));
-    await gate('C', 'C7 baseline(HEAD): healthy projects are not re-registered on a repeat takeover pass', async () => {
-      assert.strictEqual(baseline.stubs.engine.counters['engine-register:p-a'] || 0, 1, 'every takeover pass re-POSTs every healthy project (no remote-list/fingerprint dedupe)');
-    });
-    await gate('C', 'C8 baseline(HEAD): unchanged configuration is not re-pushed on a repeat takeover pass', async () => {
-      assert.strictEqual(baseline.stubs.engine.counters['engine-scopes'] || 0, 1, 'unchanged scopes are re-pushed on every pass (no change detection)');
-    });
-  }
   const current = await makeEnv({ projectIds: ['p-a', 'p-b'] });
   const currentRuntime = current.makeRuntime();
   await current.connect(currentRuntime);
@@ -303,19 +229,6 @@ async function sectionC4() {
 }
 
 async function sectionD() {
-  if (baselineReady) {
-    const baseline = await makeEnv({ baseline: true, projectIds: ['p1'] });
-    await Promise.all([baseline.bridge.syncEngineConfiguration(), baseline.bridge.syncEngineConfiguration(), baseline.bridge.syncEngineConfiguration()]);
-    console.log('  baseline(HEAD) engine counters after 3 concurrent syncs: ' + JSON.stringify(baseline.stubs.engine.counters));
-    await gate('D', 'D1 baseline(HEAD): concurrent duplicate config syncs are merged into one push', async () => {
-      assert.strictEqual(baseline.stubs.engine.counters['engine-scopes'] || 0, 1, 'single-flight chains a full re-run per concurrent caller: 3 callers produced ' + (baseline.stubs.engine.counters['engine-scopes'] || 0) + ' scope pushes');
-    });
-    await baseline.bridge.syncEngineConfiguration();
-    console.log('  baseline(HEAD) engine counters after a fourth unchanged sync: ' + JSON.stringify(baseline.stubs.engine.counters));
-    await gate('D', 'D2 baseline(HEAD): unchanged configuration is not re-pushed on the next sync', async () => {
-      assert.strictEqual(baseline.stubs.engine.counters['engine-scopes'] || 0, 1, 'a completed sync with unchanged settings still re-pushes scopes');
-    });
-  }
   const current = await makeEnv({ projectIds: ['p1'] });
   await Promise.all([current.bridge.syncEngineConfiguration(), current.bridge.syncEngineConfiguration(), current.bridge.syncEngineConfiguration()]);
   console.log('  current engine counters after 3 concurrent syncs: ' + JSON.stringify(current.stubs.engine.counters));
@@ -379,7 +292,6 @@ async function sectionE() {
 }
 
 async function main() {
-  if (!baselineReady) console.log('  baseline(HEAD) commit ' + BASELINE_COMMIT.slice(0, 7) + ' unavailable in this checkout (shallow clone); running current-behavior gates only.');
   await sectionA();
   await sectionB();
   await sectionC();
@@ -390,13 +302,10 @@ async function main() {
   console.log('');
   console.log('glm-ui-refresh-review-test summary: ' + (gates.length - failed.length) + '/' + gates.length + ' gates passed');
   if (failed.length) {
-    console.log('failed gates (baseline(HEAD) failures = first-failure evidence; current failures = regressions):');
+    console.log('failed gates (current regressions):');
     for (const g of failed) console.log('  [' + g.section + '] ' + g.name + ' :: ' + g.message);
   }
-  const baseline = gates.filter(g => g.name.includes('baseline(HEAD)'));
-  const regressions = failed.filter(g => !g.name.includes('baseline(HEAD)'));
-  console.log(`Current: ${gates.length - baseline.length - regressions.length}/${gates.length - baseline.length}; baseline expected failures: ${baseline.filter(g => !g.ok).length}/${baseline.length}`);
-  process.exitCode = regressions.length || baseline.some(g => g.ok) ? 1 : 0;
+  process.exitCode = failed.length ? 1 : 0;
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => {

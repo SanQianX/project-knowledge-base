@@ -41,7 +41,7 @@ function runScripts(block) {
             continue;
         }
         const indent = match[1].length;
-        if (match[2].trim()) {
+        if (match[2].trim() && match[2].trim() !== '|') {
             scripts.push(match[2]);
             i++;
             continue;
@@ -76,10 +76,41 @@ test('the RC trigger and command set are unchanged', () => {
     assert.ok(raw.includes('.github/workflows/publish.yml'), 'the workflow path marker must stay');
 });
 
-test('no registry credential or registry url is configured anywhere', () => {
-    assert.ok(!code.includes('NODE_AUTH_TOKEN'), 'no NODE_AUTH_TOKEN may appear in code');
-    assert.ok(!code.includes('registry-url'), 'no registry-url may appear in code');
-    assert.ok(!/\.npmrc/.test(code), 'no npmrc may be written');
+test('registry credentials stay out of the read-only jobs; write jobs gate the optional token behind a placeholder-only userconfig', () => {
+    // The RC, assessment and prepare jobs remain strictly credential-free,
+    // and no job may hand npm a credential through setup-node.
+    for (const job of ['publish', 'auth-probe', 'stable-prepare']) {
+        const block = jobBlock(job);
+        assert.ok(!block.includes('NODE_AUTH_TOKEN'), job + ' must not reference NODE_AUTH_TOKEN');
+        assert.ok(!block.includes('registry-url'), job + ' must not configure registry-url');
+    }
+    assert.ok(!code.includes('registry-url'), 'no setup-node registry-url may appear anywhere');
+    assert.ok(!/\.npmrc/.test(code), 'no npmrc path may be hardcoded');
+    const tokenEnv = 'NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}';
+    const publishCommands = {
+        'stable-publish-next': 'node qa-autopilot/tools/stable-next-publish.cjs publish',
+        'stable-promote': 'node qa-autopilot/tools/stable-promote.cjs promote'
+    };
+    for (const [job, command] of Object.entries(publishCommands)) {
+        const block = jobBlock(job);
+        assert.deepEqual(
+            block.split('\n').filter(line => line.trim().startsWith('NODE_AUTH_TOKEN:')).map(line => line.trim()),
+            [tokenEnv],
+            job + ' must consume the token only as the write step env reference');
+        const write = runScripts(block).find(script => script.includes(command));
+        assert.ok(write, job + ' must keep running ' + command);
+        assert.ok(write.includes('if [ -n "$NODE_AUTH_TOKEN" ]; then'), job + ' must test the token for non-emptiness before any credential config');
+        assert.ok(write.includes('export NPM_CONFIG_USERCONFIG="$(mktemp)"'), job + ' must locate the temporary userconfig with mktemp');
+        assert.ok(write.includes("printf '%s\\n' '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}' > \"$NPM_CONFIG_USERCONFIG\""),
+            job + ' must write ONLY the npm placeholder line into the userconfig, never the token');
+        assert.ok(write.includes(`trap 'rm -f "$NPM_CONFIG_USERCONFIG"' EXIT`), job + ' must remove the userconfig on exit');
+        assert.ok(write.indexOf('if [ -n') < write.indexOf('NPM_CONFIG_USERCONFIG=') && write.indexOf('printf') < write.indexOf(command),
+            job + ' must gate and write the config before the original tool command');
+        const secretNames = [...block.matchAll(/secrets\.([A-Za-z_][A-Za-z0-9_]*)/g)].map(m => m[1]);
+        assert.ok(secretNames.length > 0, job + ' must reference at least the github token');
+        assert.ok(secretNames.every(name => name === 'GITHUB_TOKEN' || name === 'NPM_PUBLISH_TOKEN'),
+            job + ' references a secret other than the github and publish tokens');
+    }
 });
 
 test('the RC job keeps its environment gate and stays push only', () => {
