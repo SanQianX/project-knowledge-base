@@ -40,8 +40,6 @@ function checkPrepareSource(i) {
         { when: i.packageName !== C.CORE_PACKAGE, code: 'PACKAGE_NAME', reason: 'This route prepares the core package only' },
         { when: i.sourceVersion !== i.expectedVersion, code: 'VERSION_INPUT', reason: 'source package.json is ' + i.sourceVersion + ', not the requested ' + i.expectedVersion + '; the route never bumps a version' },
         { when: i.lockVersion !== i.expectedVersion || i.lockRootVersion !== i.expectedVersion, code: 'LOCK_STALE', reason: 'package-lock.json is not in lockstep with ' + i.expectedVersion },
-        { when: i.desktopVersion !== i.expectedVersion, code: 'THREE_SYNC', reason: 'desktop package.json is ' + i.desktopVersion + ', not ' + i.expectedVersion },
-        { when: i.desktopCorePin !== i.expectedVersion, code: 'THREE_SYNC', reason: 'the desktop core pin is ' + i.desktopCorePin + ', not ' + i.expectedVersion },
         { when: i.headSha !== i.sourceSha, code: 'SHA_MATCH', reason: 'checked-out HEAD ' + i.headSha + ' is not the requested ' + i.sourceSha },
         { when: i.dirty, code: 'DIRTY_TREE', reason: 'Tracked files differ from the reviewed commit' },
         { when: !i.onDispatchRef, code: 'REF_MISMATCH', reason: 'The reviewed commit is not an ancestor of the dispatched ref' },
@@ -119,7 +117,6 @@ async function prepare(options = {}) {
 
     const rootPkg = readJSON(path.join(root, 'package.json'));
     const lock = readJSON(path.join(root, 'package-lock.json'));
-    const desktopPkg = readJSON(path.join(root, 'desktop', 'package.json'));
 
     const headSha = git(['rev-parse', 'HEAD']).stdout;
     const dirty = git(['status', '--porcelain', '--untracked-files=no']).stdout !== '';
@@ -135,8 +132,6 @@ async function prepare(options = {}) {
         sourceVersion: rootPkg.version,
         lockVersion: lock.version,
         lockRootVersion: lock.packages && lock.packages[''] ? lock.packages[''].version : null,
-        desktopVersion: desktopPkg.version,
-        desktopCorePin: desktopPkg.dependencies ? desktopPkg.dependencies[C.CORE_PACKAGE] : null,
         headSha,
         dirty,
         onDispatchRef,

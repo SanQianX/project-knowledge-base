@@ -27,8 +27,6 @@ function input(over = {}) {
         sourceVersion: VERSION,
         lockVersion: VERSION,
         lockRootVersion: VERSION,
-        desktopVersion: VERSION,
-        desktopCorePin: VERSION,
         headSha: SHA_A,
         dirty: false,
         onDispatchRef: true,
@@ -108,12 +106,16 @@ test('prepare refuses a stale lockfile', () => {
     expectCode('lock root version', g.checkPrepareCandidate(input({ lockRootVersion: '5.0.24' })), 'LOCK_STALE');
 });
 
-test('prepare refuses a desktop package out of sync', () => {
-    expectCode('desktop version', g.checkPrepareCandidate(input({ desktopVersion: '5.0.24' })), 'THREE_SYNC');
+test('prepare accepts a core candidate despite desktop metadata out of sync', () => {
+    const verdict = g.checkPrepareCandidate(input({ desktopVersion: '5.0.24', desktopCorePin: '5.0.24' }));
+    assert.strictEqual(verdict.ok, true, JSON.stringify(verdict));
 });
 
-test('prepare refuses a desktop core pin out of sync', () => {
-    expectCode('desktop pin', g.checkPrepareCandidate(input({ desktopCorePin: '5.0.24' })), 'THREE_SYNC');
+test('prepare accepts a 5.0.26 core candidate with old or absent desktop metadata', () => {
+    const core26 = { expectedVersion: '5.0.26', sourceVersion: '5.0.26', lockVersion: '5.0.26', lockRootVersion: '5.0.26' };
+    assert.strictEqual(g.checkPrepareCandidate(input(core26)).ok, true, 'absent desktop facts must not block core-only prepare');
+    const stale = g.checkPrepareCandidate(input({ ...core26, desktopVersion: '5.0.25', desktopCorePin: '5.0.25' }));
+    assert.strictEqual(stale.ok, true, JSON.stringify(stale));
 });
 
 test('prepare refuses a checkout that is not the reviewed commit', () => {
