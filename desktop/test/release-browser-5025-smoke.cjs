@@ -27,6 +27,7 @@ const { spawn, spawnSync } = require('node:child_process');
 const envLib = require('./release-preflight-5025-env.cjs');
 const coreTarballLib = require('./release-preflight-5025-core-tarball.cjs');
 const localModules = require('./release-preflight-5025-local-modules.cjs');
+const quotaPins = require('./release-browser-5025-quota-pins.cjs');
 const { launchCdpBrowser } = require('../../_site/_test/helpers/cdp-browser');
 const { findChromeDetailed } = require('../../_site/_test/helpers/find-chrome');
 
@@ -278,24 +279,23 @@ async function main() {
   const wbDir = extractTgz(wbTarball, path.join(extractRoot, 'wb'), nodeEnv);
   const bridgeDir = extractTgz(bridgeTarball, path.join(extractRoot, 'bridge'), nodeEnv);
 
-  // 0.13.8 quota pin re-base (R20): the Leader-reviewed 0.13.8 delta changed
-  // exactly 3 of the 17 audited quota files. The table below replaces ONLY
-  // those three pins with the reviewed sha256 values — source of truth
-  // qa-autopilot/.runtime/leader-20261023/wb-0138-package-files.json (the
-  // 125-file review of this exact tarball; r17-leader-review.json
-  // wb125HashesMatched=true). Everything else keeps the frozen 0.13.7-era
-  // baseline (shipped pins, notShipped, versionDoc), and any WB version other
-  // than 0.13.8 keeps the frozen baseline untouched — strict 17/17 both ways,
-  // never a skip and never derived from the candidate-under-test.
-  const WB_QUOTA_AUDITED_0138 = Object.assign({}, localModules.WB_QUOTA_AUDITED, {
-    'packages/server/lib/workbench-service.js': { sha256: 'e72686c654e0373c562fbbe3c858c46fc104e198d5f6e44f59153247292bfea9', source: 'r20-leader-0138' },
-    'packages/server/lib/http-handler.js': { sha256: '143892a94e6a9d7a1e58a6dfba18f4e11f52d15465687a99addfcadf62b662f0', source: 'r20-leader-0138' },
-    'packages/client/index.js': { sha256: '493938f0ff357aea6db136fca216c6cfcb542d51f6628e1994a179b5ec296a12', source: 'r20-leader-0138' },
-  });
-  const wbQuotaTable = byId.wb.version === '0.13.8' ? WB_QUOTA_AUDITED_0138 : undefined;
+  // Workbench quota pin re-base. The reviewed pin tables live in
+  // release-browser-5025-quota-pins.cjs: the R20 0.13.8 re-base (ONLY 3 of
+  // the 17 audited quota files re-pinned — source of truth
+  // qa-autopilot/.runtime/leader-20261023/wb-0138-package-files.json, the
+  // 125-file review of that exact tarball; r17-leader-review.json
+  // wb125HashesMatched=true) and the R42 0.13.9 table (the 0.13.8 table plus
+  // ONLY packages/ui/ai-profile-settings.js, the R33/R33B quota patch
+  // 928c1bb, shipped in the official 0.13.9 artifact and proven identical to
+  // the installed official package by the R36 review). Everything else keeps
+  // the frozen 0.13.7-era baseline (shipped pins, notShipped, versionDoc), and
+  // any WB version other than 0.13.8/0.13.9 keeps the frozen baseline
+  // untouched — strict 17/17 both ways, never a skip and never derived from
+  // the candidate-under-test.
+  const wbQuotaTable = quotaPins.selectWbQuotaTable(byId.wb.version);
   const quota = localModules.auditWbQuota(byId.wb, path.join(extractRoot, 'wb'), wbQuotaTable);
   record('wb-quota17-content', quota.failures.length === 0,
-    `pin table ${wbQuotaTable ? '0.13.8-reviewed (ONLY 3 re-pinned leader-verified entries, 14 frozen)' : 'frozen-default'} for wb@${byId.wb.version}; `
+    `pin table ${quotaPins.describeWbQuotaTable(byId.wb.version)} for wb@${byId.wb.version}; `
     + `audited ${quota.detail.audited}, matched ${quota.detail.matched}, versionDocs ${quota.detail.versionDocs}`
     + (quota.failures.length ? `; failures: ${quota.failures.slice(0, 3).join(' | ')}` : ''));
 
@@ -889,7 +889,11 @@ async function main() {
   process.exit(report.passed ? 0 : 1);
 }
 
-main().catch((error) => {
-  console.error(error && error.stack || error);
-  process.exit(1);
-});
+// Guarded: importing this module (e.g. from the focused quota-pin test)
+// must never boot a service, a browser or the CLI.
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error && error.stack || error);
+    process.exit(1);
+  });
+}
