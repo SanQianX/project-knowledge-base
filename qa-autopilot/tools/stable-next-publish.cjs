@@ -18,7 +18,14 @@
 //      package.json must carry the expected name and version;
 //   6. only then is the tarball published with --tag next. "latest" is never
 //      moved, no dist-tag is moved for an already published version, and no
-//      registry credential, placeholder or secret is involved.
+//      registry credential, placeholder or secret is involved;
+//   7. after the publish the route waits until BOTH the version metadata and
+//      the "next" tag are visible, because the registry exposes them
+//      asynchronously. A slow propagation is waited out; a wrong artifact or a
+//      drifted "latest" stops the route at once - the drift is judged before
+//      the transient states, so neither an absent metadata nor a stale next
+//      tag can hide it - and an expired deadline is recorded as an honest
+//      pending state instead of a pass.
 //
 // Usage:
 //   node qa-autopilot/tools/stable-next-publish.cjs verify-run
@@ -37,7 +44,12 @@ const RECEIPT_NAME = 'candidate-receipt.json';
 const RECEIPT_SCHEMA = 'project-knowledge/stable-next-candidate/v1';
 const PUBLISH_SCHEMA = 'project-knowledge/stable-next-publication/v1';
 const PUBLISH_TAG = 'next';
-const REGISTRY_POLL_ATTEMPTS = 12;
+// The registry publishes a version and moves a dist-tag asynchronously: the
+// version metadata can be readable BEFORE the "next" tag points at it. The
+// route therefore waits for BOTH, and it tells a slow propagation (transient)
+// apart from a wrong or drifted registry state (terminal). 36 attempts of 10s
+// are 6 minutes, well inside the 30-minute job budget.
+const REGISTRY_POLL_ATTEMPTS = 36;
 const REGISTRY_POLL_DELAY_MS = 10000;
 
 // Pure: the manual inputs and the prepare-run binding.
@@ -109,18 +121,138 @@ function checkArtifactBinding(i) {
     ]);
 }
 
+// Pure: has the "latest" tag moved away from the reviewed baseline?
+//
+// This route publishes to "next" and never moves "latest", so a latest that
+// differs from the baseline was moved by somebody else. That is TERMINAL: no
+// propagation can repair it. It is therefore evaluated BEFORE the transient
+// states, otherwise an absent metadata or a stale next tag would hide it and
+// the route would wait for a propagation that will never come.
+//
+// A reconciliation is never judged by the dist-tag rules, so the caller
+// decides whether the tags are judged at all.
+function latestDrift(latestAfter, baselineLatest) {
+    const after = latestAfter || null;
+    const baseline = baselineLatest || null;
+    if (after === baseline) return null;
+    return {
+        code: 'LATEST_CHANGED',
+        reason: 'latest moved from ' + baseline + ' to ' + after + '; this route never moves latest',
+    };
+}
+
 // Pure: the registry outcome after a publication. The dist-tag assertions
 // only apply when this route published; a reconciliation never moves a tag,
 // so it must not be judged by them.
+//
+// The order of the problems matters: a drifted "latest" is terminal and is
+// reported FIRST, so neither an absent metadata nor a stale next tag can
+// mask it.
 function checkRegistryOutcome(i) {
+    const drift = i.requireTags ? latestDrift(i.latestAfter, i.baselineLatest) : null;
     return C.firstProblem([
+        { when: drift, code: 'LATEST_CHANGED', reason: drift ? drift.reason : '' },
         { when: !i.meta || !i.meta.dist || !i.meta.dist.integrity, code: 'NO_RECEIPT', reason: 'The registry does not expose this version yet' },
         { when: i.meta && i.meta.name !== i.packageName, code: 'RECEIPT_NAME', reason: 'The registry returned ' + (i.meta ? i.meta.name : '?') },
         { when: i.meta && i.meta.version !== i.expectedVersion, code: 'RECEIPT_VERSION', reason: 'The registry returned version ' + (i.meta ? i.meta.version : '?') },
         { when: i.meta && i.meta.dist.integrity !== i.expectedSRI, code: 'INTEGRITY', reason: 'The registry artifact differs from the reviewed tarball; do not republish blindly' },
         { when: i.requireTags && i.nextAfter !== i.expectedVersion, code: 'NEXT_NOT_MOVED', reason: 'the next tag is ' + i.nextAfter + ', not the candidate' },
-        { when: i.requireTags && i.latestAfter !== i.baselineLatest, code: 'LATEST_CHANGED', reason: 'latest moved from ' + i.baselineLatest + ' to ' + i.latestAfter + '; this route never moves latest' },
     ]);
+}
+
+// Pure: the classification of ONE registry observation after a publication.
+//
+//   VISIBLE   - the metadata carries the reviewed bytes and the next tag
+//               points at the candidate;
+//   TRANSIENT - the registry has not caught up yet (the metadata is absent, or
+//               the next tag still points at the previous candidate);
+//   TERMINAL  - the registry exposes a DIFFERENT artifact, or latest drifted;
+//               waiting cannot repair that, so the route must fail at once
+//               instead of waiting for a propagation that will never come.
+//
+// The drifted "latest" is checked FIRST, before the transient states: an
+// absent metadata or a stale next tag must never hide a terminal drift.
+function classifyVisibility(i) {
+    const meta = i.meta;
+    const nextAfter = (i.tags && i.tags.next) || null;
+    const latestAfter = (i.tags && i.tags.latest) || null;
+    const drift = i.requireTags ? latestDrift(latestAfter, i.baselineLatest) : null;
+    if (drift) return { status: 'TERMINAL', code: drift.code, reason: drift.reason };
+    if (!meta || !meta.dist || !meta.dist.integrity) {
+        return { status: 'TRANSIENT', code: 'NO_RECEIPT', reason: 'The registry does not expose this version yet' };
+    }
+    const metadata = checkRegistryOutcome({
+        meta,
+        packageName: i.packageName,
+        expectedVersion: i.expectedVersion,
+        expectedSRI: i.expectedSRI,
+        nextAfter,
+        latestAfter,
+        baselineLatest: i.baselineLatest,
+        requireTags: false,
+    });
+    if (!metadata.ok) return { status: 'TERMINAL', code: metadata.code, reason: metadata.reason };
+    if (!i.requireTags) return { status: 'VISIBLE' };
+    const tags = checkRegistryOutcome({
+        meta,
+        packageName: i.packageName,
+        expectedVersion: i.expectedVersion,
+        expectedSRI: i.expectedSRI,
+        nextAfter,
+        latestAfter,
+        baselineLatest: i.baselineLatest,
+        requireTags: true,
+    });
+    if (!tags.ok) {
+        return tags.code === 'NEXT_NOT_MOVED'
+            ? { status: 'TRANSIENT', code: tags.code, reason: tags.reason }
+            : { status: 'TERMINAL', code: tags.code, reason: tags.reason };
+    }
+    return { status: 'VISIBLE' };
+}
+
+// Bounded wait until the publication is visible. Only the registry is read
+// here: this route never writes a second time.
+async function waitForVisibility(options) {
+    const fetchImpl = options.fetchImpl;
+    const attempts = Math.max(1, options.attempts || 1);
+    const delayMs = options.delayMs === undefined ? REGISTRY_POLL_DELAY_MS : options.delayMs;
+    const sleep = options.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms)));
+    const observations = [];
+    let meta = null;
+    let tags = null;
+    let classification = { status: 'TRANSIENT', code: 'NO_RECEIPT', reason: 'The registry does not expose this version yet' };
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+        meta = await C.registryVersionMeta(options.packageName, options.expectedVersion, fetchImpl);
+        tags = await C.registryDistTags(options.packageName, fetchImpl);
+        classification = classifyVisibility({
+            meta,
+            tags,
+            packageName: options.packageName,
+            expectedVersion: options.expectedVersion,
+            expectedSRI: options.expectedSRI,
+            baselineLatest: options.baselineLatest,
+            requireTags: options.requireTags,
+        });
+        observations.push({
+            attempt,
+            versionVisible: Boolean(meta && meta.dist && meta.dist.integrity),
+            next: (tags && tags.next) || null,
+            latest: (tags && tags.latest) || null,
+            status: classification.status,
+        });
+        if (classification.status !== 'TRANSIENT') break;
+        if (attempt < attempts) await sleep(delayMs);
+    }
+    return {
+        status: classification.status === 'TRANSIENT' ? 'PENDING' : classification.status,
+        code: classification.code || null,
+        reason: classification.reason || null,
+        meta,
+        tags,
+        observations,
+        attempts: observations.length,
+    };
 }
 
 function listDirectory(dir) {
@@ -224,6 +356,7 @@ async function publish(options = {}) {
     const existing = await C.registryVersionMeta(inputs.packageName, inputs.expectedVersion, fetchImpl);
     const baseline = receipt.baseline || { latest: null, next: null };
     let published = false;
+    let publishStatus = null;
 
     if (existing !== null) {
         // Reconciliation: the exact version already exists. Never republish
@@ -233,35 +366,74 @@ async function publish(options = {}) {
         const publishNpm = options.runNpm || runNpm;
         const result = publishNpm(['publish', path.join(inputs.artifactDir, tarballName), '--tag', PUBLISH_TAG, '--access', 'public', '--provenance'], { cwd: process.cwd() });
         published = true;
+        publishStatus = result.status;
         const dir = path.join(env.RUNNER_TEMP, 'stable-next');
         fs.mkdirSync(dir, { recursive: true });
         fs.writeFileSync(path.join(dir, 'publish.log'), redact(result.stdout + '\n' + result.stderr), { mode: 0o600 });
         must(result.status === 0, 'PUBLISH_FAILED', 'npm publish exited ' + result.status + '; see the redacted publish log', 20);
     }
 
-    let meta = null;
-    for (let attempt = 0; attempt < REGISTRY_POLL_ATTEMPTS; attempt++) {
-        meta = await C.registryVersionMeta(inputs.packageName, inputs.expectedVersion, fetchImpl);
-        if (meta && meta.dist && meta.dist.integrity)
-            break;
-        await new Promise(resolve => setTimeout(resolve, REGISTRY_POLL_DELAY_MS));
-    }
-    const tags = await C.registryDistTags(inputs.packageName, fetchImpl);
-    const outcome = checkRegistryOutcome({
-        meta,
+    // The publication is asynchronous: the version metadata and the next tag
+    // become visible one after the other. Wait for BOTH of them.
+    const visibility = await waitForVisibility({
         packageName: inputs.packageName,
         expectedVersion: inputs.expectedVersion,
         expectedSRI: inputs.expectedSRI,
-        nextAfter: tags.next || null,
-        latestAfter: tags.latest || null,
         baselineLatest: baseline.latest || null,
         requireTags: published,
+        fetchImpl,
+        attempts: options.pollAttempts || REGISTRY_POLL_ATTEMPTS,
+        delayMs: options.pollDelayMs === undefined ? REGISTRY_POLL_DELAY_MS : options.pollDelayMs,
+        sleep: options.sleep,
     });
-    must(outcome.ok, outcome.code || 'REGISTRY_OUTCOME', outcome.reason || 'registry outcome refused');
+    const meta = visibility.meta;
+    const tags = visibility.tags || {};
+    const dir = path.join(env.RUNNER_TEMP, 'stable-next');
+    fs.mkdirSync(dir, { recursive: true });
+
+    if (visibility.status === 'TERMINAL') {
+        // The registry exposes something no propagation can repair.
+        must(false, visibility.code || 'REGISTRY_OUTCOME', visibility.reason || 'registry outcome refused', 20);
+    }
+
+    if (visibility.status === 'PENDING') {
+        // The npm CLI exited 0, so the bytes were accepted; only the visibility
+        // proof is missing. The receipt says exactly that and nothing more:
+        // this is NOT a verified publication, NOT an authentication failure,
+        // and the route never writes a second time.
+        const pending = {
+            schema: PUBLISH_SCHEMA,
+            status: 'PENDING_VISIBILITY',
+            verified: false,
+            name: inputs.packageName,
+            version: inputs.expectedVersion,
+            sourceSha: inputs.expectedSourceSha,
+            prepareRunId: inputs.prepareRunId,
+            reviewer: inputs.reviewer,
+            tarball: { file: tarballName, sha256: inputs.expectedSha256, integrity: inputs.expectedSRI, bytes: bytes.length },
+            fileCount: manifestFiles.length,
+            distTag: PUBLISH_TAG,
+            publishExitStatus: publishStatus,
+            publishedByThisRoute: published,
+            baseline: { latest: baseline.latest || null, next: baseline.next || null },
+            observed: {
+                latest: tags.latest || null,
+                next: tags.next || null,
+                versionVisible: visibility.observations.length ? visibility.observations[visibility.observations.length - 1].versionVisible : false,
+            },
+            latestUnchanged: (tags.latest || null) === (baseline.latest || null),
+            visibility: { attempts: visibility.attempts, observations: visibility.observations },
+            note: 'The npm CLI exited ' + publishStatus + ', but the registry did not expose this version and the next tag within the deadline. The publication is NOT verified, it is NOT an authentication failure, and it was NOT retried.',
+            publishedAt: new Date().toISOString(),
+        };
+        atomicJSON(path.join(dir, 'publication-receipt.json'), pending);
+        must(false, 'VISIBILITY_TIMEOUT', 'The published version and the next tag did not become visible within ' + visibility.attempts + ' polls; the receipt records the pending state', 20);
+    }
 
     const receiptOut = {
         schema: PUBLISH_SCHEMA,
         status: published ? 'PUBLISHED_NEXT' : 'ALREADY_PUBLISHED_VERIFIED',
+        verified: true,
         name: inputs.packageName,
         version: inputs.expectedVersion,
         sourceSha: inputs.expectedSourceSha,
@@ -270,13 +442,14 @@ async function publish(options = {}) {
         tarball: { file: tarballName, sha256: inputs.expectedSha256, integrity: inputs.expectedSRI, bytes: bytes.length },
         fileCount: manifestFiles.length,
         distTag: PUBLISH_TAG,
+        publishExitStatus: publishStatus,
+        publishedByThisRoute: published,
         baseline: { latest: baseline.latest || null, next: baseline.next || null },
         observed: { latest: tags.latest || null, next: tags.next || null },
         latestUnchanged: (tags.latest || null) === (baseline.latest || null),
+        visibility: { attempts: visibility.attempts, observations: visibility.observations },
         publishedAt: new Date().toISOString(),
     };
-    const dir = path.join(env.RUNNER_TEMP, 'stable-next');
-    fs.mkdirSync(dir, { recursive: true });
     atomicJSON(path.join(dir, 'publication-receipt.json'), receiptOut);
     return receiptOut;
 }
@@ -298,6 +471,7 @@ async function main() {
 
 module.exports = {
     checkPublishBinding, checkPrepareRun, checkArtifactDirectory, checkArtifactBinding, checkRegistryOutcome,
+    classifyVisibility, waitForVisibility, latestDrift,
     verifyRun, publish, listDirectory, RECEIPT_NAME, RECEIPT_SCHEMA, PUBLISH_SCHEMA, PUBLISH_TAG,
 };
 

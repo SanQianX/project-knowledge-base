@@ -265,6 +265,28 @@ test('a reconciliation is not judged by the dist-tag rules', () => {
     assert.strictEqual(verdict.ok, true, JSON.stringify(verdict));
 });
 
+test('a drifted latest is judged before the transient states', () => {
+    const meta = { name: C.CORE_PACKAGE, version: VERSION, dist: { integrity: SRI_FIXTURE } };
+    const base = { packageName: C.CORE_PACKAGE, expectedVersion: VERSION, expectedSRI: SRI_FIXTURE, baselineLatest: '5.0.24', requireTags: true };
+    // an absent metadata and a drifted latest: terminal, not a propagation
+    const absent = g.classifyVisibility(Object.assign({}, base, { meta: null, tags: { next: VERSION, latest: '5.0.26' } }));
+    assert.strictEqual(absent.status, 'TERMINAL');
+    assert.strictEqual(absent.code, 'LATEST_CHANGED');
+    // a stale next tag and a drifted latest: terminal, not a propagation
+    const stale = g.classifyVisibility(Object.assign({}, base, { meta, tags: { next: '5.0.24', latest: '5.0.26' } }));
+    assert.strictEqual(stale.status, 'TERMINAL');
+    assert.strictEqual(stale.code, 'LATEST_CHANGED');
+    // the same observations without a drift stay transient
+    const propagating = g.classifyVisibility(Object.assign({}, base, { meta: null, tags: { next: VERSION, latest: '5.0.24' } }));
+    assert.strictEqual(propagating.status, 'TRANSIENT');
+    assert.strictEqual(propagating.code, 'NO_RECEIPT');
+    // a reconciliation is never judged by the dist-tag rules
+    const reconciliation = g.classifyVisibility(Object.assign({}, base, { meta, tags: { next: '5.0.24', latest: '5.0.26' }, requireTags: false }));
+    assert.strictEqual(reconciliation.status, 'VISIBLE');
+    // the outcome helper reports the drift before the stale next tag
+    expectCode('drift', g.checkRegistryOutcome(Object.assign({}, base, { meta, nextAfter: '5.0.24', latestAfter: '5.0.26' })), 'LATEST_CHANGED');
+});
+
 // ---------------------------------------------------------------------------
 // End-to-end cases with a fully mocked transport.
 // ---------------------------------------------------------------------------
@@ -313,6 +335,10 @@ function scenario(options = {}) {
 
     const calls = { npm: [], fetch: [] };
     let versionLookups = 0;
+    let tagLookups = 0;
+    // The counts let a test prove that a terminal observation stops the route
+    // at once, and that a transient one keeps it waiting.
+    const counts = { metaPolls: 0, tagLookups: 0 };
     const fetchImpl = async (url) => {
         calls.fetch.push(String(url));
         const target = String(url);
@@ -320,13 +346,22 @@ function scenario(options = {}) {
             return { ok: true, status: 200, json: async () => prepareRun() };
         if (target.endsWith('/' + VERSION)) {
             versionLookups += 1;
+            if (versionLookups > 1) counts.metaPolls += 1;
             if (options.alreadyPublished)
-                return { ok: true, status: 200, json: async () => ({ name: C.CORE_PACKAGE, version: VERSION, dist: { integrity: sri } }) };
+                return { ok: true, status: 200, json: async () => ({ name: C.CORE_PACKAGE, version: VERSION, dist: { integrity: options.existingIntegrity || sri } }) };
             if (versionLookups === 1)
                 return { ok: false, status: 404, json: async () => ({ error: 'Not found' }) };
+            const step = options.metaSequence ? options.metaSequence[counts.metaPolls - 1] : 'ok';
+            if (step === 'missing')
+                return { ok: false, status: 404, json: async () => ({ error: 'Not found' }) };
+            if (step === 'wrongIntegrity')
+                return { ok: true, status: 200, json: async () => ({ name: C.CORE_PACKAGE, version: VERSION, dist: { integrity: 'sha512-' + Buffer.alloc(64, 9).toString('base64') } }) };
             return { ok: true, status: 200, json: async () => ({ name: C.CORE_PACKAGE, version: VERSION, dist: { integrity: sri } }) };
         }
-        return { ok: true, status: 200, json: async () => ({ 'dist-tags': { latest: '5.0.24', next: options.alreadyPublished ? '5.0.24' : VERSION } }) };
+        counts.tagLookups += 1;
+        const next = options.nextSequence ? options.nextSequence[counts.tagLookups - 1] : (options.alreadyPublished ? '5.0.24' : VERSION);
+        const latest = options.latestSequence ? options.latestSequence[counts.tagLookups - 1] : '5.0.24';
+        return { ok: true, status: 200, json: async () => ({ 'dist-tags': { latest, next } }) };
     };
 
     const runNpm = (args) => {
@@ -334,7 +369,7 @@ function scenario(options = {}) {
         return { status: 0, stdout: 'npm notice published\n', stderr: '' };
     };
 
-    return { root, artifactDir, runnerTemp, env, calls, fetchImpl, runNpm, bytes, sha256, sri, tarballName };
+    return { root, artifactDir, runnerTemp, env, calls, counts, fetchImpl, runNpm, bytes, sha256, sri, tarballName };
 }
 
 test('publish publishes exactly the reviewed bytes to next only', async () => {
@@ -381,4 +416,104 @@ test('the tar reader understands an npm shaped tarball', () => {
     assert.strictEqual(parsed.packageJson.version, VERSION);
     assert.deepStrictEqual(C.relativePaths(parsed.files).sort(), ['package.json', 'ui/index.html']);
     assert.deepStrictEqual(C.unsafePaths(parsed.files), []);
+});
+
+// ---------------------------------------------------------------------------
+// The asynchronous visibility of a publication.
+//
+// The registry exposes the version metadata and the "next" tag one after the
+// other. The route has to wait for BOTH: a metadata that is visible before the
+// tag is a propagation state, not a failure.
+// ---------------------------------------------------------------------------
+
+test('the metadata may be visible before the next tag points at the candidate', async () => {
+    const s = scenario({ nextSequence: ['5.0.24', '5.0.24', VERSION] });
+    const receipt = await g.publish({ env: s.env, fetchImpl: s.fetchImpl, runNpm: s.runNpm, pollAttempts: 6, pollDelayMs: 0 });
+    assert.strictEqual(s.calls.npm.length, 1, 'the route must publish exactly once');
+    assert.strictEqual(receipt.status, 'PUBLISHED_NEXT');
+    assert.strictEqual(receipt.observed.next, VERSION);
+    assert.ok(receipt.visibility.attempts >= 3, 'the route must wait for the next tag, not only for the metadata');
+    assert.strictEqual(receipt.visibility.observations[0].versionVisible, true, 'the metadata was visible before the tag');
+    assert.strictEqual(receipt.visibility.observations[0].next, '5.0.24');
+    assert.strictEqual(receipt.visibility.observations[receipt.visibility.observations.length - 1].next, VERSION);
+});
+
+test('the metadata may be absent for several polls before it appears', async () => {
+    const s = scenario({ metaSequence: ['missing', 'missing', 'ok'] });
+    const receipt = await g.publish({ env: s.env, fetchImpl: s.fetchImpl, runNpm: s.runNpm, pollAttempts: 6, pollDelayMs: 0 });
+    assert.strictEqual(s.calls.npm.length, 1, 'the route must publish exactly once');
+    assert.strictEqual(receipt.status, 'PUBLISHED_NEXT');
+    assert.ok(receipt.visibility.attempts >= 3, 'the route must wait for the metadata to appear');
+    assert.strictEqual(receipt.visibility.observations[0].versionVisible, false);
+    assert.strictEqual(receipt.visibility.observations[receipt.visibility.observations.length - 1].versionVisible, true);
+});
+
+test('a registry artifact with another integrity stops the route at once', async () => {
+    const s = scenario({ metaSequence: ['wrongIntegrity'] });
+    await assert.rejects(() => g.publish({ env: s.env, fetchImpl: s.fetchImpl, runNpm: s.runNpm, pollAttempts: 6, pollDelayMs: 0 }), error => {
+        assert.strictEqual(error.code, 'INTEGRITY');
+        return true;
+    });
+    assert.strictEqual(s.calls.npm.length, 1, 'the route must publish exactly once and never retry');
+    assert.strictEqual(s.counts.metaPolls, 1, 'a wrong artifact is terminal, not a propagation');
+});
+
+test('a latest that moved away from the baseline stops the route at once', async () => {
+    const s = scenario({ latestSequence: ['5.0.26'] });
+    await assert.rejects(() => g.publish({ env: s.env, fetchImpl: s.fetchImpl, runNpm: s.runNpm, pollAttempts: 6, pollDelayMs: 0 }), error => {
+        assert.strictEqual(error.code, 'LATEST_CHANGED');
+        return true;
+    });
+    assert.strictEqual(s.calls.npm.length, 1, 'the route must publish exactly once and never retry');
+    assert.strictEqual(s.counts.metaPolls, 1, 'a drifted latest is terminal, not a propagation');
+});
+
+test('an absent metadata does not hide a latest that moved away from the baseline', async () => {
+    const s = scenario({ metaSequence: ['missing', 'missing', 'missing'], latestSequence: ['5.0.26'] });
+    await assert.rejects(() => g.publish({ env: s.env, fetchImpl: s.fetchImpl, runNpm: s.runNpm, pollAttempts: 6, pollDelayMs: 0 }), error => {
+        assert.strictEqual(error.code, 'LATEST_CHANGED');
+        return true;
+    });
+    assert.strictEqual(s.calls.npm.length, 1, 'the route must publish exactly once and never retry');
+    assert.strictEqual(s.counts.metaPolls, 1, 'a drifted latest is terminal even when the metadata is absent');
+});
+
+test('a stale next tag does not hide a latest that moved away from the baseline', async () => {
+    const s = scenario({ nextSequence: ['5.0.24'], latestSequence: ['5.0.26'] });
+    await assert.rejects(() => g.publish({ env: s.env, fetchImpl: s.fetchImpl, runNpm: s.runNpm, pollAttempts: 6, pollDelayMs: 0 }), error => {
+        assert.strictEqual(error.code, 'LATEST_CHANGED');
+        return true;
+    });
+    assert.strictEqual(s.calls.npm.length, 1, 'the route must publish exactly once and never retry');
+    assert.strictEqual(s.counts.metaPolls, 1, 'a drifted latest is terminal even when the next tag is stale');
+});
+
+test('an expired visibility deadline is recorded as pending and never as a pass', async () => {
+    const s = scenario({ metaSequence: ['missing', 'missing', 'missing'] });
+    await assert.rejects(() => g.publish({ env: s.env, fetchImpl: s.fetchImpl, runNpm: s.runNpm, pollAttempts: 3, pollDelayMs: 0 }), error => {
+        assert.strictEqual(error.code, 'VISIBILITY_TIMEOUT');
+        return true;
+    });
+    assert.strictEqual(s.calls.npm.length, 1, 'the route must publish exactly once and never retry');
+    const receipt = JSON.parse(fs.readFileSync(path.join(s.runnerTemp, 'stable-next', 'publication-receipt.json'), 'utf8'));
+    assert.strictEqual(receipt.status, 'PENDING_VISIBILITY');
+    assert.strictEqual(receipt.verified, false, 'a pending publication is never a verified publication');
+    assert.strictEqual(receipt.publishExitStatus, 0, 'the npm CLI did exit 0');
+    assert.strictEqual(receipt.sourceSha, SHA_A);
+    assert.strictEqual(receipt.tarball.sha256, s.sha256);
+    assert.strictEqual(receipt.tarball.integrity, s.sri);
+    assert.strictEqual(receipt.observed.versionVisible, false);
+    assert.strictEqual(receipt.visibility.attempts, 3);
+    assert.ok(receipt.visibility.observations.length > 0, 'the receipt must carry the observations');
+    assert.ok(/NOT an authentication failure/i.test(receipt.note), 'the receipt must deny an authentication failure');
+    assert.ok(/NOT verified/i.test(receipt.note), 'the receipt must deny a verified publication');
+});
+
+test('an occupied version is reconciled without a write and without waiting for a tag', async () => {
+    const s = scenario({ alreadyPublished: true });
+    const receipt = await g.publish({ env: s.env, fetchImpl: s.fetchImpl, runNpm: s.runNpm, pollAttempts: 6, pollDelayMs: 0 });
+    assert.strictEqual(s.calls.npm.length, 0, 'an occupied version must not be published again');
+    assert.strictEqual(receipt.status, 'ALREADY_PUBLISHED_VERIFIED');
+    assert.strictEqual(receipt.observed.next, '5.0.24', 'a reconciliation never moves the next tag');
+    assert.strictEqual(receipt.visibility.attempts, 1, 'a reconciliation needs no tag propagation');
 });
