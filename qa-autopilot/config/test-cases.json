@@ -956,7 +956,7 @@
       "priority": "P0",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "宿主锁定0.13.6；独立默认分支0.3.0不得充当同版本源码；ui/product.js iframe合同",
+      "source": "宿主版本以 package.json 与 module-runtime-manifest.json 的当前精确锁定为准（本轮 0.13.9）；独立源码必须逐文件匹配该制品，不能凭分支名或版本字符串替代；ui/product.js iframe合同",
       "candidateSuite": "workbench",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -985,7 +985,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "宿主锁定0.13.6；独立默认分支0.3.0不得充当同版本源码；ui/product.js iframe合同",
+      "source": "宿主版本以 package.json 与 module-runtime-manifest.json 的当前精确锁定为准（本轮 0.13.9）；独立源码必须逐文件匹配该制品，不能凭分支名或版本字符串替代；ui/product.js iframe合同",
       "candidateSuite": "workbench",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -1014,7 +1014,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "宿主锁定0.13.6；独立默认分支0.3.0不得充当同版本源码；ui/product.js iframe合同",
+      "source": "宿主版本以 package.json 与 module-runtime-manifest.json 的当前精确锁定为准（本轮 0.13.9）；独立源码必须逐文件匹配该制品，不能凭分支名或版本字符串替代；ui/product.js iframe合同",
       "candidateSuite": "workbench",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -1044,7 +1044,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "宿主锁定0.13.6；独立默认分支0.3.0不得充当同版本源码；ui/product.js iframe合同",
+      "source": "宿主版本以 package.json 与 module-runtime-manifest.json 的当前精确锁定为准（本轮 0.13.9）；独立源码必须逐文件匹配该制品，不能凭分支名或版本字符串替代；ui/product.js iframe合同",
       "candidateSuite": "workbench",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -1073,7 +1073,7 @@
       "priority": "P0",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "宿主锁定0.13.6；独立默认分支0.3.0不得充当同版本源码；ui/product.js iframe合同",
+      "source": "宿主版本以 package.json 与 module-runtime-manifest.json 的当前精确锁定为准（本轮 0.13.9）；独立源码必须逐文件匹配该制品，不能凭分支名或版本字符串替代；ui/product.js iframe合同",
       "candidateSuite": "workbench",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -1102,7 +1102,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "宿主锁定0.13.6；独立默认分支0.3.0不得充当同版本源码；ui/product.js iframe合同",
+      "source": "宿主版本以 package.json 与 module-runtime-manifest.json 的当前精确锁定为准（本轮 0.13.9）；独立源码必须逐文件匹配该制品，不能凭分支名或版本字符串替代；ui/product.js iframe合同",
       "candidateSuite": "workbench",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -1131,7 +1131,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "宿主锁定0.13.6；独立默认分支0.3.0不得充当同版本源码；ui/product.js iframe合同",
+      "source": "宿主版本以 package.json 与 module-runtime-manifest.json 的当前精确锁定为准（本轮 0.13.9）；独立源码必须逐文件匹配该制品，不能凭分支名或版本字符串替代；ui/product.js iframe合同",
       "candidateSuite": "workbench",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -1160,7 +1160,7 @@
       "priority": "P0",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "宿主锁定0.13.6；独立默认分支0.3.0不得充当同版本源码；ui/product.js iframe合同",
+      "source": "宿主版本以 package.json 与 module-runtime-manifest.json 的当前精确锁定为准（本轮 0.13.9）；独立源码必须逐文件匹配该制品，不能凭分支名或版本字符串替代；ui/product.js iframe合同",
       "candidateSuite": "workbench",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -1189,7 +1189,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "宿主锁定0.13.6；独立默认分支0.3.0不得充当同版本源码；ui/product.js iframe合同",
+      "source": "宿主版本以 package.json 与 module-runtime-manifest.json 的当前精确锁定为准（本轮 0.13.9）；独立源码必须逐文件匹配该制品，不能凭分支名或版本字符串替代；ui/product.js iframe合同",
       "candidateSuite": "workbench",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -1218,7 +1218,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "宿主锁定0.13.6；独立默认分支0.3.0不得充当同版本源码；ui/product.js iframe合同",
+      "source": "宿主版本以 package.json 与 module-runtime-manifest.json 的当前精确锁定为准（本轮 0.13.9）；独立源码必须逐文件匹配该制品，不能凭分支名或版本字符串替代；ui/product.js iframe合同",
       "candidateSuite": "workbench",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -1248,7 +1248,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "宿主锁定0.13.6；独立默认分支0.3.0不得充当同版本源码；ui/product.js iframe合同",
+      "source": "宿主版本以 package.json 与 module-runtime-manifest.json 的当前精确锁定为准（本轮 0.13.9）；独立源码必须逐文件匹配该制品，不能凭分支名或版本字符串替代；ui/product.js iframe合同",
       "candidateSuite": "workbench",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -1277,7 +1277,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "宿主锁定0.13.6；独立默认分支0.3.0不得充当同版本源码；ui/product.js iframe合同",
+      "source": "宿主版本以 package.json 与 module-runtime-manifest.json 的当前精确锁定为准（本轮 0.13.9）；独立源码必须逐文件匹配该制品，不能凭分支名或版本字符串替代；ui/product.js iframe合同",
       "candidateSuite": "workbench",
       "preconditions": [
         "使用独立测试数据和受管实例",
