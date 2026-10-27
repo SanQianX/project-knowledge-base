@@ -11,7 +11,9 @@
     "P-WB-SUPPLEMENT-02",
     "P-ENGINE-CI-R5",
     "P-WB-QA-INTEGRATION-5025",
-    "P-QA-LOG-INTEGRATION-5025"
+    "P-QA-LOG-INTEGRATION-5025",
+    "P-WB-PERMISSION-QUESTION-R44",
+    "P-PROFILE-BLANK-REAL-R49"
   ],
   "note": "产品用例（PRJ-*）→ 真实断言的可复用绑定表。本表只描述“哪条 expected 由哪个测试入口的哪一条断言覆盖”；不含任何一次运行的结果（退出码、状态、日志路径、私有路径）。每次运行的结果必须另存到被忽略的证据目录，不回写本表。文件级套件通过不构成用例级证据。",
   "definitionModel": {
@@ -7268,6 +7270,166 @@
               "anchor": "noFakeEmptyFile",
               "kind": "disk",
               "test": "ui"
+            }
+          ]
+        }
+      ]
+    },
+    "WB-006": {
+      "title": "权限拒绝",
+      "tests": [
+        {
+          "id": "real-permission-question",
+          "command": "node qa-autopilot/tools/product-probes/qa-r44-permission-question.js --run",
+          "isolation": "全隔离 driver/子进程 HOME、双KB目录、Workbench/Bridge数据、端口与浏览器profile；真实订阅配置仅服务端只读内存解析，不复制凭据；必须显式 PK_WB_ALLOW_PAID_TURNS=1，默认check不调用模型"
+        }
+      ],
+      "expected": [
+        {
+          "key": "denied-tool-not-executed",
+          "text": "真实工具未执行。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-WB-006-denied-tool-not-executed-1",
+              "file": "_site/_test/qa-r44-permission-question.js",
+              "line": 457,
+              "anchor": "the denied Write tool still executed, or the receipt and the UI disagree",
+              "kind": "browser+event+disk",
+              "test": "real-permission-question"
+            }
+          ]
+        },
+        {
+          "key": "denial-ui-receipt-agree",
+          "text": "UI错误与拒绝回执一致。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-WB-006-denial-ui-receipt-agree-1",
+              "file": "_site/_test/qa-r44-permission-question.js",
+              "line": 417,
+              "anchor": "the pending permission does not protect the Write tool:",
+              "kind": "event+identity",
+              "test": "real-permission-question"
+            },
+            {
+              "id": "QA-SPEC-WB-006-denial-ui-receipt-agree-2",
+              "file": "_site/_test/qa-r44-permission-question.js",
+              "line": 457,
+              "anchor": "the denied Write tool still executed, or the receipt and the UI disagree",
+              "kind": "browser+event+disk",
+              "test": "real-permission-question"
+            }
+          ]
+        }
+      ]
+    },
+    "WB-007": {
+      "title": "用户问题选择",
+      "tests": [
+        {
+          "id": "real-permission-question",
+          "command": "node qa-autopilot/tools/product-probes/qa-r44-permission-question.js --run",
+          "isolation": "全隔离 driver/子进程 HOME、双KB目录、Workbench/Bridge数据、端口与浏览器profile；真实订阅配置仅服务端只读内存解析，不复制凭据；必须显式 PK_WB_ALLOW_PAID_TURNS=1，默认check不调用模型"
+        }
+      ],
+      "expected": [
+        {
+          "key": "real-user-selection-required",
+          "text": "必须由真实选择确认。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-WB-007-real-user-selection-required-1",
+              "file": "_site/_test/qa-r44-permission-question.js",
+              "line": 512,
+              "anchor": "the question card did not hold the turn in the pending-permission state",
+              "kind": "browser+event",
+              "test": "real-permission-question"
+            },
+            {
+              "id": "QA-SPEC-WB-007-real-user-selection-required-2",
+              "file": "_site/_test/qa-r44-permission-question.js",
+              "line": 656,
+              "anchor": "the submitted answers did not reach the model, or the receipt disagrees with the selection",
+              "kind": "browser+sdk-receipt+reply",
+              "test": "real-permission-question"
+            }
+          ]
+        },
+        {
+          "key": "bypass-cannot-auto-answer-or-release",
+          "text": "bypass工具权限不能代选、空答或放行。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-WB-007-bypass-cannot-auto-answer-or-release-1",
+              "file": "_site/_test/qa-r44-permission-question.js",
+              "line": 557,
+              "anchor": "the product accepted a bypass/empty/wrong resolution of the pending question",
+              "kind": "api-negative+browser+event",
+              "test": "real-permission-question"
+            },
+            {
+              "id": "QA-SPEC-WB-007-bypass-cannot-auto-answer-or-release-2",
+              "file": "_site/_test/qa-r44-permission-question.js",
+              "line": 576,
+              "anchor": "record('R44.g-wb007-bypass-mode-does-not-release-the-question', bypassSwitch.questionCardStillPending",
+              "kind": "browser+event",
+              "test": "real-permission-question"
+            },
+            {
+              "id": "QA-SPEC-WB-007-bypass-cannot-auto-answer-or-release-3",
+              "file": "_site/_test/qa-r44-permission-question.js",
+              "line": 700,
+              "anchor": "record('R44.j-wb007-the-bypass-mode-still-asks-the-question', stillPending8",
+              "kind": "browser+event",
+              "test": "real-permission-question"
+            }
+          ]
+        }
+      ]
+    },
+    "SYS-003": {
+      "title": "凭据留空",
+      "tests": [
+        {
+          "id": "real-blank-credential",
+          "command": "node qa-autopilot/tools/product-probes/qa-r49-run.cjs --run",
+          "isolation": "全隔离driver/child HOME、双KB/Workbench/Bridge目录、临时端口和独立browser profile；仅虚构Key和.invalid端点，真实产品ProfileStore/API/表单；默认check不开服务或browser、不调用模型/额度"
+        }
+      ],
+      "expected": [
+        {
+          "key": "blank-preserves-credential",
+          "text": "留空不覆盖。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-SYS-003-blank-preserves-credential-1",
+              "file": "_site/_test/qa-r49-sys003-real-blank-probe.js",
+              "line": 217,
+              "anchor": "credential file bytes must be identical across the embedding blank save",
+              "kind": "api+disk",
+              "test": "real-blank-credential"
+            },
+            {
+              "id": "QA-SPEC-SYS-003-blank-preserves-credential-2",
+              "file": "_site/_test/qa-r49-sys003-real-blank-probe.js",
+              "line": 274,
+              "anchor": "stored runtime credential must keep the FAKE value",
+              "kind": "browser+disk",
+              "test": "real-blank-credential"
+            }
+          ]
+        },
+        {
+          "key": "response-log-secret-not-exposed",
+          "text": "响应、日志不泄露secret。",
+          "bindings": [
+            {
+              "id": "QA-SPEC-SYS-003-response-log-secret-not-exposed-1",
+              "file": "_site/_test/qa-r49-sys003-real-blank-probe.js",
+              "line": 309,
+              "anchor": "raw secrets leaked to:",
+              "kind": "response+log+dom",
+              "test": "real-blank-credential"
             }
           ]
         }

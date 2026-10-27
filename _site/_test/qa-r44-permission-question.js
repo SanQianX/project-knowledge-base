@@ -668,7 +668,7 @@ async function main() {
         const mode8 = await readSession(host.base, session8.sessionId);
         const effectiveMode8 = mode8.body && mode8.body.permissionMode;
         paidTurns += 1;
-        await harness.typeText(browser, '请调用 AskUserQuestion 工具问一个问题：question 为 "QA-R44 bypass 完全访问下的问题"，options 为 [{"label":"同意","description":"同意"}]，multiSelect=false。收到回答后原样复述。');
+        await harness.typeText(browser, '请调用 AskUserQuestion 工具问一个问题：question 为 "QA-R44 bypass 完全访问下的问题"，options 为 [{"label":"同意","description":"同意"},{"label":"不同意","description":"不同意"}]，multiSelect=false。收到回答后原样复述。');
         await harness.clickSend(browser);
         const event8 = await ui.waitUntil(async () => {
           const found = eventsOfType(session8.events, 'claude/permission-request').find(event => event.kind === 'question');
