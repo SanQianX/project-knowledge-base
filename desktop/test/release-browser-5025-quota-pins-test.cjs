@@ -11,16 +11,27 @@
 //   3. the 0.13.9 reviewed table adds EXACTLY ONE entry
 //      (packages/ui/ai-profile-settings.js) with the approved sha256;
 //   4. the selection is EXACT-VERSION: an unknown version selects nothing;
-//   5. the official public 0.13.9 bytes audit clean against the 0.13.9 table
+//   5. the official public bytes of the version installed under the ROOT
+//      alias audit clean against THAT version's reviewed table
 //      (12 exact + 1 versionDoc + 4 notShipped = 17) while the frozen
 //      baseline REJECTS the very same bytes;
 //   6. mutating one approved public file is rejected;
-//   7. an unknown version is not silently accepted.
+//   7. an unknown version is not silently accepted;
+//   8. the 0.13.10 reviewed table is the 0.13.9 table plus EXACTLY three
+//      R79 re-pins (workbench-service.js, http-handler.js, contracts/index.d.ts;
+//      ai-profile-settings.js keeps the 0.13.9 pin), the label names
+//      0.13.10-reviewed and all reviewed changes, and the three new pins
+//      genuinely bite: 0.13.9-era official bytes are rejected on exactly
+//      those three files (plus the openapi.yaml version field) until the
+//      official 0.13.10 install makes the very same audit pass.
 //
 // The public module root is resolved from the ROOT package.json alias
-// dependency ("claude-ai-workbench": "npm:@sanqianx/claude-ai-workbench@0.13.9"),
-// so the test is portable: no absolute source path is hardcoded and no file
-// key is copied from another lane.
+// dependency ("claude-ai-workbench": "npm:@sanqianx/claude-ai-workbench@…",
+// today 0.13.10), so the test is portable: no absolute source path is
+// hardcoded and no file key is copied from another lane. The installed module
+// under the alias must be a version with a reviewed table (0.13.9 today,
+// 0.13.10 after the official install), so the audit stays real through the
+// alias→install transition.
 //
 // The audit runs in a NODE CHILD under the audited isolated environment; the
 // child only REQUIRES the selector module, so this also proves that
@@ -43,6 +54,7 @@ const LOCAL_MODULES_PATH = path.join(__dirname, 'release-preflight-5025-local-mo
 
 const WB_0138 = '0.13.8';
 const WB_0139 = '0.13.9';
+const WB_01310 = '0.13.10';
 const APPROVED_0139_REL = 'packages/ui/ai-profile-settings.js';
 const APPROVED_0139_SHA = '3c7a75833a3c4f607739ecf71a0716e27c8594cecd9d84e2f8ac99498a59e0e7';
 const R20_REPINS = {
@@ -50,6 +62,14 @@ const R20_REPINS = {
   'packages/server/lib/http-handler.js': '143892a94e6a9d7a1e58a6dfba18f4e11f52d15465687a99addfcadf62b662f0',
   'packages/client/index.js': '493938f0ff357aea6db136fca216c6cfcb542d51f6628e1994a179b5ec296a12',
 };
+// The R79 Leader raw-Git re-pins for 0.13.10 (source fe572537, evidence
+// qa-autopilot/.runtime/leader-20261023/r79-independent-quota-pins.json).
+const R79_REPINS = {
+  'packages/contracts/index.d.ts': '2947ab3e5d4408afa7af5095e23733e983c6845994217cab202e737268f61da1',
+  'packages/server/lib/workbench-service.js': '3a4262ce20cd531374850e427852f3d2870df07a94473a63c5362cc134f67ba8',
+  'packages/server/lib/http-handler.js': '7dd1cfafac4d1d9b9603bc084d55c45548ab3d1fb12d015c8aec6271ca4db3ca',
+};
+const VERSION_DOC_REL = 'docs/sdk/openapi.yaml';
 
 // The approved 0.13.9 entry is the R33/R33B quota patch (source commit
 // 928c1bb), shipped in the official 0.13.9 artifact and proven identical to
@@ -209,47 +229,76 @@ try {
       && String(t0139[APPROVED_0139_REL].source).includes('928c1bb'),
     `delta=${JSON.stringify(delta0139)}`);
 
+  // 3b. the 0.13.10 reviewed table: 17 entries, exactly the three R79 re-pins,
+  //     and the unchanged files keep the 0.13.9 entries byte-for-byte.
+  const t01310 = pins.WB_QUOTA_AUDITED_01310;
+  const t01310Keys = Object.keys(t01310 || {});
+  const delta01310 = t01310Keys.filter((k) => !(k in t0139) || t0139[k].sha256 !== t01310[k].sha256);
+  check('01310-table-has-17-entries', t01310Keys.length === 17, `entries=${t01310Keys.length}`);
+  check('01310-delta-is-exactly-the-three-reviewed-repins',
+    delta01310.length === 3 && delta01310.every((k) => R79_REPINS[k] && t01310[k].sha256 === R79_REPINS[k]
+      && t01310[k].source === 'r79-leader-01310'),
+    `delta=${JSON.stringify(delta01310)}`);
+  check('01310-keeps-the-0139-entries-for-unchanged-files',
+    JSON.stringify(t01310[APPROVED_0139_REL]) === JSON.stringify(t0139[APPROVED_0139_REL])
+      && t01310['packages/client/index.js'].sha256 === t0139['packages/client/index.js'].sha256
+      && t0139[APPROVED_0139_REL].sha256 === APPROVED_0139_SHA,
+    `ai-profile=${t01310[APPROVED_0139_REL].sha256.slice(0, 8)} client=${t01310['packages/client/index.js'].sha256.slice(0, 8)}`);
+  check('01310-label-names-the-reviewed-table-and-all-changes',
+    String(pins.describeWbQuotaTable(WB_01310)).includes('0.13.10-reviewed')
+      && String(pins.describeWbQuotaTable(WB_01310)).includes('workbench-service.js')
+      && String(pins.describeWbQuotaTable(WB_01310)).includes('http-handler.js')
+      && String(pins.describeWbQuotaTable(WB_01310)).includes('contracts/index.d.ts'),
+    pins.describeWbQuotaTable(WB_01310));
+
   // 4. exact-version selection only
   check('selector-is-exact-version',
     pins.selectWbQuotaTable(WB_0138) !== undefined && pins.selectWbQuotaTable(WB_0139) !== undefined
+      && pins.selectWbQuotaTable(WB_01310) === t01310
       && pins.selectWbQuotaTable('0.13.7') === undefined
-      && pins.selectWbQuotaTable('0.13.10') === undefined
+      && pins.selectWbQuotaTable('0.13.11') === undefined
       && pins.selectWbQuotaTable('0.14.0') === undefined
       && pins.selectWbQuotaTable(`${WB_0138} `) === undefined
+      && pins.selectWbQuotaTable(`${WB_01310} `) === undefined
       && pins.selectWbQuotaTable(undefined) === undefined,
     'unknown versions select nothing');
   check('label-identifies-the-reviewed-table',
     String(pins.describeWbQuotaTable(WB_0139)).includes(WB_0139)
       && String(pins.describeWbQuotaTable(WB_0138)).includes(WB_0138)
-      && pins.describeWbQuotaTable('0.13.10') === 'frozen-default',
+      && String(pins.describeWbQuotaTable(WB_01310)).includes(WB_01310)
+      && pins.describeWbQuotaTable('0.13.11') === 'frozen-default',
     `0139=${pins.describeWbQuotaTable(WB_0139)}`);
 
-  // 5. the official public 0.13.9 bytes
+  // 5. the official public bytes of the version installed under the ROOT
+  //    alias (0.13.9 today; 0.13.10 after the official install). The audit
+  //    always runs against the reviewed table OF THE BYTES ACTUALLY THERE.
   const publicInfo = resolvePublicModuleRoot();
+  const installedTable = pins.selectWbQuotaTable(publicInfo.version);
   check('public-module-root-is-the-root-alias-dependency',
-    publicInfo.version === WB_0139 && publicInfo.dep === `npm:@sanqianx/claude-ai-workbench@${WB_0139}`,
-    `resolved ${publicInfo.dep} -> ${publicInfo.version}`);
+    publicInfo.dep.startsWith('npm:@sanqianx/claude-ai-workbench@')
+      && installedTable !== undefined,
+    `resolved ${publicInfo.dep} -> installed ${publicInfo.version}`);
 
   const goodRoot = path.join(RUN_ROOT, 'fixture-official');
-  const good = buildFixture(t0139 || t0138, goodRoot, publicInfo.root);
+  const good = buildFixture(installedTable, goodRoot, publicInfo.root);
   check('fixture-contains-only-the-explicit-public-files',
     good.shipped.length === 13 && good.shipped.includes('docs/sdk/openapi.yaml')
       && !good.shipped.some((rel) => frozen[rel] && frozen[rel].notShipped),
     `shipped=${good.shipped.length}`);
 
-  const official = auditInChild(goodRoot, WB_0139);
-  check('official-0139-audit-passes-against-the-0139-table',
+  const official = auditInChild(goodRoot, publicInfo.version);
+  check('official-installed-bytes-audit-clean-against-their-reviewed-table',
     official.tableSelected === true && official.quota.failures.length === 0
       && official.quota.detail.audited === 17 && official.quota.detail.matched === 12
       && official.quota.detail.versionDocs === 1 && official.quota.detail.notShipped.length === 4,
-    `failures=${official.quota.failures.length} detail=${JSON.stringify(official.quota.detail)}`);
+    `wb@${publicInfo.version} failures=${official.quota.failures.length} detail=${JSON.stringify(official.quota.detail)}`);
 
   // 6. mutating one approved public file is rejected
   const mutatedRoot = path.join(RUN_ROOT, 'fixture-mutated');
-  buildFixture(t0139 || t0138, mutatedRoot, publicInfo.root);
+  buildFixture(installedTable, mutatedRoot, publicInfo.root);
   const mutatedFile = containedPath(path.join(mutatedRoot, 'package'), APPROVED_0139_REL);
   fs.appendFileSync(mutatedFile, '\n// tampered\n');
-  const mutated = auditInChild(mutatedRoot, WB_0139);
+  const mutated = auditInChild(mutatedRoot, publicInfo.version);
   check('mutated-public-file-is-rejected',
     mutated.quota.failures.length > 0
       && mutated.quota.failures.some((f) => f.includes(APPROVED_0139_REL)),
@@ -258,12 +307,33 @@ try {
   // 7. an unknown version is not silently accepted: the frozen baseline
   //    rejects the official bytes, so an unknown version cannot pass by
   //    accident.
-  const unknown = auditInChild(goodRoot, '0.13.10');
+  const unknown = auditInChild(goodRoot, '0.13.11');
   check('unknown-version-is-not-silently-accepted',
     unknown.tableSelected === false && unknown.label === 'frozen-default'
       && unknown.quota.failures.length > 0
       && unknown.quota.failures.some((f) => f.includes(APPROVED_0139_REL)),
     `failures=${JSON.stringify(unknown.quota.failures)}`);
+
+  // 7b. the three R79 pins genuinely bite. Audited against the 0.13.10 table,
+  //     0.13.9-era official bytes fail on EXACTLY the three re-pinned
+  //     files (plus the openapi.yaml version field). Once the official 0.13.10
+  //     install lands under the alias, the very same audit passes — so the
+  //     check stays real through the alias→install transition.
+  const vs01310 = auditInChild(goodRoot, WB_01310);
+  const serverChanged = vs01310.quota.failures.filter((f) => f.startsWith('audited quota source changed:'));
+  if (publicInfo.version === WB_0139) {
+    check('01310-table-rejects-0139-era-bytes-on-exactly-the-three-repins',
+      vs01310.tableSelected === true
+        && serverChanged.length === 3
+        && Object.keys(R79_REPINS).every((rel) => serverChanged.some((f) => f.endsWith(rel)))
+        && vs01310.quota.failures.length === 4
+        && vs01310.quota.failures.some((f) => f.includes(VERSION_DOC_REL)),
+      `failures=${JSON.stringify(vs01310.quota.failures)}`);
+  } else {
+    check('01310-table-accepts-the-official-01310-bytes',
+      vs01310.tableSelected === true && vs01310.quota.failures.length === 0,
+      `failures=${JSON.stringify(vs01310.quota.failures)}`);
+  }
 
   const failed = cases.filter((c) => !c.ok);
   console.log(failed.length === 0

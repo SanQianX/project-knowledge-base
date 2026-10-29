@@ -284,12 +284,16 @@ async function main() {
   // the 17 audited quota files re-pinned — source of truth
   // qa-autopilot/.runtime/leader-20261023/wb-0138-package-files.json, the
   // 125-file review of that exact tarball; r17-leader-review.json
-  // wb125HashesMatched=true) and the R42 0.13.9 table (the 0.13.8 table plus
+  // wb125HashesMatched=true), the R42 0.13.9 table (the 0.13.8 table plus
   // ONLY packages/ui/ai-profile-settings.js, the R33/R33B quota patch
   // 928c1bb, shipped in the official 0.13.9 artifact and proven identical to
-  // the installed official package by the R36 review). Everything else keeps
+  // the installed official package by the R36 review), and the R79 0.13.10
+  // table (source fe572537; the 0.13.9 table plus the two server changes
+  // and contracts/index.d.ts history resync type, Leader raw-Git evidence
+  // qa-autopilot/.runtime/leader-20261023/r79-independent-quota-pins.json;
+  // ai-profile-settings.js keeps the 0.13.9 pin). Everything else keeps
   // the frozen 0.13.7-era baseline (shipped pins, notShipped, versionDoc), and
-  // any WB version other than 0.13.8/0.13.9 keeps the frozen baseline
+  // any WB version other than 0.13.8/0.13.9/0.13.10 keeps the frozen baseline
   // untouched — strict 17/17 both ways, never a skip and never derived from
   // the candidate-under-test.
   const wbQuotaTable = quotaPins.selectWbQuotaTable(byId.wb.version);
