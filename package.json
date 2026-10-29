@@ -1,6 +1,6 @@
 {
   "name": "@sanqianx/project-knowledge",
-  "version": "5.0.26",
+  "version": "5.0.27",
   "description": "Knowledge base manager with Git integration, AI-driven analysis, and bilingual (zh-CN/en-US) knowledge output",
   "main": "_site/server.js",
   "scripts": {
@@ -93,7 +93,7 @@
     "@sanqianx/vector-hub": "1.0.8-rc.8",
     "buffer": "^6.0.3",
     "cheerio": "^1.2.0",
-    "claude-ai-workbench": "npm:@sanqianx/claude-ai-workbench@0.13.9",
+    "claude-ai-workbench": "npm:@sanqianx/claude-ai-workbench@0.13.10",
     "cross-spawn": "7.0.6",
     "dotenv": "^17.4.2",
     "gpt-tokenizer": "^3.4.0",
