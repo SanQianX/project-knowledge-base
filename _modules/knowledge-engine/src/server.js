@@ -115,6 +115,11 @@ async function api(method, pathname, search, body, store, coordinator, ctx) {
     coordinator.emit('progress', store.addEvent({ type: 'memory.updated', summary: memory.status === 'confirmed' ? '已确认长期记忆' : memory.status === 'ignored' ? '已忽略记忆候选' : '已编辑记忆候选' }));
     return { memory };
   }
+  if (method === 'DELETE' && memoryMatch) {
+    const memory = await coordinator.memories.remove(decodeURIComponent(memoryMatch[1]));
+    coordinator.emit('progress', store.addEvent({ type: 'memory.deleted', summary: '已删除长期记忆' }));
+    return { memory };
+  }
   if (method === 'POST' && pathname === '/api/projects') {
     const result = store.addProject(body);
     if (!result.reused) store.addEvent({ type: 'project.register', projectId: body.projectId, summary: `登记 ${result.project.name}` });

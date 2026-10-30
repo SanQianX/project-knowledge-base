@@ -40,8 +40,18 @@ class EngineStore {
       for (const [journalId, sequence] of Object.entries(raw.journalCursors || {})) if (!/^(global|sha256:[a-f0-9]{64})$/.test(journalId) || !Number.isSafeInteger(sequence) || sequence < 0) throw new Error('Invalid journal cursor');
       for (const scope of raw.sharedScopes || []) if (!scope || !['brain', 'domain'].includes(scope.kind) || !path.isAbsolute(scope.knowledgePath || '')) throw new Error('Invalid shared scope');
       for (const memory of raw.memories || []) {
-        if (!memory || !['candidate', 'confirmed', 'ignored'].includes(memory.status) || typeof memory.text !== 'string' || memory.sourceType !== undefined && !['manual', 'agent'].includes(memory.sourceType)) throw new Error('Invalid memory record');
-        if (memory.sourceType === 'manual') {
+        if (!memory || !['candidate', 'confirmed', 'ignored', 'deleted'].includes(memory.status) || memory.sourceType !== undefined && !['manual', 'agent'].includes(memory.sourceType)) throw new Error('Invalid memory record');
+        if (memory.status === 'deleted') {
+          // Tombstones carry no text: the dedup fingerprint and audit metadata
+          // are the whole record, so validate those instead of the live shape.
+          validateProjectId(memory.brainId);
+          // R101: the `memory-` prefix is only a generation convention; records
+          // written before it (any stable non-empty string id, ASCII or
+          // Unicode) load and delete legally, and the id never reaches a file
+          // path — so the tombstone validates the same id contract they had.
+          if (typeof memory.id !== 'string' || !memory.id || typeof memory.fingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(memory.fingerprint) || memory.captureFingerprint !== undefined && !/^[a-f0-9]{64}$/.test(memory.captureFingerprint) || memory.originalCaptureFingerprint !== undefined && !/^[a-f0-9]{64}$/.test(memory.originalCaptureFingerprint) || memory.evidence !== null && (!memory.evidence.projectId || !/^[a-f0-9]{40}$/.test(memory.evidence.commitSha || '')) || !Number.isFinite(Date.parse(memory.createdAt)) || !Number.isFinite(Date.parse(memory.deletedAt))) throw new Error('Invalid deleted memory record');
+        } else if (typeof memory.text !== 'string') throw new Error('Invalid memory record');
+        else if (memory.sourceType === 'manual') {
           validateProjectId(memory.brainId);
           if (memory.status === 'candidate' || !memory.text.trim() || memory.text.length > 2000 || !memory.scopeType || memory.evidence !== null || !Number.isFinite(Date.parse(memory.createdAt)) || !Number.isFinite(Date.parse(memory.updatedAt))) throw new Error('Invalid manual memory record');
         } else if (!memory.evidence?.projectId || !/^[a-f0-9]{40}$/.test(memory.evidence.commitSha || '')) throw new Error('Invalid memory evidence');

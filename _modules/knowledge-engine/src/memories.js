@@ -96,7 +96,7 @@ class MemoryService {
   }
   list({ brainId, status, scopeType, scopeId } = {}) {
     if (scopeType && !TYPES.includes(scopeType)) throw new DomainError('INVALID_ARGUMENT', '记忆筛选范围无效。');
-    return this.store.state.memories.filter(m => (!brainId || m.brainId === brainId) && (!status || m.status === status) && (!scopeType || this.scopeOf(m).type === scopeType) && (!scopeId || this.scopeOf(m).id === scopeId)).map(m => this.project(m));
+    return this.store.state.memories.filter(m => (m.status !== 'deleted' || status === 'deleted') && (!brainId || m.brainId === brainId) && (!status || m.status === status) && (!scopeType || this.scopeOf(m).type === scopeType) && (!scopeId || this.scopeOf(m).id === scopeId)).map(m => this.project(m));
   }
   capture(run) {
     const report = { accepted: 0, deduplicated: 0, rejected: [] };
@@ -123,7 +123,15 @@ class MemoryService {
       const scopeType = raw.scopeType;
       const scopeId = scopeType === 'global' ? brainId : project.domainId;
       const key = fingerprint(brainId, scopeType, scopeId, text);
-      if (next.some(m => m.captureFingerprint === key || fingerprint(m.brainId || 'brain-default', this.scopeOf(m).type, this.scopeOf(m).id, m.text) === key || !m.scopeType && m.evidence?.projectId === project.projectId && normalized(m.originalText || m.text) === normalized(text))) { report.deduplicated++; continue; }
+      // Tombstones never hold text, so they dedup through their fingerprints:
+      // the fresh pair covers the record's last scope and text, while the kept
+      // original capture key still covers a pre-edit/pre-move scope.
+      const duplicateOf = m => {
+        if (m.captureFingerprint === key) return true;
+        if (m.status === 'deleted') return m.fingerprint === key || m.originalCaptureFingerprint === key;
+        return fingerprint(m.brainId || 'brain-default', this.scopeOf(m).type, this.scopeOf(m).id, m.text) === key || !m.scopeType && m.evidence?.projectId === project.projectId && normalized(m.originalText || m.text) === normalized(text);
+      };
+      if (next.some(duplicateOf)) { report.deduplicated++; continue; }
       next.push({ id: `memory-${crypto.randomUUID()}`, fingerprint: key, captureFingerprint: key, brainId, domainId: project.domainId || null, scopeType, scopeId, text, originalText: text, status: 'candidate', sourceEventId: provenance.sourceEventId, sourceHash: provenance.sourceHash, eligibility: provenance.eligibility, evidence: { projectId: project.projectId, commitSha: run.commitSha, runId: run.runId, entryId, quote }, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
       report.accepted++;
     }
@@ -145,7 +153,9 @@ class MemoryService {
       this.validateScope(type, targetId, brainId);
       if (!this.brainScope(brainId)) throw new DomainError('INVALID_ARGUMENT', '请先绑定智脑共享目录。', { status: 409 });
       const text = input.text.trim(), key = fingerprint(brainId, type, targetId, text);
-      if (this.store.state.memories.some(m => fingerprint(m.brainId || 'brain-default', this.scopeOf(m).type, this.scopeOf(m).id, m.text) === key)) throw new DomainError('MEMORY_DUPLICATE', '该范围内已存在相同记忆。', { status: 409 });
+      // An explicit manual add is the user changing their mind after a delete:
+      // tombstones never block it, only another live record in the same scope does.
+      if (this.store.state.memories.some(m => m.status !== 'deleted' && fingerprint(m.brainId || 'brain-default', this.scopeOf(m).type, this.scopeOf(m).id, m.text) === key)) throw new DomainError('MEMORY_DUPLICATE', '该范围内已存在相同记忆。', { status: 409 });
       // User confirmation is the provenance; never invent a model run or Git commit.
       const now = new Date().toISOString();
       const memory = { id: `memory-${crypto.randomUUID()}`, fingerprint: key, brainId, scopeType: type, scopeId: targetId, sourceType: 'manual', text, originalText: text, status: 'confirmed', evidence: null, createdAt: now, updatedAt: now };
@@ -162,7 +172,7 @@ class MemoryService {
     if (Object.keys(input).some(key => !['text', 'status', 'scopeType', 'scopeId'].includes(key))) throw new DomainError('INVALID_ARGUMENT', '来源证据和文件路径不能修改。');
     const job = AtomicFile.withFileLock(this.lock(), async () => {
       const memory = this.store.state.memories.find(m => m.id === id);
-      if (!memory) throw new DomainError('PROJECT_NOT_FOUND', '记忆不存在。', { status: 404 });
+      if (!memory || memory.status === 'deleted') throw new DomainError('PROJECT_NOT_FOUND', '记忆不存在。', { status: 404 });
       if (input.text !== undefined && (typeof input.text !== 'string' || !input.text.trim() || input.text.length > 2000)) throw new DomainError('INVALID_ARGUMENT', '记忆内容必须为 1–2000 个字符。');
       if (input.status !== undefined && !['confirmed', 'ignored'].includes(input.status)) throw new DomainError('INVALID_ARGUMENT', '记忆状态无效。');
       if (memory.status === 'ignored') throw new DomainError('INVALID_ARGUMENT', '该候选已忽略。', { status: 409 });
@@ -172,12 +182,47 @@ class MemoryService {
       if (input.status !== 'ignored' || input.scopeType !== undefined || input.scopeId !== undefined) this.validateScope(type, targetId, brainId);
       if ((input.status || memory.status) === 'confirmed' && !this.brainScope(brainId)) throw new DomainError('INVALID_ARGUMENT', '请先绑定智脑共享目录。', { status: 409 });
       const text = input.text?.trim() || memory.text, key = fingerprint(brainId, type, targetId, text);
-      if (this.store.state.memories.some(m => m.id !== id && fingerprint(m.brainId || 'brain-default', this.scopeOf(m).type, this.scopeOf(m).id, m.text) === key)) throw new DomainError('MEMORY_DUPLICATE', '该范围内已存在相同记忆。', { status: 409 });
+      if (this.store.state.memories.some(m => m.id !== id && m.status !== 'deleted' && fingerprint(m.brainId || 'brain-default', this.scopeOf(m).type, this.scopeOf(m).id, m.text) === key)) throw new DomainError('MEMORY_DUPLICATE', '该范围内已存在相同记忆。', { status: 409 });
       const next = { ...memory, originalText: memory.originalText || memory.text, captureFingerprint: memory.captureFingerprint || fingerprint(brainId, old.type, old.id, memory.originalText || memory.text), fingerprint: key, scopeType: type, scopeId: targetId, text, status: input.status || memory.status, updatedAt: new Date().toISOString() };
       const before = this.store.state.memories;
       this.store.state.memories = before.map(m => m.id === id ? next : m);
       try { this.store.save(); } catch (error) { this.store.state.memories = before; throw error; }
       await this.materialize(); return this.project(next);
+    });
+    this.writes.add(job);
+    try { return await job; } finally { this.writes.delete(job); }
+  }
+  async remove(id) {
+    if (this.closed) throw new DomainError('PROJECT_BUSY', '引擎正在关闭，请稍后重试。', { status: 409 });
+    if (typeof id !== 'string' || !id.trim()) throw new DomainError('INVALID_ARGUMENT', '记忆 ID 无效。');
+    const job = AtomicFile.withFileLock(this.lock(), async () => {
+      const memory = this.store.state.memories.find(m => m.id === id);
+      if (!memory || memory.status === 'deleted') throw new DomainError('PROJECT_NOT_FOUND', '记忆不存在。', { status: 404 });
+      const brainId = memory.brainId || 'brain-default', scope = this.scopeOf(memory);
+      // A tombstone keeps only the dedup fingerprints and audit metadata; the
+      // text and quote are dropped so a deleted memory never returns through
+      // lists, markdown, retrieval or context injection, and the fingerprints
+      // stop the same candidate from coming back on the next capture. Legacy
+      // records may predate originalText/captureFingerprint/createdAt, so both
+      // keys are always computed from the live record, and a stored original
+      // capture key from before an edit or scope move is preserved separately.
+      const now = new Date().toISOString();
+      const captureKey = fingerprint(brainId, scope.type, scope.id, memory.originalText || memory.text);
+      const originalCaptureKey = typeof memory.captureFingerprint === 'string' && /^[a-f0-9]{64}$/.test(memory.captureFingerprint) && memory.captureFingerprint !== captureKey ? memory.captureFingerprint : null;
+      const tombstone = {
+        id: memory.id, brainId, scopeType: scope.type, scopeId: scope.id,
+        ...(memory.sourceType !== undefined ? { sourceType: memory.sourceType } : {}),
+        status: 'deleted',
+        fingerprint: fingerprint(brainId, scope.type, scope.id, memory.text),
+        captureFingerprint: captureKey,
+        ...(originalCaptureKey ? { originalCaptureFingerprint: originalCaptureKey } : {}),
+        evidence: memory.evidence ? { projectId: memory.evidence.projectId, commitSha: memory.evidence.commitSha, runId: memory.evidence.runId || null, entryId: memory.evidence.entryId || '' } : null,
+        createdAt: typeof memory.createdAt === 'string' && Number.isFinite(Date.parse(memory.createdAt)) ? memory.createdAt : now, updatedAt: now, deletedAt: now,
+      };
+      const before = this.store.state.memories;
+      this.store.state.memories = before.map(m => m.id === id ? tombstone : m);
+      try { this.store.save(); } catch (error) { this.store.state.memories = before; throw error; }
+      await this.materialize(); return this.project(tombstone);
     });
     this.writes.add(job);
     try { return await job; } finally { this.writes.delete(job); }

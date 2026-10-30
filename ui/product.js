@@ -24,7 +24,7 @@
   const time = value => value ? new Date(value).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
   const label = run => run.state === 'failed' && run.error?.code === 'MODEL_QUOTA_EXHAUSTED' ? '额度不足 · 待重试' : run.state === 'queued' && run.phase === 'waiting-previous' ? '等待前一条提交恢复' : ({ queued: '排队', running: '维护中', succeeded: '已更新 · 可检索', 'index-pending': '知识已更新 · 索引待修复', failed: '维护失败', cancelled: '已取消' })[run.state] || run.state;
   const badge = (text, status = '') => `<span class="status ${esc(status)}">${esc(text)}</span>`;
-  let toastTimer, refreshTimer, preflightTimer, editingMemoryId, logStream, logEpoch = 0, referenceEpoch = 0, snapshotEpoch = 0, registryEpoch = 0, registryPromise = null, resumeImport = false, unbindProjectId = '', unbinding = false;
+  let toastTimer, refreshTimer, preflightTimer, editingMemoryId, deletingMemoryId, logStream, logEpoch = 0, referenceEpoch = 0, snapshotEpoch = 0, registryEpoch = 0, registryPromise = null, resumeImport = false, unbindProjectId = '', unbinding = false;
   let captureEpoch = 0, captureBusy = false;
   let registryStream = null, registryReceipt = null, registryRefreshTimer;
   async function api(url, options = {}) {
@@ -261,7 +261,7 @@
     all('[data-memory-tab]').forEach(button => button.classList.toggle('active', button.dataset.memoryTab === state.memoryTab));
     const type = $('memoryScopeFilter').value, target = $('memoryTargetFilter').value;
     const memories = state.snapshot.memories.filter(m => m.status === state.memoryTab && (!type || (m.scopeType || 'global') === type) && (!type || type === 'global' || !target || m.scopeId === target));
-    $('memoryContent').innerHTML = !state.engineAvailable ? '<div class="empty">知识引擎暂时不可用。未读取到的记忆不会显示为已确认。</div>' : memories.length ? `<div class="memory-grid">${memories.map(m => `<article class="memory-card" data-memory-card="${esc(m.id)}"><div class="memory-meta">${badge(memoryScopeName(m))}${m.targetAvailable === false ? badge('目标已失效，不会注入', 'issue') : m.status === 'confirmed' && m.syncStatus === 'pending' ? badge('写入待恢复', 'issue') : m.status === 'confirmed' && m.indexStatus === 'failed' ? badge('索引待恢复', 'issue') : m.status === 'confirmed' && m.indexStatus === 'pending' ? badge('索引更新中') : ''}</div><p>${esc(m.text)}</p><small>${m.sourceType === 'manual' ? `来源：手动添加 · ${esc(time(m.createdAt))}` : `来源：${esc(projectName(m.evidence.projectId))} · commit ${esc(m.evidence.commitSha.slice(0, 8))}<br>${esc(m.evidence.entryId)}`}</small><div class="actions">${m.sourceType === 'manual' ? '' : `<button data-memory-action="evidence" data-memory-id="${esc(m.id)}">查看依据</button>`}${m.status === 'candidate' ? `<button class="primary" data-memory-action="confirm" data-memory-id="${esc(m.id)}">审核确认</button><button data-memory-action="ignore" data-memory-id="${esc(m.id)}">忽略</button>` : `<button data-memory-action="edit" data-memory-id="${esc(m.id)}">编辑</button>${badge(m.syncStatus === 'pending' ? '待同步' : '已确认', m.syncStatus === 'pending' ? 'issue' : 'up')}`}</div></article>`).join('')}</div>` : `<div class="empty">${type ? '此范围内没有匹配的记忆。' : state.memoryTab === 'confirmed' ? '还没有已确认的长期记忆。可以点击“添加记忆”记录约定。' : '候选箱为空。维护产物中的有据偏好会进入这里，等待你的确认。'}</div>`;
+    $('memoryContent').innerHTML = !state.engineAvailable ? '<div class="empty">知识引擎暂时不可用。未读取到的记忆不会显示为已确认。</div>' : memories.length ? `<div class="memory-grid">${memories.map(m => `<article class="memory-card" data-memory-card="${esc(m.id)}"><div class="memory-meta">${badge(memoryScopeName(m))}${m.targetAvailable === false ? badge('目标已失效，不会注入', 'issue') : m.status === 'confirmed' && m.syncStatus === 'pending' ? badge('写入待恢复', 'issue') : m.status === 'confirmed' && m.indexStatus === 'failed' ? badge('索引待恢复', 'issue') : m.status === 'confirmed' && m.indexStatus === 'pending' ? badge('索引更新中') : ''}</div><p>${esc(m.text)}</p><small>${m.sourceType === 'manual' ? `来源：手动添加 · ${esc(time(m.createdAt))}` : `来源：${esc(projectName(m.evidence.projectId))} · commit ${esc(m.evidence.commitSha.slice(0, 8))}<br>${esc(m.evidence.entryId)}`}</small><div class="actions">${m.sourceType === 'manual' ? '' : `<button data-memory-action="evidence" data-memory-id="${esc(m.id)}">查看依据</button>`}${m.status === 'candidate' ? `<button class="primary" data-memory-action="confirm" data-memory-id="${esc(m.id)}">审核确认</button><button data-memory-action="ignore" data-memory-id="${esc(m.id)}">忽略</button>` : `<button data-memory-action="edit" data-memory-id="${esc(m.id)}">编辑</button>${badge(m.syncStatus === 'pending' ? '待同步' : '已确认', m.syncStatus === 'pending' ? 'issue' : 'up')}`}<button data-memory-action="delete" data-memory-id="${esc(m.id)}">删除</button></div></article>`).join('')}</div>` : `<div class="empty">${type ? '此范围内没有匹配的记忆。' : state.memoryTab === 'confirmed' ? '还没有已确认的长期记忆。可以点击“添加记忆”记录约定。' : '候选箱为空。维护产物中的有据偏好会进入这里，等待你的确认。'}</div>`;
   }
   function memoryScopeName(memory) {
     const type = memory.scopeType || 'global';
@@ -297,6 +297,15 @@
     $('memoryFeedback').hidden = true; $('saveMemoryCandidate').hidden = memory.status !== 'candidate';
     $('confirmMemory').textContent = memory.status === 'candidate' ? '确认并保存' : '保存修改';
     $('memoryDialog').showModal();
+  }
+  function openDeleteMemory(memory) {
+    if (!state.engineAvailable) { toast('知识引擎暂时不可用，请恢复连接后重试。'); return; }
+    deletingMemoryId = memory.id;
+    $('memoryDeleteText').textContent = memory.text;
+    $('memoryDeleteScope').textContent = `适用范围：${memoryScopeName(memory)}`;
+    $('memoryDeleteFeedback').hidden = true;
+    $('confirmMemoryDelete').disabled = false;
+    $('memoryDeleteDialog').showModal();
   }
   function openAddMemory() {
     if (!state.engineAvailable) { toast('知识引擎暂时不可用，请恢复连接后重试。'); return; }
@@ -674,6 +683,7 @@
         const action = button.dataset.memoryAction;
         if (action === 'evidence') await openReference({ ...memory.evidence, readFile: false, text: memory.evidence.quote, title: '记忆来源依据（冻结原文）' });
         else if (action === 'edit' || action === 'confirm') openMemory(memory);
+        else if (action === 'delete') openDeleteMemory(memory);
         else { await api(`/api/engine/memories/${encodeURIComponent(memory.id)}`, { method: 'PATCH', body: { status: 'ignored' } }); await refreshSnapshot(); }
       }
     };
@@ -732,6 +742,22 @@
   on('domainForm', 'submit', async e => { e.preventDefault(); await api('/api/domains', { method: 'POST', body: Object.fromEntries(new FormData(e.target)) }); $('domainDialog').close(); await refreshRegistry(true); });
   on('memoryScopeFilter', 'change', updateMemoryFilter); on('memoryTargetFilter', 'change', renderMemories);
   on('addMemory', 'click', openAddMemory);
+  on('confirmMemoryDelete', 'click', async () => {
+    if (!deletingMemoryId || $('confirmMemoryDelete').disabled) return;
+    $('confirmMemoryDelete').disabled = true;
+    $('memoryDeleteFeedback').hidden = true;
+    try {
+      await api(`/api/engine/memories/${encodeURIComponent(deletingMemoryId)}`, { method: 'DELETE' });
+      $('memoryDeleteDialog').close();
+      await refreshSnapshot();
+      toast('记忆已删除，不再作为长期记忆使用。');
+    } catch (error) {
+      $('confirmMemoryDelete').disabled = false;
+      $('memoryDeleteFeedback').textContent = error.message;
+      $('memoryDeleteFeedback').hidden = false;
+    }
+  });
+  on('memoryDeleteDialog', 'close', () => { deletingMemoryId = ''; $('confirmMemoryDelete').disabled = false; });
   on('memoryScope', 'change', () => {
     const memory = state.snapshot.memories.find(m => m.id === editingMemoryId), type = $('memoryScope').value;
     const source = state.projects.find(p => p.projectId === memory?.evidence?.projectId) || activeProject();

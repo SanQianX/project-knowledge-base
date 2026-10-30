@@ -3,11 +3,11 @@
   "modules": {
     "knowledge-engine": {
       "name": "@sanqianx/ai-coding-knowledge-engine",
-      "version": "0.2.7-rc.11",
+      "version": "0.2.7-rc.12",
       "root": "_modules/knowledge-engine",
       "files": {
-        "README.md": "27236264aa40ca3abd12a82d779120410d09507c0b0ad8d3f16896a03ae363ee",
-        "package.json": "ad46440e59ee83f43e23a985418f9b94e1f5bc91ec93c589eb22bf39e4c3201d",
+        "README.md": "5fcf21c2fb819b431df34d5da05ee7bd861c7069c9d24c1b630e8a5e4ac3455c",
+        "package.json": "a3d61ae5aeda5f820b678f464b223ab80a5d60f024dd2df9dc12533de9d86e03",
         "src/analysis-contract.js": "6d4b9fde0e05d9a80d43e96d0c27febf082ecdb19312faf0280d6c9b16ac71b1",
         "src/analysis-failures.js": "eb1e5a476b1e3e3c87dfd9955707c85151707799883595bcb5e9cc3e26a991c4",
         "src/analysis-output.js": "95a3c19dcc9ab85d1dba7fee5b9aec80f9c000dfba89da3fd0be25a81e2fb680",
@@ -20,7 +20,7 @@
         "src/headless-analyzer.js": "df570864136981cf98f3f69d047fa5729fbbfdeeaee0c6bfad26dab941dbbdae",
         "src/index-request.js": "78f26b872299005499fff4f2d1f9e8f986784f2ff36a5cf2be2b1e7b7c7d9378",
         "src/knowledge-targets.js": "aa44ec285d16d7b1c0b63bf084058a1d6f867fa9929c753b6b0cbb24f7b20ee2",
-        "src/memories.js": "7ad6701033c9a98a0d918b9745c012f9e90b8de6db6e1d870e2ebf77000a1aac",
+        "src/memories.js": "b661474b51688a7ec9bc9d79bdc628070f7e128effbf7b86be9520398ead00a5",
         "src/memory-eligibility.js": "48af31f23f81140dbc706ff83a39ba9f411314d87d01e5accfaf419c7a74e0ea",
         "src/retrieval-policy.json": "3205fb4eb114a839a74f902e6fae6a61e1460958e5a9d7e29add32b60ba4e05a",
         "src/retrieval-ranking.js": "061b64f5bffec3269851830b30ab51abc3260274e5207ea4864ae33d9cb22809",
@@ -43,13 +43,13 @@
         "src/runtime/layout.js": "e47fe54c605218493ce46f6289798d9db2a3ecec95089d288ed03d3b75cf871a",
         "src/runtime/markdown-knowledge-indexer.js": "ac094e947e52cbaeb781c0e1a9437b52b4e46bda9ae92fdd5c626ee13eb0b8be",
         "src/runtime/scanner.js": "2b5443a1b782b4b73458de907a06a34e6bb6bfa9ba45d20c443ef8272ada97e6",
-        "src/server.js": "4bb07e1538c70ee53f2238be29f8452f11c2ddf87725c4e063d7999765a8082c",
-        "src/store.js": "8fe9c415c845feefab3e2129b5850686747a880c827189026e3eb6295b158c0a",
+        "src/server.js": "1d89378d889d563082e7ca0ade198ba312332288d5d253a9379c24b542f39b75",
+        "src/store.js": "66f573a58662f0a726c2ef62ccc1697616e9d93066af9f65a87c2c1f6b16829d",
         "ui/app.css": "7ad370c269e60a7b5ec907d81a607b2d16bd07b2d7c22a81f102dab51eeb2889",
         "ui/app.js": "e9ecb0125d5f2a8bb30a58c4d278fe0737ee2540ecfb065f97f453495cfc792d",
         "ui/index.html": "ce3565cfefd4838b11d37a91a906ef26ca5a1834844fe3f7c897b56851a3c418"
       },
-      "sourceCommit": "28475eb83f794d6fa578577b4f6e80114d40a85c"
+      "sourceCommit": "949d1d7066082e5c3ddcf04af653f5624be9add6"
     }
   }
 }
