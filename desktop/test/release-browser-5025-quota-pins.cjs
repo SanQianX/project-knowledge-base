@@ -7,7 +7,7 @@
 // Nothing here touches the filesystem, the network, a service or a browser:
 // importing this module starts nothing.
 //
-// Four pin tables, each with the SAME 17 audited quota sources:
+// Five pin tables, each with the SAME 17 audited quota sources:
 //   - FROZEN (localModules.WB_QUOTA_AUDITED): the frozen 0.13.7-era baseline
 //     (shipped pins, notShipped, versionDoc). It is never changed here.
 //   - 0.13.8: the R20 Leader-reviewed re-base — ONLY 3 of the 17 entries are
@@ -27,6 +27,15 @@
 //     packages/ui/ai-profile-settings.js
 //     is byte-identical to 0.13.9 and keeps the 0.13.9 pin. The other 14
 //     entries are unchanged, notShipped and versionDoc semantics included.
+//   - 0.13.11: the R114 reviewed table (source
+//     6b3e78e1a76c1e00a1d66b2b1b6294eefb1caaae, the reviewed 0.13.11
+//     Workbench source) — the 0.13.10 table plus ONLY the four entries whose
+//     bytes actually changed there (the two server files, client/index.js and
+//     client/index.d.ts). The quota logic is untouched: profile-quota.js and
+//     ai-profile-settings.js are byte-identical to their 0.13.10 pins and keep
+//     them. docs/sdk/openapi.yaml changed as well, but it is the versionDoc
+//     entry: it keeps its version-semantics check (info.version), so its old
+//     hash is NOT forced. The four notShipped entries are unchanged.
 //
 // The selection is EXACT-VERSION. An unknown version selects NOTHING, so the
 // caller keeps the strict frozen baseline: never a skip, never a table derived
@@ -37,6 +46,7 @@ const localModules = require('./release-preflight-5025-local-modules.cjs');
 const WB_VERSION_0138 = '0.13.8';
 const WB_VERSION_0139 = '0.13.9';
 const WB_VERSION_01310 = '0.13.10';
+const WB_VERSION_01311 = '0.13.11';
 
 // R20 Leader-reviewed 0.13.8 re-base: ONLY these 3 of the 17 audited quota
 // sources changed in 0.13.8; the other 14 keep the frozen baseline entries.
@@ -65,12 +75,30 @@ const WB_QUOTA_AUDITED_01310 = Object.assign({}, WB_QUOTA_AUDITED_0139, {
   'packages/server/lib/http-handler.js': { sha256: '7dd1cfafac4d1d9b9603bc084d55c45548ab3d1fb12d015c8aec6271ca4db3ca', source: 'r79-leader-01310' },
 });
 
+// R114 reviewed 0.13.11 re-base (source 6b3e78e1a76c1e00a1d66b2b1b6294eefb1caaae,
+// the reviewed 0.13.11 Workbench source; the pins are the sha256 of the real
+// Git BLOB bytes of the 17 audited paths at that commit, derived by
+// qa-autopilot/artifacts/parallel-20261023/wb01311-quota-pins-r114/qa-r114-git-pins.cjs):
+// the 0.13.10 table plus ONLY the four entries whose bytes actually changed
+// there. The quota logic itself did not change — profile-quota.js and
+// ai-profile-settings.js keep their 0.13.10 pins byte-for-byte — and
+// contracts/index.d.ts is unchanged too. openapi.yaml changed as well, but it
+// is the versionDoc entry: it keeps the version-semantics check, so no hash is
+// forced on it. The four notShipped entries are unchanged.
+const WB_QUOTA_AUDITED_01311 = Object.assign({}, WB_QUOTA_AUDITED_01310, {
+  'packages/server/lib/workbench-service.js': { sha256: 'dce4df6765961ec19d51652374e79070bbc33873c9a0e6338cbf8cfabdc89a9e', source: 'r114-leader-01311' },
+  'packages/server/lib/http-handler.js': { sha256: '6a5d2d44527d05d5e03b6608d6209a55f5b8e1ae6c55896ead347706017de667', source: 'r114-leader-01311' },
+  'packages/client/index.js': { sha256: '5458fa35fd260178927ad6eb6e1a84cd8cce3e173260acf46872554e3e36ad65', source: 'r114-leader-01311' },
+  'packages/client/index.d.ts': { sha256: '4c4a00577ad427215d9b91d6794a98a4c0ede06bafcf7c9904e53363c7c8bf9d', source: 'r114-leader-01311' },
+});
+
 // The pin table for an exact Workbench version, or undefined for every other
 // version (the caller then keeps the strict frozen baseline).
 const WB_QUOTA_TABLES = {
   [WB_VERSION_0138]: WB_QUOTA_AUDITED_0138,
   [WB_VERSION_0139]: WB_QUOTA_AUDITED_0139,
   [WB_VERSION_01310]: WB_QUOTA_AUDITED_01310,
+  [WB_VERSION_01311]: WB_QUOTA_AUDITED_01311,
 };
 
 // The truthful label of the table a version is audited against.
@@ -83,6 +111,9 @@ function describeWbQuotaTable(version) {
   }
   if (version === WB_VERSION_01310) {
     return '0.13.10-reviewed (R79: 0.13.9-reviewed + the reviewed changes workbench-service.js, http-handler.js and contracts/index.d.ts, source fe572537)';
+  }
+  if (version === WB_VERSION_01311) {
+    return '0.13.11-reviewed (R114: 0.13.10-reviewed + the reviewed changes workbench-service.js, http-handler.js, client/index.js and client/index.d.ts, source 6b3e78e)';
   }
   return 'frozen-default';
 }
@@ -97,9 +128,11 @@ module.exports = {
   WB_VERSION_0138,
   WB_VERSION_0139,
   WB_VERSION_01310,
+  WB_VERSION_01311,
   WB_QUOTA_AUDITED_0138,
   WB_QUOTA_AUDITED_0139,
   WB_QUOTA_AUDITED_01310,
+  WB_QUOTA_AUDITED_01311,
   WB_QUOTA_TABLES,
   selectWbQuotaTable,
   describeWbQuotaTable,
