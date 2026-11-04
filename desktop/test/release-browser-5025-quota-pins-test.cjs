@@ -34,8 +34,24 @@
 //      With --source-root <tree> holding the real reviewed 0.13.11 sources
 //      (the Leader's exact Git export, or a tree materialized from the Git
 //      blobs), the very same audit PASSES against that source, a SINGLE
-//      changed file is rejected, and an unknown version (0.13.12) still
+//      changed file is rejected, and an unknown version (0.13.13) still
 //      selects nothing and rejects those bytes.
+//  10. the 0.13.12 reviewed table is the 0.13.11 table plus EXACTLY the two
+//      re-pins whose business bytes changed in the reviewed 0.13.12 source
+//      (workbench-service.js, http-handler.js); the other 15 audited entries
+//      keep their 0.13.11 entries byte-for-byte (the quota logic included),
+//      openapi.yaml stays the versionDoc entry (its old hash is NOT forced),
+//      and the four notShipped entries are unchanged. R141B closed that
+//      table on the R142 final candidate: workbench-service.js carries the
+//      R142 final bytes (the R141 value is void), while http-handler.js did
+//      not change in R142 and keeps its R141 pin and provenance. The label
+//      names 0.13.12-reviewed and both changed files. With --source-root-01312
+//      <tree> holding the real reviewed 0.13.12 sources, the audit PASSES
+//      against that source, the 0.13.11 pins REJECT those very bytes on
+//      exactly the two re-pinned files, a SINGLE changed file is rejected,
+//      and the unknown version (0.13.13) still selects nothing and rejects
+//      them. Without that tree the source-based cases are SKIPPED, never
+//      silently passed.
 //
 // The public module root is resolved from the ROOT package.json alias
 // dependency ("claude-ai-workbench": "npm:@sanqianx/claude-ai-workbench@…",
@@ -68,9 +84,10 @@ const WB_0138 = '0.13.8';
 const WB_0139 = '0.13.9';
 const WB_01310 = '0.13.10';
 const WB_01311 = '0.13.11';
-// The next version after the reviewed 0.13.11 table: still UNKNOWN, so it must
+const WB_01312 = '0.13.12';
+// The next version after the reviewed 0.13.12 table: still UNKNOWN, so it must
 // select nothing and keep the strict frozen baseline.
-const WB_UNKNOWN_AFTER_01311 = '0.13.12';
+const WB_UNKNOWN_AFTER_01312 = '0.13.13';
 const APPROVED_0139_REL = 'packages/ui/ai-profile-settings.js';
 const APPROVED_0139_SHA = '3c7a75833a3c4f607739ecf71a0716e27c8594cecd9d84e2f8ac99498a59e0e7';
 const R20_REPINS = {
@@ -97,6 +114,17 @@ const R114_REPINS = {
   'packages/client/index.d.ts': '4c4a00577ad427215d9b91d6794a98a4c0ede06bafcf7c9904e53363c7c8bf9d',
 };
 const VERSION_DOC_REL = 'docs/sdk/openapi.yaml';
+// The R141 reviewed re-pins for 0.13.12, closed by R141B on the R142 final
+// candidate (source r141b-r142-final-01312). These are EXACTLY the audited
+// paths whose business bytes changed in the reviewed 0.13.12 source; every
+// other audited path keeps its 0.13.11 pin. workbench-service.js carries the
+// R142 final bytes - the R141 value is void, because R142 fixed the
+// attached-writer disk main-index corruption - while http-handler.js did not
+// change there and keeps its R141 pin and provenance.
+const R141_REPINS = {
+  'packages/server/lib/workbench-service.js': { sha256: 'ea9fbf88139d3c476624354af0f237062b038ce201283d2d513eac6ef1fdcc42', source: 'r141b-r142-final-01312' },
+  'packages/server/lib/http-handler.js': { sha256: 'dedbd3938ec4b35c0730336d095ff8e08825217d1e3cdeccccbf0afc569f8fd9', source: 'r141-leader-01312' },
+};
 // The audited paths that must keep their 0.13.10 pin byte-for-byte in the
 // 0.13.11 table: the quota logic itself (server + UI) and the reviewed
 // contract type.
@@ -129,6 +157,13 @@ const RUN_ROOT = path.join(TEMP_ROOT, 'run');
 // silently passed. Nothing is hardcoded to a drive letter.
 const SOURCE_ROOT_ARG = argValue('--source-root', process.env.WB_QUOTA_SOURCE_ROOT || '');
 const SOURCE_ROOT = SOURCE_ROOT_ARG ? path.resolve(SOURCE_ROOT_ARG) : null;
+// The reviewed 0.13.12 SOURCE tree: the actual 0.13.12 Workbench source (the
+// one whose docs/sdk/openapi.yaml carries info.version 0.13.12, because the
+// versionDoc entry is checked by its version field, not by a hash). Without
+// it the 0.13.12 source-based cases are SKIPPED, never silently passed.
+// Nothing is hardcoded to a drive letter.
+const SOURCE_ROOT_01312_ARG = argValue('--source-root-01312', process.env.WB_QUOTA_SOURCE_ROOT_01312 || '');
+const SOURCE_ROOT_01312 = SOURCE_ROOT_01312_ARG ? path.resolve(SOURCE_ROOT_01312_ARG) : null;
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -330,17 +365,51 @@ try {
       && String(pins.describeWbQuotaTable(WB_01311)).includes('client/index.d.ts'),
     pins.describeWbQuotaTable(WB_01311));
 
+  // 3d. the 0.13.12 reviewed table: 17 entries, EXACTLY the two re-pins whose
+  //     business bytes changed in the reviewed 0.13.12 source; every other
+  //     audited path keeps its 0.13.11 entry byte-for-byte, the quota logic
+  //     included.
+  const t01312 = pins.WB_QUOTA_AUDITED_01312;
+  const t01312Keys = Object.keys(t01312 || {});
+  const delta01312 = t01312Keys.filter((k) => !(k in t01311) || t01311[k].sha256 !== t01312[k].sha256);
+  check('01312-table-has-17-entries', t01312Keys.length === 17, `entries=${t01312Keys.length}`);
+  check('01312-delta-is-exactly-the-two-reviewed-repins',
+    delta01312.length === 2 && delta01312.every((k) => R141_REPINS[k]
+      && t01312[k].sha256 === R141_REPINS[k].sha256
+      && t01312[k].source === R141_REPINS[k].source),
+    `delta=${JSON.stringify(delta01312)}`);
+  const unchanged01312Rels = Object.keys(t01311).filter((k) => !R141_REPINS[k]);
+  check('01312-keeps-the-other-fifteen-entries-byte-for-byte',
+    unchanged01312Rels.length === 15
+      && unchanged01312Rels.every((rel) => JSON.stringify(t01312[rel]) === JSON.stringify(t01311[rel])),
+    unchanged01312Rels.map((rel) => `${rel}=${String(t01312[rel] && t01312[rel].sha256).slice(0, 8)}`).join(' '));
+  check('01312-keeps-openapi-as-the-version-doc-entry',
+    t01312[VERSION_DOC_REL].versionDoc === true
+      && t01312[VERSION_DOC_REL].sha256 === t01311[VERSION_DOC_REL].sha256
+      && t01312[VERSION_DOC_REL].notShipped === undefined,
+    `versionDoc=${t01312[VERSION_DOC_REL].versionDoc} sha=${t01312[VERSION_DOC_REL].sha256.slice(0, 8)}`);
+  check('01312-keeps-the-four-not-shipped-entries',
+    Object.keys(t01312).filter((k) => t01312[k].notShipped).length === 4,
+    `notShipped=${Object.keys(t01312).filter((k) => t01312[k].notShipped).length}`);
+  check('01312-label-names-the-reviewed-table-and-all-changes',
+    String(pins.describeWbQuotaTable(WB_01312)).includes('0.13.12-reviewed')
+      && String(pins.describeWbQuotaTable(WB_01312)).includes('workbench-service.js')
+      && String(pins.describeWbQuotaTable(WB_01312)).includes('http-handler.js'),
+    pins.describeWbQuotaTable(WB_01312));
+
   // 4. exact-version selection only
   check('selector-is-exact-version',
     pins.selectWbQuotaTable(WB_0138) !== undefined && pins.selectWbQuotaTable(WB_0139) !== undefined
       && pins.selectWbQuotaTable(WB_01310) === t01310
       && pins.selectWbQuotaTable(WB_01311) === t01311
+      && pins.selectWbQuotaTable(WB_01312) === t01312
       && pins.selectWbQuotaTable('0.13.7') === undefined
-      && pins.selectWbQuotaTable(WB_UNKNOWN_AFTER_01311) === undefined
+      && pins.selectWbQuotaTable(WB_UNKNOWN_AFTER_01312) === undefined
       && pins.selectWbQuotaTable('0.14.0') === undefined
       && pins.selectWbQuotaTable(`${WB_0138} `) === undefined
       && pins.selectWbQuotaTable(`${WB_01310} `) === undefined
       && pins.selectWbQuotaTable(`${WB_01311} `) === undefined
+      && pins.selectWbQuotaTable(`${WB_01312} `) === undefined
       && pins.selectWbQuotaTable('0.13.1') === undefined
       && pins.selectWbQuotaTable(undefined) === undefined,
     'unknown versions select nothing');
@@ -349,7 +418,8 @@ try {
       && String(pins.describeWbQuotaTable(WB_0138)).includes(WB_0138)
       && String(pins.describeWbQuotaTable(WB_01310)).includes(WB_01310)
       && String(pins.describeWbQuotaTable(WB_01311)).includes(WB_01311)
-      && pins.describeWbQuotaTable(WB_UNKNOWN_AFTER_01311) === 'frozen-default',
+      && String(pins.describeWbQuotaTable(WB_01312)).includes(WB_01312)
+      && pins.describeWbQuotaTable(WB_UNKNOWN_AFTER_01312) === 'frozen-default',
     `0139=${pins.describeWbQuotaTable(WB_0139)}`);
 
   // 5. the official public bytes of the version installed under the ROOT
@@ -389,9 +459,9 @@ try {
 
   // 7. an unknown version is not silently accepted: the frozen baseline
   //    rejects the official bytes, so an unknown version cannot pass by
-  //    accident. 0.13.12 is the next version after the reviewed 0.13.11
+  //    accident. 0.13.13 is the next version after the reviewed 0.13.12
   //    table: it must still select nothing.
-  const unknown = auditInChild(goodRoot, WB_UNKNOWN_AFTER_01311);
+  const unknown = auditInChild(goodRoot, WB_UNKNOWN_AFTER_01312);
   check('unknown-version-is-not-silently-accepted',
     unknown.tableSelected === false && unknown.label === 'frozen-default'
       && unknown.quota.failures.length > 0
@@ -399,10 +469,11 @@ try {
     `failures=${JSON.stringify(unknown.quota.failures)}`);
 
   // 7b. the three R79 pins genuinely bite. Audited against the 0.13.10 table,
-  //     0.13.9-era official bytes fail on EXACTLY the three re-pinned
-  //     files (plus the openapi.yaml version field). Once the official 0.13.10
-  //     install lands under the alias, the very same audit passes — so the
-  //     check stays real through the alias→install transition.
+  //     0.13.9-era official bytes fail on EXACTLY the three re-pinned files
+  //     (plus the openapi.yaml version field), the official 0.13.10 bytes
+  //     pass, and every later reviewed install is rejected as a different
+  //     artifact. This keeps the check truthful after the root alias advances
+  //     beyond 0.13.10 instead of treating all later bytes as 0.13.10 bytes.
   const vs01310 = auditInChild(goodRoot, WB_01310);
   const serverChanged = vs01310.quota.failures.filter((f) => f.startsWith('audited quota source changed:'));
   if (publicInfo.version === WB_0139) {
@@ -413,10 +484,16 @@ try {
         && vs01310.quota.failures.length === 4
         && vs01310.quota.failures.some((f) => f.includes(VERSION_DOC_REL)),
       `failures=${JSON.stringify(vs01310.quota.failures)}`);
-  } else {
+  } else if (publicInfo.version === WB_01310) {
     check('01310-table-accepts-the-official-01310-bytes',
       vs01310.tableSelected === true && vs01310.quota.failures.length === 0,
       `failures=${JSON.stringify(vs01310.quota.failures)}`);
+  } else {
+    check('01310-table-rejects-later-official-bytes',
+      vs01310.tableSelected === true
+        && vs01310.quota.failures.length > 0
+        && vs01310.quota.failures.some((f) => f.includes(VERSION_DOC_REL)),
+      `wb@${publicInfo.version} failures=${JSON.stringify(vs01310.quota.failures)}`);
   }
 
   // 7c. the 0.13.11 reviewed table against the REAL reviewed source: the
@@ -453,11 +530,67 @@ try {
         && drift.quota.failures[0].includes('packages/client/index.js'),
       `failures=${JSON.stringify(drift.quota.failures)}`);
 
-    const unknownSource = auditInChild(sourceRoot, WB_UNKNOWN_AFTER_01311);
+    const unknownSource = auditInChild(sourceRoot, WB_UNKNOWN_AFTER_01312);
     check('01311-unknown-version-rejects-the-source-bytes',
       unknownSource.tableSelected === false && unknownSource.label === 'frozen-default'
         && unknownSource.quota.failures.length > 0,
       `failures=${JSON.stringify(unknownSource.quota.failures)}`);
+  }
+
+  // 7d. the 0.13.12 reviewed table against the REAL reviewed 0.13.12 source:
+  //     the correct source audits clean, the 0.13.11 pins REJECT those very
+  //     bytes on exactly the two re-pinned files, a SINGLE changed file is
+  //     rejected, and the unknown version still selects nothing on them.
+  if (!SOURCE_ROOT_01312 || !fs.existsSync(SOURCE_ROOT_01312)) {
+    const reason = `no reviewed 0.13.12 source tree (--source-root-01312 <dir> or WB_QUOTA_SOURCE_ROOT_01312); ${SOURCE_ROOT_01312 || 'unset'}`;
+    skip('01312-source-fixture-holds-the-13-shipped-audited-files', reason);
+    skip('01312-correct-source-audits-clean-against-the-reviewed-table', reason);
+    skip('01311-table-rejects-the-01312-bytes-on-exactly-the-two-repins', reason);
+    skip('01312-single-file-drift-is-rejected', reason);
+    skip('01312-unknown-version-rejects-the-source-bytes', reason);
+  } else {
+    const sourceRoot012 = path.join(RUN_ROOT, 'fixture-source-01312');
+    const source = buildFixture(t01312, sourceRoot012, SOURCE_ROOT_01312);
+    check('01312-source-fixture-holds-the-13-shipped-audited-files',
+      source.shipped.length === 13 && source.shipped.includes('packages/server/lib/workbench-service.js')
+        && !source.shipped.some((rel) => t01312[rel] && t01312[rel].notShipped),
+      `shipped=${source.shipped.length}`);
+
+    const correct012 = auditInChild(sourceRoot012, WB_01312);
+    check('01312-correct-source-audits-clean-against-the-reviewed-table',
+      correct012.tableSelected === true && correct012.quota.failures.length === 0
+        && correct012.quota.detail.audited === 17 && correct012.quota.detail.matched === 12
+        && correct012.quota.detail.versionDocs === 1 && correct012.quota.detail.notShipped.length === 4,
+      `failures=${JSON.stringify(correct012.quota.failures)} detail=${JSON.stringify(correct012.quota.detail)}`);
+
+    // the 0.13.11 pins must NOT accept the 0.13.12 bytes: they fail on
+    // exactly the two re-pinned files (the version doc may fail as well,
+    // because its info.version is the audited version).
+    const vs01311 = auditInChild(sourceRoot012, WB_01311);
+    const changedOn01311 = vs01311.quota.failures.filter((f) => f.startsWith('audited quota source changed:'));
+    check('01311-table-rejects-the-01312-bytes-on-exactly-the-two-repins',
+      vs01311.tableSelected === true
+        && changedOn01311.length === 2
+        && Object.keys(R141_REPINS).every((rel) => changedOn01311.some((f) => f.endsWith(rel))),
+      `failures=${JSON.stringify(vs01311.quota.failures)}`);
+
+    const driftRoot012 = path.join(RUN_ROOT, 'fixture-source-01312-drift');
+    buildFixture(t01312, driftRoot012, SOURCE_ROOT_01312);
+    const drifted012 = containedPath(path.join(driftRoot012, 'package'), 'packages/server/lib/workbench-service.js');
+    fs.appendFileSync(drifted012, '\n// tampered\n');
+    const drift012 = auditInChild(driftRoot012, WB_01312);
+    const changedOn01312 = drift012.quota.failures.filter((f) => f.startsWith('audited quota source changed:'));
+    check('01312-single-file-drift-is-rejected',
+      drift012.tableSelected === true
+        && changedOn01312.length === 1
+        && changedOn01312[0].includes('packages/server/lib/workbench-service.js'),
+      `failures=${JSON.stringify(drift012.quota.failures)}`);
+
+    const unknownSource012 = auditInChild(sourceRoot012, WB_UNKNOWN_AFTER_01312);
+    check('01312-unknown-version-rejects-the-source-bytes',
+      unknownSource012.tableSelected === false && unknownSource012.label === 'frozen-default'
+        && unknownSource012.quota.failures.length > 0,
+      `failures=${JSON.stringify(unknownSource012.quota.failures)}`);
   }
 
   const failed = cases.filter((c) => !c.ok);

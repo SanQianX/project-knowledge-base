@@ -7,7 +7,7 @@
 // Nothing here touches the filesystem, the network, a service or a browser:
 // importing this module starts nothing.
 //
-// Five pin tables, each with the SAME 17 audited quota sources:
+// Six pin tables, each with the SAME 17 audited quota sources:
 //   - FROZEN (localModules.WB_QUOTA_AUDITED): the frozen 0.13.7-era baseline
 //     (shipped pins, notShipped, versionDoc). It is never changed here.
 //   - 0.13.8: the R20 Leader-reviewed re-base — ONLY 3 of the 17 entries are
@@ -36,6 +36,21 @@
 //     them. docs/sdk/openapi.yaml changed as well, but it is the versionDoc
 //     entry: it keeps its version-semantics check (info.version), so its old
 //     hash is NOT forced. The four notShipped entries are unchanged.
+//   - 0.13.12: the R141 reviewed table, closed by R141B on the R142 final
+//     candidate — the 0.13.11 table plus ONLY the two server files whose
+//     business bytes actually changed in the reviewed 0.13.12 source
+//     (workbench-service.js, http-handler.js). R142 fixed the attached-writer
+//     disk main-index corruption, so workbench-service.js was re-reviewed and
+//     re-pinned to the R142 final bytes (source r141b-r142-final-01312);
+//     http-handler.js did not change there and keeps its R141 pin and
+//     provenance. The other 15 entries keep their 0.13.11 entries
+//     byte-for-byte, the quota logic (profile-quota.js,
+//     ai-profile-settings.js) included; openapi.yaml stays the versionDoc
+//     entry, so no hash is forced on it — its info.version field is what the
+//     audit checks — and the four notShipped entries are unchanged. The
+//     hashes are the reviewed 0.13.12 bytes; NO commit is named here, because
+//     the 0.13.12 commit does not exist yet and a pin must never cite a
+//     commit that was never made.
 //
 // The selection is EXACT-VERSION. An unknown version selects NOTHING, so the
 // caller keeps the strict frozen baseline: never a skip, never a table derived
@@ -47,6 +62,7 @@ const WB_VERSION_0138 = '0.13.8';
 const WB_VERSION_0139 = '0.13.9';
 const WB_VERSION_01310 = '0.13.10';
 const WB_VERSION_01311 = '0.13.11';
+const WB_VERSION_01312 = '0.13.12';
 
 // R20 Leader-reviewed 0.13.8 re-base: ONLY these 3 of the 17 audited quota
 // sources changed in 0.13.8; the other 14 keep the frozen baseline entries.
@@ -92,6 +108,25 @@ const WB_QUOTA_AUDITED_01311 = Object.assign({}, WB_QUOTA_AUDITED_01310, {
   'packages/client/index.d.ts': { sha256: '4c4a00577ad427215d9b91d6794a98a4c0ede06bafcf7c9904e53363c7c8bf9d', source: 'r114-leader-01311' },
 });
 
+// R141 reviewed 0.13.12 re-base, closed by R141B on the R142 final candidate:
+// the 0.13.11 table plus ONLY the two server files whose business bytes
+// changed in the reviewed 0.13.12 source. The other 15 audited entries keep
+// their 0.13.11 entries byte-for-byte — the quota logic (profile-quota.js,
+// ai-profile-settings.js) included — and the versionDoc openapi.yaml keeps
+// its version-semantics check, so no hash is forced on it. The four
+// notShipped entries are unchanged.
+//
+// The provenance tag names the reviewing lane, NOT a commit: the 0.13.12
+// commit does not exist yet, and a pin must never cite a commit that was
+// never made. workbench-service.js carries the R142 final bytes (R142 fixed
+// the attached-writer disk main-index corruption, so the R141 value is
+// void); http-handler.js did not change in R142 and keeps its R141 pin and
+// provenance, which is what shows that R142 moved exactly one file.
+const WB_QUOTA_AUDITED_01312 = Object.assign({}, WB_QUOTA_AUDITED_01311, {
+  'packages/server/lib/workbench-service.js': { sha256: 'ea9fbf88139d3c476624354af0f237062b038ce201283d2d513eac6ef1fdcc42', source: 'r141b-r142-final-01312' },
+  'packages/server/lib/http-handler.js': { sha256: 'dedbd3938ec4b35c0730336d095ff8e08825217d1e3cdeccccbf0afc569f8fd9', source: 'r141-leader-01312' },
+});
+
 // The pin table for an exact Workbench version, or undefined for every other
 // version (the caller then keeps the strict frozen baseline).
 const WB_QUOTA_TABLES = {
@@ -99,6 +134,7 @@ const WB_QUOTA_TABLES = {
   [WB_VERSION_0139]: WB_QUOTA_AUDITED_0139,
   [WB_VERSION_01310]: WB_QUOTA_AUDITED_01310,
   [WB_VERSION_01311]: WB_QUOTA_AUDITED_01311,
+  [WB_VERSION_01312]: WB_QUOTA_AUDITED_01312,
 };
 
 // The truthful label of the table a version is audited against.
@@ -115,6 +151,9 @@ function describeWbQuotaTable(version) {
   if (version === WB_VERSION_01311) {
     return '0.13.11-reviewed (R114: 0.13.10-reviewed + the reviewed changes workbench-service.js, http-handler.js, client/index.js and client/index.d.ts, source 6b3e78e)';
   }
+  if (version === WB_VERSION_01312) {
+    return '0.13.12-reviewed (R141B: 0.13.11-reviewed + the reviewed changes workbench-service.js and http-handler.js, source r141b-r142-final-01312)';
+  }
   return 'frozen-default';
 }
 
@@ -129,10 +168,12 @@ module.exports = {
   WB_VERSION_0139,
   WB_VERSION_01310,
   WB_VERSION_01311,
+  WB_VERSION_01312,
   WB_QUOTA_AUDITED_0138,
   WB_QUOTA_AUDITED_0139,
   WB_QUOTA_AUDITED_01310,
   WB_QUOTA_AUDITED_01311,
+  WB_QUOTA_AUDITED_01312,
   WB_QUOTA_TABLES,
   selectWbQuotaTable,
   describeWbQuotaTable,
