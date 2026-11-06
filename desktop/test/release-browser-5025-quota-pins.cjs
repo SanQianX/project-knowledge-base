@@ -7,7 +7,7 @@
 // Nothing here touches the filesystem, the network, a service or a browser:
 // importing this module starts nothing.
 //
-// Six pin tables, each with the SAME 17 audited quota sources:
+// Seven pin tables, each with the SAME 17 audited quota sources:
 //   - FROZEN (localModules.WB_QUOTA_AUDITED): the frozen 0.13.7-era baseline
 //     (shipped pins, notShipped, versionDoc). It is never changed here.
 //   - 0.13.8: the R20 Leader-reviewed re-base — ONLY 3 of the 17 entries are
@@ -51,6 +51,13 @@
 //     hashes are the reviewed 0.13.12 bytes; NO commit is named here, because
 //     the 0.13.12 commit does not exist yet and a pin must never cite a
 //     commit that was never made.
+//   - 0.13.13: the Leader-reviewed release table at source
+//     4291887c2dd6e23a493615374bdbab6e36aa4a4f. It is the 0.13.12 table plus
+//     ONLY workbench-service.js, the one quota-audited file whose bytes
+//     changed for the indexed cold-history first-window fix. The quota
+//     implementation itself is unchanged; the other 16 entries remain
+//     byte-for-byte identical. openapi.yaml remains the versionDoc entry and
+//     the four notShipped entries remain unchanged.
 //
 // The selection is EXACT-VERSION. An unknown version selects NOTHING, so the
 // caller keeps the strict frozen baseline: never a skip, never a table derived
@@ -63,6 +70,7 @@ const WB_VERSION_0139 = '0.13.9';
 const WB_VERSION_01310 = '0.13.10';
 const WB_VERSION_01311 = '0.13.11';
 const WB_VERSION_01312 = '0.13.12';
+const WB_VERSION_01313 = '0.13.13';
 
 // R20 Leader-reviewed 0.13.8 re-base: ONLY these 3 of the 17 audited quota
 // sources changed in 0.13.8; the other 14 keep the frozen baseline entries.
@@ -127,6 +135,15 @@ const WB_QUOTA_AUDITED_01312 = Object.assign({}, WB_QUOTA_AUDITED_01311, {
   'packages/server/lib/http-handler.js': { sha256: 'dedbd3938ec4b35c0730336d095ff8e08825217d1e3cdeccccbf0afc569f8fd9', source: 'r141-leader-01312' },
 });
 
+// Leader-reviewed 0.13.13 release bytes. The official npm artifact is bound
+// to source 4291887c and was independently downloaded and compared byte for
+// byte before this table was added. Of the 17 quota-audited paths, only
+// workbench-service.js changed; the history reader change lives outside this
+// narrow quota table and is covered by module-runtime-manifest.json.
+const WB_QUOTA_AUDITED_01313 = Object.assign({}, WB_QUOTA_AUDITED_01312, {
+  'packages/server/lib/workbench-service.js': { sha256: '498f4ea4d5c4c2b8fcf6c51212e0607daa19f666b8b2fe66517fdc04d0ccdc64', source: 'leader-01313-4291887c' },
+});
+
 // The pin table for an exact Workbench version, or undefined for every other
 // version (the caller then keeps the strict frozen baseline).
 const WB_QUOTA_TABLES = {
@@ -135,6 +152,7 @@ const WB_QUOTA_TABLES = {
   [WB_VERSION_01310]: WB_QUOTA_AUDITED_01310,
   [WB_VERSION_01311]: WB_QUOTA_AUDITED_01311,
   [WB_VERSION_01312]: WB_QUOTA_AUDITED_01312,
+  [WB_VERSION_01313]: WB_QUOTA_AUDITED_01313,
 };
 
 // The truthful label of the table a version is audited against.
@@ -154,6 +172,9 @@ function describeWbQuotaTable(version) {
   if (version === WB_VERSION_01312) {
     return '0.13.12-reviewed (R141B: 0.13.11-reviewed + the reviewed changes workbench-service.js and http-handler.js, source r141b-r142-final-01312)';
   }
+  if (version === WB_VERSION_01313) {
+    return '0.13.13-reviewed (Leader: 0.13.12-reviewed + ONLY packages/server/lib/workbench-service.js, source 4291887c)';
+  }
   return 'frozen-default';
 }
 
@@ -169,11 +190,13 @@ module.exports = {
   WB_VERSION_01310,
   WB_VERSION_01311,
   WB_VERSION_01312,
+  WB_VERSION_01313,
   WB_QUOTA_AUDITED_0138,
   WB_QUOTA_AUDITED_0139,
   WB_QUOTA_AUDITED_01310,
   WB_QUOTA_AUDITED_01311,
   WB_QUOTA_AUDITED_01312,
+  WB_QUOTA_AUDITED_01313,
   WB_QUOTA_TABLES,
   selectWbQuotaTable,
   describeWbQuotaTable,

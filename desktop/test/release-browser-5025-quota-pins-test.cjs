@@ -34,7 +34,7 @@
 //      With --source-root <tree> holding the real reviewed 0.13.11 sources
 //      (the Leader's exact Git export, or a tree materialized from the Git
 //      blobs), the very same audit PASSES against that source, a SINGLE
-//      changed file is rejected, and an unknown version (0.13.13) still
+//      changed file is rejected, and a later unknown version still
 //      selects nothing and rejects those bytes.
 //  10. the 0.13.12 reviewed table is the 0.13.11 table plus EXACTLY the two
 //      re-pins whose business bytes changed in the reviewed 0.13.12 source
@@ -49,7 +49,7 @@
 //      <tree> holding the real reviewed 0.13.12 sources, the audit PASSES
 //      against that source, the 0.13.11 pins REJECT those very bytes on
 //      exactly the two re-pinned files, a SINGLE changed file is rejected,
-//      and the unknown version (0.13.13) still selects nothing and rejects
+//      and a later unknown version still selects nothing and rejects
 //      them. Without that tree the source-based cases are SKIPPED, never
 //      silently passed.
 //
@@ -85,9 +85,10 @@ const WB_0139 = '0.13.9';
 const WB_01310 = '0.13.10';
 const WB_01311 = '0.13.11';
 const WB_01312 = '0.13.12';
-// The next version after the reviewed 0.13.12 table: still UNKNOWN, so it must
+const WB_01313 = '0.13.13';
+// The next version after the reviewed 0.13.13 table: still UNKNOWN, so it must
 // select nothing and keep the strict frozen baseline.
-const WB_UNKNOWN_AFTER_01312 = '0.13.13';
+const WB_UNKNOWN_AFTER_01313 = '0.13.14';
 const APPROVED_0139_REL = 'packages/ui/ai-profile-settings.js';
 const APPROVED_0139_SHA = '3c7a75833a3c4f607739ecf71a0716e27c8594cecd9d84e2f8ac99498a59e0e7';
 const R20_REPINS = {
@@ -124,6 +125,9 @@ const VERSION_DOC_REL = 'docs/sdk/openapi.yaml';
 const R141_REPINS = {
   'packages/server/lib/workbench-service.js': { sha256: 'ea9fbf88139d3c476624354af0f237062b038ce201283d2d513eac6ef1fdcc42', source: 'r141b-r142-final-01312' },
   'packages/server/lib/http-handler.js': { sha256: 'dedbd3938ec4b35c0730336d095ff8e08825217d1e3cdeccccbf0afc569f8fd9', source: 'r141-leader-01312' },
+};
+const LEADER_01313_REPINS = {
+  'packages/server/lib/workbench-service.js': { sha256: '498f4ea4d5c4c2b8fcf6c51212e0607daa19f666b8b2fe66517fdc04d0ccdc64', source: 'leader-01313-4291887c' },
 };
 // The audited paths that must keep their 0.13.10 pin byte-for-byte in the
 // 0.13.11 table: the quota logic itself (server + UI) and the reviewed
@@ -397,19 +401,43 @@ try {
       && String(pins.describeWbQuotaTable(WB_01312)).includes('http-handler.js'),
     pins.describeWbQuotaTable(WB_01312));
 
+  // 3e. the 0.13.13 reviewed table is the 0.13.12 table plus EXACTLY the
+  //     one quota-audited file touched by the cold-history fix.
+  const t01313 = pins.WB_QUOTA_AUDITED_01313;
+  const t01313Keys = Object.keys(t01313 || {});
+  const delta01313 = t01313Keys.filter((k) => !(k in t01312) || t01312[k].sha256 !== t01313[k].sha256);
+  check('01313-table-has-17-entries', t01313Keys.length === 17, `entries=${t01313Keys.length}`);
+  check('01313-delta-is-exactly-the-one-reviewed-repin',
+    delta01313.length === 1 && delta01313.every((k) => LEADER_01313_REPINS[k]
+      && t01313[k].sha256 === LEADER_01313_REPINS[k].sha256
+      && t01313[k].source === LEADER_01313_REPINS[k].source),
+    `delta=${JSON.stringify(delta01313)}`);
+  const unchanged01313Rels = Object.keys(t01312).filter((k) => !LEADER_01313_REPINS[k]);
+  check('01313-keeps-the-other-sixteen-entries-byte-for-byte',
+    unchanged01313Rels.length === 16
+      && unchanged01313Rels.every((rel) => JSON.stringify(t01313[rel]) === JSON.stringify(t01312[rel])),
+    unchanged01313Rels.map((rel) => `${rel}=${String(t01313[rel] && t01313[rel].sha256).slice(0, 8)}`).join(' '));
+  check('01313-label-names-the-reviewed-table-and-change',
+    String(pins.describeWbQuotaTable(WB_01313)).includes('0.13.13-reviewed')
+      && String(pins.describeWbQuotaTable(WB_01313)).includes('workbench-service.js')
+      && String(pins.describeWbQuotaTable(WB_01313)).includes('4291887c'),
+    pins.describeWbQuotaTable(WB_01313));
+
   // 4. exact-version selection only
   check('selector-is-exact-version',
     pins.selectWbQuotaTable(WB_0138) !== undefined && pins.selectWbQuotaTable(WB_0139) !== undefined
       && pins.selectWbQuotaTable(WB_01310) === t01310
       && pins.selectWbQuotaTable(WB_01311) === t01311
       && pins.selectWbQuotaTable(WB_01312) === t01312
+      && pins.selectWbQuotaTable(WB_01313) === t01313
       && pins.selectWbQuotaTable('0.13.7') === undefined
-      && pins.selectWbQuotaTable(WB_UNKNOWN_AFTER_01312) === undefined
+      && pins.selectWbQuotaTable(WB_UNKNOWN_AFTER_01313) === undefined
       && pins.selectWbQuotaTable('0.14.0') === undefined
       && pins.selectWbQuotaTable(`${WB_0138} `) === undefined
       && pins.selectWbQuotaTable(`${WB_01310} `) === undefined
       && pins.selectWbQuotaTable(`${WB_01311} `) === undefined
       && pins.selectWbQuotaTable(`${WB_01312} `) === undefined
+      && pins.selectWbQuotaTable(`${WB_01313} `) === undefined
       && pins.selectWbQuotaTable('0.13.1') === undefined
       && pins.selectWbQuotaTable(undefined) === undefined,
     'unknown versions select nothing');
@@ -419,7 +447,8 @@ try {
       && String(pins.describeWbQuotaTable(WB_01310)).includes(WB_01310)
       && String(pins.describeWbQuotaTable(WB_01311)).includes(WB_01311)
       && String(pins.describeWbQuotaTable(WB_01312)).includes(WB_01312)
-      && pins.describeWbQuotaTable(WB_UNKNOWN_AFTER_01312) === 'frozen-default',
+      && String(pins.describeWbQuotaTable(WB_01313)).includes(WB_01313)
+      && pins.describeWbQuotaTable(WB_UNKNOWN_AFTER_01313) === 'frozen-default',
     `0139=${pins.describeWbQuotaTable(WB_0139)}`);
 
   // 5. the official public bytes of the version installed under the ROOT
@@ -459,9 +488,9 @@ try {
 
   // 7. an unknown version is not silently accepted: the frozen baseline
   //    rejects the official bytes, so an unknown version cannot pass by
-  //    accident. 0.13.13 is the next version after the reviewed 0.13.12
+  //    accident. 0.13.14 is the next version after the reviewed 0.13.13
   //    table: it must still select nothing.
-  const unknown = auditInChild(goodRoot, WB_UNKNOWN_AFTER_01312);
+  const unknown = auditInChild(goodRoot, WB_UNKNOWN_AFTER_01313);
   check('unknown-version-is-not-silently-accepted',
     unknown.tableSelected === false && unknown.label === 'frozen-default'
       && unknown.quota.failures.length > 0
@@ -530,7 +559,7 @@ try {
         && drift.quota.failures[0].includes('packages/client/index.js'),
       `failures=${JSON.stringify(drift.quota.failures)}`);
 
-    const unknownSource = auditInChild(sourceRoot, WB_UNKNOWN_AFTER_01312);
+    const unknownSource = auditInChild(sourceRoot, WB_UNKNOWN_AFTER_01313);
     check('01311-unknown-version-rejects-the-source-bytes',
       unknownSource.tableSelected === false && unknownSource.label === 'frozen-default'
         && unknownSource.quota.failures.length > 0,
@@ -586,7 +615,7 @@ try {
         && changedOn01312[0].includes('packages/server/lib/workbench-service.js'),
       `failures=${JSON.stringify(drift012.quota.failures)}`);
 
-    const unknownSource012 = auditInChild(sourceRoot012, WB_UNKNOWN_AFTER_01312);
+    const unknownSource012 = auditInChild(sourceRoot012, WB_UNKNOWN_AFTER_01313);
     check('01312-unknown-version-rejects-the-source-bytes',
       unknownSource012.tableSelected === false && unknownSource012.label === 'frozen-default'
         && unknownSource012.quota.failures.length > 0,
