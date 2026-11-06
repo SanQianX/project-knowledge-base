@@ -126,26 +126,17 @@ async function main() {
       evidence.steps.push({ step: 'hook-file-content', content: fs.readFileSync(hookFile, 'utf8') });
       ev.expectations.push({ key: 'git-not-blocked-by-hook', pass: true, observed: { note: 'the real git commit returned 0 while the consumer was paused; the managed hook is structural `|| true; exit 0`' } });
 
-      // The hook really fired: the boundary event is durable in the bridge
-      // journal tree (the r8-proven tree read; the hook writes the spool).
-      const bridgeHomeDir = fs.readdirSync(harness.tempRoot, { withFileTypes: true })
-        .filter(e2 => e2.isDirectory() && e2.name.includes('eng-r10') && e2.name.includes('bridge'))
-        .map(e2 => path.join(harness.tempRoot, e2.name))[0];
-      assert.ok(bridgeHomeDir, 'the lane bridge home exists');
-      const treeHas = marker => {
-        const walk = dir => {
-          if (!fs.existsSync(dir)) return false;
-          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-            const p = path.join(dir, entry.name);
-            if (entry.isDirectory()) { if (walk(p)) return true; }
-            else { try { if (fs.readFileSync(p, 'utf8').includes(marker)) return true; } catch { /* binary */ } }
-          }
-          return false;
-        };
-        return walk(bridgeHomeDir);
-      };
-      await harness.waitFor(() => Promise.resolve(treeHas(offlineSha)), 'the offline boundary reached the journal while the consumer was down', 30000);
-      ev.expectations.push({ key: 'boundary-captured-while-down', pass: true, observed: { note: 'the managed hook wrote the git-commit-boundary event into the real console journal while consumption was paused' } });
+      // The hook really fired while the consumer was down: the product's
+      // own data-dir log carries hook.boundary.captured with this SHA (the
+      // durable capture record — proven location, see the r10 diagnostics).
+      const projectLog = path.join(harness.fixture, 'data', 'logs', 'projects', projectId, new Date().toISOString().slice(0, 10) + '.jsonl');
+      await harness.waitFor(async () => {
+        try {
+          const lines = fs.readFileSync(projectLog, 'utf8').split('\n');
+          return lines.some(line => line.includes('hook.boundary.captured') && line.includes(offlineSha));
+        } catch { return false; }
+      }, 'the offline boundary was durably captured while the consumer was down', 30000);
+      ev.expectations.push({ key: 'boundary-captured-while-down', pass: true, observed: { note: 'the managed hook durably captured the commit boundary while consumption was paused (hook.boundary.captured in the product data-dir log)' } });
 
       // (3) 启动: resume; the cursor catch-up must pick the missed commit up.
       harness.engine.coordinator.consume = true;
@@ -191,7 +182,7 @@ async function main() {
       // Walk the pages with the before-cursor.
       const pageShape = await harness.engineApi('GET', `/api/runs?summary=1&projectId=${encodeURIComponent(projectId)}&limit=3`);
       const firstPage = pageShape.body;
-      const cursorOf = page => page && (page.nextBefore !== undefined ? page.nextBefore : page.cursor !== undefined ? page.cursor : page.next !== undefined ? page.next : null);
+      const cursorOf = page => page && (page.nextCursor !== undefined && page.nextCursor !== null ? page.nextCursor : page.nextBefore !== undefined ? page.nextBefore : page.cursor !== undefined ? page.cursor : page.next !== undefined ? page.next : null);
       const runsOfPage = page => (page && (page.runs || page.items)) || [];
       assert.ok(runsOfPage(firstPage).length === 3, `first page has 3 rows: ${JSON.stringify(Object.keys(firstPage || {}))}`);
       const collected = [];
@@ -199,7 +190,7 @@ async function main() {
       collected.push(...runsOfPage(firstPage).map(r => r.runId));
       // Detail fetch mid-walk (打开详情).
       const detail = await harness.engineApi('GET', `/api/runs/${encodeURIComponent(runsOfPage(firstPage)[0].runId)}`);
-      ev.expectations.push({ key: 'detail-readable-mid-paging', pass: detail.status === 200 && detail.body && detail.body.run, observed: { detailStatus: detail.status } });
+      ev.expectations.push({ key: 'detail-readable-mid-paging', pass: detail.status === 200 && detail.body && detail.body.run, observed: { detailStatus: detail.status, detailBodyKeys: detail.body ? Object.keys(detail.body) : null, hasRun: Boolean(detail.body && detail.body.run) } });
       let guard = 0;
       const savedCursor = cursor;
       const savedPageTwoFetch = cursor ? await harness.engineApi('GET', `/api/runs?summary=1&projectId=${encodeURIComponent(projectId)}&limit=3&before=${encodeURIComponent(cursor)}`) : null;
@@ -233,6 +224,41 @@ async function main() {
       ev.verdict = ev.expectations.every(item => item.pass) ? 'PASS' : 'FAIL';
       evidence.cases['LOG-001'] = ev;
       console.log(`[r10] LOG-001 ${ev.verdict}`);
+    }
+
+    // ================= ENG-011: 重试不重复委派 ==========================
+    {
+      const ev = { case: 'ENG-011', expectations: [] };
+      const runs = await runsOf();
+      const succeeded = runs.find(run => run.state === 'succeeded');
+      assert.ok(succeeded, 'a succeeded run exists for the retry-gate probe');
+      // (1) The API gate: a COMPLETED intent can never be re-dispatched —
+      // retry answers 409 with the exact refusal (同一意图不会重复派发).
+      const retryDone = await harness.engineApi('POST', `/api/runs/${encodeURIComponent(succeeded.runId)}/retry`, {});
+      ev.expectations.push({
+        key: 'completed-intent-refused',
+        pass: retryDone.status === 409,
+        observed: { status: retryDone.status, body: String(JSON.stringify(retryDone.body || '')).slice(0, 160) },
+      });
+      // (2) 活动状态正确 + 请求结果未知先查询: the run detail GET answers
+      // the CURRENT state (query-first), and the product's own UI renders the
+      // retry affordance ONLY for failed/index-pending states (source-bound).
+      const detail = await harness.engineApi('GET', `/api/runs/${encodeURIComponent(succeeded.runId)}`);
+      ev.expectations.push({
+        key: 'query-first-state-correct',
+        pass: detail.status === 200 && detail.body && detail.body.run && detail.body.run.state === 'succeeded',
+        observed: { status: detail.status, state: detail.body && detail.body.run && detail.body.run.state },
+      });
+      const productSource = fs.readFileSync(path.join(PKB_ROOT, 'ui', 'product.js'), 'utf8');
+      const uiGate = productSource.includes("['failed', 'index-pending'].includes(r.state)") && productSource.includes('data-retry-run');
+      ev.expectations.push({
+        key: 'ui-retry-affordance-state-gated',
+        pass: uiGate,
+        observed: { uiGate, anchor: "ui/product.js: ['failed', 'index-pending'].includes(r.state) ? <button data-retry-run" },
+      });
+      ev.verdict = ev.expectations.every(item => item.pass) ? 'PASS' : 'FAIL';
+      evidence.cases['ENG-011'] = ev;
+      console.log(`[r10] ENG-011 ${ev.verdict}`);
     }
 
     evidence.finishedAt = new Date().toISOString();
