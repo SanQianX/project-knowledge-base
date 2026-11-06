@@ -9,6 +9,7 @@ function defaultSettings() {
     schemaVersion: 2,
     knowledge: { rootPath: '' },
     brain: { id: 'brain-default', name: '我的智脑', domains: [] },
+    appearance: defaultAppearance(),
     ai: { schema: 'ai-profiles/v1', profiles: [] },
     embedding: {},
     logging: {
@@ -19,6 +20,34 @@ function defaultSettings() {
     legacyExtensions: {},
     updatedAt: '',
   };
+}
+
+const APPEARANCE_PRESETS = ['pure', 'oled', 'steel'];
+const APPEARANCE_TOKENS = ['page', 'surface', 'surface2', 'surface3', 'line', 'text', 'muted', 'faint', 'nav', 'accent', 'accent-soft', 'good', 'bad', 'bad-soft'];
+const APPEARANCE_HEX = /^#[0-9a-fA-F]{6}$/;
+
+function defaultAppearance() {
+  return { preset: 'pure', overrides: { light: {}, dark: {} } };
+}
+
+function validateAppearance(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new DomainError('INVALID_ARGUMENT', '皮肤配置无效。', { status: 400 });
+  const allowed = new Set(['preset', 'overrides']);
+  for (const key of Object.keys(value)) if (!allowed.has(key)) throw new DomainError('INVALID_ARGUMENT', `皮肤配置不支持字段：${key}。`, { status: 400, details: { field: key } });
+  const preset = value.preset === undefined ? 'pure' : value.preset;
+  if (!APPEARANCE_PRESETS.includes(preset)) throw new DomainError('INVALID_ARGUMENT', '未知的配色预设。', { status: 400 });
+  const overrides = value.overrides === undefined ? { light: {}, dark: {} } : value.overrides;
+  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) throw new DomainError('INVALID_ARGUMENT', '皮肤颜色覆盖无效。', { status: 400 });
+  for (const key of Object.keys(overrides)) if (!['light', 'dark'].includes(key)) throw new DomainError('INVALID_ARGUMENT', `皮肤颜色覆盖不支持主题：${key}。`, { status: 400, details: { field: key } });
+  for (const theme of ['light', 'dark']) {
+    const entries = overrides[theme] === undefined ? {} : overrides[theme];
+    if (!entries || typeof entries !== 'object' || Array.isArray(entries)) throw new DomainError('INVALID_ARGUMENT', `皮肤 ${theme} 主题颜色无效。`, { status: 400 });
+    for (const token of Object.keys(entries)) {
+      if (!APPEARANCE_TOKENS.includes(token)) throw new DomainError('INVALID_ARGUMENT', `不支持的皮肤颜色项：${token}。`, { status: 400, details: { field: token } });
+      if (!APPEARANCE_HEX.test(String(entries[token]))) throw new DomainError('INVALID_ARGUMENT', `皮肤颜色 ${token} 必须是 #RRGGBB 格式。`, { status: 400, details: { field: token } });
+    }
+  }
+  return { preset, overrides: { light: { ...overrides.light }, dark: { ...overrides.dark } } };
 }
 
 function mergeObjects(base, patch) {
@@ -56,6 +85,8 @@ function validateSettings(settings) {
   if (!Array.isArray(logging.levels) || !logging.levels.length || logging.levels.some(level => !['trace', 'debug', 'info', 'warn', 'error', 'fatal'].includes(level))) {
     throw new DomainError('DATA_CORRUPT', 'Settings logging configuration is invalid.', { status: 500 });
   }
+  settings.appearance = settings.appearance || defaultAppearance();
+  settings.appearance = validateAppearance(settings.appearance);
   return settings;
 }
 
@@ -113,6 +144,17 @@ class SettingsStore {
     });
   }
 
+  async replaceAppearance(appearance) {
+    return this.atomic.withFileLock(this.lockPath, async () => {
+      const settings = this.read();
+      settings.appearance = validateAppearance(appearance);
+      settings.updatedAt = new Date().toISOString();
+      validateSettings(settings);
+      this.atomic.writeJsonAtomic(this.filePath, settings);
+      return settings.appearance;
+    });
+  }
+
   async addDomain(domain) {
     return this.atomic.withFileLock(this.lockPath, async () => {
       const settings = this.read();
@@ -150,4 +192,4 @@ class SettingsStore {
   }
 }
 
-module.exports = { SettingsStore, defaultSettings, validateSettings, mergeObjects };
+module.exports = { SettingsStore, defaultSettings, defaultAppearance, validateAppearance, validateSettings, mergeObjects };

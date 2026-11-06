@@ -711,7 +711,91 @@
     }
   });
   on('projectSelect', 'change', e => selectProject(e.target.value));
-  on('themeToggle', 'click', () => { document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('kb.theme', document.documentElement.dataset.theme); Object.keys(frames).forEach(key => post(key, { type: 'kb:theme', theme: document.documentElement.dataset.theme })); void pushKnowledgeToPanel(); });
+  on('themeToggle', 'click', () => { document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('kb.theme', document.documentElement.dataset.theme); applyAppearance(); Object.keys(frames).forEach(key => post(key, { type: 'kb:theme', theme: document.documentElement.dataset.theme })); void pushKnowledgeToPanel(); });
+  // Appearance skin: preset palettes plus per-theme token overrides (kb-skin/v1).
+  const appearanceTokens = ['page','surface','surface2','surface3','line','text','muted','faint','nav','accent','accent-soft','good','bad','bad-soft'];
+  const appearanceDefaults = {
+    pure: {
+      light: { page:'#ffffff',surface:'#ffffff',surface2:'#f6f6f7',surface3:'#ececee',line:'#e2e2e5',text:'#1a1a1e',muted:'#6d6d75',faint:'#8a8a92',nav:'#fafafa',accent:'#2f6db5','accent-soft':'#e2ecf8',good:'#2e7d5b',bad:'#b04a4a','bad-soft':'#f7ecec' },
+      dark: { page:'#0e0e10',surface:'#1a1c26',surface2:'#20222e',surface3:'#2a2c3c',line:'#343644',text:'#eef0f6',muted:'#b3bad0',faint:'#8b91a6',nav:'#131319',accent:'#7da2ff','accent-soft':'#242e48',good:'#8cc8a8',bad:'#e89898','bad-soft':'#3a272b' },
+    },
+    oled: {
+      light: { page:'#ffffff',surface:'#ffffff',surface2:'#f6f6f7',surface3:'#ececee',line:'#e2e2e5',text:'#1a1a1e',muted:'#6d6d75',faint:'#8a8a92',nav:'#fafafa',accent:'#2f6db5','accent-soft':'#e2ecf8',good:'#2e7d5b',bad:'#b04a4a','bad-soft':'#f7ecec' },
+      dark: { page:'#000000',surface:'#101118',surface2:'#16171e',surface3:'#1e1f26',line:'#2e2f3a',text:'#f2f2f5',muted:'#b3bad0',faint:'#8b91a6',nav:'#050506',accent:'#7da2ff','accent-soft':'#1e263c',good:'#8cc8a8',bad:'#e89898','bad-soft':'#352428' },
+    },
+    steel: {
+      light: { page:'#f3f5f7',surface:'#ffffff',surface2:'#f8f9fb',surface3:'#edf1f4',line:'#dce2e8',text:'#202733',muted:'#687587',faint:'#8e99a7',nav:'#eef1f4',accent:'#516f89','accent-soft':'#e6edf3',good:'#397761',bad:'#a05252','bad-soft':'#fbeeee' },
+      dark: { page:'#171a1f',surface:'#20252d',surface2:'#252b34',surface3:'#2c333e',line:'#39424f',text:'#e6ebf0',muted:'#a0aaba',faint:'#788393',nav:'#1b2028',accent:'#8aa8cf','accent-soft':'#293748',good:'#81b29a',bad:'#d88b8b','bad-soft':'#39292d' },
+    },
+  };
+  const appearance = { preset: 'pure', overrides: { light: {}, dark: {} }, skinTheme: 'light' };
+  const sanitizeSkinTokens = source => {
+    const themes = {};
+    for (const theme of ['light', 'dark']) {
+      themes[theme] = {};
+      const entries = source?.[theme] && typeof source[theme] === 'object' ? source[theme] : {};
+      for (const token of appearanceTokens) if (/^#[0-9a-fA-F]{6}$/.test(String(entries[token] || ''))) themes[theme][token] = String(entries[token]).toLowerCase();
+    }
+    return themes;
+  };
+  function applyAppearance() {
+    const root = document.documentElement;
+    root.dataset.skin = appearanceDefaults[appearance.preset] ? appearance.preset : 'pure';
+    if (!root.style) return;
+    const theme = root.dataset.theme === 'dark' ? 'dark' : 'light';
+    for (const token of appearanceTokens) root.style.removeProperty(`--${token}`);
+    for (const [token, value] of Object.entries(appearance.overrides[theme] || {})) if (appearanceTokens.includes(token)) root.style.setProperty(`--${token}`, value);
+  }
+  function syncAppearanceControls() {
+    if (!$('skinPreset')) return;
+    $('skinPreset').value = appearance.preset;
+    all('#skinThemeTabs button').forEach(button => button.classList.toggle('active', button.dataset.skinTheme === appearance.skinTheme));
+    all('#skinColors input[data-token], .skin-more input[data-token]').forEach(input => {
+      const token = input.dataset.token;
+      const fallback = appearanceDefaults[appearance.preset]?.[appearance.skinTheme]?.[token] || '#000000';
+      input.value = (appearance.overrides[appearance.skinTheme]?.[token] || fallback).toLowerCase();
+    });
+  }
+  async function saveAppearance() {
+    const result = await api('/api/appearance', { method: 'PATCH', body: { appearance: { preset: appearance.preset, overrides: appearance.overrides } } });
+    appearance.preset = result.appearance.preset; appearance.overrides = sanitizeSkinTokens(result.appearance.overrides);
+    applyAppearance(); syncAppearanceControls();
+    $('appearanceStatus').textContent = '皮肤已保存，对本机所有入口生效。';
+  }
+  async function loadAppearance() {
+    try {
+      const result = await api('/api/appearance', { allowNotReady: true });
+      if (result.appearance) { appearance.preset = result.appearance.preset || 'pure'; appearance.overrides = sanitizeSkinTokens(result.appearance.overrides); }
+    } catch { /* 服务未就绪时保持默认皮肤，不阻塞启动 */ }
+    applyAppearance(); syncAppearanceControls();
+  }
+  on('skinPreset', 'change', () => { appearance.preset = $('skinPreset').value; applyAppearance(); syncAppearanceControls(); $('appearanceStatus').textContent = '预设已切换（即时预览），记得保存。'; });
+  all('#skinThemeTabs button').forEach(button => button.addEventListener('click', () => { appearance.skinTheme = button.dataset.skinTheme; syncAppearanceControls(); }));
+  all('#skinColors input[data-token], .skin-more input[data-token]').forEach(input => input.addEventListener('input', () => {
+    appearance.overrides[appearance.skinTheme] = { ...appearance.overrides[appearance.skinTheme], [input.dataset.token]: input.value.toLowerCase() };
+    applyAppearance(); $('appearanceStatus').textContent = '颜色已应用（即时预览），记得保存。';
+  }));
+  on('saveAppearance', 'click', saveAppearance);
+  on('resetAppearance', 'click', async () => { appearance.preset = 'pure'; appearance.overrides = { light: {}, dark: {} }; await saveAppearance(); toast('已恢复默认皮肤。'); });
+  on('exportSkin', 'click', () => {
+    const tokens = {};
+    for (const theme of ['light', 'dark']) tokens[theme] = { ...appearanceDefaults[appearance.preset][theme], ...appearance.overrides[theme] };
+    const skin = { schema: 'kb-skin/v1', name: '我的皮肤', preset: appearance.preset, tokens };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(skin, null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a'); link.href = url; link.download = 'kb-skin.json'; link.click(); URL.revokeObjectURL(url);
+  });
+  on('importSkin', 'click', () => $('importSkinFile').click());
+  $('importSkinFile').addEventListener('change', async event => {
+    const file = event.target.files?.[0]; event.target.value = '';
+    if (!file) return;
+    try {
+      const skin = JSON.parse(await file.text());
+      if (skin.schema !== 'kb-skin/v1') throw new Error('不是有效的 kb-skin/v1 皮肤文件。');
+      if (appearanceDefaults[skin.preset]) appearance.preset = skin.preset;
+      appearance.overrides = sanitizeSkinTokens(skin.tokens);
+      await saveAppearance(); toast(`已导入皮肤「${String(skin.name || '未命名').slice(0, 40)}」。`);
+    } catch (error) { toast(`导入失败：${error.message}`); }
+  });
   on('openSystem', 'click', openSystem); on('closeSystem', 'click', closeSystem); on('drawerBackdrop', 'click', closeSystem);
   on('repairWiring', 'click', repair);
   on('configureProviders', 'click', () => { closeSystem(); setView('work'); initializeFrame('terminal'); if (frames.terminal.ready) post('terminal', { type: 'kb:open-settings' }); else frames.terminal.openSettings = true; });
@@ -833,6 +917,7 @@
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { connectRegistryEvents(); void refreshRegistry(); } });
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSystem(); });
   document.documentElement.dataset.theme = localStorage.getItem('kb.theme') === 'dark' ? 'dark' : 'light';
+  applyAppearance(); void loadAppearance();
   all('[data-scope]').forEach(button => button.classList.toggle('active', button.dataset.scope === state.scope));
   state.view = titles[location.hash.slice(1)] ? location.hash.slice(1) : 'home';
   setView(state.view); refreshRegistry();

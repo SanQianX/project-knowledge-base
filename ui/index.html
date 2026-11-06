@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN" data-theme="light">
+<html lang="zh-CN" data-theme="light" data-skin="pure">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark">
   <title>Project Knowledge · 我的智脑</title><link rel="icon" type="image/svg+xml" href="/favicon.svg?v=folded-k-1"><link rel="stylesheet" href="/product.css"><link rel="stylesheet" href="/version-info.css">
@@ -41,6 +41,23 @@
     <section><h3>后台维护模型</h3><p class="muted">使用持久化默认模型，不跟随聊天中的临时切换。</p><select id="maintenanceModel" aria-label="后台维护默认模型"></select><div class="actions"><button id="saveMaintenance">保存默认模型</button><button id="configureProviders">管理模型供应商</button></div><p id="configurationStatus" class="muted"></p></section>
     <section><h3>向量检索模型</h3><p id="embeddingStatus" class="muted">正在读取配置。</p><button id="openEmbedding">配置向量模型</button><p class="muted">凭据由工作台统一保存。未配置时仍可使用文本检索。</p></section>
     <section><h3>智脑设置</h3><label>名称<input id="brainName" maxlength="100"></label><label>知识根目录<div class="input-with-action"><input id="knowledgeRoot"><button id="pickRoot">选择</button></div></label><label>向量索引目录<output id="indexStoragePath" class="detail-path"></output></label><p id="indexStorageStatus" class="muted"></p><p class="muted">索引跟随知识根目录，可重新构建；切换时原索引保留，已有项目知识与共享知识不移动。</p><button id="saveBrainSettings">保存设置</button></section>
+    <section><h3>外观与皮肤</h3><p class="muted">预设与自定义颜色分浅色、深色两套；改动即时预览，保存后对本机所有入口生效。</p>
+      <label>配色预设<select id="skinPreset"><option value="pure">纯净黑白</option><option value="oled">OLED 纯黑</option><option value="steel">钢青（旧版配色）</option></select></label>
+      <div class="segmented" id="skinThemeTabs"><button data-skin-theme="light" class="active">浅色主题</button><button data-skin-theme="dark">深色主题</button></div>
+      <div class="skin-colors" id="skinColors">
+        <label class="skin-color">页面底色<input type="color" data-token="page"></label>
+        <label class="skin-color">卡片底色<input type="color" data-token="surface"></label>
+        <label class="skin-color">正文文字<input type="color" data-token="text"></label>
+        <label class="skin-color">强调色<input type="color" data-token="accent"></label>
+      </div>
+      <details class="skin-more"><summary>更多颜色</summary><div class="skin-colors">
+        <label class="skin-color">分隔线<input type="color" data-token="line"></label>
+        <label class="skin-color">次要文字<input type="color" data-token="muted"></label>
+        <label class="skin-color">成功色<input type="color" data-token="good"></label>
+        <label class="skin-color">危险色<input type="color" data-token="bad"></label>
+      </div></details>
+      <div class="actions"><button id="saveAppearance" class="primary">保存皮肤</button><button id="resetAppearance">恢复默认</button><button id="exportSkin">导出皮肤</button><button id="importSkin">导入皮肤</button><input type="file" id="importSkinFile" accept=".json,application/json" hidden></div>
+      <p id="appearanceStatus" class="muted"></p></section>
     <section><div class="actions"><button id="openEngine">知识引擎诊断</button><button id="openLogs">系统诊断记录</button></div><p class="muted">诊断不影响正在进行的会话与维护。</p></section>
   </div>
 </aside>

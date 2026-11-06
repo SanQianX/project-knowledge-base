@@ -9,7 +9,7 @@ const runtimeControl = require('./runtime-control');
 const hookManager = require('./hook-manager');
 const claudeCliRunner = require('./claude-cli-runner');
 const { StorageLayout } = require('./storage-layout');
-const { SettingsStore } = require('./settings-store');
+const { SettingsStore, defaultAppearance } = require('./settings-store');
 const { ProjectRegistryStore } = require('./project-registry-store');
 const { ProjectStore } = require('./project-store');
 const { ProjectLifecycleService } = require('./project-lifecycle-service');
@@ -870,7 +870,7 @@ function createRequestHandler(runtime, options = {}) {
     res.once('finish', () => {
       if (requestFailed || res.statusCode >= 400) return;
       if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method)
-        && /^\/api\/(?:projects(?:\/|$)|domains(?:\/|$)|brain$|settings$|modules\/configure$)/.test(requestPathname)
+        && /^\/api\/(?:projects(?:\/|$)|domains(?:\/|$)|brain$|settings$|appearance$|modules\/configure$)/.test(requestPathname)
         && requestPathname !== '/api/projects/preflight-import') runtime.registryEvents?.publish();
       Promise.resolve(runtime.logger.info('http.request_completed', 'HTTP request completed.', {
         operationId: requestOperationId,
@@ -942,6 +942,15 @@ function createRequestHandler(runtime, options = {}) {
         const settings = await runtime.settingsStore.updatePatch({ brain: { name: body.name.trim() } });
         const configuration = await runtime.moduleBridge.syncEngineConfiguration();
         return send(res, 200, { ok: true, brain: settings.brain, configuration });
+      }
+      if (method === 'GET' && pathname === '/api/appearance') {
+        const settings = runtime.settingsStore.read({ allowMissing: true });
+        return send(res, 200, { ok: true, appearance: settings.appearance || defaultAppearance() });
+      }
+      if (method === 'PATCH' && pathname === '/api/appearance') {
+        const body = await readJsonBody(req);
+        const appearance = await runtime.settingsStore.replaceAppearance(body?.appearance || body);
+        return send(res, 200, { ok: true, appearance });
       }
       if (method === 'POST' && pathname === '/api/domains') {
         const body = await readJsonBody(req);
