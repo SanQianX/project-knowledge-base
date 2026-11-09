@@ -20,7 +20,7 @@ const path = require('node:path');
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 
 // ---------- step 1: isolate the driver process environment ----------
-const TEMP_ROOT = path.resolve(process.env.R45_TEMP_ROOT || path.join(os.tmpdir(), 'r45-engine-offline'));
+const TEMP_ROOT = path.resolve(process.env.R45_TEMP_ROOT || process.env.PK_TEST_TEMP_ROOT || path.join(os.tmpdir(), 'r45-engine-offline'));
 const EVIDENCE_ROOT = path.resolve(process.env.R45_EVIDENCE_ROOT || path.join(REPO_ROOT, 'qa-autopilot', 'artifacts', 'parallel-20261023', 'engine-offline-audit-r45', 'evidence'));
 
 if (TEMP_ROOT === REPO_ROOT || TEMP_ROOT.startsWith(REPO_ROOT + path.sep)) {

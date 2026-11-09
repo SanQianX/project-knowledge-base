@@ -19,7 +19,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
-const TEMP_ROOT = path.resolve(process.env.R48_TEMP_ROOT || path.join(os.tmpdir(), 'r48-lifecycle-evidence'));
+const TEMP_ROOT = path.resolve(process.env.R48_TEMP_ROOT || process.env.PK_TEST_TEMP_ROOT || path.join(os.tmpdir(), 'r48-lifecycle-evidence'));
 const EVIDENCE_ROOT = path.resolve(process.env.R48_EVIDENCE_ROOT || path.join(REPO_ROOT, 'qa-autopilot', 'artifacts', 'parallel-20261023', 'lifecycle-evidence-r48', 'evidence'));
 
 function installLaneEnv({ caseId } = {}) {
