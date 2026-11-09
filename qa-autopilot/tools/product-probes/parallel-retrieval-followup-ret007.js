@@ -38,8 +38,8 @@ shell.isolateProcess();
 
 const { LocalEmbeddingService } = require(path.join(shell.REPO_ROOT, '_site', 'lib', 'embedding-service'));
 const { EMBEDDING_DIMENSIONS } = require(path.join(shell.REPO_ROOT, '_site', 'lib', 'knowledge-schema'));
-const { createEngineServer } = require(path.join(shell.REPO_ROOT, '_modules', 'knowledge-engine', 'src', 'server'));
-const { BridgeClient } = require(path.join(shell.REPO_ROOT, '_modules', 'knowledge-engine', 'src', 'bridge-client'));
+const { createEngineServer } = require(path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [path.join(shell.REPO_ROOT)] })), 'src', 'server'));
+const { BridgeClient } = require(path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [path.join(shell.REPO_ROOT)] })), 'src', 'bridge-client'));
 const { installHook } = require(path.join(shell.REPO_ROOT, '_site', 'lib', 'hook-manager'));
 
 const PROJECT_ID = 'ret007-demo';

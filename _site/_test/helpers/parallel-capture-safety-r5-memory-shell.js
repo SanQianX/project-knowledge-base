@@ -48,7 +48,7 @@ const { createEventBridgeStandin } = require('./parallel-memory-event-bridge');
 const { startLaneVectorHub } = require('./parallel-capture-safety-r5-cap-shell');
 
 const ROOT = path.resolve(__dirname, '../../..');
-const ENGINE_ENTRY = path.join(ROOT, '_modules', 'knowledge-engine', 'src', 'server.js');
+const ENGINE_ENTRY = path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [path.join(ROOT)] })), 'src', 'server.js');
 const LIVE_PORTS = new Set([5757, 5790, 8787, 8790]);
 
 function isInside(candidate, parent) {

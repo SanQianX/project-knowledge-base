@@ -47,7 +47,7 @@ function createStandinAnalyzer(options = {}) {
 
         const atomicFilePath = engineRoot
           ? path.join(engineRoot, 'src', 'runtime', 'atomic-file.js')
-          : path.join(__dirname, '..', '..', '..', '_modules', 'knowledge-engine', 'src', 'runtime', 'atomic-file.js');
+          : path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [path.join(__dirname, '..', '..', '..')] })), 'src', 'runtime', 'atomic-file.js');
         const AtomicFile = require(atomicFilePath);
         AtomicFile.writeFileAtomic(path.join(input.stagingPath, 'files', ...filename.split('/')), markdown);
 

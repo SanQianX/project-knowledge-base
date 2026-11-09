@@ -78,10 +78,14 @@ async function main() {
   const good = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-r99-good-prefix-'));
   stubEntry(good);
   fs.writeFileSync(path.join(good, 'package.json'), JSON.stringify({ name: 'qa-r99-synthetic-prefix', version: '9.9.9-test' }, null, 2));
+  expectReject(good, 'MISSING_ENGINE', 'an installed prefix without its npm engine is rejected');
+  const fixtureEngine = path.join(good, 'node_modules', '@sanqianx', 'ai-coding-knowledge-engine');
+  fs.mkdirSync(fixtureEngine, { recursive: true });
+  fs.writeFileSync(path.join(fixtureEngine, 'package.json'), JSON.stringify({ name: '@sanqianx/ai-coding-knowledge-engine', version: '0.2.7-rc.12' }));
   const resolved = resolveProductRoot(good);
   assert.equal(resolved.root, path.resolve(good));
   assert.equal(resolved.siteEntry, path.join(path.resolve(good), '_site', 'lib', 'server-app.js'));
-  assert.equal(resolved.engineRoot, path.join(path.resolve(good), '_modules', 'knowledge-engine'));
+  assert.equal(resolved.engineRoot, fixtureEngine);
   assert.deepEqual({ name: resolved.packageJson.name, version: resolved.packageJson.version }, { name: 'qa-r99-synthetic-prefix', version: '9.9.9-test' });
   ok('synthetic official prefix accepted with root/siteEntry/engineRoot/packageJson');
 

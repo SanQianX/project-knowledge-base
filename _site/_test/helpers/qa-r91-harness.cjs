@@ -120,7 +120,10 @@ function resolveProductRoot(candidate) {
   if (!packageJson || typeof packageJson.name !== 'string' || !packageJson.name || typeof packageJson.version !== 'string' || !packageJson.version) {
     throw invalidProductRoot('INVALID_PACKAGE', `package.json must carry name and version, got ${JSON.stringify({ name: packageJson && packageJson.name, version: packageJson && packageJson.version })}`);
   }
-  return { root, packageJson, siteEntry, engineRoot: path.join(root, '_modules', 'knowledge-engine') };
+  let engineRoot;
+  try { engineRoot = path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [root] })); }
+  catch { throw invalidProductRoot('MISSING_ENGINE', 'the installed npm engine dependency is missing'); }
+  return { root, packageJson, siteEntry, engineRoot };
 }
 
 function r91CreateEngineServer(options = {}, engineSourceRoot = ENGINE_SOURCE_ROOT) {

@@ -8,10 +8,10 @@
 前提:所有改动已合并到 `main`,CHANGELOG 的 `[Unreleased]` 段落已写好,
 本地 `npm test` 全绿(当前 115 例)。
 
-0. **模块有变更时**(claude-ai-workbench / vector-hub 有新提交):先在
-   `vector-hub` 里 `npm run build`,然后回到本仓库执行 `npm run vendor:modules`,
-   把重新拷贝后的 `_modules/` 一并提交。`_modules/` 是 committed 构建产物,
-   发版不依赖兄弟目录存在。
+0. **模块有变更时**：先在各自私有源码仓库测试并发布公开 npm 运行包，再在本仓库
+   固定四个模块的精确版本，更新 lockfile 与 `module-runtime-manifest.json`。
+   knowledge-engine 与 Workbench 一样通过 npm 安装，不再复制源码或执行 vendoring。
+   从官方 registry 独立下载安装后验证模块哈希、四服务启动和知识链路，保留旧版本。
 
 1. **定格 CHANGELOG**:把 `## [Unreleased] - <日期>` 改成 `## [x.y.z] - <今天日期>`。
 2. **版本同步**(仓库钩子自动跑 `release:verify` 校验,并同步 6 个清单文件:

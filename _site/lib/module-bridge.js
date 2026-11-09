@@ -49,24 +49,15 @@ const INDEX_TIMEOUT_MS = 120000;
 // Native folder dialogs wait for the user without a bound.
 const PICKER_TIMEOUT_MS = 10 * 60 * 1000;
 
-// Vendored module runtimes shipped inside the npm package. Sibling-checkout
-// spawning is gone: the services are bundled, spawned from here, and resolved
-// through normal node_modules resolution
-// node_modules.
-// Module entry scripts resolve through normal node_modules dependencies
-// (claude-ai-workbench, @sanqianx/vector-hub, @sanqianx/ai-coding-event-bridge-
-// console) — the npm packages are the single source of these runtimes.
+// All four services resolve through the host's pinned npm dependencies.
 const MODULE_ENTRIES = {
   terminal: 'claude-ai-workbench/packages/server/bin/agent-terminal-server.js',
   'vector-hub': '@sanqianx/vector-hub/bin.js',
   'event-bridge': '@sanqianx/ai-coding-event-bridge-console/src/bin.js',
+  'knowledge-engine': '@sanqianx/ai-coding-knowledge-engine/src/bin.js',
 };
 
 function resolveModuleEntry(name) {
-  if (name === 'knowledge-engine') {
-    const runtime = path.resolve(__dirname, '..', '..', '_modules', 'knowledge-engine', 'src', 'bin.js');
-    return fs.existsSync(runtime) ? runtime : null;
-  }
   try { return require.resolve(MODULE_ENTRIES[name]); } catch { return null; }
 }
 

@@ -19,9 +19,9 @@ const { StorageLayout } = require('../lib/storage-layout');
 const { ProjectStore } = require('../lib/project-store');
 const { ProjectRegistryStore } = require('../lib/project-registry-store');
 const { ProjectLifecycleService } = require('../lib/project-lifecycle-service');
-const { createEngineServer } = require('../../_modules/knowledge-engine/src/server');
-const { CommitScanner } = require('../../_modules/knowledge-engine/src/runtime/scanner');
-const AtomicFile = require('../../_modules/knowledge-engine/src/runtime/atomic-file');
+const { createEngineServer } = require('@sanqianx/ai-coding-knowledge-engine/src/server');
+const { CommitScanner } = require('@sanqianx/ai-coding-knowledge-engine/src/runtime/scanner');
+const AtomicFile = require('@sanqianx/ai-coding-knowledge-engine/src/runtime/atomic-file');
 
 const results = [];
 function record(caseId, status, detail) {

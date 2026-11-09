@@ -45,7 +45,7 @@ const freePort = require(path.join(PKB_ROOT, '_site', '_test', 'helpers', 'free-
 
 const ARTIFACTS = path.join(PKB_ROOT, 'qa-autopilot', 'artifacts', 'parallel-20261106', 'cap-acceptance-r19');
 const CONSOLE_ENTRY = path.join(PKB_ROOT, 'node_modules', '@sanqianx', 'ai-coding-event-bridge-console', 'src', 'bin.js');
-const ENGINE_ENTRY = path.join(PKB_ROOT, '_modules', 'knowledge-engine', 'src', 'server.js');
+const ENGINE_ENTRY = path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [path.join(PKB_ROOT)] })), 'src', 'server.js');
 const TERMINAL_ENTRY = path.join(PKB_ROOT, 'node_modules', 'claude-ai-workbench', 'packages', 'server', 'bin', 'agent-terminal-server.js');
 
 const PROFILE_ID = process.env.R19_PROFILE || 'minimax';

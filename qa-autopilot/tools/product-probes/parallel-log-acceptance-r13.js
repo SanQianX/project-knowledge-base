@@ -27,7 +27,7 @@ const { spawnSync } = require('node:child_process');
 const PKB_ROOT = path.resolve(__dirname, '..', '..', '..');
 if (!process.env.PK_CAPTURE_SAFETY_R5_REAL_HOME) process.env.PK_CAPTURE_SAFETY_R5_REAL_HOME = os.homedir();
 const { startCapHarness } = require(path.join(PKB_ROOT, '_site', '_test', 'helpers', 'parallel-capture-safety-r5-cap-shell'));
-const { classifyAnalysisFailure, analysisFailure } = require(path.join(PKB_ROOT, '_modules', 'knowledge-engine', 'src', 'analysis-failures.js'));
+const { classifyAnalysisFailure, analysisFailure } = require(path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [path.join(PKB_ROOT)] })), 'src', 'analysis-failures.js'));
 
 const ARTIFACTS = path.join(PKB_ROOT, 'qa-autopilot', 'artifacts', 'parallel-20261106', 'log-acceptance-r13');
 

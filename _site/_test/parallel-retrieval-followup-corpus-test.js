@@ -38,7 +38,7 @@ const shell = require('./helpers/parallel-retrieval-followup-shell');
 shell.isolateProcess();
 
 const corpusDefinitions = require('./helpers/parallel-retrieval-followup-corpus');
-const ranking = require('../../_modules/knowledge-engine/src/retrieval-ranking');
+const ranking = require('@sanqianx/ai-coding-knowledge-engine/src/retrieval-ranking');
 
 const HUB_DIST = path.join(shell.REPO_ROOT, 'node_modules', '@sanqianx', 'vector-hub', 'dist', 'cjs');
 const DIMENSIONS = 512;

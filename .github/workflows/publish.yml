@@ -205,7 +205,7 @@ jobs:
         run: npm ci
       - name: Verify the reviewed version lockstep
         run: node _site/scripts/sync-release-version.js --check --web-only
-      - name: Verify the vendored runtime integrity
+      - name: Verify all four pinned npm runtimes
         run: node _site/scripts/verify-module-runtime.js
       - name: Build the reviewed candidate and write its receipt
         env:

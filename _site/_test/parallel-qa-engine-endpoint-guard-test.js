@@ -75,7 +75,7 @@ const {
 
     // ── Leg B: negative regression — the ORIGINAL defect, safely held ──
     // Raw product constructor without vectorUrl (exactly the S1/S2/S3 shape).
-    const { createEngineServer } = require('../../_modules/knowledge-engine/src/server');
+    const { createEngineServer } = require('@sanqianx/ai-coding-knowledge-engine/src/server');
     const negRoot = mkdtemp('neg');
     const negBrainDir = path.join(negRoot, 'brain-shared');
     fs.mkdirSync(negBrainDir, { recursive: true });

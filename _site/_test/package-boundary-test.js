@@ -4,6 +4,9 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const root = path.resolve(__dirname, '..', '..');
+for (const retired of ['_modules/knowledge-engine', 'vendor-manifest.json', '_site/scripts/vendor-modules.js']) {
+  assert(!fs.existsSync(path.join(root, retired)), `engine must remain an npm dependency; remove the retired source copy: ${retired}`);
+}
 const npmCli = process.env.npm_execpath
   || path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
 const result = spawnSync(process.execPath, [npmCli, 'pack', '--dry-run', '--json'], {
@@ -16,6 +19,8 @@ assert.strictEqual(result.status, 0, result.stderr || result.stdout);
 const report = JSON.parse(result.stdout);
 const files = report[0].files.map(entry => entry.path.replace(/\\/g, '/'));
 const forbidden = [
+  '_modules/knowledge-engine/',
+  'vendor-manifest.json',
   'docs/project-knowledge-base-review-deliverables.zip',
   'docs/project-knowledge-base-review-deliverables/',
   'docs/project-knowledge-base-pro-review-prompt.md',

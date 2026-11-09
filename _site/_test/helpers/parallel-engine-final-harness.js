@@ -31,8 +31,8 @@ const os = require('node:os');
 const path = require('node:path');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
-const VENDORED_ENGINE_SERVER = path.join(REPO_ROOT, '_modules', 'knowledge-engine', 'src', 'server.js');
-const VENDORED_ATOMIC_FILE = path.join(REPO_ROOT, '_modules', 'knowledge-engine', 'src', 'runtime', 'atomic-file.js');
+const VENDORED_ENGINE_SERVER = path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [path.join(REPO_ROOT)] })), 'src', 'server.js');
+const VENDORED_ATOMIC_FILE = path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [path.join(REPO_ROOT)] })), 'src', 'runtime', 'atomic-file.js');
 
 // Pinned runtime by default: the root repo's installed
 // versions declared by the root package (identity-checked below), so the drivers are portable to any checkout of this

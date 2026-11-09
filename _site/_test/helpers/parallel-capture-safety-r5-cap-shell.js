@@ -64,7 +64,7 @@ const freePort = require('../helpers/free-port');
 const { createMemoryStandinAnalyzer } = require('./parallel-memory-analyzer');
 
 const ROOT = r3cap.ROOT;
-const ENGINE_ENTRY = path.join(ROOT, '_modules', 'knowledge-engine', 'src', 'server.js');
+const ENGINE_ENTRY = path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [path.join(ROOT)] })), 'src', 'server.js');
 const CONSOLE_ENTRY = path.join(ROOT, 'node_modules', '@sanqianx', 'ai-coding-event-bridge-console', 'src', 'bin.js');
 const { resolveTempRoot, withSanitizedEnv } = r3cap;
 

@@ -26,8 +26,8 @@ const shell = require('./helpers/parallel-retrieval-followup-shell');
 // Isolate before any product module is loaded.
 shell.isolateProcess();
 
-const { createEngineServer } = require('../../_modules/knowledge-engine/src/server');
-const AtomicFile = require('../../_modules/knowledge-engine/src/runtime/atomic-file');
+const { createEngineServer } = require('@sanqianx/ai-coding-knowledge-engine/src/server');
+const AtomicFile = require('@sanqianx/ai-coding-knowledge-engine/src/runtime/atomic-file');
 
 const TOKEN = 'RET007OFFLINE';
 const results = [];

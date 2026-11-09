@@ -18,7 +18,9 @@ project-knowledge
 ```
 
 1. `npm install -g @sanqianx/project-knowledge@latest` 安装外壳、固定版本的
-   工作台、vector-hub、event-bridge，以及包内 knowledge-engine。
+   工作台、vector-hub、event-bridge，以及固定版本的 knowledge-engine npm 包。
+   模块源码仓库可保持私有；安装使用公开 npm 包，不需要 GitHub 凭据。
+   主仓库不再保存 knowledge-engine 的源码副本。
 2. `project-knowledge-integrations install` 是一次性的 Integration Setup,
    对检测到的每个客户端(Claude Code / Codex / OpenCode)同时安装两类
    相互独立、分别上报状态的能力:

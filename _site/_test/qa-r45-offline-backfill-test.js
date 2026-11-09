@@ -83,8 +83,8 @@ async function main() {
     caseId: 'ENG-007', lane: 'P-ENGINE-OFFLINE-AUDIT-R45', laneDir: lane, phases: {}, commands,
     isolation: { tempRoot: TEMP_ROOT, evidenceRoot: EVIDENCE_ROOT, envIsolation: ENV_ISOLATION_RESOLVED },
     identity: {
-      vendoredEngineVersion: JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', '..', '_modules', 'knowledge-engine', 'package.json'), 'utf8')).version,
-      vendoredCoordinatorSha256: sha256(path.resolve(__dirname, '..', '..', '_modules', 'knowledge-engine', 'src', 'coordinator.js')),
+      vendoredEngineVersion: JSON.parse(fs.readFileSync(path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [path.resolve(__dirname, '..', '..')] })), 'package.json'), 'utf8')).version,
+      vendoredCoordinatorSha256: sha256(path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [path.resolve(__dirname, '..', '..')] })), 'src', 'coordinator.js')),
       bridge: RUNTIME_IDENTITY.bridge, vector: RUNTIME_IDENTITY.vector,
     },
   };

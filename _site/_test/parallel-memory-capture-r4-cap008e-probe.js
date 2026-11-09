@@ -107,7 +107,7 @@ function identityChain(shimPath) {
   return {
     gitHead: gitHead(),
     core: coreFiles.map(file => ({ file, sha256: sha256File(path.join(r3cap.ROOT, file)) })),
-    engine: engineFiles.map(file => ({ file, sha256: sha256File(path.join(r3cap.ROOT, '_modules', 'knowledge-engine', file)) })),
+    engine: engineFiles.map(file => ({ file, sha256: sha256File(path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [path.join(r3cap.ROOT)] })), file)) })),
     console: consoleIdentity(),
     shim: {
       installedPath: shimPath,

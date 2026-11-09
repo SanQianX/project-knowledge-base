@@ -19,7 +19,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
-const VENDORED_ENGINE_SERVER = path.join(REPO_ROOT, '_modules', 'knowledge-engine', 'src', 'server.js');
+const VENDORED_ENGINE_SERVER = path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [path.join(REPO_ROOT)] })), 'src', 'server.js');
 const ENGINE_CHILD = path.join(__dirname, 'parallel-engine-advanced-engine-child.js');
 
 // Temp root: PK_TEST_TEMP_ROOT or the OS temp dir; never inside the repository.

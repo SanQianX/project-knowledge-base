@@ -44,7 +44,7 @@ const { spawn, execFileSync } = require('node:child_process');
 const chain = require('./parallel-retrieval-followup-shell');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
-const ENGINE_ENTRY = path.join(REPO_ROOT, '_modules', 'knowledge-engine', 'src', 'server.js');
+const ENGINE_ENTRY = path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [path.join(REPO_ROOT)] })), 'src', 'server.js');
 const BRIDGE_CONSOLE_ENTRY = path.join(REPO_ROOT, 'node_modules', '@sanqianx', 'ai-coding-event-bridge-console', 'src', 'server.js');
 const BRIDGE_REPO_CONTEXT = path.join(REPO_ROOT, 'node_modules', '@sanqianx', 'ai-coding-event-bridge-console', 'src', 'bridge', 'core', 'repo-context.js');
 

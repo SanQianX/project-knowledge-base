@@ -12,6 +12,7 @@ const definitions = {
   terminal: { option: '--terminal-source', name: '@sanqianx/claude-ai-workbench', installName: 'claude-ai-workbench', required: ['apps/agent-terminal/app.js', 'apps/agent-terminal/app.css', 'packages/server/lib/knowledge-context.js'] },
   vectorHub: { option: '--vector-source', name: '@sanqianx/vector-hub', installName: '@sanqianx/vector-hub', required: ['dist/cjs/bin.js', 'dist/cjs/server/manager.js', 'ui/index.html'] },
   eventBridge: { option: '--bridge-source', name: '@sanqianx/ai-coding-event-bridge-console', installName: '@sanqianx/ai-coding-event-bridge-console', required: ['src/server.js', 'src/bridge/core/consumer-registry.js', 'console/index.html'] },
+  engine: { option: '--engine-source', name: '@sanqianx/ai-coding-knowledge-engine', installName: '@sanqianx/ai-coding-knowledge-engine', required: ['src/bin.js', 'src/server.js', 'src/coordinator.js', 'src/analysis-worker.js', 'ui/index.html', 'ui/app.js', 'ui/app.css'] },
 };
 function run(command, args, cwd) {
   const result = spawnSync(command, args, { cwd, windowsHide: true, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
@@ -86,4 +87,4 @@ if (require.main === module) {
     }
   } catch (error) { process.stderr.write(`${error.message}\n`); process.exitCode = 1; }
 }
-module.exports = { verifyInstalled, safeRelative, productFiles, installedFileBytes };
+module.exports = { definitions, verifyInstalled, safeRelative, productFiles, installedFileBytes };

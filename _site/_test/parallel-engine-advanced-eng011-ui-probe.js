@@ -80,7 +80,7 @@ const { attachNetworkCapture } = require('./helpers/cdp-network-capture.js');
 const ARTIFACTS = process.env.KB_ENG011_EVIDENCE_DIR
   || path.resolve(__dirname, '../../qa-autopilot/artifacts/parallel-20261023/engine-review-r3/evidence/eng011ui');
 const UI_DIR = process.env.KB_ENG011_UI_DIR
-  || path.join(REPO_ROOT, '_modules', 'knowledge-engine', 'ui');
+  || path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [path.join(REPO_ROOT)] })), 'ui');
 
 function isRetryPost(entry) {
   return entry.method === 'POST' && /\/api\/runs\/[^/]+\/retry$/.test(new URL(entry.url).pathname);

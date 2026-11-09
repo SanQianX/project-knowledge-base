@@ -41,7 +41,7 @@ const REQUESTED_MODEL = String(process.env.PK_WB_MODEL_ID || 'MiniMax-M3.1-Flash
 const EFFORT = String(process.env.PK_WB_MODEL_EFFORT || 'max');
 const TURN_TIMEOUT_MS = Number(process.env.PK_WB_TURN_TIMEOUT_MS || 420000);
 
-const BINDER_ENTRY = path.join(shell.REPO_ROOT, '_modules', 'knowledge-engine', 'src', 'runtime', 'commit-conversation-binder.js');
+const BINDER_ENTRY = path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [path.join(shell.REPO_ROOT)] })), 'src', 'runtime', 'commit-conversation-binder.js');
 
 const results = [];
 function record(caseId, status, detail) {

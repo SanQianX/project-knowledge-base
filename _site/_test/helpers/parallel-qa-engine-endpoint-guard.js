@@ -43,7 +43,7 @@ const { PROTECTED_PORTS } = require('./parallel-qa-engine-endpoint-isolate');
 
 const REFUSAL_CODE = 'PK_ENGINE_ENDPOINT_REFUSED';
 const EGRESS_BLOCK_CODE = 'PK_PROTECTED_EGRESS_BLOCKED';
-const ENGINE_SERVER_MODULE = path.resolve(__dirname, '..', '..', '..', '_modules', 'knowledge-engine', 'src', 'server.js');
+const ENGINE_SERVER_MODULE = path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [path.resolve(__dirname, '..', '..', '..')] })), 'src', 'server.js');
 
 function refusal(message, extra = {}) {
   return Object.assign(new Error(message), { code: REFUSAL_CODE, ...extra });

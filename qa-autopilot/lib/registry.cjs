@@ -22,9 +22,9 @@ function validatePack(files) {
     const paths = files.map(f => typeof f === 'string' ? f : f.path);
     for (const p of paths)
         must(!/^(qa-autopilot|\.runtime|state|artifacts)(\/|$)|(^|\/)\.git(\/|$)|(^|\/)(\.env(?:\..*)?|ai-profiles\.json|credentials\.json)$/.test(p), 'PACKAGE_LEAK', 'Forbidden package file: ' + p);
-    for (const required of ['package.json', '_site/server.js', 'ui/index.html', 'ui/product.js', 'ui/live-client.js', 'module-runtime-manifest.json', 'vendor-manifest.json'])
+    for (const required of ['package.json', '_site/server.js', 'ui/index.html', 'ui/product.js', 'ui/live-client.js', 'module-runtime-manifest.json'])
         must(paths.includes(required), 'PACKAGE_MISSING', 'Required runtime missing: ' + required);
-    must(paths.some(p => p.startsWith('_modules/knowledge-engine/')), 'ENGINE_MISSING', 'Vendored engine missing.');
+    must(!paths.some(p => p.startsWith('_modules/knowledge-engine/')), 'ENGINE_SOURCE_LEAK', 'Engine source must be installed from its pinned npm dependency.');
     return true;
 }
 function packAudit(cfg) {

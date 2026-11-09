@@ -21,7 +21,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 
 const REPO = path.resolve(__dirname, '..', '..');
-const { MemoryEligibility } = require(path.join(REPO, '_modules', 'knowledge-engine', 'src', 'memory-eligibility.js'));
+const { MemoryEligibility } = require(path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [path.join(REPO)] })), 'src', 'memory-eligibility.js'));
 
 const sha = text => crypto.createHash('sha256').update(text).digest('hex');
 

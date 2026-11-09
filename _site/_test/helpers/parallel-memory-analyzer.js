@@ -20,7 +20,7 @@
 
 const path = require('node:path');
 const crypto = require('node:crypto');
-const AtomicFile = require('../../../_modules/knowledge-engine/src/runtime/atomic-file.js');
+const AtomicFile = require('@sanqianx/ai-coding-knowledge-engine/src/runtime/atomic-file.js');
 
 /**
  * A long enough sentence that the engine's own capture gate accepts it as a

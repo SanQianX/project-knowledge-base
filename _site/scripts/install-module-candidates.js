@@ -56,7 +56,7 @@ function main() {
   const verify = spawnSync(process.execPath, [path.join(core, '_site/scripts/verify-module-runtime.js'), '--working-tree'], { cwd: installedRoot, windowsHide: true, encoding: 'utf8' });
   if (verify.status !== 0) throw new Error('Packaged engine integrity failed');
   require('./verify-product-runtime').verifyProductRuntime(core);
-  for (const relative of ['vendor-manifest.json', 'module-runtime-manifest.json']) {
+  for (const relative of ['module-runtime-manifest.json']) {
     if (!fs.readFileSync(path.join(core, relative)).equals(fs.readFileSync(path.join(root, relative)))) throw new Error(`Installed candidate is stale: ${relative}`);
   }
   const report = { schema: 'project-knowledge/installed-candidates/v1', mode: 'local npm candidate installation, not remote release', installedRoot, core, artifactManifest: manifestFile, shellVersion: candidate.version, shellSha256, shellArtifact, modules: Object.fromEntries(Object.entries(manifest.modules).map(([key, module]) => [key, { version: module.version, sha256: module.sha256 }])), integrityPassed: true, testedAt: new Date().toISOString() };

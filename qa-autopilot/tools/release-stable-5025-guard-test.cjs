@@ -156,7 +156,7 @@ test('desktop candidate: immutability (VERSION_EXISTS)', () => {
 
 // ---- checkPack ---------------------------------------------------------------
 
-const CORE_FILES = ['package.json', '_site/server.js', 'ui/index.html', 'ui/product.js', 'ui/live-client.js', 'module-runtime-manifest.json', 'vendor-manifest.json', '_modules/knowledge-engine/index.js'];
+const CORE_FILES = ['package.json', '_site/server.js', 'ui/index.html', 'ui/product.js', 'ui/live-client.js', 'module-runtime-manifest.json'];
 
 test('pack: core positive with required runtime files', () => {
   const verdict = g.checkPack(packInput(packList(CORE_FILES), { required: ['package.json', '_site/server.js'] }));

@@ -82,7 +82,7 @@ function createStandinAnalyzer(options = {}) {
         if (delegatedQuote) lines.push(`维护指令：${delegatedQuote}`, '');
         const markdown = lines.join('\n');
 
-        const AtomicFile = require('../../../_modules/knowledge-engine/src/runtime/atomic-file.js');
+        const AtomicFile = require('@sanqianx/ai-coding-knowledge-engine/src/runtime/atomic-file.js');
         AtomicFile.writeFileAtomic(path.join(input.stagingPath, 'files', ...filename.split('/')), markdown);
 
         const references = [

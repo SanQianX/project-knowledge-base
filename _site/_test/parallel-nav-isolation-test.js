@@ -49,7 +49,7 @@ const {
 } = require('./helpers/parallel-nav-isolation-env');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const ENGINE_ENTRY = path.join(ROOT, '_modules', 'knowledge-engine', 'src', 'server.js');
+const ENGINE_ENTRY = path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [path.join(ROOT)] })), 'src', 'server.js');
 const SHELL_FILE = path.join(ROOT, '_site', '_test', 'helpers', 'parallel-nav-shell.js');
 const EVIDENCE = process.env.PK_R7_EVIDENCE_DIR ? path.resolve(process.env.PK_R7_EVIDENCE_DIR) : null;
 

@@ -20,7 +20,10 @@ project-knowledge
 ```
 
 1. `npm install -g @sanqianx/project-knowledge@latest` installs the shell,
-   three pinned module dependencies and the bundled knowledge-engine.
+   four pinned npm module dependencies, including knowledge-engine.
+   Module source repositories may be private; installation uses public npm
+   packages and needs no GitHub credentials. Engine source is maintained in its
+   own repository rather than copied into this shell.
 2. `project-knowledge-integrations install` is the one-time Integration Setup.
    For every detected client (Claude Code / Codex / OpenCode) it installs two
    independent capabilities, reported separately:
@@ -316,7 +319,7 @@ _site/lib/knowledge-tool-runtime.js
 _site/scripts/hook-trigger.js
 ui/index.html                         # unified production web UI
 ui/product.js, ui/product.css          # shell navigation and state projection
-_modules/knowledge-engine/            # verified dependency-free engine
+node_modules/@sanqianx/ai-coding-knowledge-engine/ # pinned npm runtime (not tracked)
 bin/project-knowledge*.js             # CLI and MCP entry points
 desktop/                              # Windows Electron package
 ```

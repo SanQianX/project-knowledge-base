@@ -172,7 +172,7 @@ function main() {
   // ---------------- REL-003 制品泄漏 ------------------------------------
   {
     const { validatePack } = require(path.join(REPO, 'qa-autopilot', 'lib', 'registry.cjs'));
-    const essentials = ['package.json', '_site/server.js', 'ui/index.html', 'ui/product.js', 'ui/live-client.js', 'module-runtime-manifest.json', 'vendor-manifest.json'];
+    const essentials = ['package.json', '_site/server.js', 'ui/index.html', 'ui/product.js', 'ui/live-client.js', 'module-runtime-manifest.json'];
     assert.throws(() => validatePack([...essentials, 'qa-autopilot/tools/x.cjs']), /Forbidden package file.*qa-autopilot/,
       'QA-SPEC-REL-003: qa/ paths are refused in the pack');
     assert.throws(() => validatePack([...essentials, 'state/runs/1.json']), /Forbidden package file.*state/,
@@ -185,8 +185,10 @@ function main() {
       assert.throws(() => validatePack(essentials.filter(f => f !== required)), /Required runtime missing/,
         `QA-SPEC-REL-003: removing the essential ${required} is refused — the engine/plugins runtime cannot be cleaned away`);
     }
-    assert.doesNotThrow(() => validatePack([...essentials, '_modules/knowledge-engine/src/server.js', 'plugins/project-knowledge/plugin.json']),
-      'QA-SPEC-REL-003: the required engine and plugin payload passes the audit');
+    assert.doesNotThrow(() => validatePack([...essentials, 'plugins/project-knowledge/plugin.json']),
+      'QA-SPEC-REL-003: shell and plugin payload passes the audit with npm runtime dependencies');
+    assert.throws(() => validatePack([...essentials, '_modules/knowledge-engine/src/server.js']), /Engine source must be installed/,
+      'QA-SPEC-REL-003: engine source cannot leak back into the shell package');
     console.log('QA-SPEC-REL-003: leak paths refused; required runtime essentials protected');
   }
 

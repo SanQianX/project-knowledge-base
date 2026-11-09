@@ -23,7 +23,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const AtomicFile = require('../../../_modules/knowledge-engine/src/runtime/atomic-file.js');
+const AtomicFile = require('@sanqianx/ai-coding-knowledge-engine/src/runtime/atomic-file.js');
 
 function hashBuffer(value) {
   return `sha256:${crypto.createHash('sha256').update(value).digest('hex')}`;

@@ -22,9 +22,9 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { RuntimeLayout } = require('../../../_modules/knowledge-engine/src/runtime/layout.js');
-const { KnowledgePromotionService } = require('../../../_modules/knowledge-engine/src/runtime/knowledge-promotion.js');
-const AtomicFile = require('../../../_modules/knowledge-engine/src/runtime/atomic-file.js');
+const { RuntimeLayout } = require('@sanqianx/ai-coding-knowledge-engine/src/runtime/layout.js');
+const { KnowledgePromotionService } = require('@sanqianx/ai-coding-knowledge-engine/src/runtime/knowledge-promotion.js');
+const AtomicFile = require('@sanqianx/ai-coding-knowledge-engine/src/runtime/atomic-file.js');
 
 const PROJECT_ID = 'project-eng009-fault';
 const COMMIT_SHA = 'a'.repeat(40); // fixture identity; not a real repo commit - promotion only needs claim identity + hashes

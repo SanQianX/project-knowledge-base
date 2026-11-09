@@ -7,7 +7,7 @@
 // The analyzer is the lane's declarative stand-in - real staged bytes, no real
 // model output. Vendored engine code is never modified.
 
-const { createEngineServer } = require('../../../_modules/knowledge-engine/src/server.js');
+const { createEngineServer } = require('@sanqianx/ai-coding-knowledge-engine/src/server.js');
 const { createStandinAnalyzer } = require('./parallel-engine-advanced-standin-analyzer.js');
 
 async function main() {

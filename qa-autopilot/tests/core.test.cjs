@@ -363,11 +363,11 @@ test('public API change blocks', () => assert.throws(() => g.validateChanges({},
 for (const version of ['1.2.3', 'latest', 'next', 'v1.2.3-rc.1', '1.2.3-rc.01', '1.2.3-beta.1'])
     test('reject nonfixed RC ' + version, () => assert.equal(r.isRC(version), false, 'QA-SPEC-REL-001 latest/next 之类不是固定 RC 版本，没有自动出口'));
 test('fixed RC accepts', () => assert.equal(r.isRC('5.0.25-rc.1'), true));
-const required = ['package.json', '_site/server.js', 'ui/index.html', 'ui/product.js', 'ui/live-client.js', 'module-runtime-manifest.json', 'vendor-manifest.json', '_modules/knowledge-engine/index.js'];
+const required = ['package.json', '_site/server.js', 'ui/index.html', 'ui/product.js', 'ui/live-client.js', 'module-runtime-manifest.json'];
 test('package runtime allowlist', () => assert.equal(r.validatePack(required), true));
 for (const f of ['qa-autopilot/plans/test.md', '.env', 'artifacts/trace.zip', 'credentials.json'])
     test('package leak ' + f, () => assert.throws(() => r.validatePack([...required, f]), { code: 'PACKAGE_LEAK' }, 'QA-SPEC-REL-003 制品清单包含 qa/state/.env 一类文件时拒绝打包'));
-test('missing engine blocks', () => assert.throws(() => r.validatePack(required.slice(0, -1)), { code: 'ENGINE_MISSING' }, 'QA-SPEC-REL-003 必要引擎不得被清理出制品'));
+test('engine source is distributed separately', () => assert.throws(() => r.validatePack([...required, '_modules/knowledge-engine/index.js']), { code: 'ENGINE_SOURCE_LEAK' }));
 test('empty package blocks', () => assert.throws(() => r.validatePack([])));
 test('RC without complete release gates blocks', () => assert.throws(() => r.validateReleaseAcceptance({}, null, {}), { code: 'RC_ACCEPTANCE' }, 'QA-SPEC-REL-008 候选验收门禁未齐全时不得进入发布动作，稳定版只能经外部审批'));
 

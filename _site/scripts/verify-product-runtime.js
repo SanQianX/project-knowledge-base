@@ -3,10 +3,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { createRequire } = require('node:module');
-const { safeRelative } = require('./pack-module-candidates');
+const { safeRelative, definitions } = require('./pack-module-candidates');
 function verifyProductRuntime(coreRoot, resolveFrom = path.join(coreRoot, 'package.json')) {
   const manifest = JSON.parse(fs.readFileSync(path.join(coreRoot, 'module-runtime-manifest.json')));
-  if (manifest.schema !== 'project-knowledge/module-content/v1' || Object.keys(manifest.modules).length !== 3) throw new Error('Incomplete module content manifest');
+  if (manifest.schema !== 'project-knowledge/module-content/v1' || Object.keys(manifest.modules).length !== Object.keys(definitions).length || Object.keys(definitions).some(key => !manifest.modules[key])) throw new Error('Incomplete module content manifest');
+  const host = JSON.parse(fs.readFileSync(path.join(coreRoot, 'package.json')));
   for (const file of ['ui/index.html', 'ui/knowledge-panel.html', 'ui/product.js', 'ui/product.css', 'ui/favicon.svg', 'plugins/project-knowledge/hooks/claude.json', 'plugins/project-knowledge/hooks/codex.json', 'plugins/project-knowledge/scripts/context-hook.cjs', 'plugins/project-knowledge/scripts/mcp-launcher.cjs', 'plugins/project-knowledge/.claude-plugin/plugin.json', 'plugins/project-knowledge/.codex-plugin/plugin.json', 'plugins/project-knowledge/.mcp.json']) if (!manifest.productFiles?.[file]) throw new Error(`Product asset missing from content manifest: ${file}`);
   const resolve = createRequire(resolveFrom);
   if (!manifest.productFiles['ui/live-client.js']) throw new Error('Product live transport missing from content manifest');
@@ -15,6 +16,9 @@ function verifyProductRuntime(coreRoot, resolveFrom = path.join(coreRoot, 'packa
   }
   const modules = {};
   for (const [key, module] of Object.entries(manifest.modules)) {
+    const definition = definitions[key];
+    if (module.name !== definition.name || module.installName !== definition.installName || definition.required.some(file => !module.files[file])) throw new Error(`Incomplete module runtime: ${key}`);
+    if (![module.version, `npm:${module.name}@${module.version}`].includes(host.dependencies[module.installName])) throw new Error(`Module dependency is not pinned to manifest: ${key}`);
     const pkgFile = resolve.resolve(`${module.installName}/package.json`);
     const directory = path.dirname(pkgFile);
     const pkg = JSON.parse(fs.readFileSync(pkgFile));
@@ -26,7 +30,7 @@ function verifyProductRuntime(coreRoot, resolveFrom = path.join(coreRoot, 'packa
     }
     modules[key] = { directory, version: pkg.version };
   }
-  for (const file of ['ui/index.html', 'ui/knowledge-panel.html', 'ui/product.js', 'ui/product.css', '_modules/knowledge-engine/src/bin.js', '_modules/knowledge-engine/src/coordinator.js']) if (!fs.existsSync(path.join(coreRoot, file))) throw new Error(`Product runtime missing: ${file}`);
+  for (const file of ['ui/index.html', 'ui/knowledge-panel.html', 'ui/product.js', 'ui/product.css']) if (!fs.existsSync(path.join(coreRoot, file))) throw new Error(`Product runtime missing: ${file}`);
   return modules;
 }
 if (require.main === module) {

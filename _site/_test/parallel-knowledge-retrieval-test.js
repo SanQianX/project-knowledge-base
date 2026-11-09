@@ -21,8 +21,8 @@ const { KnowledgeRetrievalService } = require('../lib/knowledge-retrieval-servic
 const { EngineKnowledgeClient } = require('../lib/engine-knowledge-client');
 const { CHUNKER_VERSION } = require('../lib/markdown-knowledge-indexer');
 const { sha256 } = require('../lib/knowledge-schema');
-const { createEngineServer } = require('../../_modules/knowledge-engine/src/server');
-const AtomicFile = require('../../_modules/knowledge-engine/src/runtime/atomic-file');
+const { createEngineServer } = require('@sanqianx/ai-coding-knowledge-engine/src/server');
+const AtomicFile = require('@sanqianx/ai-coding-knowledge-engine/src/runtime/atomic-file');
 
 const results = [];
 function record(caseId, status, detail) {

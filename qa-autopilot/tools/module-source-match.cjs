@@ -119,11 +119,11 @@ function main() {
 
   // knowledge-engine：主项目内嵌副本 vs 独立仓库
   try {
-    const vm = JSON.parse(g(KB, KB_REV, 'vendor-manifest.json').toString());
-    const keFiles = (vm.modules && vm.modules['knowledge-engine'] && vm.modules['knowledge-engine'].files) || {};
+    const engineModule = mrm.modules.engine || JSON.parse(g(KB, KB_REV, 'vendor-manifest.json').toString()).modules['knowledge-engine'];
+    const keFiles = engineModule.files || {};
     const keRepo = 'D:/SanQian.Xu/knowledge-engine';
     const keAttempts = [];
-    const keWorktree = path.join(KB, '_modules', 'knowledge-engine');
+    const keWorktree = path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [path.join(KB)] })));
     for (const rev of ['main', 'origin/main']) {
       let r;
       try { r = compare('knowledge-engine', keRepo, rev, keFiles, [''], [], keWorktree); }
@@ -131,14 +131,14 @@ function main() {
       keAttempts.push(r);
       if (r.counts.mismatch === 0 && r.counts.missing === 0) break;
     }
-    out.results.push({ module: 'knowledge-engine', expectedVersion: vm.modules['knowledge-engine'].version, attempts: keAttempts });
+    out.results.push({ module: 'knowledge-engine', expectedVersion: engineModule.version, attempts: keAttempts });
     const best = keAttempts.find(a => !a.blocked && a.counts.mismatch === 0 && a.counts.missing === 0);
     out.findings.push({
-      module: 'knowledge-engine', expectedVersion: vm.modules['knowledge-engine'].version,
+      module: 'knowledge-engine', expectedVersion: engineModule.version,
       matchedRev: best ? best.rev : null,
       verdict: best ? (best.allBytesMatch ? 'ALL_BYTES_MATCH' : 'CONTENT_MATCH_EOL_ONLY') : 'NO_EXACT_REV_MATCH',
       counts: best ? best.counts : (keAttempts[keAttempts.length - 1] || {}).counts,
-      note: 'knowledge-engine 以 _modules/ 内嵌副本交付，不是 npm 依赖；npm 上最高为 0.2.7-rc.9，内嵌为 0.2.7-rc.10。'
+      note: 'knowledge-engine 从精确版本的公开 npm 依赖读取；旧提交仍支持历史 vendored manifest。'
     });
   } catch (e) { out.findings.push({ module: 'knowledge-engine', blocked: 'VENDOR_MANIFEST_UNAVAILABLE', error: String(e.message).split('\n')[0] }); }
 

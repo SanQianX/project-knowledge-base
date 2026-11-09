@@ -36,7 +36,7 @@ const { enterNavIsolation } = require('./parallel-nav-isolation-env');
 const freePort = require('../helpers/free-port');
 
 const ROOT = path.resolve(__dirname, '../../..');
-const ENGINE_ENTRY = path.join(ROOT, '_modules', 'knowledge-engine', 'src', 'server.js');
+const ENGINE_ENTRY = path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [path.join(ROOT)] })), 'src', 'server.js');
 
 const THEMES = ['light', 'dark'];
 

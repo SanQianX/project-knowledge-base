@@ -36,7 +36,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
-const VENDORED_ENGINE_ROOT = path.join(REPO_ROOT, '_modules', 'knowledge-engine');
+const VENDORED_ENGINE_ROOT = path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [path.join(REPO_ROOT)] })));
 const VENDORED_ENGINE_VERSION = '0.2.7-rc.10';
 
 function resolveRuntimeRoot(envVar, pinnedDir, pinnedVersion) {
