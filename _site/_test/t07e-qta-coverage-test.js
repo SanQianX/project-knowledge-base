@@ -162,9 +162,16 @@ async function main() {
     const { withSanitizedEnv, AMBIENT_PREFIXES } = require(path.join(REPO, '_site', '_test', 'helpers', 'parallel-memory-capture-r3-cap-shell'));
     assert.ok(AMBIENT_PREFIXES.includes('ANTHROPIC_') && AMBIENT_PREFIXES.includes('CLAUDE_') && AMBIENT_PREFIXES.includes('CODEX_'),
       'QA-SPEC-QTA-008: ambient credential prefixes are pinned in the shipped worker isolation');
+    // The probes are set BY THIS TEST (an offline CI lane must never depend
+    // on the calling shell carrying real credentials): synthetic probe values
+    // stand in for ambient secrets, and the isolation must strip them.
+    if (process.env.ANTHROPIC_PROBE_SECRET === undefined && process.env.CLAUDE_PROBE_TOKEN === undefined) {
+      process.env.ANTHROPIC_PROBE_SECRET = 't07e-synthetic-probe-secret';
+      process.env.CLAUDE_PROBE_TOKEN = 't07e-synthetic-probe-token';
+    }
     const probeClaude = process.env.CLAUDE_PROBE_TOKEN;
     const probeAnthropic = process.env.ANTHROPIC_PROBE_SECRET;
-    assert.ok(probeClaude !== undefined && probeAnthropic !== undefined, 'QA-SPEC-QTA-008: probe setup — ambient credentials present in the parent env (set by the runner)');
+    assert.ok(probeClaude !== undefined && probeAnthropic !== undefined, 'QA-SPEC-QTA-008: probe setup — ambient credential probes present in the parent env');
     let seenInside = null;
     withSanitizedEnv(() => {
       seenInside = {
