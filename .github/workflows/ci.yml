@@ -24,6 +24,11 @@ jobs:
         node: ['22.x', '24.x']
     steps:
       - uses: actions/checkout@v6
+        with:
+          # The regression suite includes ledger-coverage tests that read
+          # real commit history (specimen selection); a shallow clone would
+          # starve them.
+          fetch-depth: 0
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
@@ -49,6 +54,9 @@ jobs:
       TMP: ${{ github.workspace }}\.tmp
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Same as the Linux matrix: the regression suite reads commit history.
+          fetch-depth: 0
       - uses: actions/setup-node@v6
         with:
           node-version: '24.x'
