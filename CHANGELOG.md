@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [5.0.32] - 2026-11-10
 
 - 将 knowledge-engine 改为固定版本的公开 npm 依赖 `@sanqianx/ai-coding-knowledge-engine@0.2.7-rc.12`，从主仓库移除内置引擎源码和旧 vendoring 脚本；保留历史提交及现有 npm 版本。
 - 四个模块统一进行安装版本与运行文件哈希验证，更新包边界、候选安装和回归工具；安装和运行无需访问模块的私有 GitHub 仓库。

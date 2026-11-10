@@ -307,11 +307,19 @@ async function main() {
   record('bridge-path-fix-markers', localModules.BRIDGE_FIX_MARKERS.substrings.every((s) => bridgeText.includes(s)),
     `${localModules.BRIDGE_FIX_MARKERS.substrings.join(' + ')} present in ${localModules.BRIDGE_FIX_MARKERS.file}`);
 
-  const vendor = JSON.parse(fs.readFileSync(path.join(coreDir, 'vendor-manifest.json'), 'utf8'));
-  const engine = vendor.modules['knowledge-engine'];
+  const runtimeManifest = JSON.parse(fs.readFileSync(path.join(coreDir, 'module-runtime-manifest.json'), 'utf8'));
+  const engineIsNpm = Boolean(runtimeManifest.modules.engine);
+  const engine = engineIsNpm ? runtimeManifest.modules.engine
+    : JSON.parse(fs.readFileSync(path.join(coreDir, 'vendor-manifest.json'), 'utf8')).modules['knowledge-engine'];
+  const engineDir = engineIsNpm ? path.join(ownedCache, engine.installName) : path.join(coreDir, engine.root);
+  if (engineIsNpm) {
+    const pkg = JSON.parse(fs.readFileSync(path.join(engineDir, 'package.json'), 'utf8'));
+    if (pkg.name !== engine.name || pkg.version !== engine.version) throw new Error('Installed npm engine differs from the candidate manifest');
+    if (fs.existsSync(path.join(coreDir, '_modules', 'knowledge-engine'))) throw new Error('The shell must not contain an embedded npm engine copy');
+  }
   const engineFiles = Object.entries(engine.files || {});
   const engineMismatch = engineFiles.filter(([rel, hash]) =>
-    sha256(fs.readFileSync(path.join(coreDir, engine.root, ...rel.split('/')))) !== hash);
+    sha256(fs.readFileSync(path.join(engineDir, ...rel.split('/')))) !== hash);
   record('engine-vendor-content',
     engine.version !== localModules.PREVIOUS_STABLE.engine
       && (!expectEngineVersion || engine.version === expectEngineVersion)
@@ -324,7 +332,6 @@ async function main() {
   record('ui-tooltip-content', tooltipOk,
     localModules.UI_TOOLTIP_MARKERS.map((m) => `${m.file}:${m.substring}`).join(' + '));
 
-  const runtimeManifest = JSON.parse(fs.readFileSync(path.join(coreDir, 'module-runtime-manifest.json'), 'utf8'));
   const terminal = runtimeManifest.modules.terminal;
   const quotaAppFiles = Object.entries(terminal.files || {}).filter(([rel]) => rel.startsWith('apps/ai-profile-settings-host/'));
   const quotaAppBad = quotaAppFiles.filter(([rel, hash]) =>
@@ -557,12 +564,12 @@ async function main() {
       try { return coreRequire.resolve(id); } catch { /* engine is a path check */ }
       return fs.existsSync(fallbackAbs) ? fallbackAbs : null;
     };
-    const engineSlot = path.join(coreSlot, '_modules', 'knowledge-engine');
+    const engineSlot = engineIsNpm ? path.dirname(coreRequire.resolve(engine.installName + '/package.json')) : path.join(coreSlot, '_modules', 'knowledge-engine');
     const entrySpecs = {
       terminal: { id: 'claude-ai-workbench/packages/server/bin/agent-terminal-server.js', slot: path.join(nmDir, 'claude-ai-workbench'), manifestFiles: terminal.files, version: byId.wb.version },
       vectorHub: { id: '@sanqianx/vector-hub/bin.js', slot: path.join(nmDir, '@sanqianx', 'vector-hub'), manifestFiles: runtimeManifest.modules.vectorHub.files, version: vectorManifestSpec.version },
       eventBridge: { id: '@sanqianx/ai-coding-event-bridge-console/src/bin.js', slot: path.join(nmDir, '@sanqianx', 'ai-coding-event-bridge-console'), manifestFiles: runtimeManifest.modules.eventBridge.files, version: byId.bridge.version },
-      engine: { id: null, fallback: path.join(engineSlot, 'src', 'bin.js'), slot: engineSlot, manifestFiles: engine.files, version: engine.version },
+      engine: { id: engineIsNpm ? engine.installName + '/src/bin.js' : null, fallback: path.join(engineSlot, 'src', 'bin.js'), slot: engineSlot, manifestFiles: engine.files, version: engine.version },
     };
     for (const key of MODULE_KEYS) entrySpecs[key].entryAbs = resolveEntry(entrySpecs[key].id, entrySpecs[key].fallback);
     const portOfModule = {
