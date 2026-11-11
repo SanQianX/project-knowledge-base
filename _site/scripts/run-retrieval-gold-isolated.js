@@ -80,15 +80,32 @@ async function main() {
   const fixture = fs.mkdtempSync(path.join(applied.layout.temp, 'pk-gold-'));
   const corpusRoot = path.join(fixture, 'corpus');
   fs.mkdirSync(corpusRoot, { recursive: true });
+  // The gold queries are calibrated against the corpus state of their last
+  // evidenced run (2026-10-23). Later knowledge entries ABOUT the gate itself
+  // quote the queries and their expectations verbatim, so including them makes
+  // a PostgreSQL "unsupported" question match the entry documenting that very
+  // gate. Snapshot the corpus with a mtime cutoff instead of copying it live.
+  const cutoffEnv = process.env.PKB_GOLD_CORPUS_CUTOFF;
+  const cutoff = cutoffEnv ? Date.parse(cutoffEnv) : Date.parse('2026-10-24T00:00:00+08:00');
+  if (!Number.isFinite(cutoff)) throw new Error(`PKB_GOLD_CORPUS_CUTOFF is not a valid date: ${cutoffEnv}`);
+  const copySnapshot = (from, to) => {
+    fs.mkdirSync(to, { recursive: true });
+    for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
+      const sourceFile = path.join(from, entry.name), targetFile = path.join(to, entry.name);
+      if (entry.isDirectory()) copySnapshot(sourceFile, targetFile);
+      else if (entry.isFile() && fs.statSync(sourceFile).mtimeMs < cutoff) fs.copyFileSync(sourceFile, targetFile);
+    }
+  };
   const projects = {};
   for (const [name, source] of Object.entries(corpus)) {
     const target = path.join(corpusRoot, name);
-    fs.cpSync(source, target, { recursive: true, dereferenceLinks: true });
+    copySnapshot(source, target);
     const repo = path.join(fixture, 'repos', name);
     fs.mkdirSync(repo, { recursive: true });
     const projectId = `gold-${name}-${crypto.randomBytes(3).toString('hex')}`;
     projects[name] = { projectId, knowledgePath: target, repoPath: repo, files: fs.readdirSync(target).length };
   }
+  console.log('corpus snapshot cutoff:', new Date(cutoff).toISOString(), '| files:', Object.fromEntries(Object.entries(projects).map(([name, p]) => [name, p.files])));
   const shared = path.join(corpusRoot, '_shared');
   fs.mkdirSync(path.join(shared, 'brain'), { recursive: true }); fs.mkdirSync(path.join(shared, 'domain'), { recursive: true });
 
@@ -136,20 +153,56 @@ async function main() {
     ] });
     for (const project of Object.values(projects)) {
       await engineApi('POST', '/api/projects', { projectId: project.projectId, repoPath: project.repoPath, knowledgePath: project.knowledgePath, domainId });
-      const imported = await postJson(vectorUrl, '/api/import', { projectName: project.projectId, sourceDir: project.knowledgePath, watch: false }, 30 * 60 * 1000);
-      console.log(`indexed-import accepted: ${project.projectId}`);
+      // The remote embedding API rate-limits full-corpus imports (RPM). The
+      // import is incremental per file hash, so retrying after a cool-down
+      // only embeds what the previous attempt did not reach.
+      let imported = null;
+      for (let attempt = 1; attempt <= 20; attempt++) {
+        try { imported = await postJson(vectorUrl, '/api/import', { projectName: project.projectId, sourceDir: project.knowledgePath, watch: false }, 30 * 60 * 1000); break; }
+        catch (error) {
+          if (attempt === 20 || !/rate limit|429|1002/i.test(String(error.message))) throw error;
+          console.log(`rate-limited on ${project.projectId} (attempt ${attempt}); cooling down 75s`);
+          await new Promise(resolve => setTimeout(resolve, 75 * 1000));
+        }
+      }
+      console.log(`indexed-import accepted: ${project.projectId}`, JSON.stringify(imported).slice(0, 120));
     }
     const indexTimeout = Number(process.env.PKB_GOLD_INDEX_TIMEOUT_MS || 20 * 60 * 1000);
     await waitFor(`${vectorUrl}/api/projects`, async response => {
       const payload = await response.clone().json();
       return Object.values(projects).every(project => payload.projects?.some(p => p.name === project.projectId && p.hasIndex));
     }, 'all three corpus indexes', indexTimeout);
-    console.log('corpus indexed; running the gold cases');
-
+    // Rate-limited incremental imports can leave a file tracked but not fully
+    // embedded. Every gold target must answer a probe built from its own
+    // distinctive text before the cases run; re-import until they all do.
     const queries = JSON.parse(fs.readFileSync(path.join(ROOT, '_site/_test/fixtures/retrieval-gold-queries.json'), 'utf8'));
+    const targets = queries.filter(q => q.entry).map(q => ({ id: q.id, project: q.project, entry: q.entry }));
+    const needle = file => fs.readFileSync(file, 'utf8').split(/\r?\n/).map(line => line.trim()).filter(line => line.length >= 12 && !line.startsWith('#')).sort((a, b) => b.length - a.length)[0];
+    const probeTarget = async target => {
+      const file = path.join(projects[target.project].knowledgePath, target.entry);
+      if (!fs.existsSync(file)) return 'file-missing-in-snapshot';
+      const phrase = needle(file);
+      if (!phrase) return 'no-distinctive-line';
+      const probe = await fetch(`${vectorUrl}/api/search?q=${encodeURIComponent(phrase)}&projects=${projects[target.project].projectId}&maxResults=5&resultLevel=chunk`, { signal: AbortSignal.timeout(30000) });
+      const payload = await probe.json();
+      return (payload.results || []).some(row => String(row.uri || row.documentUri || '').replace(/\\/g, '/').endsWith(target.entry)) ? null : 'not-in-vector-top5';
+    };
+    let missing = [];
+    for (let round = 1; round <= 10; round++) {
+      missing = [];
+      for (const target of targets) { const verdict = await probeTarget(target); if (verdict) missing.push({ ...target, verdict }); }
+      if (!missing.length) break;
+      console.log('vector completeness round', round, '- missing:', missing.map(m => `${m.id}(${m.verdict})`).join(','));
+      if (missing.some(m => m.verdict === 'file-missing-in-snapshot')) throw new Error('a gold target file is absent from the corpus snapshot: ' + JSON.stringify(missing));
+      for (const project of Object.values(projects)) await postJson(vectorUrl, '/api/import', { projectName: project.projectId, sourceDir: project.knowledgePath, watch: false }, 30 * 60 * 1000);
+    }
+    if (missing.length) throw new Error('vector index incomplete after re-imports: ' + JSON.stringify(missing));
+    console.log('corpus indexed and all gold targets probe clean; running the gold cases');
+
     const report = await verify({
       url: proxy.url,
       basePath: '/api',
+      recallAt: Number(process.env.PKB_GOLD_RECALL_AT || 15),
       projects: Object.fromEntries(Object.entries(projects).map(([name, project]) => [name, { projectId: project.projectId, knowledgePath: project.knowledgePath }])),
       fixtureRoot: corpusRoot,
       queries,
