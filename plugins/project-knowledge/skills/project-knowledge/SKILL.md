@@ -7,6 +7,17 @@ description: Query durable Project Knowledge records for prior decisions, implem
 
 Use Project Knowledge as a read-only source of durable project context. Automatic client capture is the primary conversation truth. Its one write-capable tool only supplements that truth with an explicit user Prompt event and never starts knowledge analysis. Verify returned knowledge against the current source whenever the repository may have changed since the knowledge entry was produced.
 
+## Automatic session injection (read this first)
+
+Clients with the UserPromptSubmit hook receive knowledge automatically, once per session:
+
+- The first message of a session injects one compact block: applicable confirmed memories in full, plus a **title-only index** of knowledge entries (with their entry ids). Body text is never auto-injected.
+- When a later message strongly matches an indexed entry, a one-line breadcrumb `- 相关知识：title (entryId)` points back at it; the same entry cools down for several turns.
+- Edited or newly confirmed memories are re-sent in full exactly once; removed memories get a one-line notice.
+- Everything else is silent by design - silence means "nothing new", not "no knowledge".
+
+Therefore: when a task touches an indexed entry, read its body with `project_knowledge_get` instead of assuming the index line is the whole story, and do not re-ask for knowledge that is already in the session index above.
+
 ## Workflow
 
 1. Call `project_knowledge_resolve` with the current Git root before substantial implementation, diagnosis, or design work. Do not guess the project slug.

@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
-async function verify({ url, projects, fixtureRoot, queries, reportPath }) {
+async function verify({ url, projects, fixtureRoot, queries, reportPath, basePath = '/api/engine' }) {
   const root = path.resolve(fixtureRoot);
   const inside = file => { const relative = path.relative(root, path.resolve(file)); return relative && !relative.startsWith('..') && !path.isAbsolute(relative); };
   const report = { passed: false, source: 'real engine and configured remote embeddings', startedAt: new Date().toISOString(), cases: [], metrics: {} };
@@ -22,7 +22,7 @@ async function verify({ url, projects, fixtureRoot, queries, reportPath }) {
         if (fs.existsSync(hidden)) throw new Error('prior interrupted stale test needs recovery');
         fs.renameSync(target, hidden);
       }
-      const response = await fetch(new URL('/api/engine/search', url), { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const response = await fetch(new URL(basePath + '/search', url), { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId: project.projectId, scope: 'project', query: q.query, limit: 5 }), signal: AbortSignal.timeout(20000) });
       const result = await response.json();
       if (!response.ok) throw new Error(`search failed with HTTP ${response.status}`);
@@ -43,12 +43,44 @@ async function verify({ url, projects, fixtureRoot, queries, reportPath }) {
       }
       badCitations += citationErrors; scopeLeaks += leaks;
       const documentHit = rows.some(row => row.entry_id === q.entry);
+      if (q.kind === 'breadcrumb') {
+        // The session-injection gate: same engine, same corpus, real channels.
+        // An index turn registers the session, then the query turn must earn a
+        // one-line pointer for a strongly matched entry (positive cases) or
+        // stay completely silent (negative cases); an immediate repeat of a
+        // positive query must respect the breadcrumb cooldown.
+        const sessionId = `gold-${q.id}`;
+        const contextCall = async query => {
+          const response = await fetch(new URL(basePath + '/context', url), { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectId: project.projectId, query, client: 'gold', sessionId }), signal: AbortSignal.timeout(20000) });
+          const result = await response.json();
+          if (!response.ok || result.ok !== true) throw new Error(`context failed with HTTP ${response.status}`);
+          return result;
+        };
+        await contextCall(q.query);
+        const turn = await contextCall(q.query);
+        const entries = (turn.facts || []).map(item => item.entryId);
+        item.injectionKind = turn.injectionKind || null; item.injectedEntries = entries;
+        const bodyLeak = (turn.facts || []).some(item => typeof item.text === 'string' && item.text.length > 0);
+        if (q.expect) {
+          item.passed = turn.injectionKind === 'breadcrumb' && entries.includes(q.expect) && !bodyLeak;
+          const repeat = await contextCall(q.query);
+          item.cooldownSilent = !repeat.prompt;
+          item.passed = item.passed && item.cooldownSilent;
+        } else {
+          item.passed = !turn.prompt && entries.length === 0 && !turn.injectionKind;
+        }
+        item.bodyLeak = bodyLeak;
+        report.cases.push(item); save();
+        console.log(`${item.passed ? 'PASS' : 'FAIL'} ${q.id} ${q.kind}`);
+        continue;
+      }
       const snippetFactHit = rows.some(row => row.entry_id === q.entry && (!q.fact || String(row.chunk_text).toLowerCase().includes(q.fact.toLowerCase())));
       let factRetrieved = snippetFactHit;
       if (q.fact && documentHit && !snippetFactHit) {
         // Search locates documents; an agent may then get the selected entry.
         // Record this separately rather than claiming a snippet contained it.
-        const detail = await fetch(new URL('/api/engine/get', url), { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        const detail = await fetch(new URL(basePath + '/get', url), { method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ projectId: project.projectId, entryId: q.entry, scope: 'project' }), signal: AbortSignal.timeout(10000) });
         const full = await detail.json();
         const text = full.chunks?.map(chunk => chunk.chunk_text).join('\n') || '';

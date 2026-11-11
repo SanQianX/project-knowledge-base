@@ -27,6 +27,25 @@ async function main() {
     await writeOutput(output, { write: (text, callback) => { assert.ok(!text.includes('receipt')); callback(); } });
     const logDir = path.join(root, 'logs/projects/project-a'); const logText = fs.readFileSync(path.join(logDir, fs.readdirSync(logDir)[0]), 'utf8');
     assert.ok(!logText.includes(payload.prompt)); assert.ok(!logText.includes('revision 37')); assert.ok(logText.includes('agent.context.output'));
+    // Session-index contract: empty turns are fully silent, degraded notices
+    // stay user-facing, injectionKind rides along to the receipt log.
+    const engineResponse = body => async (url, options) => {
+      if (String(url).endsWith('/identity')) return Response.json(identity);
+      const input = JSON.parse(options.body);
+      return Response.json({ ok: true, requestId: input.requestId, projectId: 'project-a', memoryStatus: 'ready', ...body });
+    };
+    const silent = await run(payload, { env, fetchImpl: engineResponse({ status: 'empty', prompt: '', facts: [], memories: [], references: [] }) });
+    assert.deepEqual(silent, {}, 'empty turns inject nothing at all');
+    const degraded = await run(payload, { env, fetchImpl: engineResponse({ status: 'file-fallback', prompt: '', facts: [], memories: [], references: [] }) });
+    assert.match(degraded.systemMessage, /向量检索暂不可用/);
+    assert.ok(!degraded.hookSpecificOutput, 'degraded notices never enter the model context');
+    const indexed = await run(payload, { env, fetchImpl: engineResponse({ status: 'ready', injectionKind: 'index', sessionIndexedCount: 7, prompt: '<knowledge_context>session index</knowledge_context>', facts: [{}, {}], memories: [], references: [{}, {}] }) });
+    assert.match(indexed.hookSpecificOutput.additionalContext, /session index/);
+    assert.equal(indexed.receipt.injectionKind, 'index'); assert.equal(indexed.receipt.sessionIndexedCount, 7);
+    await writeOutput(indexed, { write: (text, callback) => callback() });
+    assert.ok(fs.readFileSync(path.join(logDir, fs.readdirSync(logDir)[0]), 'utf8').includes('"injectionKind":"index"'), 'the receipt log carries the injection kind');
+    const oversized = await run(payload, { env, fetchImpl: engineResponse({ status: 'ready', prompt: 'x'.repeat(8001), facts: [], memories: [], references: [] }) });
+    assert.match(oversized.systemMessage, /CONTEXT_INVALID_RESPONSE/);
     calls.length = 0;
     assert.deepEqual(await run(payload, { env: { ...env, KB_KNOWLEDGE_CONTEXT: '0' }, fetchImpl }), {}); assert.equal(calls.length, 0);
     assert.deepEqual(await run({ ...payload, hook_event_name: 'Stop' }, { env, fetchImpl }), {});

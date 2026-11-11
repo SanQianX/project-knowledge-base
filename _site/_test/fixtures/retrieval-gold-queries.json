@@ -1,5 +1,9 @@
 [
   {"id":"S01","kind":"semantic","project":"product","query":"默认监听地址被别的程序占用后，模块如何避让并确认服务身份？","entry":"changes/c4afa63fa1ca.md","fact":"dynamic"},
+  {"id":"B01","kind":"breadcrumb","project":"product","query":"默认监听地址被别的程序占用后，模块如何避让并确认服务身份？","expect":"changes/c4afa63fa1ca.md"},
+  {"id":"B02","kind":"breadcrumb","project":"workbench","query":"相同项目的嵌入消息反复到达，为何不应作废正在创建的会话？","expect":"changes/29e2cf932e08.md"},
+  {"id":"B03","kind":"breadcrumb","project":"product","query":"当前项目 PostgreSQL 主从故障切换与 WAL 归档策略是什么？"},
+  {"id":"B04","kind":"breadcrumb","project":"workbench","query":"当前项目 ElasticSearch 搜索集群如何备份？"},
   {"id":"S02","kind":"semantic","project":"product","query":"桌面窗口怎样复用网页后台并在退出时处理自己启动的进程？","entry":"changes/6ea83d5c4e59.md","fact":"后台"},
   {"id":"S03","kind":"semantic","project":"product","query":"客户端检测尚未结束时，为什么不能记录用户已移除接入？","entry":"changes/155e3bf3bb5f.md","fact":"扫描"},
   {"id":"S04","kind":"semantic","project":"product","query":"外部开发工具的接入开关怎样记住用户选择并在启动时修复？","entry":"changes/b2da6dd5d6fd.md","fact":"意图"},

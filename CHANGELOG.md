@@ -1,5 +1,11 @@
 # Changelog
 
+## [5.0.33] - 2026-11-11
+
+- 知识注入改为会话一次索引（对齐 ZCode memory 的"索引+懒加载"模式）：会话首条用户消息注入一次紧凑索引（适用已确认记忆全文 + 知识条目标题清单 + 仲裁声明），正文摘录不再进入注入层；后续消息默认静默，新增/变更的记忆全文重注入一次，删除的记忆发一行移除提示，相关问题对强命中条目（实词/身份/已校准向量命中，仅 bigram 撞词不触发）给一行面包屑并在 10 轮内冷却，超过 30 轮重发仅标题索引对冲上下文压缩。30 轮会话累计注入从旧设计的 ~90KB+ 降至 ≤10KB。
+- 引擎升级至 `@sanqianx/ai-coding-knowledge-engine@0.2.8`（ranking-v3：词锚/字节对锚分离、listTitles、注入预算进 retrieval-policy）；`context-hook` 空结果完全静默、降级提示只走 systemMessage，receipt 日志新增 `injectionKind`/`sessionIndexedCount`；响应契约向后兼容（status 枚举与必选字段不变）。
+- 检索质量金标准新增 breadcrumb-gating 用例（正例强匹配出面包屑并冷却、负例零注入）与隔离运行器 `run-retrieval-gold-isolated.js`（自起真实 vector-hub 与引擎、语料只读副本、独立 VECTOR_HUB_CONFIG 防止继承用户全局 watcher）；新增 `context-session-index-test.js` 端到端回归（跨项目诱饵零面包屑、30 轮累计注入量化断言）。
+
 ## [5.0.32] - 2026-11-10
 
 - 将 knowledge-engine 改为固定版本的公开 npm 依赖 `@sanqianx/ai-coding-knowledge-engine@0.2.7-rc.12`，从主仓库移除内置引擎源码和旧 vendoring 脚本；保留历史提交及现有 npm 版本。
