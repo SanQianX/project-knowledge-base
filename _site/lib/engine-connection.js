@@ -23,7 +23,7 @@ async function connectEngineOnce(runtime) {
     httpStatus = health.status;
     if (!health.ok) throw new Error('ENGINE_UNAVAILABLE');
     const engine = await health.json();
-    if (engine.name !== 'knowledge-engine' || engine.dataSchemaVersion !== 3) throw new Error('ENGINE_VERSION_MISMATCH');
+    if (engine.name !== 'knowledge-engine' || engine.dataSchemaVersion !== 4) throw new Error('ENGINE_VERSION_MISMATCH');
     step = 'runtime-authentication';
     const auth = await bridge._fetch(`${bridge.engineUrl}/api/runtime-auth`, { headers });
     httpStatus = auth.status;

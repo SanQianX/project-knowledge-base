@@ -1009,6 +1009,29 @@ function createRequestHandler(runtime, options = {}) {
       }
 
       if (method === 'GET' && pathname === '/api/projects/projection') return send(res, 200, { ok: true, projects: listProjectViews(runtime.registryStore, runtime.projectStore).map(p => ({ projectId: p.projectId, name: p.config.displayName, workspacePath: p.config.repoPath, knowledgePath: p.config.knowledgePath, brainId: p.config.brainId, domainId: p.config.domainId, modules: Object.fromEntries(['terminal', 'vectorHub', 'eventBridge', 'engine'].map(key => { const module = p.state.modules?.[key] || {}; return [key, { projectId: module.projectId, projectName: module.projectName, status: module.status, registered: module.ok === true && module.status === 'registered' }]; })) })) });
+      // Server-side project search + pagination: the registry is the source,
+      // the browser never downloads every project to fake-filter a page.
+      if (method === 'GET' && pathname === '/api/projects/page') {
+        const limit = Number(url.searchParams.get('limit') || 20);
+        if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new DomainError('INVALID_ARGUMENT', '项目分页参数无效。');
+        const cursor = url.searchParams.get('cursor');
+        const query = String(url.searchParams.get('q') || '').trim().toLowerCase();
+        const domain = url.searchParams.get('domain') || '';
+        let afterName = null, afterId = null;
+        if (cursor) {
+          const decoded = /^(.*)\u0000(.*)$/.exec(Buffer.from(cursor, 'base64url').toString('utf8'));
+          if (!decoded) throw new DomainError('INVALID_ARGUMENT', '项目分页游标无效。');
+          [, afterName, afterId] = decoded;
+        }
+        const rows = listProjectViews(runtime.registryStore, runtime.projectStore)
+          .map(p => ({ projectId: p.projectId, name: p.config.displayName, workspacePath: p.config.repoPath, knowledgePath: p.config.knowledgePath, brainId: p.config.brainId, domainId: p.config.domainId || '' }))
+          .filter(p => (!domain || p.domainId === domain) && (!query || `${p.name}\n${p.workspacePath}`.toLowerCase().includes(query)))
+          .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN') || a.projectId.localeCompare(b.projectId));
+        const start = afterName == null ? 0 : rows.findIndex(p => p.name > afterName || p.name === afterName && p.projectId > afterId) ;
+        const page = rows.slice(afterName == null ? 0 : Math.max(0, start), (afterName == null ? 0 : Math.max(0, start)) + limit);
+        const last = page.at(-1);
+        return send(res, 200, { ok: true, projects: page, total: rows.length, nextCursor: page.length === limit && last ? Buffer.from(`${last.name}\u0000${last.projectId}`).toString('base64url') : null });
+      }
       if (method === 'GET' && pathname === '/api/projects') return send(res, 200, { ok: true, projects: listProjectViews(runtime.registryStore, runtime.projectStore) });
       // T06: pure preflight endpoint — never mutates state. The UI calls
       // this on path pick / language change / profile change to keep the

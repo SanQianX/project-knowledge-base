@@ -43,7 +43,7 @@ for (const ambientModuleUrl of ['KB_KNOWLEDGE_ENGINE_URL', 'KB_VECTORHUB_URL', '
   const server = http.createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     if (req.url === '/api/runtime/identity') return res.end(JSON.stringify(control.identity(invalidIdentity ? root : layout.getDataDir(), { port: server.address().port, host: '127.0.0.1', startedAt: 'test-start' })));
-    if (req.url === '/api/health') return res.end(JSON.stringify({ name: 'knowledge-engine', dataSchemaVersion: 3 }));
+    if (req.url === '/api/health') return res.end(JSON.stringify({ name: 'knowledge-engine', dataSchemaVersion: 4 }));
     if (req.url === '/api/projects') return res.end(JSON.stringify({ projects: [{ projectId, repoPath, knowledgePath: wrongBinding ? root : knowledgePath }] }));
     let text = ''; for await (const bytes of req) text += bytes;
     calls.push({ route: req.url, input: JSON.parse(text || '{}') });

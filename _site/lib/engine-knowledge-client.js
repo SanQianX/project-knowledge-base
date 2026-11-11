@@ -48,7 +48,7 @@ class EngineKnowledgeClient {
       const health = await this.json(new URL('/api/health', url));
       const registered = await this.json(new URL('/api/projects', url));
       const match = registered.projects?.find(item => item.projectId === project.projectId && item.enabled !== false);
-      if (health.name !== 'knowledge-engine' || health.dataSchemaVersion !== 3 || !match || !this.layout.pathsEqual(match.repoPath, project.repoPath) || !this.layout.pathsEqual(match.knowledgePath, project.knowledgePath)) throw new DomainError('ENGINE_IDENTITY_MISMATCH', '知识引擎与当前项目目录绑定不匹配。', { status: 409 });
+      if (health.name !== 'knowledge-engine' || health.dataSchemaVersion !== 4 || !match || !this.layout.pathsEqual(match.repoPath, project.repoPath) || !this.layout.pathsEqual(match.knowledgePath, project.knowledgePath)) throw new DomainError('ENGINE_IDENTITY_MISMATCH', '知识引擎与当前项目目录绑定不匹配。', { status: 409 });
       return { url, prefix: '/api' };
     }
     const live = endpoint.readLiveEndpoint(this.layout.getDataDir(), { removeStale: false });

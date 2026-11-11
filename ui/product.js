@@ -3,61 +3,91 @@
   const $ = id => document.getElementById(id);
   const ProgressSource = window.KnowledgeLive?.EventSource || EventSource;
   const all = selector => [...document.querySelectorAll(selector)];
-  const titles = { home: '智脑首页', work: '开始工作', search: '知识检索', memory: '长期记忆', projects: '领域与项目', activity: '活动记录' };
+  const titles = { home: '首页', memory: '长期记忆', projects: '项目', search: '知识检索', activity: '活动记录' };
   const modules = { terminal: 'Agent 工作台', vectorHub: '知识索引', eventBridge: '开发事件', engine: '知识引擎' };
+  // The workbench frame stays as a hidden service mount for provider/model
+  // configuration from the system drawer; it is no longer a navigation page.
   const frames = {
-    terminal: { id: 'workFrame', url: '/modules/terminal/agent-terminal/?embed=1&apiBase=/api/terminal&transport=live', view: 'work', ready: false },
-    vectorHub: { id: 'vectorFrame', url: '/modules/vectorhub/?embed=1&apiBase=/api/vectorhub&engineBase=/api/engine', view: 'search', ready: false },
+    terminal: { id: 'workFrame', url: '/modules/terminal/agent-terminal/?embed=1&apiBase=/api/terminal&transport=live', view: '', ready: false },
     eventBridge: { id: 'bridgeFrame', url: '/modules/eventbridge/?embed=1&apiBase=/api/eventbridge', view: 'activity', ready: false },
     engine: { id: 'engineFrame', url: '/modules/engine/?embed=1&apiBase=/api/engine', ready: false },
   };
-  // Register knowledge as an optional dock tab. Cached retrieval updates
-  // never open a tab or expand the dock; only user navigation does that.
   const knowledgePanel = { providerId: 'kb.knowledge.references', version: 0, registered: false, registering: false, failed: false, error: null, panelId: '', pending: null, sending: null, queued: false, deliveredPanelId: '' };
   const panelRequests = new Map();
   let panelRequestSeq = 0;
-  const state = { brain: { id: 'brain-default', name: '我的智脑', domains: [] }, root: '', projects: [], projectId: localStorage.getItem('kb.project') || '', view: 'home', scope: 'project', memoryTab: 'confirmed', activityTab: 'updates', health: {}, snapshot: { projects: [], runs: [], events: [], memories: [] }, engineAvailable: false, epoch: 0, contexts: new Map(), stream: null, refreshing: false, importId: '', preflight: null, preflightEpoch: 0 };
+  const state = {
+    brain: { id: 'brain-default', name: '我的智脑', domains: [] }, root: '', projects: [], projectId: localStorage.getItem('kb.project') || '', view: 'home',
+    health: {}, snapshot: { projects: [], runs: [], events: [], memories: [] }, engineAvailable: false, epoch: 0, contexts: new Map(), stream: null, importId: '', preflight: null, preflightEpoch: 0,
+    overview: null, overviewError: null, overviewLoading: false, overviewEpoch: 0,
+    groups: { items: [], total: 0, loading: false, epoch: 0 },
+    memory: { tab: 'library', folder: 'all', q: '', items: [], total: 0, cursors: [null], page: 0, loading: false, epoch: 0 },
+    candidates: { items: [], total: 0, cursors: [null], page: 0, loading: false, epoch: 0 },
+    projects: [], projectsPage: { q: '', domain: '', items: [], total: 0, cursors: [null], page: 0, loading: false, epoch: 0, detail: null },
+    detailGroups: { detail: null, epoch: 0 },
+    search: { q: '', draft: '', projectId: '', scope: 'brain', type: 'all', done: false, results: [], page: 0, loading: false, epoch: 0 },
+    activityFilter: 'all', activityTab: 'updates', activityProject: null, activityBefore: null, activityPage: null, runDetails: new Map(),
+  };
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const activeProject = () => state.projects.find(p => p.projectId === state.projectId);
   const domainName = id => state.brain.domains.find(d => d.id === id)?.name || '未分组';
   const projectName = id => state.projects.find(p => p.projectId === id)?.name || id;
   const time = value => value ? new Date(value).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
-  const label = run => run.state === 'failed' && run.error?.code === 'MODEL_QUOTA_EXHAUSTED' ? '额度不足 · 待重试' : run.state === 'queued' && run.phase === 'waiting-previous' ? '等待前一条提交恢复' : ({ queued: '排队', running: '维护中', succeeded: '已更新 · 可检索', 'index-pending': '知识已更新 · 索引待修复', failed: '维护失败', cancelled: '已取消' })[run.state] || run.state;
+  const clamp2 = text => String(text || '').replace(/\n\s*\n/g, '\n');
+  const SCOPE_LABEL = { project: '项目记忆', domain: '领域记忆', global: '全局记忆', group: '组合记忆' };
+  const recoveryLabel = run => {
+    const recovery = run.recovery;
+    if (['failed', 'index-pending'].includes(run.state)) {
+      if (!recovery) return run.state === 'index-pending' ? '自动恢复中' : '需要处理';
+      if (recovery.kind === 'config-blocked') return '等待配置';
+      if (recovery.budgetExhaustedAt) return '需要处理';
+      return '自动恢复中';
+    }
+    return '';
+  };
+  const label = run => run.state === 'queued' && run.phase === 'waiting-previous' ? '等待前一条提交恢复'
+    : ['failed', 'index-pending'].includes(run.state) ? `${({ failed: '维护失败', 'index-pending': '索引待修复' })[run.state]} · ${recoveryLabel(run)}`
+    : ({ queued: '排队', running: '维护中', succeeded: '已更新 · 可检索', cancelled: '已取消' })[run.state] || run.state;
   const badge = (text, status = '') => `<span class="status ${esc(status)}">${esc(text)}</span>`;
-  let toastTimer, refreshTimer, preflightTimer, editingMemoryId, deletingMemoryId, logStream, logEpoch = 0, referenceEpoch = 0, snapshotEpoch = 0, registryEpoch = 0, registryPromise = null, resumeImport = false, unbindProjectId = '', unbinding = false;
+  let toastTimer, refreshTimer, preflightTimer, logStream, logEpoch = 0, referenceEpoch = 0, snapshotEpoch = 0, registryEpoch = 0, registryPromise = null, resumeImport = false, unbindProjectId = '', unbinding = false;
   let captureEpoch = 0, captureBusy = false;
   let registryStream = null, registryReceipt = null, registryRefreshTimer;
+  let toastUndo = null;
   async function api(url, options = {}) {
-    const { allowNotReady, timeoutMs = (options.method || 'GET') === 'GET' && !url.includes('pick-folder') ? 3000 : 0, ...init } = options;
+    const { allowNotReady, timeoutMs = (options.method || 'GET') === 'GET' && !url.includes('pick-folder') ? 8000 : 0, ...init } = options;
     if (init.body && typeof init.body !== 'string') init.body = JSON.stringify(init.body);
     if (init.body) init.headers = { 'Content-Type': 'application/json', ...init.headers };
     const controller = new AbortController();
     const timer = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : null;
     try {
-    const response = await fetch(url, { ...init, signal: controller.signal });
-    const data = await response.json();
-    if (!response.ok || data.ok === false && !allowNotReady) throw Object.assign(new Error(data.error?.message || data.message || (typeof data.error === 'string' ? data.error : `请求失败 (${response.status})`)), { code: data.error?.code || data.error, operationId: data.error?.operationId || response.headers.get('X-Operation-Id') || '' });
-    return data;
+      const response = await fetch(url, { ...init, signal: controller.signal });
+      const data = await response.json();
+      if (!response.ok || data.ok === false && !allowNotReady) throw Object.assign(new Error(data.error?.message || data.message || (typeof data.error === 'string' ? data.error : `请求失败 (${response.status})`)), { code: data.error?.code || data.error, operationId: data.error?.operationId || response.headers.get('X-Operation-Id') || '' });
+      return data;
     } catch (error) { if (controller.signal.aborted) throw new Error('状态读取超时，保留上次内容，请稍后重试。'); throw error; }
     finally { clearTimeout(timer); }
   }
-  function toast(text) { $('toast').textContent = text; $('toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('toast').hidden = true; }, 4000); }
+  function toast(text, undo = null) {
+    const box = $('toast');
+    box.textContent = '';
+    const span = document.createElement('span'); span.textContent = text; box.append(span);
+    if (undo) { const button = document.createElement('button'); button.textContent = '撤销'; button.dataset.action = 'toast-undo'; box.append(button); toastUndo = undo; }
+    box.hidden = false; clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { box.hidden = true; toastUndo = null; }, 6000);
+  }
   function on(id, event, callback) { $(id).addEventListener(event, e => Promise.resolve(callback(e)).catch(error => toast(error.message))); }
   function post(key, message) { const frame = frames[key]; if (frame.ready) $(frame.id).contentWindow.postMessage(message, location.origin); }
   function initializeFrame(key) { const frame = frames[key]; if (!frame.initialized) { $(frame.id).src = frame.url; frame.initialized = true; } }
-  function frameVisible(key) { return key === 'engine' ? $('engineDialog').open : state.view === frames[key].view && (key !== 'eventBridge' || state.activityTab === 'sessions'); }
+  function frameVisible(key) { return key === 'engine' ? $('engineDialog').open : key === 'eventBridge' && state.view === 'activity' && state.activityTab === 'sessions'; }
   function frameContext(key) {
     const project = activeProject();
     const frame = frames[key];
     if (!frame.ready) return;
-    const ref = key === 'terminal' ? project?.modules.terminal.projectId || project?.workspacePath : key === 'eventBridge' ? project?.modules.eventBridge.projectId || project?.workspacePath : project?.projectId;
+    const ref = key === 'eventBridge' ? project?.modules?.eventBridge?.projectId || project?.workspacePath : project?.projectId;
     frame.requestId = `${state.epoch}:${key}`;
-    const signature = JSON.stringify([state.epoch, ref || '', state.scope, document.documentElement.dataset.theme, frameVisible(key)]);
+    const signature = JSON.stringify([state.epoch, ref || '', document.documentElement.dataset.theme, frameVisible(key)]);
     if (frame.contextSignature === signature) return;
     frame.contextSignature = signature;
     post(key, { type: 'kb:theme', theme: document.documentElement.dataset.theme });
-    post(key, { type: 'kb:scope', scope: state.scope });
-    post(key, { type: 'kb:sidebar', visible: key === 'terminal' });
     post(key, { type: 'kb:select-project', project: ref || '', projectId: project?.projectId || '', requestId: frame.requestId });
     post(key, { type: 'kb:visibility', visible: frameVisible(key) });
   }
@@ -78,8 +108,6 @@
       post('terminal', { type, requestId, ...payload });
     });
   }
-  // Plain JSON only: bounded strings, ≤50 references - the panel renders
-  // textContent and never interprets strings as markup.
   function knowledgePayload(projectId) {
     const context = state.contexts.get(projectId);
     return {
@@ -92,8 +120,6 @@
       })),
     };
   }
-  // kb:ready (re)fires whenever the terminal frame loads: the workbench-side
-  // registry starts empty, so registration restarts from zero each time.
   async function resetKnowledgePanel() {
     if (knowledgePanel.registering) return;
     knowledgePanel.registering = true;
@@ -127,8 +153,6 @@
       const timer = setTimeout(() => {
         if (knowledgePanel.pending && knowledgePanel.pending.version === version) knowledgePanelFailed('面板未确认内容');
       }, 8000);
-      // Install before posting: a fast frame can acknowledge before the
-      // relay response reaches the host.
       knowledgePanel.pending = { version, projectId, panelId, timer };
       const relayed = await panelRequest('kb:panel/content', { panelId: knowledgePanel.panelId, providerId: knowledgePanel.providerId, version, content: knowledgePayload(projectId) });
       if (current() && !relayed.ok) knowledgePanelFailed('内容投递失败');
@@ -142,8 +166,6 @@
   function handlePanelState(message) {
     const panel = (message.panels || []).find(p => p.providerId === knowledgePanel.providerId);
     if (!panel) {
-      // Closing the view only cancels delivery. Knowledge remains cached
-      // without creating another surface or reopening the user's dock.
       if (knowledgePanel.pending) { clearTimeout(knowledgePanel.pending.timer); knowledgePanel.pending = null; }
       knowledgePanel.panelId = ''; knowledgePanel.deliveredPanelId = '';
       knowledgePanel.ready = false;
@@ -168,12 +190,7 @@
       return;
     }
     const pending = knowledgePanel.pending;
-    if (pending.projectId !== state.projectId) {
-      clearTimeout(pending.timer); knowledgePanel.pending = null;
-      if (!knowledgePanel.sending) void pushKnowledgeToPanel(state.projectId, panel.panelId);
-      return;
-    }
-    if (pending.panelId !== panel.panelId) {
+    if (pending.projectId !== state.projectId || pending.panelId !== panel.panelId) {
       clearTimeout(pending.timer); knowledgePanel.pending = null;
       if (!knowledgePanel.sending) void pushKnowledgeToPanel(state.projectId, panel.panelId);
       return;
@@ -198,18 +215,19 @@
     all('[data-view]').forEach(button => button.classList.toggle('active', button.dataset.view === view));
     all('.view').forEach(section => section.classList.toggle('active', section.id === `view-${view}`));
     $('pageTitle').textContent = titles[view];
-    if (view === 'work' && activeProject()) initializeFrame('terminal');
-    if (view === 'search' && activeProject()) initializeFrame('vectorHub');
     if (view === 'activity' && state.activityTab === 'sessions' && activeProject()) initializeFrame('eventBridge');
     Object.keys(frames).forEach(key => post(key, { type: 'kb:visibility', visible: frameVisible(key) }));
     render();
+    if (view === 'home') void loadOverview();
+    if (view === 'memory') { void loadGroups(); void loadMemoryPage(); void loadCandidates(); }
+    if (view === 'projects' && !state.projectsPage.detail) void loadProjectsPage();
+    if (view === 'search') renderSearch();
     if (view === 'activity' && (changed || state.activityProject !== state.projectId)) void loadActivityPage();
   }
   function selectProject(id) {
     if (id === state.projectId && activeProject()) return;
     state.projectId = id; state.epoch++;
-    state.snapshot.runs = []; state.snapshot.nextCursor = null;
-    state.activityProject = null; state.activityBefore = null; state.runDetails = new Map();
+    state.snapshot.runs = []; state.activityProject = null; state.activityBefore = null; state.runDetails = new Map();
     void refreshSnapshot();
     referenceEpoch++; $('referenceDialog').close();
     if ($('logsDialog').open) loadLogs().catch(error => toast(error.message));
@@ -229,97 +247,312 @@
     const project = activeProject();
     $('brainLabel').textContent = state.brain.name; $('homeTitle').textContent = state.brain.name;
     $('breadcrumb').textContent = project ? `${state.brain.name} / ${domainName(project.domainId)} / ${project.name}` : state.brain.name;
-    $('workEmpty').hidden = !!project; $('workLayout').hidden = !project;
-    $('searchEmpty').hidden = !!project; $('vectorFrame').parentElement.hidden = !project;
-    const candidates = state.snapshot.memories.filter(m => m.status === 'candidate');
-    $('memoryCount').textContent = candidates.length; $('memoryCount').hidden = !candidates.length; $('candidateCount').textContent = candidates.length || '';
-    if (state.view === 'home') renderHome(candidates);
+    const candidatesTotal = state.overview?.totals?.candidates ?? 0;
+    $('memoryCount').textContent = candidatesTotal; $('memoryCount').hidden = !candidatesTotal;
+    const needsTotal = state.overview?.needsTotal ?? 0;
+    $('homeCount').textContent = needsTotal; $('homeCount').hidden = !needsTotal;
+    if (state.view === 'home') renderHome();
     if (state.view === 'projects') renderProjects();
     if (state.view === 'memory') renderMemories();
+    if (state.view === 'search') renderSearch();
     if (state.view === 'activity') renderActivity();
     renderSystem();
   }
-  function renderHome(candidates) {
-    if (!state.projectsLoaded) { $('homeContent').innerHTML = state.projectsError ? '<div class="empty">项目登记读取失败，未把失败当作空知识库。<button data-action="refresh">重试读取</button></div>' : '<div class="empty">正在读取项目登记…</div>'; return; }
-    if (!state.projects.length) { $('homeContent').innerHTML = '<div class="empty"><h2>从第一个项目开始</h2><p>选择代码目录和知识目录，保留项目原有文件。</p><button class="primary" data-action="import">导入第一个项目</button></div>'; return; }
-    const runs = state.snapshot.runs.filter(r => !state.projectId || r.projectId === state.projectId);
-    const issues = runs.filter(r => ['failed', 'index-pending'].includes(r.state));
-    const scopeIssues = (state.snapshot.sharedScopes || []).filter(s => s.brainId === state.brain.id && s.index?.status === 'pending');
-    const projectRows = state.projects.map(p => `<div class="row"><div><b>${esc(p.name)}</b><small>${esc(domainName(p.domainId))}</small></div>${badge(Object.values(p.modules).every(m => m.registered) ? '已连接' : '接线待恢复', Object.values(p.modules).every(m => m.registered) ? 'up' : 'issue')}<button data-select-project="${esc(p.projectId)}">打开</button></div>`).join('');
-    const updates = runs.slice(0, 5).map(r => `<div class="row"><time>${time(r.startedAt)}</time><div><b>${esc(projectName(r.projectId))}</b><small>${esc(r.commitSha.slice(0, 8))} · ${esc(label(r))}</small></div></div>`).join('') || '<p>尚无维护记录。导入时不会分析历史提交。</p>';
-    $('homeContent').innerHTML = `<div class="grid2"><div class="stack"><section class="panel"><h2>领域与项目</h2>${projectRows}</section><section class="panel"><h2>最近知识更新</h2>${state.engineAvailable ? updates : '<p>知识引擎暂时不可用，恢复后显示真实记录。</p>'}</section></div><div class="stack"><section class="panel"><h2>待确认记忆</h2>${candidates.length ? candidates.slice(0, 3).map(m => `<div class="row"><div><b>${esc(m.text)}</b><small>${esc(projectName(m.evidence.projectId))} · ${esc(m.evidence.commitSha.slice(0, 8))}</small></div></div>`).join('') + '<button data-go="memory">查看候选箱</button>' : '<p>没有待确认记忆。智脑不会自动把项目行为当作你的偏好。</p>'}</section><section class="panel"><h2>需要处理</h2>${issues.length ? issues.slice(0, 3).map(r => `<div class="row"><div><b>${esc(projectName(r.projectId))}</b><small>${esc(r.error?.message || label(r))}</small></div></div>`).join('') + '<button data-go="activity">查看运行详情</button>' : scopeIssues.length ? '' : '<p>没有待处理的维护异常。</p>'}${scopeIssues.map(s => `<div class="row"><div><b>${esc(s.name)}</b><small>${esc(s.index.message)}</small></div></div>`).join('')}${scopeIssues.length ? '<button data-action="system">检查索引连接</button>' : ''}${!state.engineAvailable ? '<p>知识引擎离线，请检查系统状态。</p>' : ''}</section></div></div>`;
+  // ============ 首页：全局待办 + 候选 + 组合入口 ============
+  async function loadOverview(force = false) {
+    if (state.overviewLoading && !force) return;
+    const epoch = ++state.overviewEpoch;
+    state.overviewLoading = true;
+    try {
+      const overview = await api('/api/engine/overview');
+      if (epoch !== state.overviewEpoch) return;
+      state.overview = overview; state.overviewError = null;
+    } catch (error) {
+      if (epoch !== state.overviewEpoch) return;
+      state.overviewError = error.message;
+    } finally { if (epoch === state.overviewEpoch) state.overviewLoading = false; }
+    if (state.view === 'home') renderHome();
+    render();
   }
-  function renderProjects() {
-    const group = (id, name) => `<h3>${esc(name)}</h3>${state.projects.filter(p => (p.domainId || '') === id).map(p => `<button class="${p.projectId === state.projectId ? 'active' : ''}" data-select-project="${esc(p.projectId)}">${esc(p.name)}</button>`).join('') || '<small>暂无项目</small>'}`;
-    $('projectTree').innerHTML = `<h2>${esc(state.brain.name)}</h2>${state.brain.domains.map(d => group(d.id, d.name)).join('')}${group('', '未分组')}`;
-    const project = activeProject();
-    if (!project) { $('projectDetail').innerHTML = '<div class="empty"><h2>尚未导入项目</h2><button class="primary" data-action="import">导入第一个项目</button></div>'; return; }
-    $('projectDetail').innerHTML = `<h2>${esc(project.name)}</h2><div class="detail-label">代码目录</div><div class="detail-path">${esc(project.workspacePath)}</div><div class="detail-label">知识目录</div><div class="detail-path">${esc(project.knowledgePath)}</div><label>所属领域<select id="projectDomain"><option value="">未分组</option>${state.brain.domains.map(d => `<option value="${esc(d.id)}" ${d.id === project.domainId ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></label><h3>项目连接</h3>${Object.entries(modules).map(([key, name]) => `<div class="row"><div>${esc(name)}</div>${badge(project.modules[key]?.registered ? '已连接' : '待恢复', project.modules[key]?.registered ? 'up' : 'issue')}</div>`).join('')}<div class="actions"><button class="primary" data-go="work">开始工作</button><button data-action="repair">修复接线</button><button data-action="unbind">解绑并保留数据</button></div>`;
+  function needRow(item) {
+    if (item.kind === 'run') return `<div class="row"><div><b>${esc(item.title)} · ${esc(projectName(item.projectId))}</b><small>${esc(item.commitSha?.slice(0, 8) || '')} ${esc(item.error?.message || '')}</small></div>${badge(recoveryLabel(item) || '需要处理', 'issue')}</div>`;
+    if (item.kind === 'journal') return `<div class="row"><div><b>提交事件消费受阻</b><small>${esc(item.journalId)} · ${esc(item.message)}</small></div>${badge('需要处理', 'issue')}</div>`;
+    if (item.kind === 'late-commit') return `<div class="row"><div><b>晚到的旧提交待受控处理</b><small>${esc(projectName(item.projectId))} · ${esc(String(item.commitSha || '').slice(0, 12))}</small></div>${badge('需要处理', 'issue')}</div>`;
+    if (item.kind === 'scope-index') return `<div class="row"><div><b>共享知识索引待恢复</b><small>${esc(item.name)} · ${esc(item.message)}</small></div>${badge('需要处理', 'issue')}</div>`;
+    return '';
+  }
+  function renderHome() {
+    if (!state.projectsLoaded) { $('homeContent').innerHTML = state.projectsError ? '<div class="empty">项目登记读取失败，未把失败当作空知识库。<button data-action="refresh">重试读取</button></div>' : '<div class="empty">正在读取项目登记…</div>'; return; }
+    if (state.overviewError) {
+      $('homeContent').innerHTML = `<div class="empty">全局状态读取失败：${esc(state.overviewError)}<br>已保存的待办与记忆不受影响，也不会显示为零待办。<button data-action="reload-overview">重试</button></div>`;
+      return;
+    }
+    if (!state.overview) { $('homeContent').innerHTML = '<div class="empty">正在读取全局待办…</div>'; return; }
+    if (!state.projects.length) { $('homeContent').innerHTML = '<div class="empty"><h2>从第一个项目开始</h2><p>选择代码目录和知识目录，保留项目原有文件。</p><button class="primary" data-action="import">导入第一个项目</button></div>'; return; }
+    const overview = state.overview;
+    const needs = overview.needsPreview || [];
+    const candidates = overview.candidatesPreview || [];
+    const recovering = overview.recoveringPreview || [];
+    const groups = overview.groupsPreview || [];
+    const needsRows = needs.slice(0, 3).map(needRow).join('') || '<p class="small-empty">目前没有需要你处理的事项。</p>';
+    const candidateRows = candidates.slice(0, 3).map(m => `<div class="row"><div><b>${esc(m.title)}</b><small>${esc(clamp2(m.text).slice(0, 120))}</small><small>${m.evidence ? `来源：${esc(projectName(m.evidence.projectId))} · commit ${esc(m.evidence.commitSha.slice(0, 8))}` : '来源：手动添加'}</small></div><button data-action="review-candidate" data-id="${esc(m.id)}">审核</button></div>`).join('') || '<p class="small-empty">没有待确认的记忆。智脑不会自动把项目行为当作你的偏好。</p>';
+    const comboCards = groups.slice(0, 4).map(g => `<button class="combo-card" data-action="open-group" data-id="${esc(g.id)}"><div><b>${esc(g.name)}</b><small>${g.memberCount} 条记忆 · ${g.boundProjectCount} 个项目</small></div><span aria-hidden="true">›</span></button>`).join('') || '<p class="small-empty">还没有记忆组合。到「长期记忆」创建第一个组合。</p>';
+    $('homeContent').innerHTML = `
+      <div class="grid2">
+        <section class="panel"><h2>需要处理 ${overview.needsTotal ? badge(overview.needsTotal, 'issue') : ''}</h2>${needsRows}
+          ${overview.needsTotal > needs.length ? '<button data-action="activity-needs">查看全部待办</button>' : ''}
+          ${overview.totals.recovering ? `<div class="recovery-banner">${overview.totals.recovering} 项正在自动恢复，无需操作<button data-action="activity-recovering">查看</button></div>` : ''}
+        </section>
+        <section class="panel"><h2>待确认记忆 ${overview.totals.candidates ? badge(overview.totals.candidates, '') : ''}</h2>${candidateRows}
+          ${overview.totals.candidates > candidates.length ? '<button data-go="memory">查看候选箱</button>' : ''}
+        </section>
+      </div>
+      <section class="panel" style="margin-top:24px"><div class="section-heading" style="margin-bottom:12px"><h2>记忆组合</h2><button data-go="memory">管理记忆</button></div><div class="combo-grid">${comboCards}</div></section>`;
+  }
+  // ============ 长期记忆：组合 + 独立小记忆 + 候选 ============
+  async function loadGroups() {
+    const epoch = ++state.groups.epoch;
+    state.groups.loading = true;
+    try {
+      const result = await api('/api/engine/memory-groups?limit=100');
+      if (epoch !== state.groups.epoch) return;
+      state.groups.items = result.groups; state.groups.total = result.total;
+    } catch (error) { if (epoch === state.groups.epoch) toast('组合列表读取失败：' + error.message); }
+    finally { if (epoch === state.groups.epoch) state.groups.loading = false; }
+    if (state.view === 'memory') renderMemories();
+  }
+  const groupById = id => state.groups.items.find(g => g.id === id);
+  async function loadMemoryPage() {
+    const memory = state.memory;
+    const epoch = ++memory.epoch;
+    memory.loading = true;
+    try {
+      const params = new URLSearchParams({ status: 'confirmed', limit: '10' });
+      if (memory.folder === 'ungrouped') params.set('ungrouped', '1');
+      else if (memory.folder !== 'all') params.set('groupId', memory.folder);
+      if (memory.q.trim()) params.set('q', memory.q.trim());
+      const cursor = memory.cursors[memory.page];
+      if (cursor) params.set('cursor', cursor);
+      const result = await api('/api/engine/memories?' + params);
+      if (epoch !== memory.epoch) return;
+      memory.items = result.memories; memory.total = result.total;
+      if (result.nextCursor) memory.cursors[memory.page + 1] = result.nextCursor; else memory.cursors.length = memory.page + 1;
+    } catch (error) { if (epoch === memory.epoch) toast('记忆列表读取失败：' + error.message); }
+    finally { if (epoch === memory.epoch) memory.loading = false; }
+    if (state.view === 'memory') renderMemories();
+  }
+  async function loadCandidates() {
+    const candidates = state.candidates;
+    const epoch = ++candidates.epoch;
+    candidates.loading = true;
+    try {
+      const params = new URLSearchParams({ status: 'candidate', limit: '10' });
+      const cursor = candidates.cursors[candidates.page];
+      if (cursor) params.set('cursor', cursor);
+      const result = await api('/api/engine/memories?' + params);
+      if (epoch !== candidates.epoch) return;
+      candidates.items = result.memories; candidates.total = result.total;
+      if (result.nextCursor) candidates.cursors[candidates.page + 1] = result.nextCursor; else candidates.cursors.length = candidates.page + 1;
+    } catch (error) { if (epoch === candidates.epoch) toast('候选列表读取失败：' + error.message); }
+    finally { if (epoch === candidates.epoch) candidates.loading = false; }
+    if (state.view === 'memory') renderMemories();
+  }
+  function memoryCard(m) {
+    const scopeText = m.scopeType === 'group' ? (m.groups?.length ? `组合：${m.groups.map(g => esc(g.name)).join('、')}` : '未归组合') : `${SCOPE_LABEL[m.scopeType] || ''} · ${m.scopeType === 'domain' ? esc(domainName(m.scopeId)) : m.scopeType === 'project' ? esc(projectName(m.scopeId)) : '所有项目'}`;
+    const statusBadge = m.targetAvailable === false ? badge('目标已失效，不会注入', 'issue') : m.syncStatus === 'pending' ? badge('写入待恢复', 'issue') : '';
+    return `<article class="memory-item"><button class="reference" data-action="memory-detail" data-id="${esc(m.id)}"><b>${esc(m.title)}</b><small>${esc(clamp2(m.text).slice(0, 160))}</small><small>${scopeText}</small></button><div class="actions">${statusBadge}<button data-action="memory-edit" data-id="${esc(m.id)}">编辑</button><button data-action="memory-groups" data-id="${esc(m.id)}">组合归属</button>${m.sourceType !== 'manual' ? `<button data-action="memory-evidence" data-id="${esc(m.id)}">查看依据</button>` : ''}<button data-action="memory-delete" data-id="${esc(m.id)}">删除</button></div></article>`;
+  }
+  function pagerUi(kind, page, total, pageSize) {
+    const pages = Math.max(1, Math.ceil(total / pageSize));
+    if (total <= pageSize && page === 0) return '';
+    return `<div class="pager"><span>${total ? page * pageSize + 1 : 0}–${Math.min((page + 1) * pageSize, total)} / ${total}</span><div class="actions"><button data-page="${kind}" data-value="${page - 1}" ${page === 0 ? 'disabled' : ''}>上一页</button><span>${page + 1} / ${pages}</span><button data-page="${kind}" data-value="${page + 1}" ${page + 1 >= pages ? 'disabled' : ''}>下一页</button></div></div>`;
   }
   function renderMemories() {
-    $('addMemory').disabled = !state.engineAvailable;
-    all('[data-memory-tab]').forEach(button => button.classList.toggle('active', button.dataset.memoryTab === state.memoryTab));
-    const type = $('memoryScopeFilter').value, target = $('memoryTargetFilter').value;
-    const memories = state.snapshot.memories.filter(m => m.status === state.memoryTab && (!type || (m.scopeType || 'global') === type) && (!type || type === 'global' || !target || m.scopeId === target));
-    $('memoryContent').innerHTML = !state.engineAvailable ? '<div class="empty">知识引擎暂时不可用。未读取到的记忆不会显示为已确认。</div>' : memories.length ? `<div class="memory-grid">${memories.map(m => `<article class="memory-card" data-memory-card="${esc(m.id)}"><div class="memory-meta">${badge(memoryScopeName(m))}${m.targetAvailable === false ? badge('目标已失效，不会注入', 'issue') : m.status === 'confirmed' && m.syncStatus === 'pending' ? badge('写入待恢复', 'issue') : m.status === 'confirmed' && m.indexStatus === 'failed' ? badge('索引待恢复', 'issue') : m.status === 'confirmed' && m.indexStatus === 'pending' ? badge('索引更新中') : ''}</div><p>${esc(m.text)}</p><small>${m.sourceType === 'manual' ? `来源：手动添加 · ${esc(time(m.createdAt))}` : `来源：${esc(projectName(m.evidence.projectId))} · commit ${esc(m.evidence.commitSha.slice(0, 8))}<br>${esc(m.evidence.entryId)}`}</small><div class="actions">${m.sourceType === 'manual' ? '' : `<button data-memory-action="evidence" data-memory-id="${esc(m.id)}">查看依据</button>`}${m.status === 'candidate' ? `<button class="primary" data-memory-action="confirm" data-memory-id="${esc(m.id)}">审核确认</button><button data-memory-action="ignore" data-memory-id="${esc(m.id)}">忽略</button>` : `<button data-memory-action="edit" data-memory-id="${esc(m.id)}">编辑</button>${badge(m.syncStatus === 'pending' ? '待同步' : '已确认', m.syncStatus === 'pending' ? 'issue' : 'up')}`}<button data-memory-action="delete" data-memory-id="${esc(m.id)}">删除</button></div></article>`).join('')}</div>` : `<div class="empty">${type ? '此范围内没有匹配的记忆。' : state.memoryTab === 'confirmed' ? '还没有已确认的长期记忆。可以点击“添加记忆”记录约定。' : '候选箱为空。维护产物中的有据偏好会进入这里，等待你的确认。'}</div>`;
+    if (!state.engineAvailable) { $('memoryContent').innerHTML = '<div class="empty">知识引擎暂时不可用。未读取到的记忆不会显示为已确认。</div>'; return; }
+    const memory = state.memory, candidates = state.candidates;
+    if (memory.tab === 'candidate') {
+      const rows = candidates.items.map(m => `<div class="row"><div><b>${esc(m.title)}</b><small>${esc(clamp2(m.text).slice(0, 140))}</small><small>${m.evidence ? `来源：${esc(projectName(m.evidence.projectId))} · ${esc(m.evidence.commitSha.slice(0, 8))}` : '来源：手动添加'}</small></div><button class="primary" data-action="review-candidate" data-id="${esc(m.id)}">审核</button></div>`).join('');
+      $('memoryContent').innerHTML = `<div class="segmented" style="margin-bottom:20px"><button data-memory-tab="library">记忆库</button><button class="active" data-memory-tab="candidate">候选箱 ${candidates.total || ''}</button></div>
+        ${rows || '<div class="empty small-empty">候选箱为空。维护产物中的有据偏好会进入这里，等待你的确认。</div>'}
+        ${pagerUi('candidate', candidates.page, candidates.total, 10)}`;
+      return;
+    }
+    const current = memory.folder !== 'all' && memory.folder !== 'ungrouped' ? groupById(memory.folder) : null;
+    const folderName = current ? current.name : memory.folder === 'ungrouped' ? '未归组合' : '全部记忆';
+    const folders = `<aside class="memory-folders">
+        <button class="${memory.folder === 'all' ? 'active' : ''}" data-folder="all">全部记忆</button>
+        <button class="${memory.folder === 'ungrouped' ? 'active' : ''}" data-folder="ungrouped">未归组合</button>
+        <hr>
+        ${state.groups.items.map(g => `<button class="${memory.folder === g.id ? 'active' : ''}" data-folder="${esc(g.id)}">${esc(g.name)} <small>${g.memberCount}</small></button>`).join('')}
+        <hr>
+        <button data-action="new-group">＋ 新建组合</button>
+      </aside>`;
+    const header = `<div class="section-heading" style="margin-bottom:12px"><div><h2>${esc(folderName)}</h2><p>${current ? `<button class="link-button" data-action="group-projects" data-id="${esc(current.id)}">应用到项目（${current.boundProjectCount}）</button>` : memory.folder === 'ungrouped' ? '不在任何组合中的记忆；加入组合并应用到项目后生效。' : '包含全部已确认记忆；同一记忆被多处引用时只保留一条。'}</p></div>
+      <div class="actions">${current ? `<button data-action="group-settings" data-id="${esc(current.id)}">组合设置</button><button data-action="add-existing" data-id="${esc(current.id)}">选入已有记忆</button>` : ''}<button class="primary" data-action="new-memory">＋ 添加记忆</button></div></div>`;
+    const items = memory.items.map(m => memoryCard(m)).join('') || '<div class="empty small-empty">没有匹配的记忆。</div>';
+    $('memoryContent').innerHTML = `<div class="segmented" style="margin-bottom:20px"><button class="active" data-memory-tab="library">记忆库</button><button data-memory-tab="candidate">候选箱 ${state.overview?.totals?.candidates || ''}</button></div>
+      <div class="memory-layout">${folders}<section class="memory-main">
+        ${header}
+        <div class="actions" style="margin-bottom:16px"><input id="memoryQuery" placeholder="查找记忆标题或内容" aria-label="查找记忆" value="${esc(memory.q)}" style="flex:1"></div>
+        <div class="memory-list">${items}</div>
+        ${pagerUi('memory', memory.page, memory.total, 10)}
+      </section></div>`;
   }
-  function memoryScopeName(memory) {
-    const type = memory.scopeType || 'global';
-    return type === 'global' ? '全局 · 所有领域与项目' : `${type === 'domain' ? '领域' : '项目'} · ${type === 'domain' ? domainName(memory.scopeId) : projectName(memory.scopeId)}`;
+  // ============ 项目：服务端分页 + 组合标签 + 生效记忆 ============
+  async function loadProjectsPage() {
+    const projects = state.projectsPage;
+    const epoch = ++projects.epoch;
+    projects.loading = true;
+    try {
+      const params = new URLSearchParams({ limit: '20' });
+      if (projects.q.trim()) params.set('q', projects.q.trim());
+      if (projects.domain) params.set('domain', projects.domain);
+      const cursor = projects.cursors[projects.page];
+      if (cursor) params.set('cursor', cursor);
+      const result = await api('/api/projects/page?' + params);
+      if (epoch !== projects.epoch) return;
+      projects.items = result.projects; projects.total = result.total;
+      if (result.nextCursor) projects.cursors[projects.page + 1] = result.nextCursor; else projects.cursors.length = projects.page + 1;
+      await Promise.allSettled(result.projects.map(async p => {
+        try { const groups = await api(`/api/engine/projects/${encodeURIComponent(p.projectId)}/memory-groups`); if (epoch === projects.epoch) p.groups = groups.groups; } catch { if (epoch === projects.epoch) p.groups = []; }
+      }));
+    } catch (error) { if (epoch === projects.epoch) toast('项目列表读取失败：' + error.message); }
+    finally { if (epoch === projects.epoch) projects.loading = false; }
+    if (state.view === 'projects') renderProjects();
   }
-  function memoryTargets(type) { return type === 'domain' ? state.brain.domains : type === 'project' ? state.projects.map(p => ({ id: p.projectId, name: p.name })) : []; }
-  function updateMemoryTarget(type, selected = '') {
-    const options = memoryTargets(type);
-    $('memoryTargetLabel').hidden = type === 'global'; $('memoryTarget').required = type !== 'global'; $('memoryTarget').disabled = type === 'global';
-    $('memoryTarget').innerHTML = '<option value="">请选择适用目标</option>' + options.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
-    $('memoryTarget').value = selected;
-    $('memoryScopeHint').textContent = type === 'global' ? '确认后可用于所有领域和项目。' : type === 'domain' ? '只用于所选领域当前所属的项目。可改选其他已有领域。' : '只用于所选项目。可改选其他已有项目。';
+  async function openProjectDetail(projectId) {
+    state.projectsPage.detail = projectId;
+    state.detailGroups.loadingDetail = projectId;
+    try { await Promise.all([loadProjectsPage(), loadDetail(projectId)]); }
+    finally { if (state.detailGroups.loadingDetail === projectId) state.detailGroups.loadingDetail = null; }
+    renderProjects();
   }
-  function updateMemoryFilter() {
-    const type = $('memoryScopeFilter').value, previous = $('memoryTargetFilter').value;
-    $('memoryTargetFilter').hidden = !['domain', 'project'].includes(type);
-    $('memoryTargetFilter').innerHTML = '<option value="">全部目标</option>' + memoryTargets(type).map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
-    $('memoryTargetFilter').value = memoryTargets(type).some(p => p.id === previous) ? previous : '';
-    renderMemories();
+  async function loadDetail(projectId) {
+    const epoch = ++state.detailGroups.epoch;
+    const detail = { projectId, groups: [], effective: { items: [], total: 0, cursors: [null], page: 0 } };
+    state.detailGroups.detail = detail;
+    state.detailGroups.loadingDetail = projectId;
+    try {
+      const [groups, effective] = await Promise.all([
+        api(`/api/engine/projects/${encodeURIComponent(projectId)}/memory-groups`),
+        api(`/api/engine/projects/${encodeURIComponent(projectId)}/effective-memories?limit=10`),
+      ]);
+      if (epoch !== state.detailGroups.epoch) return;
+      detail.groups = groups.groups;
+      detail.effective.items = effective.memories; detail.effective.total = effective.total;
+      if (effective.nextCursor) detail.effective.cursors[1] = effective.nextCursor;
+    } catch (error) { if (epoch === state.detailGroups.epoch) toast('项目详情读取失败：' + error.message); }
+    if (state.view === 'projects') renderProjects();
   }
-  function openMemory(memory) {
-    editingMemoryId = memory.id;
-    $('memoryDialogTitle').textContent = memory.status === 'candidate' ? '审核并确认记忆' : '编辑已确认记忆';
-    $('memoryText').value = memory.text; $('memoryScope').value = memory.scopeType || 'global';
-    updateMemoryTarget($('memoryScope').value, memory.scopeId || memory.brainId);
-    $('memoryOriginal').textContent = `原始总结：${memory.originalText || memory.text}`;
-    $('memoryEvidence').textContent = memory.evidence ? `${projectName(memory.evidence.projectId)} · ${memory.evidence.commitSha} / ${memory.evidence.entryId}${memory.sourceEventId || memory.evidence.sourceEventId ? ` · 用户事件 ${memory.sourceEventId || memory.evidence.sourceEventId}` : ''}` : '';
-    let eligibility = $('memoryEligibility');
-    if (!eligibility) { eligibility = document.createElement('p'); eligibility.id = 'memoryEligibility'; $('memoryEvidenceDetails').append(eligibility); }
-    eligibility.textContent = memory.eligibility ? `推荐理由：${memory.eligibility.reason || ''}\n范围依据：${memory.eligibility.scopeReason || ''}` : memory.status === 'candidate' ? '旧候选尚未按跨项目长期共识标准复核。' : '';
-    $('memoryQuote').textContent = memory.evidence?.quote || '';
-    $('memoryEvidenceDetails').hidden = memory.sourceType === 'manual'; $('manualMemoryHint').hidden = memory.sourceType !== 'manual';
-    $('memoryFeedback').hidden = true; $('saveMemoryCandidate').hidden = memory.status !== 'candidate';
-    $('confirmMemory').textContent = memory.status === 'candidate' ? '确认并保存' : '保存修改';
-    $('memoryDialog').showModal();
+  async function loadDetailEffectivePage() {
+    const detail = state.detailGroups.detail;
+    if (!detail) return;
+    const epoch = state.detailGroups.epoch;
+    const cursor = detail.effective.cursors[detail.effective.page];
+    try {
+      const params = new URLSearchParams({ limit: '10' });
+      if (cursor) params.set('cursor', cursor);
+      const effective = await api(`/api/engine/projects/${encodeURIComponent(detail.projectId)}/effective-memories?` + params);
+      if (epoch !== state.detailGroups.epoch) return;
+      detail.effective.items = effective.memories; detail.effective.total = effective.total;
+      if (effective.nextCursor) detail.effective.cursors[detail.effective.page + 1] = effective.nextCursor; else detail.effective.cursors.length = detail.effective.page + 1;
+    } catch (error) { toast('生效记忆读取失败：' + error.message); }
+    renderProjects();
   }
-  function openDeleteMemory(memory) {
-    if (!state.engineAvailable) { toast('知识引擎暂时不可用，请恢复连接后重试。'); return; }
-    deletingMemoryId = memory.id;
-    $('memoryDeleteText').textContent = memory.text;
-    $('memoryDeleteScope').textContent = `适用范围：${memoryScopeName(memory)}`;
-    $('memoryDeleteFeedback').hidden = true;
-    $('confirmMemoryDelete').disabled = false;
-    $('memoryDeleteDialog').showModal();
+  function groupTag(group, projectId) {
+    return `<span class="group-tag" draggable="true" data-drag-group="${esc(group.id)}" data-project="${esc(projectId)}"><span>${esc(group.name)}</span><button data-action="unlink-group" data-id="${esc(group.id)}" data-project="${esc(projectId)}" aria-label="从项目移除组合 ${esc(group.name)}" draggable="false">×</button></span>`;
   }
-  function openAddMemory() {
-    if (!state.engineAvailable) { toast('知识引擎暂时不可用，请恢复连接后重试。'); return; }
-    if (!state.root) { toast('请先在设置中配置知识根目录，再添加记忆。'); return; }
-    editingMemoryId = '';
-    const project = activeProject(), filter = $('memoryScopeFilter').value;
-    const type = filter || (project ? 'project' : 'global');
-    const target = $('memoryTargetFilter').value || (type === 'project' ? project?.projectId : type === 'domain' ? project?.domainId : '');
-    $('memoryForm').reset(); $('memoryDialogTitle').textContent = '添加记忆'; $('memoryScope').value = type;
-    updateMemoryTarget(type, target);
-    $('memoryEvidenceDetails').hidden = true; $('manualMemoryHint').hidden = false;
-    $('memoryFeedback').hidden = true; $('saveMemoryCandidate').hidden = true; $('confirmMemory').textContent = '确认并保存';
-    $('memoryDialog').showModal(); $('memoryText').focus();
+  function renderProjects() {
+    const detailId = state.projectsPage.detail;
+    const detailLoading = state.detailGroups.loadingDetail === detailId;
+    if (detailId && detailLoading && state.detailGroups.detail?.projectId === detailId) return renderProjectDetail();
+    if (detailId && !detailLoading && state.projectsPage.items.some(p => p.projectId === detailId) && state.detailGroups.detail?.projectId === detailId) return renderProjectDetail();
+    if (!detailLoading) state.projectsPage.detail = null;
+    const rows = state.projectsPage.items.map(p => `<div class="project-row" data-drop-project="${esc(p.projectId)}">
+        <div class="project-name"><button class="link-button" data-action="project-detail" data-id="${esc(p.projectId)}">${esc(p.name)}</button><small>${esc(domainName(p.domainId))}</small></div>
+        <div class="group-tags">${(p.groups || []).slice(0, 3).map(g => groupTag(g, p.projectId)).join('') || '<small>未挂载组合</small>'}${(p.groups || []).length > 3 ? `<button class="link-button" data-action="project-detail" data-id="${esc(p.projectId)}">＋${p.groups.length - 3}</button>` : ''}</div>
+        <button data-action="project-groups" data-id="${esc(p.projectId)}">＋ 组合</button>
+      </div>`).join('') || '<div class="empty small-empty">没有匹配的项目。</div>';
+    $('projectsContent').innerHTML = `
+      <div class="actions" style="margin-bottom:16px">
+        <input id="projectQuery" placeholder="搜索全部项目（名称或目录）" aria-label="搜索项目" value="${esc(state.projectsPage.q)}" style="flex:1">
+        <select id="projectDomainFilter" aria-label="按领域筛选"><option value="">全部领域</option>${state.brain.domains.map(d => `<option value="${esc(d.id)}" ${state.projectsPage.domain === d.id ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select>
+      </div>
+      <div class="dragbar" data-unlink-drop><span>拖动组合到项目行可应用；把项目上的标签拖回这里解除</span>${state.groups.items.map(g => `<button draggable="true" data-drag-group="${esc(g.id)}" data-action="group-projects" data-id="${esc(g.id)}">${esc(g.name)}</button>`).join('')}</div>
+      ${rows}
+      ${pagerUi('projects', state.projectsPage.page, state.projectsPage.total, 20)}`;
   }
+  function renderProjectDetail() {
+    const detail = state.detailGroups.detail;
+    const project = state.projectsPage.items.find(p => p.projectId === detail.projectId);
+    if (!project) { state.projectsPage.detail = null; return renderProjects(); }
+    const effective = detail.effective;
+    const items = effective.items.map(m => `<article class="memory-item"><button class="reference" data-action="memory-detail" data-id="${esc(m.id)}"><b>${esc(m.title)}</b><small>${esc(clamp2(m.text).slice(0, 160))}</small><small>${(m.sources || []).map(s => s.kind === 'group' ? `组合：${esc(s.groupName)}` : `${SCOPE_LABEL[s.scopeType] || '作用域'}`).join(' · ')}</small></button></article>`).join('') || '<div class="empty small-empty">为项目添加组合后，在这里查看生效记忆。</div>';
+    $('projectsContent').innerHTML = `
+      <div class="section-heading"><button class="link-button" data-action="project-list">‹ 返回项目列表</button><div class="actions"><button data-action="edit-project" data-id="${esc(project.projectId)}">项目设置</button></div></div>
+      <h2>${esc(project.name)}</h2><p>${esc(domainName(project.domainId))}</p>
+      <div class="detail-path">${esc(project.workspacePath)}</div>
+      <section class="panel" style="margin-top:20px"><div class="section-heading" style="margin-bottom:12px"><h2>使用的组合</h2><button data-action="project-groups" data-id="${esc(project.projectId)}">＋ 添加组合</button></div>
+        <div class="group-tags">${detail.groups.map(g => groupTag(g, project.projectId)).join('') || '<small>尚未添加组合</small>'}</div></section>
+      <section class="panel" style="margin-top:20px"><h2>生效记忆 <small>${effective.total} 条 · 已按记忆去重</small></h2>
+        <div class="memory-list">${items}</div>
+        ${pagerUi('effective', effective.page, effective.total, 10)}</section>`;
+  }
+  // ============ 检索：真实引擎 API ============
+  function renderSearch() {
+    const search = state.search;
+    const projectOptions = [`<option value="">全部项目</option>`, ...state.projects.map(p => `<option value="${esc(p.projectId)}" ${search.projectId === p.projectId ? 'selected' : ''}>${esc(p.name)}</option>`)].join('');
+    const typeOptions = [['all', '知识与记忆'], ['knowledge', '项目知识'], ['memory', '长期记忆']].map(([id, name]) => `<option value="${id}" ${search.type === id ? 'selected' : ''}>${name}</option>`).join('');
+    let resultsHtml = '<div class="empty small-empty">输入关键词，查找已保存的项目知识和长期记忆。</div>';
+    if (search.done) {
+      const filtered = search.results.filter(r => search.type === 'all' || (search.type === 'memory') === Boolean(r.memoryId));
+      const pageRows = filtered.slice(search.page * 8, (search.page + 1) * 8).map((r, i) => `<article class="result-row"><button class="reference" data-action="search-detail" data-index="${search.page * 8 + i}"><b>${esc(r.title)}</b><small>${esc(clamp2(r.snippet || r.chunk_text || '').slice(0, 180))}</small></button><small>${r.memoryId ? `长期记忆${r.memoryScopeType && r.memoryScopeType !== 'group' ? ' · ' + (SCOPE_LABEL[r.memoryScopeType] || '') : ''}` : `${esc(projectName(r.scope_project_id || r.projectId))}${r.commitSha ? ` · commit ${esc(r.commitSha.slice(0, 8))}` : ''}`}</small></article>`).join('');
+      resultsHtml = `<p class="muted" style="margin:12px 0">${search.results.length} 条结果${filtered.length !== search.results.length ? `（当前筛选 ${filtered.length} 条）` : ''}</p>${pageRows || '<div class="empty small-empty">没有找到匹配内容，试试其他关键词。</div>'}${pagerUi('search', search.page, filtered.length, 8)}`;
+    }
+    $('searchContent').innerHTML = `
+      <form id="searchForm"><div class="actions" style="margin-bottom:12px">
+        <input name="query" placeholder="搜索知识或记忆，例如：测试、索引" aria-label="搜索知识和记忆" value="${esc(search.draft)}" style="flex:1">
+        <button class="primary" type="submit">搜索</button></div>
+        <div class="actions">
+          <select name="project" aria-label="检索项目">${projectOptions}</select>
+          <select name="type" aria-label="检索类型">${typeOptions}</select>
+          <select name="scope" aria-label="检索范围">${[['brain', '整个智脑'], ['domain', '所属领域'], ['project', '当前项目']].map(([id, name]) => `<option value="${id}" ${search.scope === id ? 'selected' : ''}>${name}</option>`).join('')}</select>
+        </div></form>
+      ${search.loading ? '<div class="empty small-empty">正在检索…</div>' : resultsHtml}`;
+    const form = $('searchForm');
+    if (form) {
+      form.addEventListener('submit', event => { event.preventDefault(); runSearch(new FormData(form)); });
+      form.elements.query.addEventListener('input', () => { state.search.draft = form.elements.query.value; });
+    }
+  }
+  async function runSearch(formData) {
+    const search = state.search;
+    search.q = String(formData.get('query') || '').trim();
+    search.draft = search.q;
+    search.projectId = String(formData.get('project') || '');
+    search.type = String(formData.get('type') || 'all');
+    search.scope = String(formData.get('scope') || 'brain');
+    search.page = 0;
+    if (!search.q) { toast('请输入检索关键词。'); return; }
+    const epoch = ++search.epoch;
+    search.loading = true; search.done = false;
+    renderSearch();
+    try {
+      const body = { query: search.q, scope: search.scope, limit: 30 };
+      if (search.projectId) body.projectId = search.projectId;
+      else if (state.projectId && search.scope !== 'brain') body.projectId = state.projectId;
+      const result = await api('/api/engine/search', { method: 'POST', body, timeoutMs: 15000 });
+      if (epoch !== search.epoch) return;
+      search.results = result.results || [];
+      search.done = true;
+    } catch (error) {
+      if (epoch !== search.epoch) return;
+      search.results = []; search.done = true;
+      toast('检索失败：' + error.message);
+    } finally { if (epoch === search.epoch) search.loading = false; }
+    renderSearch();
+  }
+  // ============ 活动记录 ============
   function maintenanceWarning() {
     const status = state.snapshot.maintenance;
     if (!status || !state.engineAvailable) return null;
@@ -331,15 +564,32 @@
   function renderActivity() {
     all('[data-activity-tab]').forEach(button => button.classList.toggle('active', button.dataset.activityTab === state.activityTab));
     $('activityUpdates').hidden = state.activityTab !== 'updates'; $('activitySessions').hidden = state.activityTab !== 'sessions';
-    const runs = (state.activityProject === state.projectId ? state.activityPage?.runs || [] : state.snapshot.runs).filter(r => r.projectId === state.projectId).map(r => ({ ...state.runDetails?.get(r.runId), ...r }));
-    const open = new Set(all('.run[open]').map(d => d.dataset.runId));
-    $('activityUpdates').innerHTML = state.engineAvailable ? runs.map(r => `<details class="run" data-run-id="${esc(r.runId)}" ${open.has(r.runId) ? 'open' : ''}><summary><time>${time(r.startedAt)}</time><strong>${esc(projectName(r.projectId))} · ${esc(r.commitSha.slice(0, 8))}</strong>${badge(label(r), ['failed', 'index-pending'].includes(r.state) ? 'issue' : r.state === 'succeeded' ? 'up' : '')}</summary><div><p>提交：${esc(r.commitSha)}<br>阶段：${esc(r.phase)} · 入口：${esc(r.trigger)}<br>知识晋升：${time(r.promotedAt)} · 索引：${esc(r.indexState)}</p>${r.memoryCapture?.rejected?.length ? `<p>记忆候选：${esc(r.memoryCapture.rejected.length)} 条依据无效，未纳入候选箱；有效知识已保留。可在诊断日志中查看原因。</p>` : ''}${r.error ? `<p class="error">${esc(r.error.message)} (${esc(r.error.code)})</p>${r.error.details ? `<p>失败原因：${esc(r.error.details.upstreamMessage)}<br>类别：${esc(r.error.details.failureKind)} · HTTP：${esc(r.error.details.httpStatus ?? '—')} · 上游代码：${esc(r.error.details.upstreamCode)}<br>请求标识：${esc(r.error.details.requestId || '—')} · 尝试：${esc(r.error.details.attempt)} · 耗时：${esc(r.error.details.durationMs ?? '—')} ms</p>` : ''}` : ''}${(r.staging?.operations || []).map(op => `<div class="operation">${esc(op.operation)} · ${esc(op.path)}<br>${esc(op.reason)}</div>`).join('')}${['failed', 'index-pending'].includes(r.state) ? `<button data-retry-run="${esc(r.runId)}">重试失败阶段</button>` : ''}</div></details>`).join('') || '<div class="empty">当前项目还没有知识维护记录。</div>' : '<div class="empty">知识引擎离线。记录仍保留在本机，连接恢复后自动读取。</div>';
+    if (state.activityTab === 'sessions') return;
+    const filters = [['all', '全部'], ['recovering', '自动恢复'], ['needs', '需处理'], ['completed', '已完成'], ['changes', '操作记录']];
+    const filterBar = `<div class="segmented" style="margin-bottom:16px">${filters.map(([id, name]) => `<button data-activity-filter="${id}" class="${state.activityFilter === id ? 'active' : ''}">${name}</button>`).join('')}</div>`;
+    let body;
+    if (state.activityFilter === 'changes') {
+      const events = state.snapshot.events || [];
+      body = events.map(e => `<div class="row"><div><b>${esc(e.summary)}</b><small>${e.projectId ? esc(projectName(e.projectId)) + ' · ' : ''}${time(e.at)}</small></div></div>`).join('') || '<div class="empty small-empty">还没有操作记录。</div>';
+    } else {
+      const runs = (state.activityProject === state.projectId ? state.activityPage?.runs || [] : state.snapshot.runs)
+        .filter(r => !state.projectId || r.projectId === state.projectId)
+        .map(r => ({ ...state.runDetails?.get(r.runId), ...r }))
+        .filter(r => state.activityFilter === 'all'
+          || (state.activityFilter === 'needs' && ['failed', 'index-pending'].includes(r.state) && recoveryLabel(r) !== '自动恢复中')
+          || (state.activityFilter === 'recovering' && recoveryLabel(r) === '自动恢复中')
+          || (state.activityFilter === 'completed' && r.state === 'succeeded'));
+      const open = new Set(all('.run[open]').map(d => d.dataset.runId));
+      body = state.engineAvailable ? runs.map(r => `<details class="run" data-run-id="${esc(r.runId)}" ${open.has(r.runId) ? 'open' : ''}><summary><time>${time(r.startedAt)}</time><strong>${esc(projectName(r.projectId))} · ${esc(r.commitSha.slice(0, 8))}</strong>${badge(label(r), ['failed', 'index-pending'].includes(r.state) && recoveryLabel(r) !== '自动恢复中' ? 'issue' : r.state === 'succeeded' ? 'up' : '')}</summary><div><p>提交：${esc(r.commitSha)}<br>阶段：${esc(r.phase)} · 入口：${esc(r.trigger)}<br>知识晋升：${time(r.promotedAt)} · 索引：${esc(r.indexState)}${r.recovery ? `<br>恢复：${esc(recoveryLabel(r))} · 已尝试 ${r.recovery.attempts} 次${r.recovery.nextRetryAt ? ` · 下次 ${time(r.recovery.nextRetryAt)}` : ''}` : ''}</p>${r.error ? `<p class="error">${esc(r.error.message)} (${esc(r.error.code)})</p>${r.error.details ? `<p>失败原因：${esc(r.error.details.upstreamMessage)}<br>类别：${esc(r.error.details.failureKind)} · HTTP：${esc(r.error.details.httpStatus ?? '—')} · 尝试：${esc(r.error.details.attempt)}</p>` : ''}` : ''}${(r.staging?.operations || []).map(op => `<div class="operation">${esc(op.operation)} · ${esc(op.path)}<br>${esc(op.reason)}</div>`).join('')}${['failed', 'index-pending'].includes(r.state) ? `<button data-retry-run="${esc(r.runId)}">重试失败阶段</button>` : ''}</div></details>`).join('') || '<div class="empty small-empty">此分类没有记录。</div>' : '<div class="empty small-empty">知识引擎离线。记录仍保留在本机，连接恢复后自动读取。</div>';
+      const nav = `<div class="actions" style="margin-top:12px">${state.activityBefore ? '<button data-run-page="">回到最新记录</button>' : ''}${state.activityPage?.nextCursor ? `<button data-run-page="${esc(state.activityPage.nextCursor)}">更早的记录</button>` : ''}</div>`;
+      body += nav;
+    }
+    $('activityUpdates').innerHTML = filterBar + body;
     renderMaintenanceWarning();
   }
   function renderMaintenanceWarning() {
     const warning = maintenanceWarning();
     if (warning) {
-      if (!all('#activityUpdates .run').length) $('activityUpdates').replaceChildren();
       const notice = document.createElement('div'); notice.className = 'empty error';
       const title = document.createElement('strong'); title.textContent = warning.title;
       const message = document.createElement('p'); message.textContent = warning.message;
@@ -352,12 +602,6 @@
       $('activityUpdates').prepend(notice);
     }
   }
-  function renderActivityNavigation() {
-    if (state.activityProject !== state.projectId || !state.engineAvailable) return;
-    const nav = document.createElement('div'); nav.className = 'actions';
-    nav.innerHTML = `${state.activityBefore ? '<button data-run-page="">回到最新记录</button>' : ''}${state.activityPage?.nextCursor ? `<button data-run-page="${esc(state.activityPage.nextCursor)}">更早的记录</button>` : ''}`;
-    $('activityUpdates').append(nav);
-  }
   let activityEpoch = 0;
   async function loadActivityPage(before = state.activityBefore) {
     const epoch = ++activityEpoch, projectId = state.projectId;
@@ -366,7 +610,7 @@
       const result = await api(`/api/engine/runs?summary=1&limit=50&projectId=${encodeURIComponent(projectId)}${before ? `&before=${encodeURIComponent(before)}` : ''}`);
       if (epoch !== activityEpoch || projectId !== state.projectId) return;
       state.activityProject = projectId; state.activityPage = result; state.activityBefore = before;
-      if (state.view === 'activity') { renderActivity(); renderActivityNavigation(); }
+      if (state.view === 'activity') renderActivity();
     } catch { if (epoch === activityEpoch) toast('运行列表刷新失败，保留已有记录。'); }
   }
   document.addEventListener('toggle', async event => {
@@ -375,7 +619,7 @@
     const id = node.dataset.runId, projectId = state.projectId;
     state.runDetails ||= new Map(); if (state.runDetails.has(id)) return;
     node.dataset.loading = '1';
-    try { const result = await api(`/api/engine/runs/${encodeURIComponent(id)}`); if (projectId !== state.projectId || result.run.projectId !== projectId) return; state.runDetails.set(id, result.run); renderActivity(); renderActivityNavigation(); }
+    try { const result = await api(`/api/engine/runs/${encodeURIComponent(id)}`); if (projectId !== state.projectId || result.run.projectId !== projectId) return; state.runDetails.set(id, result.run); renderActivity(); }
     catch { if (projectId === state.projectId) toast('运行详情读取失败，请重新展开重试。'); }
     finally { delete node.dataset.loading; }
   }, true);
@@ -397,6 +641,7 @@
     catch { if (epoch !== snapshotEpoch) return; state.snapshotStale = true; }
     render();
     if (state.view === 'activity') void loadActivityPage();
+    if (state.view === 'home') void loadOverview(true);
   }
   function scheduleRefresh() { if (!navigator.onLine) return; clearTimeout(refreshTimer); refreshTimer = setTimeout(() => { refreshSnapshot(); post('eventBridge', { type: 'kb:refresh' }); }, 160); }
   function connectProgress() {
@@ -426,24 +671,24 @@
     if (registryPromise && !force) return registryPromise;
     const epoch = ++registryEpoch;
     const job = (async () => {
-    try {
-      const apply = () => { if (epoch !== registryEpoch) return; renderProjectOptions(); renderSystem(); updateMemoryFilter(); setView(state.view); };
-      const projects = api('/api/projects/projection').then(result => {
-        if (epoch !== registryEpoch) return;
-        state.projects = result.projects; state.projectsLoaded = true; state.projectsError = null;
-        if (!activeProject()) { state.projectId = state.projects[0]?.projectId || ''; state.epoch++; }
-        Object.keys(frames).forEach(frameContext); apply();
-      }).catch(error => { if (epoch === registryEpoch) { state.projectsError = error.message; render(); } throw error; });
-      const brain = api('/api/brain').then(brain => {
-        if (epoch !== registryEpoch) return;
-        state.brain = brain.brain; state.root = brain.knowledgeRoot;
-        state.indexStorage = { path: brain.indexStoragePath, ...brain.configuration?.indexStorage }; state.scopeStatus = brain.configuration?.scopeStatus; apply();
-      });
-      const health = api('/api/modules/health').then(health => { if (epoch !== registryEpoch) return; state.health = health.modules; state.ownership = health.ownership; apply(); connectProgress(); });
-      const results = await Promise.allSettled([projects, brain, health, refreshSnapshot()]);
-      if (epoch === registryEpoch && results.some(r => r.status === 'rejected')) toast('部分状态暂未刷新，已有内容已保留。');
-    } catch (error) { toast(error.message); }
-    finally { if (epoch === registryEpoch) { registryPromise = null; connectProgress(); } }
+      try {
+        const apply = () => { if (epoch !== registryEpoch) return; renderProjectOptions(); renderSystem(); setView(state.view); };
+        const projects = api('/api/projects/projection').then(result => {
+          if (epoch !== registryEpoch) return;
+          state.projects = result.projects; state.projectsLoaded = true; state.projectsError = null;
+          if (!activeProject()) { state.projectId = state.projects[0]?.projectId || ''; state.epoch++; }
+          Object.keys(frames).forEach(frameContext); apply();
+        }).catch(error => { if (epoch === registryEpoch) { state.projectsError = error.message; render(); } throw error; });
+        const brain = api('/api/brain').then(brain => {
+          if (epoch !== registryEpoch) return;
+          state.brain = brain.brain; state.root = brain.knowledgeRoot;
+          state.indexStorage = { path: brain.indexStoragePath, ...brain.configuration?.indexStorage }; state.scopeStatus = brain.configuration?.scopeStatus; apply();
+        });
+        const health = api('/api/modules/health').then(health => { if (epoch !== registryEpoch) return; state.health = health.modules; state.ownership = health.ownership; apply(); connectProgress(); });
+        const results = await Promise.allSettled([projects, brain, health, refreshSnapshot()]);
+        if (epoch === registryEpoch && results.some(r => r.status === 'rejected')) toast('部分状态暂未刷新，已有内容已保留。');
+      } catch (error) { toast(error.message); }
+      finally { if (epoch === registryEpoch) { registryPromise = null; connectProgress(); } }
     })();
     registryPromise = job;
     return job;
@@ -473,9 +718,6 @@
     $('systemDrawer').hidden = false; $('drawerBackdrop').hidden = false;
     $('brainName').value = state.brain.name; $('knowledgeRoot').value = state.root;
     renderStorageInfo();
-    // Opening the drawer is the explicit refresh point (the manual status
-    // button is gone): force a fresh scan so externally changed client
-    // configs are reflected instead of serving the 30s cache.
     await Promise.all([loadMaintenance(), loadAgentCapture(true)]);
   }
   function renderStorageInfo() {
@@ -492,8 +734,7 @@
       if (projectId) params.set('projectId', projectId);
       if (force) params.set('refresh', '1');
       const result = await api('/api/integrations/status?' + params);
-      if (projectId !== state.projectId) return;
-      if (epoch !== captureEpoch) return;
+      if (projectId !== state.projectId || epoch !== captureEpoch) return;
       const badgeState = { connected: 'up', error: 'issue' };
       const badgeText = { checking: '检测中', connected: '已接入', disconnected: '未接入', error: '异常', 'not-detected': '未检测到' };
       $('agentCaptureList').innerHTML = result.clients.map(agent => {
@@ -659,45 +900,457 @@
       $('confirmImport').disabled = !result.ready || result.plannedGitInit && !$('importForm').elements.confirmGitInit.checked || result.checks.hook?.replacementProjectId && !$('importForm').elements.confirmReplaceHook.checked || !$('importKnowledge').value.trim();
     } catch (error) { if (epoch === state.preflightEpoch) $('preflightStatus').textContent = error.message; }
   }
+  // ============ 通用对话框（appDialog） ============
+  function appDialogOpen(title, bodyHtml, actions = []) {
+    $('appDialogTitle').textContent = title;
+    $('appDialogBody').innerHTML = bodyHtml;
+    $('appDialogFeedback').hidden = true; $('appDialogFeedback').classList.remove('issue');
+    $('appDialogActions').innerHTML = '';
+    for (const action of actions) {
+      const button = document.createElement('button');
+      button.textContent = action.label;
+      if (action.class) button.className = action.class;
+      if (action.form) { button.type = 'submit'; button.setAttribute('form', action.form); }
+      else { button.type = 'button'; button.addEventListener('click', () => Promise.resolve(action.run()).catch(error => appDialogError(error.message))); }
+      $('appDialogActions').append(button);
+    }
+    $('appDialog').showModal();
+  }
+  function appDialogError(message) { $('appDialogFeedback').textContent = message; $('appDialogFeedback').hidden = false; $('appDialogFeedback').classList.add('issue'); }
+  function appDialogClose() { $('appDialog').close(); }
+  function confirmDialog(title, text, confirmLabel, run) {
+    appDialogOpen(title, `<p class="feedback" style="margin:0">${esc(text)}</p>`, [
+      { label: '取消', run: appDialogClose },
+      { label: confirmLabel, class: 'danger', run: async () => { appDialogClose(); await run(); } },
+    ]);
+  }
+  function memoryById(id) {
+    return state.memory.items.find(m => m.id === id) || state.candidates.items.find(m => m.id === id) || state.detailGroups.detail?.effective.items.find(m => m.id === id);
+  }
+  // ---- 记忆编辑器（标题 + 多行正文 + 可选组合/作用域） ----
+  function memoryEditor(memory = null) {
+    const isLegacy = memory && memory.scopeType !== 'group';
+    const groupOptions = ['<option value="">暂不加入组合</option>', ...state.groups.items.map(g => `<option value="${esc(g.id)}" ${memory?.groups?.[0]?.id === g.id ? 'selected' : ''}>${esc(g.name)}</option>`)].join('');
+    const scopeOptions = isLegacy || !memory
+      ? `<label>适用范围<select name="scopeType"><option value="group" ${!isLegacy ? 'selected' : ''}>组合记忆：通过组合应用到项目</option><option value="global" ${memory?.scopeType === 'global' ? 'selected' : ''}>全局：所有领域与项目</option><option value="domain" ${memory?.scopeType === 'domain' ? 'selected' : ''}>领域：指定领域内的项目</option><option value="project" ${memory?.scopeType === 'project' ? 'selected' : ''}>项目：仅指定项目</option></select></label>
+         <label data-role="scope-target" hidden>适用目标<select name="scopeTarget"></select></label>`
+      : '';
+    appDialogOpen(memory ? '编辑记忆' : '添加记忆', `
+      <form id="memoryForm">
+        <label>标题<input name="title" maxlength="120" required value="${esc(memory?.title || '')}" placeholder="例如：开发时保护日常服务"></label>
+        <label>内容<textarea name="text" required rows="8" placeholder="这是一条完整记忆，可以包含多个段落和列表。">${esc(memory?.text || '')}</textarea></label>
+        ${memory ? '' : `<label>加入组合<select name="groupId">${groupOptions}</select></label>`}
+        ${scopeOptions}
+        <p class="muted">${memory?.scopeType === 'group' ? '这条记忆通过组合应用到项目；正文只有一份，被所有引用共享。' : '多段正文保存在同一条记忆中，不会按换行拆分。'}</p>
+      </form>`, [
+      { label: '取消', run: appDialogClose },
+      { label: memory ? '保存' : '添加', class: 'primary', form: 'memoryForm' },
+    ]);
+    const form = $('memoryForm');
+    const scopeSelect = form.elements.scopeType;
+    const targetLabel = form.querySelector('[data-role="scope-target"]');
+    const fillTargets = type => {
+      const targets = type === 'domain' ? state.brain.domains.map(d => ({ id: d.id, name: d.name })) : type === 'project' ? state.projects.map(p => ({ id: p.projectId, name: p.name })) : [];
+      targetLabel.hidden = targets.length === 0;
+      form.elements.scopeTarget.innerHTML = targets.map(t => `<option value="${esc(t.id)}" ${memory?.scopeId === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('');
+    };
+    if (scopeSelect) {
+      fillTargets(scopeSelect.value);
+      scopeSelect.addEventListener('change', () => fillTargets(scopeSelect.value));
+    }
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const title = form.elements.title.value.trim();
+      const text = form.elements.text.value.trim();
+      if (!title || !text) return appDialogError('请填写标题和记忆内容。');
+      const scopeType = form.elements.scopeType?.value || 'group';
+      if (scopeType !== 'group' && scopeType !== 'global' && !form.elements.scopeTarget?.value) return appDialogError('请选择适用目标。');
+      try {
+        let saved;
+        if (memory) {
+          const body = { title, text };
+          if (form.elements.scopeType && (memory.scopeType !== scopeType || scopeType !== 'group')) {
+            body.scopeType = scopeType;
+            body.scopeId = scopeType === 'global' ? state.brain.id : form.elements.scopeTarget?.value;
+          }
+          saved = await api(`/api/engine/memories/${encodeURIComponent(memory.id)}`, { method: 'PATCH', body });
+        } else {
+          const body = { title, text, brainId: state.brain.id, scopeType, scopeId: scopeType === 'group' || scopeType === 'global' ? state.brain.id : form.elements.scopeTarget?.value };
+          saved = await api('/api/engine/memories', { method: 'POST', body });
+          const groupId = form.elements.groupId?.value;
+          if (groupId) await api(`/api/engine/memory-groups/${encodeURIComponent(groupId)}/members`, { method: 'POST', body: { addMemoryIds: [saved.memory.id] } });
+        }
+        appDialogClose();
+        toast(memory ? '记忆已保存，多行内容保持在同一条记忆中。' : '记忆已保存。');
+        await Promise.all([loadMemoryPage(), loadGroups(), loadOverview(true)]);
+        if (state.projectsPage.detail) await loadDetail(state.projectsPage.detail);
+      } catch (error) { appDialogError(error.message); }
+    });
+  }
+  // ---- 候选审核 ----
+  function reviewCandidate(memory) {
+    const groupOptions = ['<option value="">暂不加入组合</option>', ...state.groups.items.map(g => `<option value="${esc(g.id)}">${esc(g.name)}</option>`)].join('');
+    appDialogOpen('审核候选记忆', `
+      <form id="reviewForm">
+        <h3>${esc(memory.title)}</h3>
+        <p class="feedback" style="white-space:pre-wrap">${esc(memory.text)}</p>
+        <p class="muted">${memory.evidence ? `来源：${esc(projectName(memory.evidence.projectId))} · commit ${esc(memory.evidence.commitSha.slice(0, 8))} · ${esc(memory.evidence.entryId)}` : '来源：手动添加'}</p>
+        ${memory.evidence?.quote ? `<details class="agent-detail" style="margin:12px 0"><summary>查看原始依据（冻结原文）</summary><p class="feedback" style="white-space:pre-wrap">${esc(memory.evidence.quote)}</p></details>` : ''}
+        <label>确认后加入组合<select name="groupId">${groupOptions}</select></label>
+        <p class="muted" data-role="impact">确认后保留在记忆库；加入组合并应用到项目后生效。</p>
+      </form>`, [
+      { label: '忽略', class: 'danger', run: async () => { await api(`/api/engine/memories/${encodeURIComponent(memory.id)}`, { method: 'PATCH', body: { status: 'ignored' } }); appDialogClose(); toast('已忽略候选。'); await Promise.all([loadCandidates(), loadOverview(true)]); } },
+      { label: '取消', run: appDialogClose },
+      { label: '确认收录', class: 'primary', form: 'reviewForm' },
+    ]);
+    const form = $('reviewForm');
+    form.elements.groupId.addEventListener('change', () => {
+      const group = groupById(form.elements.groupId.value);
+      $('appDialogBody').querySelector('[data-role="impact"]').textContent = group ? `加入后，使用「${group.name}」的 ${group.boundProjectCount} 个项目后续新任务会读到它。` : '确认后保留在记忆库；加入组合并应用到项目后生效。';
+    });
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      try {
+        await api(`/api/engine/memories/${encodeURIComponent(memory.id)}`, { method: 'PATCH', body: { status: 'confirmed' } });
+        const groupId = form.elements.groupId.value;
+        if (groupId) await api(`/api/engine/memory-groups/${encodeURIComponent(groupId)}/members`, { method: 'POST', body: { addMemoryIds: [memory.id] } });
+        appDialogClose();
+        toast(groupId ? `已确认并加入「${groupById(groupId)?.name}」。` : '已确认，保留在记忆库中。');
+        await Promise.all([loadCandidates(), loadGroups(), loadMemoryPage(), loadOverview(true)]);
+      } catch (error) { appDialogError(error.message); }
+    });
+  }
+  // ---- 记忆详情 ----
+  function memoryDetail(memory) {
+    const groups = memory.groups || [];
+    appDialogOpen(memory.title, `
+      <p class="muted">${memory.sourceType === 'manual' ? `手动添加 · ${time(memory.createdAt)}` : memory.evidence ? `${esc(projectName(memory.evidence.projectId))} · commit ${esc(memory.evidence.commitSha.slice(0, 8))} · ${time(memory.updatedAt)}` : time(memory.updatedAt)}</p>
+      <p class="feedback" style="white-space:pre-wrap;max-height:40vh;overflow:auto">${esc(memory.text)}</p>
+      <p class="muted">所在组合：${groups.map(g => esc(g.name)).join('、') || '未归组合'}${memory.scopeType !== 'group' ? ` · 原作用域：${SCOPE_LABEL[memory.scopeType]}（${memory.scopeType === 'domain' ? esc(domainName(memory.scopeId)) : memory.scopeType === 'project' ? esc(projectName(memory.scopeId)) : '所有项目'}）` : ''}</p>`, [
+      { label: '关闭', run: appDialogClose },
+      ...(memory.status === 'confirmed' ? [
+        { label: '组合归属', run: () => memoryGroupsDialog(memory) },
+        { label: '编辑', class: 'primary', run: () => memoryEditor(memory) },
+      ] : []),
+    ]);
+  }
+  // ---- 记忆的组合归属（多选差量） ----
+  async function memoryGroupsDialog(memory) {
+    await loadGroups();
+    const checks = state.groups.items.map(g => `<label class="checkbox"><input type="checkbox" name="groups" value="${esc(g.id)}" ${memory.groups?.some(mg => mg.id === g.id) ? 'checked' : ''}><span>${esc(g.name)} <small>${g.memberCount} 条</small></span></label>`).join('') || '<p class="muted">先创建一个组合。</p>';
+    appDialogOpen('选择记忆所在的组合', `
+      <form id="memoryGroupsForm">${checks}</form>
+      <p class="muted">同一条记忆可被多个组合引用，内容只维护一份。</p>`, [
+      { label: '取消', run: appDialogClose },
+      { label: '保存', class: 'primary', run: async () => {
+        const chosen = new Set([...$('memoryGroupsForm').querySelectorAll('[name=groups]:checked')].map(x => x.value));
+        const current = new Set((memory.groups || []).map(g => g.id));
+        const add = [...chosen].filter(id => !current.has(id));
+        const remove = [...current].filter(id => !chosen.has(id));
+        await Promise.all(state.groups.items.filter(g => add.includes(g.id) || remove.includes(g.id)).map(g =>
+          api(`/api/engine/memory-groups/${encodeURIComponent(g.id)}/members`, { method: 'POST', body: { addMemoryIds: add.includes(g.id) ? [memory.id] : [], removeMemoryIds: remove.includes(g.id) ? [memory.id] : [] } })));
+        appDialogClose(); toast('组合归属已更新，仍共享同一条记忆。');
+        await Promise.all([loadGroups(), loadMemoryPage()]);
+        if (state.projectsPage.detail) await loadDetail(state.projectsPage.detail);
+      } },
+    ]);
+  }
+  // ---- 组合设置 / 新建 ----
+  function groupEditor(group = null) {
+    appDialogOpen(group ? '组合设置' : '新建组合', `
+      <form id="groupForm">
+        <label>组合名称<input name="name" maxlength="80" required value="${esc(group?.name || '')}" placeholder="例如：通用约定"></label>
+        ${group ? `<p class="muted">${group.memberCount} 条独立记忆 · ${group.boundProjectCount} 个项目使用。删除组合会保留其中的小记忆。</p>` : '<p class="muted">先创建组合，再添加或选入独立的小记忆。</p>'}
+      </form>`, [
+      ...(group ? [{ label: '删除组合', class: 'danger', run: () => confirmDialog('删除组合？', `「${group.name}」将解除 ${group.boundProjectCount} 个项目的关联。里面的小记忆仍保留在「全部记忆」中。`, '删除', async () => {
+        await api(`/api/engine/memory-groups/${encodeURIComponent(group.id)}`, { method: 'DELETE' });
+        state.memory.folder = 'all';
+        toast('组合已删除，小记忆保留。');
+        await Promise.all([loadGroups(), loadMemoryPage(), loadOverview(true)]);
+        if (state.projectsPage.detail) await loadDetail(state.projectsPage.detail); else await loadProjectsPage();
+      }) }] : []),
+      { label: '取消', run: appDialogClose },
+      { label: '保存', class: 'primary', form: 'groupForm' },
+    ]);
+    $('groupForm').addEventListener('submit', async event => {
+      event.preventDefault();
+      const name = $('groupForm').elements.name.value.trim();
+      if (!name) return appDialogError('请填写组合名称。');
+      try {
+        if (group) await api(`/api/engine/memory-groups/${encodeURIComponent(group.id)}`, { method: 'PATCH', body: { name } });
+        else {
+          const created = await api('/api/engine/memory-groups', { method: 'POST', body: { brainId: state.brain.id, name } });
+          state.memory.folder = created.group.id; state.memory.page = 0; state.memory.cursors = [null];
+        }
+        appDialogClose(); toast('组合已保存。');
+        await Promise.all([loadGroups(), loadMemoryPage()]);
+      } catch (error) { appDialogError(error.message); }
+    });
+  }
+  // ---- 组合应用到项目（跨页差量选择） ----
+  async function groupProjectsDialog(group) {
+    await loadGroups();
+    const fresh = groupById(group.id) || group;
+    const selected = new Set();
+    const page = { items: [], total: 0, cursors: [null], index: 0, q: '' };
+    appDialogOpen(`「${fresh.name}」使用范围`, `
+      <input id="applyProjectQuery" placeholder="查找项目" aria-label="查找需要应用组合的项目" style="width:100%;margin-bottom:12px">
+      <div id="applyProjectList" style="max-height:40vh;overflow:auto"></div>
+      <div id="applyProjectPager"></div>
+      <p class="muted" id="applyProjectCount" style="margin-top:12px"></p>`, [
+      { label: '取消', run: appDialogClose },
+      { label: '保存应用范围', class: 'primary', run: async () => {
+        // Diff against the CURRENT server state, not the loaded snapshot:
+        // unviewed pages keep their relations, only explicit changes ship.
+        const detail = await api(`/api/engine/memory-groups/${encodeURIComponent(fresh.id)}`);
+        const current = new Set(detail.group.boundProjectIds);
+        const addProjectIds = [...selected].filter(id => !current.has(id));
+        const removeProjectIds = [...current].filter(id => !selected.has(id));
+        if (addProjectIds.length || removeProjectIds.length) {
+          await api(`/api/engine/memory-groups/${encodeURIComponent(fresh.id)}/project-bindings`, { method: 'POST', body: { addProjectIds, removeProjectIds } });
+        }
+        appDialogClose(); toast('应用范围已保存。');
+        await Promise.all([loadGroups(), loadProjectsPage(), loadOverview(true)]);
+        if (state.projectsPage.detail) await loadDetail(state.projectsPage.detail);
+      } },
+    ]);
+    const renderList = async () => {
+      const params = new URLSearchParams({ limit: '7' });
+      if (page.q.trim()) params.set('q', page.q.trim());
+      const cursor = page.cursors[page.index];
+      if (cursor) params.set('cursor', cursor);
+      const result = await api('/api/projects/page?' + params);
+      page.items = result.projects; page.total = result.total;
+      if (result.nextCursor) page.cursors[page.index + 1] = result.nextCursor; else page.cursors.length = page.index + 1;
+      $('applyProjectList').innerHTML = result.projects.map(p => `<label class="checkbox"><input type="checkbox" data-apply-project value="${esc(p.projectId)}" ${selected.has(p.projectId) ? 'checked' : ''}><span>${esc(p.name)} <small>${esc(domainName(p.domainId))}</small></span></label>`).join('') || '<p class="muted">没有匹配项目。</p>';
+      const pages = Math.max(1, Math.ceil(result.total / 7));
+      $('applyProjectPager').innerHTML = `<div class="pager"><span>${result.total} 个项目</span><div class="actions"><button data-apply-page="${page.index - 1}" ${page.index === 0 ? 'disabled' : ''}>上一页</button><span>${page.index + 1} / ${pages}</span><button data-apply-page="${page.index + 1}" ${page.index + 1 >= pages ? 'disabled' : ''}>下一页</button></div></div>`;
+      $('applyProjectCount').textContent = `已选择 ${selected.size} 个项目，翻页后继续保留选择。`;
+    };
+    try {
+      const detail = await api(`/api/engine/memory-groups/${encodeURIComponent(fresh.id)}`);
+      for (const id of detail.group.boundProjectIds) selected.add(id);
+    } catch { /* server state read failed: only explicit selections will ship */ }
+    await renderList();
+    const body = $('appDialogBody');
+    const onQuery = event => { page.q = event.target.value; page.index = 0; page.cursors = [null]; renderList().catch(() => {}); };
+    const onChange = event => {
+      if (event.target.dataset?.applyProject !== undefined && event.target.type === 'checkbox') {
+        if (event.target.checked) selected.add(event.target.value); else selected.delete(event.target.value);
+        $('applyProjectCount').textContent = `已选择 ${selected.size} 个项目，翻页后继续保留选择。`;
+      }
+    };
+    const onClick = event => {
+      const button = event.target.closest('[data-apply-page]');
+      if (!button || button.disabled) return;
+      event.preventDefault(); event.stopPropagation();
+      page.index = Number(button.dataset.applyPage); renderList().catch(() => {});
+    };
+    $('applyProjectQuery').addEventListener('input', onQuery);
+    body.addEventListener('change', onChange);
+    body.addEventListener('click', onClick, true);
+    $('appDialog').addEventListener('close', () => { body.removeEventListener('change', onChange); body.removeEventListener('click', onClick, true); }, { once: true });
+  }
+  // ---- 项目的组合选择（多选差量） ----
+  async function projectGroupsDialog(projectId) {
+    await loadGroups();
+    const project = state.projectsPage.items.find(p => p.projectId === projectId);
+    if (!project) return;
+    const current = new Set((project.groups || []).map(g => g.id));
+    const selected = new Set(current);
+    const checks = state.groups.items.map(g => `<label class="checkbox"><input type="checkbox" data-project-group value="${esc(g.id)}" ${selected.has(g.id) ? 'checked' : ''}><span>${esc(g.name)} <small>${g.memberCount} 条记忆</small></span></label>`).join('') || '<p class="muted">还没有组合。</p>';
+    appDialogOpen(`为 ${project.name} 选择组合`, `
+      ${checks}
+      <p class="muted">只调整这个项目的引用关系。</p>`, [
+      { label: '取消', run: appDialogClose },
+      { label: '保存', class: 'primary', run: async () => {
+        const addGroupIds = [...selected].filter(id => !current.has(id));
+        const removeGroupIds = [...current].filter(id => !selected.has(id));
+        if (addGroupIds.length || removeGroupIds.length) {
+          await api(`/api/engine/projects/${encodeURIComponent(projectId)}/memory-groups/bind`, { method: 'POST', body: { addGroupIds, removeGroupIds } });
+        }
+        appDialogClose(); toast('已保存项目组合。');
+        await loadProjectsPage();
+        if (state.projectsPage.detail === projectId) await loadDetail(projectId);
+      } },
+    ]);
+    const body = $('appDialogBody');
+    const onChange = event => {
+      if (event.target.dataset?.projectGroup !== undefined && event.target.type === 'checkbox') {
+        if (event.target.checked) selected.add(event.target.value); else selected.delete(event.target.value);
+      }
+    };
+    body.addEventListener('change', onChange);
+    $('appDialog').addEventListener('close', () => body.removeEventListener('change', onChange), { once: true });
+  }
+  // ---- 选入已有记忆到组合 ----
+  async function addExistingDialog(group) {
+    const selected = new Set();
+    const page = { items: [], total: 0, cursors: [null], index: 0, q: '' };
+    appDialogOpen('选入已有记忆', `
+      <input id="existingQuery" placeholder="查找已有记忆" aria-label="查找已有记忆" style="width:100%;margin-bottom:12px">
+      <div id="existingList" style="max-height:40vh;overflow:auto"></div>
+      <div id="existingPager"></div>
+      <p class="muted" id="existingCount" style="margin-top:12px"></p>`, [
+      { label: '取消', run: appDialogClose },
+      { label: `加入「${group.name}」`, class: 'primary', run: async () => {
+        if (!selected.size) return appDialogError('请先选择记忆。');
+        await api(`/api/engine/memory-groups/${encodeURIComponent(group.id)}/members`, { method: 'POST', body: { addMemoryIds: [...selected] } });
+        appDialogClose(); toast('已加入组合，没有复制记忆内容。');
+        await Promise.all([loadGroups(), loadMemoryPage()]);
+        if (state.projectsPage.detail) await loadDetail(state.projectsPage.detail);
+      } },
+    ]);
+    const renderList = async () => {
+      const params = new URLSearchParams({ status: 'confirmed', limit: '6' });
+      if (page.q.trim()) params.set('q', page.q.trim());
+      const cursor = page.cursors[page.index];
+      if (cursor) params.set('cursor', cursor);
+      const result = await api('/api/engine/memories?' + params);
+      page.items = result.memories; page.total = result.total;
+      if (result.nextCursor) page.cursors[page.index + 1] = result.nextCursor; else page.cursors.length = page.index + 1;
+      $('existingList').innerHTML = result.memories.map(m => `<label class="checkbox"><input type="checkbox" data-existing-memory value="${esc(m.id)}" ${selected.has(m.id) ? 'checked' : ''}><span>${esc(m.title)}<small style="display:block">${esc(clamp2(m.text).slice(0, 65))}</small></span></label>`).join('') || '<p class="muted">没有匹配的已有记忆。</p>';
+      const pages = Math.max(1, Math.ceil(result.total / 6));
+      $('existingPager').innerHTML = `<div class="pager"><span>${result.total} 条</span><div class="actions"><button data-existing-page="${page.index - 1}" ${page.index === 0 ? 'disabled' : ''}>上一页</button><span>${page.index + 1} / ${pages}</span><button data-existing-page="${page.index + 1}" ${page.index + 1 >= pages ? 'disabled' : ''}>下一页</button></div></div>`;
+      $('existingCount').textContent = `已选择 ${selected.size} 条，加入后共享原内容。`;
+    };
+    await renderList();
+    const body = $('appDialogBody');
+    const onQuery = event => { page.q = event.target.value; page.index = 0; page.cursors = [null]; renderList().catch(() => {}); };
+    const onChange = event => {
+      if (event.target.dataset?.existingMemory !== undefined && event.target.type === 'checkbox') {
+        if (event.target.checked) selected.add(event.target.value); else selected.delete(event.target.value);
+        $('existingCount').textContent = `已选择 ${selected.size} 条，加入后共享原内容。`;
+      }
+    };
+    const onClick = event => {
+      const button = event.target.closest('[data-existing-page]');
+      if (!button || button.disabled) return;
+      event.preventDefault(); event.stopPropagation();
+      page.index = Number(button.dataset.existingPage); renderList().catch(() => {});
+    };
+    $('existingQuery').addEventListener('input', onQuery);
+    body.addEventListener('change', onChange);
+    body.addEventListener('click', onClick, true);
+    $('appDialog').addEventListener('close', () => { body.removeEventListener('change', onChange); body.removeEventListener('click', onClick, true); }, { once: true });
+  }
+  // ============ 全局事件 ============
   document.addEventListener('click', e => {
     const button = e.target.closest('button'); if (!button) return;
     const execute = async () => {
       if (button.dataset.view) setView(button.dataset.view);
-      if (button.dataset.go) { if (button.dataset.go === 'memory') state.memoryTab = 'candidate'; setView(button.dataset.go); }
+      if (button.dataset.go) setView(button.dataset.go);
       if (button.dataset.close && !(button.dataset.close === 'unbindDialog' && unbinding)) $(button.dataset.close).close();
       if (button.dataset.selectProject) selectProject(button.dataset.selectProject);
-      if (button.dataset.scope) { state.scope = button.dataset.scope; all('[data-scope]').forEach(b => b.classList.toggle('active', b.dataset.scope === state.scope)); post('vectorHub', { type: 'kb:scope', scope: state.scope }); }
-      if (button.dataset.memoryTab) { state.memoryTab = button.dataset.memoryTab; renderMemories(); }
+      if (button.dataset.memoryTab) { state.memory.tab = button.dataset.memoryTab; state.memory.page = 0; state.memory.cursors = [null]; renderMemories(); if (button.dataset.memoryTab === 'candidate') void loadCandidates(); }
       if (button.dataset.activityTab) { state.activityTab = button.dataset.activityTab; setView('activity'); post('eventBridge', { type: 'kb:visibility', visible: state.activityTab === 'sessions' }); post('eventBridge', { type: 'kb:refresh' }); }
+      if (button.dataset.activityFilter) { state.activityFilter = button.dataset.activityFilter; renderActivity(); }
+      if (button.dataset.folder) { state.memory.folder = button.dataset.folder; state.memory.q = ''; state.memory.page = 0; state.memory.cursors = [null]; await loadMemoryPage(); }
+      if (button.dataset.page) {
+        const target = button.dataset.page;
+        const next = Math.max(0, Number(button.dataset.value) || 0);
+        if (target === 'memory') { if (state.memory.cursors[next] !== undefined) { state.memory.page = next; await loadMemoryPage(); } }
+        else if (target === 'candidate') { if (state.candidates.cursors[next] !== undefined) { state.candidates.page = next; await loadCandidates(); } }
+        else if (target === 'projects') { if (state.projectsPage.cursors[next] !== undefined) { state.projectsPage.page = next; await loadProjectsPage(); } }
+        else if (target === 'effective') { const detail = state.detailGroups.detail; if (detail && detail.effective.cursors[next] !== undefined) { detail.effective.page = next; await loadDetailEffectivePage(); } }
+        else if (target === 'search') { state.search.page = next; renderSearch(); }
+      }
       if (button.dataset.action === 'import') openImport();
       if (button.dataset.action === 'refresh') await refreshRegistry(true);
+      if (button.dataset.action === 'reload-overview') await loadOverview(true);
       if (button.dataset.action === 'repair') await repair();
       if (button.dataset.action === 'system') await openSystem();
+      if (button.dataset.action === 'activity-needs') { state.activityFilter = 'needs'; setView('activity'); renderActivity(); }
+      if (button.dataset.action === 'activity-recovering') { state.activityFilter = 'recovering'; setView('activity'); renderActivity(); }
       if (button.dataset.agentSwitch) await changeAgentAccess(button.dataset.agentClient, button.dataset.agentSwitch);
       if (button.dataset.agentRetry) await retryAgentRepair(button.dataset.agentClient);
       if (button.dataset.action === 'unbind') { const p = activeProject(); if (p && !unbinding) { unbindProjectId = p.projectId; $('unbindProjectName').textContent = `解绑「${p.name}」？`; $('unbindFeedback').textContent = ''; $('unbindDialog').showModal(); } }
-      if (button.dataset.retryRun) { await api(`/api/engine/runs/${encodeURIComponent(button.dataset.retryRun)}/retry`, { method: 'POST', body: {} }); await refreshSnapshot(); }
+      if (button.dataset.retryRun) { await api(`/api/engine/runs/${encodeURIComponent(button.dataset.retryRun)}/retry`, { method: 'POST', body: {} }); await refreshSnapshot(); toast('已重新执行失败阶段。'); }
       if (button.dataset.runPage !== undefined) await loadActivityPage(button.dataset.runPage || null);
-      if (button.dataset.memoryAction) {
-        const memory = state.snapshot.memories.find(m => m.id === button.dataset.memoryId); if (!memory) return;
-        const action = button.dataset.memoryAction;
-        if (action === 'evidence') await openReference({ ...memory.evidence, readFile: false, text: memory.evidence.quote, title: '记忆来源依据（冻结原文）' });
-        else if (action === 'edit' || action === 'confirm') openMemory(memory);
-        else if (action === 'delete') openDeleteMemory(memory);
-        else { await api(`/api/engine/memories/${encodeURIComponent(memory.id)}`, { method: 'PATCH', body: { status: 'ignored' } }); await refreshSnapshot(); }
+      if (button.dataset.action === 'toast-undo') { const undo = toastUndo; toastUndo = null; $('toast').hidden = true; await undo?.(); }
+      if (button.dataset.action === 'new-group') groupEditor();
+      if (button.dataset.action === 'group-settings') groupEditor(groupById(button.dataset.id));
+      if (button.dataset.action === 'group-projects') await groupProjectsDialog(groupById(button.dataset.id));
+      if (button.dataset.action === 'open-group') { setView('memory'); state.memory.tab = 'library'; state.memory.folder = button.dataset.id; state.memory.q = ''; state.memory.page = 0; state.memory.cursors = [null]; await loadMemoryPage(); }
+      if (button.dataset.action === 'new-memory') memoryEditor();
+      if (button.dataset.action === 'memory-edit') memoryEditor(memoryById(button.dataset.id));
+      if (button.dataset.action === 'memory-detail') { const memory = memoryById(button.dataset.id); if (memory) memoryDetail(memory); else toast('列表已刷新，请重试。'); }
+      if (button.dataset.action === 'memory-groups') { const memory = memoryById(button.dataset.id); if (memory) await memoryGroupsDialog(memory); }
+      if (button.dataset.action === 'review-candidate') { const memory = state.candidates.items.find(m => m.id === button.dataset.id) || state.overview?.candidatesPreview?.find(m => m.id === button.dataset.id); if (memory) reviewCandidate(memory); else { await loadCandidates(); const fresh = state.candidates.items.find(m => m.id === button.dataset.id); if (fresh) reviewCandidate(fresh); else toast('候选不存在或已处理。'); } }
+      if (button.dataset.action === 'memory-evidence') { const memory = memoryById(button.dataset.id); if (memory?.evidence) await openReference({ ...memory.evidence, readFile: false, text: memory.evidence.quote, title: '记忆来源依据（冻结原文）' }); }
+      if (button.dataset.action === 'memory-delete') { const memory = memoryById(button.dataset.id); if (memory) confirmDialog('删除这条记忆？', `「${memory.title}」将从所有组合中移除。其他小记忆保留。`, '删除', async () => {
+        await api(`/api/engine/memories/${encodeURIComponent(memory.id)}`, { method: 'DELETE' });
+        toast('已删除记忆。');
+        await Promise.all([loadMemoryPage(), loadGroups(), loadOverview(true)]);
+        if (state.projectsPage.detail) await loadDetail(state.projectsPage.detail);
+      }); }
+      if (button.dataset.action === 'unlink-group') {
+        const groupId = button.dataset.id, projectId = button.dataset.project;
+        await api(`/api/engine/projects/${encodeURIComponent(projectId)}/memory-groups/bind`, { method: 'POST', body: { removeGroupIds: [groupId] } });
+        toast('已解除关联，其他项目不变。', async () => {
+          await api(`/api/engine/projects/${encodeURIComponent(projectId)}/memory-groups/bind`, { method: 'POST', body: { addGroupIds: [groupId] } });
+          await loadProjectsPage(); if (state.projectsPage.detail === projectId) await loadDetail(projectId);
+          toast('已恢复关联。');
+        });
+        await loadProjectsPage(); if (state.projectsPage.detail === projectId) await loadDetail(projectId);
       }
+      if (button.dataset.action === 'project-detail') await openProjectDetail(button.dataset.id);
+      if (button.dataset.action === 'project-list') { state.projectsPage.detail = null; renderProjects(); }
+      if (button.dataset.action === 'project-groups') await projectGroupsDialog(button.dataset.id);
+      if (button.dataset.action === 'edit-project') { const p = state.projectsPage.items.find(x => x.projectId === button.dataset.id); if (p) { await openProjectDetail(p.projectId); selectProject(p.projectId); await openSystem(); } }
+      if (button.dataset.action === 'add-existing') { const group = groupById(state.memory.folder); if (group) await addExistingDialog(group); else toast('请先在左侧选择一个组合。'); }
+      if (button.dataset.action === 'search-detail') { const row = state.search.results[Number(button.dataset.index)]; if (row) await openReference({ projectId: row.scope_project_id || row.projectId, spaceId: row.space_id, entryId: row.entry_id, commitSha: row.commitSha, title: row.title, text: row.snippet || row.chunk_text }); }
     };
     execute().catch(error => toast(error.message));
   });
-  document.addEventListener('change', e => { if (e.target.id === 'projectDomain') api(`/api/projects/${encodeURIComponent(state.projectId)}`, { method: 'PATCH', body: { domainId: e.target.value || null } }).then(() => refreshRegistry(true)).catch(error => toast(error.message)); });
+  document.addEventListener('input', event => {
+    if (event.target.id === 'memoryQuery') { state.memory.q = event.target.value; state.memory.page = 0; state.memory.cursors = [null]; clearTimeout(event.target.dataset.timer || 0); event.target.dataset.timer = setTimeout(() => loadMemoryPage(), 250); }
+    if (event.target.id === 'projectQuery') { state.projectsPage.q = event.target.value; state.projectsPage.page = 0; state.projectsPage.cursors = [null]; clearTimeout(event.target.dataset.timer || 0); event.target.dataset.timer = setTimeout(() => loadProjectsPage(), 250); }
+  });
+  document.addEventListener('change', async event => {
+    if (event.target.id === 'projectDomainFilter') { state.projectsPage.domain = event.target.value; state.projectsPage.page = 0; state.projectsPage.cursors = [null]; await loadProjectsPage(); }
+  });
+  // 拖放：组合 → 项目行 = 应用；标签 → 拖回条 = 解除（键盘等价操作见各按钮/对话框）
+  let drag = null;
+  document.addEventListener('dragstart', event => {
+    const chip = event.target.closest('[data-drag-group]');
+    if (!chip) return;
+    drag = { groupId: chip.dataset.dragGroup, projectId: chip.dataset.project || null };
+    event.dataTransfer.effectAllowed = 'copyMove';
+    event.dataTransfer.setData('text/plain', drag.groupId);
+  });
+  document.addEventListener('dragover', event => {
+    const dropProject = event.target.closest('[data-drop-project]');
+    const unlinkBar = event.target.closest('[data-unlink-drop]');
+    if (!drag || !dropProject && !unlinkBar) return;
+    event.preventDefault();
+    unlinkBar?.classList.add('over');
+  });
+  document.addEventListener('drop', async event => {
+    const dropProject = event.target.closest('[data-drop-project]');
+    const unlinkBar = event.target.closest('[data-unlink-drop]');
+    if (!drag || !dropProject && !unlinkBar) return;
+    event.preventDefault();
+    all('.over').forEach(node => node.classList.remove('over'));
+    try {
+      if (dropProject) {
+        if (dropProject.dataset.dropProject === drag.projectId) return;
+        await api(`/api/engine/projects/${encodeURIComponent(dropProject.dataset.dropProject)}/memory-groups/bind`, { method: 'POST', body: { addGroupIds: [drag.groupId] } });
+        toast('已应用到项目。');
+      } else if (unlinkBar && drag.projectId) {
+        await api(`/api/engine/projects/${encodeURIComponent(drag.projectId)}/memory-groups/bind`, { method: 'POST', body: { removeGroupIds: [drag.groupId] } });
+        toast('已解除关联，其他项目不变。');
+      }
+    } catch (error) { toast(error.message); }
+    finally { drag = null; await loadProjectsPage(); if (state.projectsPage.detail) await loadDetail(state.projectsPage.detail); }
+  });
+  document.addEventListener('dragend', () => { drag = null; all('.over').forEach(node => node.classList.remove('over')); });
   window.addEventListener('message', event => {
     if (event.origin !== location.origin || !event.data || typeof event.data !== 'object') return;
     const key = Object.keys(frames).find(k => $(frames[k].id).contentWindow === event.source); if (!key) return;
     const message = event.data;
     if (message.type === 'kb:open-integrations' && key === 'eventBridge') { openSystem().then(() => $('agentCaptureSection').scrollIntoView({ block: 'start' })).catch(error => toast(error.message)); return; }
     if (message.type === 'kb:ready') { frames[key].ready = true; frameContext(key); if (key === 'terminal') void resetKnowledgePanel(); if (frames[key].openSettings) { post(key, { type: 'kb:open-settings' }); frames[key].openSettings = false; } }
-    // Panel protocol traffic carries its own request ids and never falls into
-    // the frame-context staleness drop below.
     if (key === 'terminal' && typeof message.type === 'string' && message.type.startsWith('kb:panel/')) {
       if (message.type === 'kb:panel/state') { handlePanelState(message); return; }
       const settle = panelRequests.get(message.requestId);
@@ -712,7 +1365,6 @@
   });
   on('projectSelect', 'change', e => selectProject(e.target.value));
   on('themeToggle', 'click', () => { document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('kb.theme', document.documentElement.dataset.theme); applyAppearance(); Object.keys(frames).forEach(key => post(key, { type: 'kb:theme', theme: document.documentElement.dataset.theme })); void pushKnowledgeToPanel(); });
-  // Appearance skin: preset palettes plus per-theme token overrides (kb-skin/v1).
   const appearanceTokens = ['page','surface','surface2','surface3','line','text','muted','faint','nav','accent','accent-soft','good','bad','bad-soft'];
   const appearanceDefaults = {
     pure: {
@@ -798,8 +1450,15 @@
   });
   on('openSystem', 'click', openSystem); on('closeSystem', 'click', closeSystem); on('drawerBackdrop', 'click', closeSystem);
   on('repairWiring', 'click', repair);
-  on('configureProviders', 'click', () => { closeSystem(); setView('work'); initializeFrame('terminal'); if (frames.terminal.ready) post('terminal', { type: 'kb:open-settings' }); else frames.terminal.openSettings = true; });
-  on('saveMaintenance', 'click', async () => { await api('/api/terminal/maintenance-default', { method: 'PUT', body: { profileId: $('maintenanceModel').value || null } }); const result = await api('/api/modules/configure', { method: 'POST', body: {} }); $('configurationStatus').textContent = result.configuration.model ? '后台默认模型已保存并同步。' : '配置已保存，后台运行配置尚未同步，请检查模块连接。'; });
+  on('configureProviders', 'click', () => {
+    closeSystem();
+    // Provider management lives in the workbench service; the hidden frame
+    // hosts it without a "work" navigation page.
+    initializeFrame('terminal');
+    if (frames.terminal.ready) post('terminal', { type: 'kb:open-settings' }); else frames.terminal.openSettings = true;
+    toast('正在打开模型供应商管理…');
+  });
+  on('saveMaintenance', 'click', async () => { await api('/api/terminal/maintenance-default', { method: 'PUT', body: { profileId: $('maintenanceModel').value || null } }); const result = await api('/api/modules/configure', { method: 'POST', body: {} }); $('configurationStatus').textContent = result.configuration.model ? '后台默认模型已保存并同步；被阻塞的维护任务会自动继续。' : '配置已保存，后台运行配置尚未同步，请检查模块连接。'; await loadOverview(true); });
   on('openEmbedding', 'click', openEmbedding);
   on('embeddingProfile', 'change', () => { $('embeddingSecretLabel').hidden = !!$('embeddingProfile').value; });
   on('embeddingProvider', 'change', () => { $('embeddingModel').value = $('embeddingProvider').value === 'minimax' ? 'embo-01' : 'text-embedding-3-small'; });
@@ -824,46 +1483,6 @@
   on('exportLogs', 'click', async () => { const params = new URLSearchParams({ q: $('logsSearch').value.trim() }); if ($('logsScope').value === 'project' && state.projectId) params.set('projectId', state.projectId); const response = await fetch(`/api/logs/export?${params}`); if (!response.ok) throw new Error('诊断导出失败。'); const blob = await response.blob(); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'knowledge-diagnostics.jsonl'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); });
   on('createDomain', 'click', () => { $('domainForm').reset(); $('domainDialog').showModal(); });
   on('domainForm', 'submit', async e => { e.preventDefault(); await api('/api/domains', { method: 'POST', body: Object.fromEntries(new FormData(e.target)) }); $('domainDialog').close(); await refreshRegistry(true); });
-  on('memoryScopeFilter', 'change', updateMemoryFilter); on('memoryTargetFilter', 'change', renderMemories);
-  on('addMemory', 'click', openAddMemory);
-  on('confirmMemoryDelete', 'click', async () => {
-    if (!deletingMemoryId || $('confirmMemoryDelete').disabled) return;
-    $('confirmMemoryDelete').disabled = true;
-    $('memoryDeleteFeedback').hidden = true;
-    try {
-      await api(`/api/engine/memories/${encodeURIComponent(deletingMemoryId)}`, { method: 'DELETE' });
-      $('memoryDeleteDialog').close();
-      await refreshSnapshot();
-      toast('记忆已删除，不再作为长期记忆使用。');
-    } catch (error) {
-      $('confirmMemoryDelete').disabled = false;
-      $('memoryDeleteFeedback').textContent = error.message;
-      $('memoryDeleteFeedback').hidden = false;
-    }
-  });
-  on('memoryDeleteDialog', 'close', () => { deletingMemoryId = ''; $('confirmMemoryDelete').disabled = false; });
-  on('memoryScope', 'change', () => {
-    const memory = state.snapshot.memories.find(m => m.id === editingMemoryId), type = $('memoryScope').value;
-    const source = state.projects.find(p => p.projectId === memory?.evidence?.projectId) || activeProject();
-    updateMemoryTarget(type, type === 'project' ? source?.projectId : type === 'domain' ? source?.domainId : '');
-  });
-  on('memoryForm', 'submit', async e => {
-    e.preventDefault();
-    if ($('confirmMemory').disabled) return;
-    const creating = !editingMemoryId, type = $('memoryScope').value, body = { text: $('memoryText').value.trim(), scopeType: type, scopeId: type === 'global' ? state.brain.id : $('memoryTarget').value };
-    if (!body.text) { $('memoryFeedback').textContent = '请填写记忆内容。'; $('memoryFeedback').hidden = false; return; }
-    if (creating) body.brainId = state.brain.id;
-    else if (e.submitter?.dataset.mode === 'confirmed') body.status = 'confirmed';
-    $('memoryFeedback').hidden = true;
-    $('confirmMemory').disabled = true; $('saveMemoryCandidate').disabled = true;
-    try {
-      const result = await api(creating ? '/api/engine/memories' : `/api/engine/memories/${encodeURIComponent(editingMemoryId)}`, { method: creating ? 'POST' : 'PATCH', body });
-      if (creating) { state.memoryTab = 'confirmed'; $('memoryScopeFilter').value = body.scopeType; updateMemoryFilter(); if (body.scopeType !== 'global') $('memoryTargetFilter').value = body.scopeId; }
-      $('memoryDialog').close(); await refreshSnapshot();
-      toast(result.memory.syncStatus === 'pending' ? '确认已保存，记忆文件待恢复；未同步内容不会注入任务。' : creating ? '记忆已添加，按所选范围生效。' : result.memory.status === 'confirmed' ? '记忆内容与适用范围已确认。' : '候选已保存，尚未生效。');
-    } catch (error) { $('memoryFeedback').textContent = error.message; $('memoryFeedback').hidden = false; }
-    finally { $('confirmMemory').disabled = false; $('saveMemoryCandidate').disabled = false; }
-  });
   on('unbindForm', 'submit', async e => {
     e.preventDefault(); if (!unbindProjectId || unbinding) return;
     const projectId = unbindProjectId;
@@ -873,10 +1492,10 @@
       await api(`/api/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE', body: { deleteKnowledge: false } });
       state.contexts.delete(projectId);
       state.projects = state.projects.filter(project => project.projectId !== projectId);
+      if (state.projectsPage.detail === projectId) state.projectsPage.detail = null;
       if (state.projectId === projectId) { state.projectId = state.projects[0]?.projectId || ''; state.epoch++; }
       renderProjectOptions(); render(); Object.keys(frames).forEach(frameContext);
       $('unbindDialog').close(); unbindProjectId = '';
-      // A late read started before DELETE cannot restore the removed project.
       await refreshRegistry(true); localStorage.setItem('kb.project', state.projectId);
       Object.keys(frames).forEach(frameContext);
       toast('项目已从列表移除，代码、知识和会话仍保留。');
@@ -892,7 +1511,7 @@
     e.preventDefault(); if (!state.preflight?.ready || state.preflight.plannedGitInit && !$('importForm').elements.confirmGitInit.checked || state.preflight.checks.hook?.replacementProjectId && !$('importForm').elements.confirmReplaceHook.checked) return;
     $('confirmImport').disabled = true; $('confirmImport').textContent = '正在登记…';
     let failed = false, registered = false;
-    try { const result = await api('/api/projects/import', { method: 'POST', body: importInput() }); registered = true; state.projectId = result.projectId; state.epoch++; $('importDialog').close(); await refreshRegistry(true); Object.keys(frames).forEach(frameContext); setView('projects'); toast(Object.values(result.modules).every(m => m.ok) ? '项目已导入，四个模块已连接。' : '项目已导入，部分接线待恢复。'); }
+    try { const result = await api('/api/projects/import', { method: 'POST', body: importInput() }); registered = true; state.projectId = result.projectId; state.epoch++; $('importDialog').close(); await refreshRegistry(true); Object.keys(frames).forEach(frameContext); setView('projects'); state.projectsPage.page = 0; state.projectsPage.cursors = [null]; await loadProjectsPage(); toast(Object.values(result.modules).every(m => m.ok) ? '项目已导入，四个模块已连接。' : '项目已导入，部分接线待恢复。'); }
     catch (error) {
       failed = true;
       if (registered) { toast(`项目已登记，但页面状态刷新失败：${error.message}`); return; }
@@ -918,7 +1537,6 @@
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSystem(); });
   document.documentElement.dataset.theme = localStorage.getItem('kb.theme') === 'dark' ? 'dark' : 'light';
   applyAppearance(); void loadAppearance();
-  all('[data-scope]').forEach(button => button.classList.toggle('active', button.dataset.scope === state.scope));
   state.view = titles[location.hash.slice(1)] ? location.hash.slice(1) : 'home';
   setView(state.view); refreshRegistry();
   connectRegistryEvents();

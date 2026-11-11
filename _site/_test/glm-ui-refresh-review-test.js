@@ -81,7 +81,7 @@ async function makeEnv(options = {}) {
   ]);
   const registered = [...(options.engineProjects || [])];
   const engine = await startStub([
-    { method: 'GET', path: /^\/api\/health\/?$/, name: 'engine-health', handle: () => ({ name: 'knowledge-engine', dataSchemaVersion: 3 }) },
+    { method: 'GET', path: /^\/api\/health\/?$/, name: 'engine-health', handle: () => ({ name: 'knowledge-engine', dataSchemaVersion: 4 }) },
     { method: 'ANY', path: /^\/api\/runtime-auth\/?$/, name: 'engine-auth', handle: () => ({ ok: true }) },
     { method: 'GET', path: /^\/api\/projects\/?$/, name: 'engine-list', handle: () => ({ projects: registered }) },
     { method: 'POST', path: /^\/api\/projects\/?$/, name: 'engine-register', countWith: body => { try { return 'engine-register:' + JSON.parse(body).projectId; } catch { return null; } }, handle: (cleanPath, body) => { try { const parsed = JSON.parse(body); if (failProjects.includes(parsed.projectId)) return { __status: 500, ok: false, failed: parsed.projectId }; registered.push({ projectId: parsed.projectId, repoPath: parsed.repoPath, knowledgePath: parsed.knowledgePath }); } catch {} return { ok: true }; } },

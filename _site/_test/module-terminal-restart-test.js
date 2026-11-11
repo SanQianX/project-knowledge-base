@@ -45,7 +45,7 @@ async function main() {
     registryStore: bridge.registryStore, projectStore: bridge.projectStore,
     moduleBridge: {
       engineUrl: 'http://engine.test', runtimeToken: 'fixture',
-      _fetch: async () => ({ ok: true, status: 200, json: async () => ({ name: 'knowledge-engine', dataSchemaVersion: 3 }) }),
+      _fetch: async () => ({ ok: true, status: 200, json: async () => ({ name: 'knowledge-engine', dataSchemaVersion: 4 }) }),
       _listEngineProjects: async () => [{ projectId: 'project-restart', ...config }],
       registerProjectLinks: async () => ({ engine: { ok: true }, eventBridge: { ok: true }, terminal: { ok: ++wiringCalls > 1 } }),
       syncEngineConfiguration: async () => ({}),

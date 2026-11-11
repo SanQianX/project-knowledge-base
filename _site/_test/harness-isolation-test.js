@@ -38,7 +38,7 @@ function run(file, args, options, timeoutMs) {
   const sentinel = http.createServer((req, res) => {
     sentinelHits.push(req.url);
     res.setHeader('Content-Type', 'application/json');
-    if (req.url === '/api/health') return res.end(JSON.stringify({ name: 'knowledge-engine', dataSchemaVersion: 3 }));
+    if (req.url === '/api/health') return res.end(JSON.stringify({ name: 'knowledge-engine', dataSchemaVersion: 4 }));
     if (req.url === '/api/projects') return res.end(JSON.stringify({ projects: [{ projectId: 'foreign', repoPath: path.join(root, 'foreign-repo'), knowledgePath: path.join(root, 'foreign-knowledge'), enabled: true }] }));
     res.statusCode = 409;
     res.end(JSON.stringify({ ok: false, error: { code: 'ENGINE_IDENTITY_MISMATCH' } }));

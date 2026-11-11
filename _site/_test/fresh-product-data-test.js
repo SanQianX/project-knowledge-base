@@ -37,7 +37,7 @@ const { connectEngine } = require('../lib/engine-connection');
     analysisOwner: 'engine', registryStore: { listIds: () => [] }, logger: { warn: async (...args) => logs.push(args) },
     moduleBridge: { engineUrl: 'http://engine.invalid', runtimeToken: 'private-local-token', syncEngineConfiguration: async () => {}, _fetch: async url => {
       paths.push(url);
-      if (url.endsWith('/api/health')) return { ok: true, status: 200, json: async () => ({ name: 'knowledge-engine', version: '0.2.0', dataSchemaVersion: 3 }) };
+      if (url.endsWith('/api/health')) return { ok: true, status: 200, json: async () => ({ name: 'knowledge-engine', version: '0.2.0', dataSchemaVersion: 4 }) };
       if (url.endsWith('/api/runtime-auth')) return { ok: true, status: 200 };
       return { ok: activationStatus === 200, status: activationStatus };
     } },
