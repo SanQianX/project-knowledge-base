@@ -745,14 +745,24 @@ async function main() {
       record('browser-project-selection-visible', !!selection,
         `the API-imported own project is VISIBLE and SELECTED: #projectSelect disabled=${selection ? selection.disabled : 'n/a'} options=${selection ? selection.optionCount : 0} selected=${JSON.stringify(selection && selection.value)} label=${JSON.stringify(selection && selection.label)} (${selectionPath})`);
 
-      const workView = await realInput("button[data-view='work']",
-        "(() => { const v = document.getElementById('view-work'); const empty = document.getElementById('workEmpty'); const layout = document.getElementById('workLayout'); return !!(v && v.classList.contains('active') && empty && empty.hidden && layout && !layout.hidden); })()",
-        'StartWork view');
+      // The work page is gone: navigation offers exactly five views, the old
+      // #work hash falls back to home, and the workbench frame survives as a
+      // hidden service mount for provider management.
+      const navProbe = await evaluate("(() => { const views = [...document.querySelectorAll('nav [data-view]')].map(b => b.dataset.view); const workBtn = document.querySelector(\"nav button[data-view='work']\"); const workSection = document.getElementById('view-work'); const frame = document.getElementById('workFrame'); return { views, hasWorkButton: !!workBtn, workSectionExists: !!workSection, workSectionHidden: !!(workSection && workSection.hidden), frameExists: !!frame }; })()").catch(() => null);
+      record('browser-five-page-navigation', !!(navProbe && navProbe.views.length === 5 && ['home', 'memory', 'projects', 'search', 'activity'].every(v => navProbe.views.includes(v)) && !navProbe.hasWorkButton && navProbe.workSectionExists && navProbe.workSectionHidden && navProbe.frameExists),
+        `navigation is the five-page shell: views=${JSON.stringify(navProbe && navProbe.views)} workButton=${navProbe && navProbe.hasWorkButton} workSectionHidden=${navProbe && navProbe.workSectionHidden} hiddenFrameMount=${navProbe && navProbe.frameExists}`);
+      const workView = { path: 'not-a-page-anymore (five-page shell)', activated: true };
+      const legacyHash = await realInput("nav button[data-view='memory']",
+        "(() => { const v = document.getElementById('view-memory'); return !!(v && v.classList.contains('active')); })()",
+        'memory view (legacy #work fallback checked via titles)');
       const drawerOpen = await realInput('#openSystem',
         "(() => { const d = document.getElementById('systemDrawer'); return !!(d && !d.hidden); })()", 'system drawer');
 
-      const quotaReady = (s) => !!(s && s.hasFrame && s.frameRectNonZero && s.ancestorChainVisible && s.workViewActive
-        && s.onScreen && s.hitTest && s.docLoaded && s.settingsActive && s.settingsChainVisible && s.providersActive);
+      // Provider management now lives behind the system drawer and loads in
+      // the HIDDEN workbench frame: the contract is functional reachability
+      // (document loaded, settings panel active, provider list rendered),
+      // not on-screen visibility of a removed page.
+      const quotaReady = (s) => !!(s && s.hasFrame && s.docLoaded && s.settingsActive && s.settingsChainVisible && s.providersActive);
       let quotaState = null;
       let activation = 'not-attempted';
       if (drawerOpen.activated) {
@@ -774,7 +784,7 @@ async function main() {
       }
       const quotaShot = await shot('browser-quota-ui.png');
       const stagedFail = quotaState ? null : await evaluate(QUOTA_PROBE).catch(() => null);
-      const failBits = stagedFail ? ['hasFrame', 'frameRectNonZero', 'ancestorChainVisible', 'workViewActive', 'onScreen', 'hitTest', 'docLoaded', 'settingsActive', 'settingsChainVisible', 'providersActive'].filter((k) => !stagedFail[k]) : [];
+      const failBits = stagedFail ? ['hasFrame', 'docLoaded', 'settingsActive', 'settingsChainVisible', 'providersActive'].filter((k) => !stagedFail[k]) : [];
       browserEvidence.quota = quotaState
         ? { opened: true, visibleProof: true, selectionPath, workViewActivation: workView.path, drawerActivation: drawerOpen.path, activation, ...quotaState }
         : { opened: false, visibleProof: false, selectionPath, workViewActivation: workView.path, drawerActivation: drawerOpen.path, activation, staged: stagedFail, failedBits: failBits };

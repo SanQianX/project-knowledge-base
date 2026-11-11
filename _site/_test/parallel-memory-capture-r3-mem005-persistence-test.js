@@ -34,6 +34,27 @@
 // analyzer. This case is evidence about the engine's admission, the ignore
 // action, the persistence of that state and the frozen source — never about
 // the model's judgement.
+//
+// 迁移说明（五页简化 UI，见 patches/ui-test-mapping-spec.md）：
+//   * 导入项目已列出的等待：旧首页项目面板（homeContent 含项目名）已删除，
+//     等价为顶栏 #projectSelect 选项里出现项目名（同一 registry projection）。
+//   * 候选卡片：[data-memory-card=<id>] → 候选箱行（.row）内的
+//     [data-action="review-candidate"][data-id=<id>]「审核」按钮（行存在 ⇔
+//     按钮存在）；已确认卡片 → 记忆库 .memory-item 内的
+//     [data-action="memory-detail"][data-id=<id>]。
+//   * 忽略动作：旧行内 [data-memory-action="ignore"][data-memory-id=<id>] →
+//     新审核流：点候选行的「审核」打开 #appDialog 内 #reviewForm，忽略 =
+//     #appDialogActions button.danger（引擎 PATCH {status:'ignored'} 不变）。
+//   * 候选计数：旧 #candidateCount（已删除）→ 导航徽标 #memoryCount
+//     （overview.totals.candidates；无候选时整个徽标 hidden）。为避免读到
+//     overview 尚未加载的空窗，重载后先等首页「待确认记忆」面板渲染完成。
+//   * 确认 tab：[data-memory-tab="confirmed"] → [data-memory-tab="library"]
+//     （旧 confirmed tab）；空态文案「还没有已确认的长期记忆」→「没有匹配的
+//     记忆。」。重载后记忆页先渲染离线横幅，tab 栏要等 boot snapshot 应答
+//     后才存在，点击前先等 tab 栏出现。
+//   * 引擎/冻结源/注入断言（productMemories、engineApi、engineStateOnDisk、
+//     sourceFingerprint/compareFrozen、injectedMemories）完全不变；本测试
+//     使用真实引擎（dataSchemaVersion 由引擎自报，当前为 4）。
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -46,18 +67,44 @@ const EVIDENCE = process.env.PK_TEST_EVIDENCE_DIR ? path.resolve(process.env.PK_
 const CANDIDATE_TEXT = 'R3 忽略持久性：对外错误信息使用中文表述，并优先复用已有模块。';
 const REPO_NAME = 'mem005r3-repo';
 
-async function openMemoryView(harness) {
-  await harness.nativeClick('nav [data-view="memory"]');
+/**
+ * Open a nav view with retries against the known reload commit-gap race
+ * (the shell's reload() gate proves the FRESH document, but a CDP click
+ * dispatched right at the commit boundary can still be lost — see the
+ * parallel-memory-shell.js reload comment). Driver robustness only: the
+ * assertion stays "the view is really active".
+ */
+async function openView(harness, view) {
+  let lastError = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await harness.nativeClick(`nav [data-view="${view}"]`);
+    try {
+      await harness.waitFor(
+        () => harness.run(`document.getElementById('view-${view}').classList.contains('active')`),
+        `the ${view} view is open`,
+        5000,
+      );
+      return;
+    } catch (error) { lastError = error; }
+  }
+  throw lastError;
+}
+
+const openMemoryView = harness => openView(harness, 'memory');
+
+/** The memory tab bar exists only after the reloaded page read engine data. */
+async function waitForMemoryTabs(harness) {
   await harness.waitFor(
-    () => harness.run("document.getElementById('view-memory').classList.contains('active')"),
-    'the memory view is open',
-    10000,
+    () => harness.run("document.querySelector('#memoryContent [data-memory-tab=\"candidate\"]') !== null"),
+    'the memory tab bar is rendered from real engine data',
+    20000,
   );
 }
 
 async function openCandidateBox(harness) {
   await openMemoryView(harness);
-  await harness.nativeClick('[data-memory-tab="candidate"]');
+  await waitForMemoryTabs(harness);
+  await harness.nativeClick('#memoryContent [data-memory-tab="candidate"]');
   await harness.waitFor(
     () => harness.run("document.getElementById('memoryContent').textContent.length > 0"),
     'the candidate box is rendered',
@@ -65,9 +112,15 @@ async function openCandidateBox(harness) {
   );
 }
 
-async function cardPresent(harness, memoryId) {
-  return harness.run(`Boolean(document.querySelector('[data-memory-card=${JSON.stringify(memoryId)}]'))`);
-}
+/** A candidate is offered by the real UI iff its 审核 (review) button exists. */
+const candidateOffered = (harness, memoryId) => harness.run(
+  `Boolean(document.querySelector('#memoryContent [data-action="review-candidate"][data-id=${JSON.stringify(memoryId)}]'))`,
+);
+
+/** A confirmed memory is listed in the library iff its detail card exists. */
+const libraryCardPresent = (harness, memoryId) => harness.run(
+  `Boolean(document.querySelector('#memoryContent [data-action="memory-detail"][data-id=${JSON.stringify(memoryId)}]'))`,
+);
 
 async function main() {
   const harness = await startHarness({ tag: 'mem005r3', evidenceDir: EVIDENCE || undefined });
@@ -76,8 +129,10 @@ async function main() {
     const repo = makeRepo(harness.fixture, REPO_NAME, { 'README.md': '# R3 忽略持久性夹具\n' });
     const { projectId, knowledgePath } = await harness.importProject(repo, 'R3忽略持久性');
     await harness.requestRegistryRefresh();
+    // The new home page no longer lists projects; the registry projection is
+    // surfaced by the topbar project selector instead.
     await harness.waitFor(
-      () => harness.run("document.getElementById('homeContent').textContent.includes('R3忽略持久性')"),
+      () => harness.run("document.getElementById('projectSelect').textContent.includes('R3忽略持久性')"),
       'the imported project is listed',
       20000,
     );
@@ -112,7 +167,9 @@ async function main() {
     assert.ok(before.source.event, 'the frozen conversation event really exists');
     assert.equal(before.source.event.contentHash, candidate.sourceHash, 'the frozen event hash matches the memory');
 
-    // 3. The real UI ignores the real candidate.
+    // 3. The real UI ignores the real candidate: the candidate row's 审核
+    //    button opens the review dialog (#appDialog > #reviewForm) and the
+    //    danger action sends the same engine PATCH {status:'ignored'}.
     await harness.reload();
     await openCandidateBox(harness);
     await harness.waitFor(
@@ -120,12 +177,18 @@ async function main() {
       'the candidate is listed in the candidate box',
       15000,
     );
-    assert.equal(await cardPresent(harness, candidate.id), true, 'the candidate really has a card');
+    assert.equal(await candidateOffered(harness, candidate.id), true, 'the candidate really has a card (review button)');
     if (harness.evidence) await harness.browser.screenshot(path.join(harness.evidence, 'mem005-r3-before-ignore.png'));
 
-    await harness.nativeClick(`[data-memory-action="ignore"][data-memory-id="${candidate.id}"]`);
+    await harness.nativeClick(`#memoryContent [data-action="review-candidate"][data-id="${candidate.id}"]`);
     await harness.waitFor(
-      () => harness.run(`!document.getElementById('memoryContent').textContent.includes(${JSON.stringify(CANDIDATE_TEXT)})`),
+      () => harness.run("document.getElementById('appDialog').open === true && document.getElementById('reviewForm') !== null"),
+      'the candidate review dialog is open',
+      10000,
+    );
+    await harness.nativeClick('#appDialogActions button.danger');
+    await harness.waitFor(
+      () => harness.run(`document.getElementById('appDialog').open === false && !document.getElementById('memoryContent').textContent.includes(${JSON.stringify(CANDIDATE_TEXT)})`),
       'the ignored candidate leaves the candidate box',
       15000,
     );
@@ -144,47 +207,46 @@ async function main() {
       20000,
     );
     // Re-open the view the way a user does: leave the memory view and come
-    // back, so the check is not a stale render of the old view.
-    await harness.nativeClick('nav [data-view="home"]');
+    // back, so the check is not a stale render of the old view. Opening home
+    // first also loads the overview, so the #memoryCount badge read below is
+    // never taken from an unloaded boot state.
+    await openView(harness, 'home');
     await harness.waitFor(
-      () => harness.run("document.getElementById('view-home').classList.contains('active')"),
-      'the home view is open after the reload',
-      10000,
+      () => harness.run("document.getElementById('homeContent').textContent.includes('待确认记忆')"),
+      'the home overview really answered after the reload',
+      20000,
     );
-    await harness.nativeClick('nav [data-view="memory"]');
+    await openCandidateBox(harness);
     await harness.waitFor(
-      () => harness.run("document.getElementById('view-memory').classList.contains('active')"),
-      'the memory view is re-opened after the reload',
-      10000,
-    );
-    await harness.nativeClick('[data-memory-tab="candidate"]');
-    await harness.waitFor(
-      () => harness.run("document.getElementById('memoryContent').textContent.length > 0"),
-      'the candidate box is rendered after the reload',
+      () => harness.run(`!document.getElementById('memoryContent').textContent.includes(${JSON.stringify(CANDIDATE_TEXT)})`),
+      'the candidate box is rendered without the ignored candidate',
       15000,
     );
 
     // 5. The UI after the reload: the ignored candidate does not come back,
-    //    and it is not presented as a confirmed memory either.
+    //    and it is not presented as a confirmed memory either. The new UI has
+    //    no per-row ignore/confirm buttons — the row's only action is 审核
+    //    (review-candidate), so "no card" also means "no ignore action".
     const afterReload = {
-      candidateCardPresent: await cardPresent(harness, candidate.id),
+      candidateCardPresent: await candidateOffered(harness, candidate.id),
       textInMemoryView: await harness.run(`document.getElementById('memoryContent').textContent.includes(${JSON.stringify(CANDIDATE_TEXT)})`),
-      candidateCountBadge: await harness.run("document.getElementById('candidateCount').textContent"),
-      ignoreButtonPresent: await harness.run(`Boolean(document.querySelector('[data-memory-action="ignore"][data-memory-id=${JSON.stringify(candidate.id)}]'))`),
+      candidateBadgeHidden: await harness.run("document.getElementById('memoryCount').hidden"),
+      candidateBadgeText: await harness.run("document.getElementById('memoryCount').textContent"),
+      ignoreButtonPresent: await candidateOffered(harness, candidate.id),
     };
     assert.equal(afterReload.candidateCardPresent, false, 'the ignored candidate has no card after the reload');
     assert.equal(afterReload.textInMemoryView, false, 'the ignored candidate is not in the memory view after the reload');
-    assert.equal(String(afterReload.candidateCountBadge).trim(), '', 'the candidate counter is empty after the reload');
-    assert.equal(afterReload.ignoreButtonPresent, false, 'the ignored candidate offers no ignore button after the reload');
+    assert.equal(afterReload.candidateBadgeHidden, true, 'the candidate counter badge is hidden after the reload (no candidates left)');
+    assert.equal(afterReload.ignoreButtonPresent, false, 'the ignored candidate offers no ignore (review) action after the reload');
 
-    await harness.nativeClick('[data-memory-tab="confirmed"]');
+    await harness.nativeClick('#memoryContent [data-memory-tab="library"]');
     await harness.waitFor(
-      () => harness.run("document.getElementById('memoryContent').textContent.length > 0 || document.querySelectorAll('[data-memory-card]').length === 0"),
-      'the confirmed tab is rendered after the reload',
+      () => harness.run(`(!document.getElementById('memoryContent').textContent.includes(${JSON.stringify('知识引擎暂时不可用')}) && (document.getElementById('memoryContent').textContent.includes('没有匹配的记忆。') || document.querySelectorAll('#memoryContent .memory-item').length > 0))`),
+      'the library tab (old confirmed tab) is rendered after the reload',
       15000,
     );
     const confirmedTab = {
-      cardPresent: await cardPresent(harness, candidate.id),
+      cardPresent: await libraryCardPresent(harness, candidate.id),
       textPresent: await harness.run(`document.getElementById('memoryContent').textContent.includes(${JSON.stringify(CANDIDATE_TEXT)})`),
     };
     assert.equal(confirmedTab.cardPresent, false, 'the ignored candidate is not shown as a confirmed memory');

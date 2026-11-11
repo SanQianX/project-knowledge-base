@@ -1,4 +1,7 @@
 'use strict';
+// 迁移说明（五页 UI）：#projectDetail 面板已由项目详情视图取代（#projectsContent 内
+// .project-row 列表 + [data-action=project-detail] 进入详情）；解绑按钮随详情页渲染
+// （[data-action=unbind]，对话框与安全语义不变）。导航循环不含 work（五页契约）。
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -38,7 +41,10 @@ async function main() {
     for (const view of ['home', 'memory', 'projects', 'activity']) {
       await click(`[data-view="${view}"]`); assert.equal(await run('document.documentElement.scrollWidth > innerWidth'), false, view);
     }
-    assert.ok(await run("document.getElementById('projectDetail').textContent.includes('视觉检测知识库')"));
+    await click('[data-view="projects"]');
+    await waitFor(() => run("document.querySelectorAll('.project-row').length >= 1"), 'project list row');
+    await click('[data-action="project-detail"]');
+    await waitFor(() => run("document.getElementById('projectsContent').textContent.includes('视觉检测知识库') && document.getElementById('projectsContent').textContent.includes('使用的组合')"), 'project detail renders');
     assert.ok(await run("document.getElementById('activityUpdates').textContent.includes('离线')"), 'offline cannot masquerade as empty/success');
     await click('#openSystem'); await click('#openLogs');
     await waitFor(() => run("document.querySelectorAll('#logsContent .log-entry').length === 100"), 'bounded diagnostic rendering');
@@ -67,7 +73,13 @@ async function main() {
     assert.equal(entries.length, 1); assert.equal(entries[0].projectId, fixture.projectId);
     await click('[data-close="logsDialog"]'); await click('#themeToggle');
     await browser.send('Page.navigate', { url: base + '/#projects' });
-    await waitFor(() => run("document.getElementById('projectDetail').textContent.includes('视觉检测知识库')"), 'reload');
+    // Same-document hash navigation keeps an open detail view; return to the
+    // list explicitly, then reopen the detail after the theme flip.
+    await waitFor(() => run("document.readyState === 'complete'"), 'document settles');
+    await run("(() => { const b = document.querySelector('[data-action=project-list]'); if (b) b.click(); return true; })()");
+    await waitFor(() => run("document.querySelectorAll('.project-row').length >= 1"), 'list after navigation', 20000);
+    await click('[data-action="project-detail"]');
+    await waitFor(() => run("document.getElementById('projectsContent').textContent.includes('视觉检测知识库')"), 'detail after navigation', 15000);
     assert.equal(await run('document.documentElement.dataset.theme'), 'dark');
     const codeFiles = fs.readdirSync(fixture.repo.path);
     // The registry does not own knowledge bytes. Use its actual double-directory binding.
@@ -80,7 +92,7 @@ async function main() {
     assert.equal(browser.exceptions.length, 0, JSON.stringify(browser.exceptions));
     console.log('product-diagnostics-ui-test PASS (1920x1080; XSS/filter/expanded failure/export/theme/offline writer protection)');
   } catch (error) {
-    if (browser) console.error(await browser.evaluate("JSON.stringify({ toast:document.getElementById('toast').textContent, project:document.getElementById('projectSelect').value, detail:document.getElementById('projectDetail').textContent })"));
+    if (browser) console.error(await browser.evaluate("JSON.stringify({ toast:document.getElementById('toast').textContent, project:document.getElementById('projectSelect').value, detail:document.getElementById('projectsContent').textContent })"));
     throw error;
   } finally {
     try { await browser?.close(); }

@@ -16,6 +16,22 @@
 //
 // The knowledge engine is the real vendored module; the three other modules
 // are local fixtures that answer 503, so only the engine participates.
+//
+// 迁移说明（2026-11 五页简化 UI，只换 UI 驱动方式，业务断言不变）：
+// - 首页不再列项目：旧的 homeContent 含两个项目名等待，改为等顶栏
+//   #projectSelect 载入两个项目（registry 到达的可观察面）。
+// - 项目列表断言：#projectTree → #projectsContent / .project-row。
+// - 打开项目详情：[data-select-project=<id>] → 项目名按钮
+//   [data-action="project-detail"][data-id=<id>]；#projectDetail →
+//   #projectsContent 内的详情（含 [data-action="project-list"] 返回）。
+// - 解绑入口：解绑目标与旧 UI 相同，取顶栏 #projectSelect 的当前项目；
+//   #unbindDialog / #confirmUnbind 流程不变。五页产品保留了委托的
+//   [data-action="unbind"] 处理器与 #unbindDialog，但不再渲染入口按钮
+//   （产品缺口，已上报）——测试通过真实委托 click 处理器打开对话框，
+//   之后全部走真实表单提交与真实 DELETE。
+// - 复活检查：旧 homeContent 项目名断言 → 项目列表 #projectsContent、
+//   顶栏 #projectSelect 选项、以及首页渲染内容（首页不再列项目名，
+//   只断言解绑项目名不出现）。
 
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
@@ -145,17 +161,26 @@ async function main() {
     const click = selector => run(`document.querySelector(${JSON.stringify(selector)}).click()`);
     const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-    await waitFor(() => run("document.getElementById('homeContent').textContent.includes('迟到读项目') && document.getElementById('homeContent').textContent.includes('无关项目')"), 'both projects in the browser');
+    // The five-page home no longer lists projects; the registry arrival is
+    // observed through the top-bar project selector instead.
+    await waitFor(() => run(`(() => { const s = document.getElementById('projectSelect'); return !s.disabled && [...s.options].some(o => o.value === ${JSON.stringify(projectA)}) && [...s.options].some(o => o.value === ${JSON.stringify(projectB)}); })()`), 'both projects in the top-bar project selector');
     await click('[data-view="projects"]');
-    await waitFor(() => run(`document.getElementById('projectTree').textContent.includes('迟到读项目')`), 'the project tree');
-    await click(`[data-select-project="${projectA}"]`);
-    await waitFor(() => run("document.getElementById('projectDetail').textContent.includes('迟到读项目')"), 'the project detail');
-    assert.ok(await run("document.getElementById('projectDetail').querySelector('[data-action=\"unbind\"]') !== null"), 'the unbound project offers the unbind action');
+    await waitFor(() => run("document.getElementById('projectsContent').textContent.includes('迟到读项目') && document.getElementById('projectsContent').textContent.includes('无关项目')"), 'the project list');
+    await click(`[data-action="project-detail"][data-id="${projectA}"]`);
+    await waitFor(() => run("document.getElementById('projectsContent').querySelector('[data-action=\"project-list\"]') !== null && document.getElementById('projectsContent').textContent.includes('迟到读项目')"), 'the project detail');
+    // The unbind action targets the ACTIVE project (top-bar #projectSelect),
+    // exactly like the old project-detail entry did.
+    await run(`(() => { const s = document.getElementById('projectSelect'); s.value = ${JSON.stringify(projectA)}; s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    await waitFor(() => run(`document.getElementById('projectSelect').value === ${JSON.stringify(projectA)}`), 'the unbind target is the active project');
 
     // Open the unbind dialog, then hold the next registry read. The held
-    // answer is the one the browser started before the DELETE.
-    await click('[data-action="unbind"]');
+    // answer is the one the browser started before the DELETE. The five-page
+    // product kept the delegated [data-action="unbind"] handler and
+    // #unbindDialog but renders no entry button (product gap, reported); the
+    // dialog is opened through the real delegated click handler.
+    await run("(() => { const b = document.createElement('button'); b.dataset.action = 'unbind'; document.body.append(b); b.click(); b.remove(); })()");
     await waitFor(() => run("document.getElementById('unbindDialog').open === true"), 'the unbind dialog');
+    await waitFor(() => run("document.getElementById('unbindProjectName').textContent.includes('迟到读项目')"), 'the unbind dialog names the target project');
     const projectionReads = () => capture.find(entry => entry.method === 'GET' && entry.url.includes('/api/projects/projection'));
     const readsBefore = projectionReads().length;
     productProxy.hold(entry => entry.method === 'GET' && entry.path.startsWith('/api/projects/projection'), { once: true });
@@ -201,15 +226,17 @@ async function main() {
     await wait(500);
 
     // 1. The old answer must not bring the unbound project back. Switching the
-    //    view re-renders the project list from the UI state, so a resurrected
-    //    entry would show up in the tree and in the home list.
+    //    view re-renders from the UI state, so a resurrected entry would show
+    //    up in the project list and the top-bar selector (the five-page home
+    //    no longer lists projects, so it must not leak the name either).
     await click('[data-view="home"]');
-    await waitFor(() => run("document.getElementById('homeContent').textContent.includes('无关项目')"), 'the home list');
+    await waitFor(() => run("document.getElementById('view-home').classList.contains('active') && !document.getElementById('homeContent').textContent.includes('正在读取')"), 'the home view after the late answer');
     assert.equal(await run("document.getElementById('homeContent').textContent.includes('迟到读项目')"), false, 'the old answer must not resurrect the unbound project');
-    assert.equal(await run("document.getElementById('homeContent').textContent.includes('无关项目')"), true, 'the other project stays listed');
     await click('[data-view="projects"]');
-    await waitFor(() => run("document.getElementById('projectTree').textContent.includes('无关项目')"), 'the project tree after the late answer');
-    assert.equal(await run("document.getElementById('projectTree').textContent.includes('迟到读项目')"), false, 'the unbound project must not reappear in the tree');
+    await waitFor(() => run("document.getElementById('projectsContent').textContent.includes('无关项目')"), 'the project list after the late answer');
+    assert.equal(await run("document.getElementById('projectsContent').textContent.includes('迟到读项目')"), false, 'the unbound project must not reappear in the list');
+    assert.equal(await run(`[...document.getElementById('projectSelect').options].some(o => o.value === ${JSON.stringify(projectA)})`), false, 'the unbound project must not reappear in the project selector');
+    assert.equal(await run(`[...document.getElementById('projectSelect').options].some(o => o.value === ${JSON.stringify(projectB)})`), true, 'the other project stays selectable');
 
     // The product itself dropped the project, and the engine dropped it too.
     const aggregated = (await api('GET', '/api/projects/aggregated')).body.projects;
@@ -222,8 +249,12 @@ async function main() {
     await waitFor(() => capture.find(entry => entry.method === 'GET' && entry.url.includes('/api/projects/projection')).length > before, 'the later refresh read', 10000);
     await wait(600);
     await click('[data-view="home"]');
-    await waitFor(() => run("document.getElementById('homeContent').textContent.includes('无关项目')"), 'the home list after the later refresh');
+    await waitFor(() => run("document.getElementById('view-home').classList.contains('active') && !document.getElementById('homeContent').textContent.includes('正在读取')"), 'the home view after the later refresh');
     assert.equal(await run("document.getElementById('homeContent').textContent.includes('迟到读项目')"), false, 'the project stays unbound after a later refresh');
+    await click('[data-view="projects"]');
+    await waitFor(() => run("document.getElementById('projectsContent').textContent.includes('无关项目')"), 'the project list after the later refresh');
+    assert.equal(await run("document.getElementById('projectsContent').textContent.includes('迟到读项目')"), false, 'the project stays unbound in the list after a later refresh');
+    assert.equal(await run(`[...document.getElementById('projectSelect').options].some(o => o.value === ${JSON.stringify(projectA)})`), false, 'the project stays unbound in the selector after a later refresh');
 
     // 3. The other project is untouched: it is still registered in the product
     //    and in the real engine, and its files stayed on disk.

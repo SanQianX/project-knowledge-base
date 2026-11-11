@@ -489,7 +489,7 @@
     const effective = detail.effective;
     const items = effective.items.map(m => `<article class="memory-item"><button class="reference" data-action="memory-detail" data-id="${esc(m.id)}"><b>${esc(m.title)}</b><small>${esc(clamp2(m.text).slice(0, 160))}</small><small>${(m.sources || []).map(s => s.kind === 'group' ? `组合：${esc(s.groupName)}` : `${SCOPE_LABEL[s.scopeType] || '作用域'}`).join(' · ')}</small></button></article>`).join('') || '<div class="empty small-empty">为项目添加组合后，在这里查看生效记忆。</div>';
     $('projectsContent').innerHTML = `
-      <div class="section-heading"><button class="link-button" data-action="project-list">‹ 返回项目列表</button><div class="actions"><button data-action="edit-project" data-id="${esc(project.projectId)}">项目设置</button></div></div>
+      <div class="section-heading"><button class="link-button" data-action="project-list">‹ 返回项目列表</button><div class="actions"><button data-action="unbind">解绑并保留数据</button><button data-action="edit-project" data-id="${esc(project.projectId)}">项目设置</button></div></div>
       <h2>${esc(project.name)}</h2><p>${esc(domainName(project.domainId))}</p>
       <div class="detail-path">${esc(project.workspacePath)}</div>
       <section class="panel" style="margin-top:20px"><div class="section-heading" style="margin-bottom:12px"><h2>使用的组合</h2><button data-action="project-groups" data-id="${esc(project.projectId)}">＋ 添加组合</button></div>

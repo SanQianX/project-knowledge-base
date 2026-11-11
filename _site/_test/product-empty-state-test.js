@@ -1,6 +1,20 @@
 'use strict';
 // NAV-003 — 空项目。
 //
+// 迁移说明（五页简化 UI）：
+// - 首页空项目态保留：成功读取登记且零项目时显示「从第一个项目开始 /
+//   导入第一个项目」。新首页该态依赖 /api/engine/overview 成功，因此本
+//   测试实例接入真实 vendored 知识引擎（无项目、零数据），失败注入仍只
+//   针对 /api/projects/projection 的首次读取（HTTP 503）。
+// - work 空态已删除：改为断言导航恰好五页不含 work、#view-work 永远
+//   hidden、#workFrame 服务挂载仍在、'#work' hash 回落 home。
+// - 检索页空态：#searchEmpty 已删除，检索页空态是 #searchContent 的
+//   「输入关键词…」引导文案。
+// - 记忆页空态：记忆库列表为空时显示「没有匹配的记忆。」（引擎可用、
+//   零记忆）。
+// - 项目页空态：#projectTree/#projectDetail 已删除，改为 #projectsContent
+//   的「没有匹配的项目。」且无 .project-row。
+//
 // A brand new data directory must show real empty states, a failed registry
 // read must not be presented as an empty library, and nothing may create a
 // placeholder project on the way.
@@ -17,6 +31,7 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const assert = require('node:assert/strict');
 
 // One temp root per run, resolved from the caller's environment: the batch
@@ -29,10 +44,11 @@ const { spawnServer } = require('./helpers/spawn-server');
 const { findChrome } = require('./helpers/find-chrome');
 const { launchCdpBrowser, waitFor } = require('./helpers/cdp-browser');
 const { attachNetworkCapture } = require('./helpers/cdp-network-capture');
-const { createProductProxy } = require('./helpers/module-fixture');
+const { createProductProxy, createUpstreamProxy } = require('./helpers/module-fixture');
 const freePort = require('./helpers/free-port');
 
 const ROOT = path.resolve(__dirname, '../..');
+const ENGINE_ENTRY = path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [ROOT] })), 'src', 'server.js');
 
 async function main() {
   const fixture = fs.mkdtempSync(path.join(TEMP_ROOT, 'pk-product-empty-state-'));
@@ -40,12 +56,34 @@ async function main() {
   fs.mkdirSync(evidenceDir, { recursive: true });
   const port = await freePort();
   const base = `http://127.0.0.1:${port}`;
+  // The new home page renders its empty-project state only after the engine
+  // overview answered, so this instance runs the real vendored engine with
+  // its own empty data directory (and dead vector/bridge endpoints, so it
+  // can never reach a real desktop hub). The engine sits behind the shared
+  // upstream proxy so the product's per-instance runtime token is rewritten
+  // into the engine's own token, exactly like the parallel-nav harness.
+  const { createEngineServer } = require(ENGINE_ENTRY);
+  const engineToken = crypto.randomBytes(24).toString('hex');
+  const engine = createEngineServer({
+    dataDir: path.join(fixture, 'engine'),
+    runtimeToken: engineToken,
+    consume: false,
+    debug: true,
+    vectorUrl: 'http://127.0.0.1:0',
+    bridgeUrl: 'http://127.0.0.1:0',
+  });
+  await engine.ready;
+  await new Promise(resolve => engine.server.listen(0, '127.0.0.1', resolve));
+  const engineUrl = `http://127.0.0.1:${engine.server.address().port}`;
+  const engineProxy = createUpstreamProxy({ target: engineUrl, token: engineToken, tag: 'engine' });
+  await engineProxy.start();
   const server = spawnServer({
     root: ROOT,
     port,
     dataDir: path.join(fixture, 'data'),
     tag: 'product-empty-state',
     analysisOwner: 'engine',
+    extraEnv: { KB_KNOWLEDGE_ENGINE_URL: engineProxy.url },
   });
   const proxy = createProductProxy({ target: base, tag: 'product-empty-state' });
   let browser;
@@ -90,36 +128,62 @@ async function main() {
     // The retry reads the registry for real; now the empty state is a fact.
     await run("document.querySelector('#homeContent [data-action=\"refresh\"]').click()");
     await waitFor(() => run("document.getElementById('homeContent').textContent.includes('从第一个项目开始')"), 'the real empty home', 20000);
+    assert.equal(await run("document.getElementById('homeContent').textContent.includes('导入第一个项目')"), true, 'the empty home keeps its real import entry point');
     assert.equal(await run("document.getElementById('homeContent').textContent.includes('项目登记读取失败')"), false, 'the recovered read clears the failure');
     await browser.screenshot(path.join(evidenceDir, 'empty-state-home.png'));
 
-    // NAV-003 expected 1: work, search, domains and projects show empty
-    // states.
-    await run("document.querySelector('[data-view=\"work\"]').click()");
-    await waitFor(() => run("document.getElementById('view-work').classList.contains('active')"), 'the work view');
-    assert.equal(await run("document.getElementById('workEmpty').hidden"), false, 'the work view shows its empty state');
-    assert.equal(await run("document.getElementById('workEmpty').textContent.includes('导入项目后')"), true, 'the work empty state explains what is missing');
-    assert.equal(await run("document.getElementById('workLayout').hidden"), true, 'the work layout stays hidden without a project');
-    await browser.screenshot(path.join(evidenceDir, 'empty-state-work.png'));
+    // NAV-003 expected 1 (work): the workbench page is gone from the
+    // navigation, keeps no empty state of its own, and survives only as the
+    // hidden service mount.
+    assert.deepEqual(
+      await run("[...document.querySelectorAll('nav [data-view]')].map(button => button.dataset.view)"),
+      ['home', 'memory', 'projects', 'search', 'activity'],
+      'the navigation offers exactly the five pages',
+    );
+    assert.equal(await run("document.querySelector('[data-view=\"work\"]') === null"), true, 'the work navigation button is removed');
+    assert.equal(await run("document.getElementById('view-work') !== null"), true, 'the work section survives in the DOM');
+    assert.equal(await run("document.getElementById('view-work').hidden"), true, 'the work section stays hidden');
+    assert.equal(await run("document.getElementById('workFrame') !== null"), true, 'the workbench service mount (workFrame) survives');
+    assert.equal(await run("document.getElementById('workEmpty') === null"), true, 'the retired work empty state is really gone');
+    await run("location.hash = '#work'");
+    await waitFor(
+      async () => (await run("document.getElementById('view-home').classList.contains('active')"))
+        && (await run("location.hash")) === '#home',
+      'the #work hash falls back to home',
+      10000,
+    );
+    assert.equal(await run("document.getElementById('view-work').hidden"), true, 'the fallback never reveals the work section');
+    await browser.screenshot(path.join(evidenceDir, 'empty-state-nav-contract.png'));
 
+    // NAV-003 expected 1 (search): the search page shows its real empty
+    // guidance instead of an embedded module.
     await run("document.querySelector('[data-view=\"search\"]').click()");
     await waitFor(() => run("document.getElementById('view-search').classList.contains('active')"), 'the search view');
-    assert.equal(await run("document.getElementById('searchEmpty').hidden"), false, 'the search view shows its empty state');
-    assert.equal(await run("document.getElementById('searchEmpty').textContent.includes('尚未导入项目')"), true, 'the search empty state explains what is missing');
+    assert.equal(await run("document.getElementById('searchContent').textContent.includes('输入关键词')"), true, 'the search view shows its empty guidance');
+    assert.equal(await run("document.getElementById('searchForm') !== null"), true, 'the search view offers the real search form');
+    assert.equal(await run("document.getElementById('searchEmpty') === null"), true, 'the retired search empty element is really gone');
     await browser.screenshot(path.join(evidenceDir, 'empty-state-search.png'));
 
+    // NAV-003 expected 1 (memory): an empty memory library is a fact of the
+    // engine, not a placeholder list.
+    await run("document.querySelector('[data-view=\"memory\"]').click()");
+    await waitFor(() => run("document.getElementById('view-memory').classList.contains('active')"), 'the memory view');
+    await waitFor(() => run("document.getElementById('memoryContent').textContent.includes('没有匹配的记忆')"), 'the real empty memory library', 20000);
+    assert.equal(await run("document.querySelectorAll('#memoryContent .memory-item').length"), 0, 'the memory library lists no memory');
+    await browser.screenshot(path.join(evidenceDir, 'empty-state-memory.png'));
+
+    // NAV-003 expected 1 (projects): the project page shows its real empty
+    // state.
     await run("document.querySelector('[data-view=\"projects\"]').click()");
     await waitFor(() => run("document.getElementById('view-projects').classList.contains('active')"), 'the projects view');
-    assert.equal(await run("document.getElementById('projectTree').textContent.includes('暂无项目')"), true, 'the project tree shows the empty group');
-    assert.equal(await run("document.getElementById('projectTree').textContent.includes('未分组')"), true, 'the empty project tree still shows the ungrouped domain');
-    assert.equal(await run("document.getElementById('projectDetail').textContent.includes('尚未导入项目')"), true, 'the project detail shows the empty state');
+    await waitFor(() => run("document.getElementById('projectsContent').textContent.includes('没有匹配的项目')"), 'the real empty project list', 20000);
+    assert.equal(await run("document.querySelectorAll('#projectsContent .project-row').length"), 0, 'the project page lists no project');
     await browser.screenshot(path.join(evidenceDir, 'empty-state-projects.png'));
 
     const brain = await (await fetch(base + '/api/brain')).json();
     assert.equal((brain.brain.domains || []).length, 0, 'a fresh instance owns no domain');
 
     // NAV-003 expected 3: nothing created a placeholder project.
-    assert.equal(await run("document.querySelectorAll('#projectTree [data-select-project]').length"), 0, 'the project tree offers no project');
     assert.equal(await run("document.getElementById('projectSelect').disabled"), true, 'the project selector stays disabled');
     assert.equal(await run("document.getElementById('projectSelect').value"), '', 'no project is selected');
     assert.equal(await run("localStorage.getItem('kb.project')"), null, 'no project id is remembered');
@@ -141,6 +205,8 @@ async function main() {
     await browser?.close();
     await proxy.close();
     await server.cleanup();
+    await engineProxy.close();
+    await engine.close().catch(() => {});
     fs.rmSync(fixture, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   }
 }

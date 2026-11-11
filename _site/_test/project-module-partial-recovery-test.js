@@ -12,7 +12,17 @@
 // them (each can be switched offline with 503) and the real vendored
 // knowledge-engine behind a pass-through proxy that can also be switched
 // offline. The repair is the product's own action, driven from the browser:
-// the "修复接线" button in the project detail.
+// the "修复接线" action for the ACTIVE project.
+//
+// 迁移说明（2026-11 五页简化 UI，只换 UI 驱动方式，业务断言不变）：
+// - 项目列表：#projectTree → #projectsContent / .project-row。
+// - 打开项目详情：[data-select-project=<id>] → 项目名按钮
+//   [data-action="project-detail"][data-id=<id>]；#projectDetail →
+//   #projectsContent 内的详情（含 [data-action="project-list"] 返回）。
+// - 修复接线入口：旧项目详情里的 [data-action="repair"] → 系统抽屉里的
+//   #repairWiring（#openSystem 打开抽屉）；修复目标与旧 UI 相同，取顶栏
+//   #projectSelect 的当前项目（先断言当前项目即导入项目）。
+// - #wiringFeedback 反馈元素与文案断言（待恢复 + 模块名）不变。
 //
 // Boundary: the modules are not the vendored runtime, they are contract
 // faithful fixtures — the evidence is the registration state each module
@@ -152,16 +162,21 @@ async function main() {
     // The browser picks the imported project up from the product registry.
     await click('[data-view="projects"]');
     await run("document.dispatchEvent(new Event('visibilitychange'))");
-    await waitFor(() => run("document.getElementById('projectTree').textContent.includes('部分模块项目')"), 'the imported project in the tree', 20000);
-    await click(`[data-select-project="${projectId}"]`);
-    await waitFor(() => run("document.getElementById('projectDetail').textContent.includes('部分模块项目')"), 'the project detail', 10000);
-    assert.ok(await run("document.getElementById('projectDetail').querySelector('[data-action=\"repair\"]') !== null"), 'the project offers the repair action');
+    await waitFor(() => run("document.getElementById('projectsContent').textContent.includes('部分模块项目')"), 'the imported project in the list', 20000);
+    await click(`[data-action="project-detail"][data-id="${projectId}"]`);
+    await waitFor(() => run("document.getElementById('projectsContent').querySelector('[data-action=\"project-list\"]') !== null && document.getElementById('projectsContent').textContent.includes('部分模块项目')"), 'the project detail', 10000);
+    // The repair action targets the ACTIVE project and lives in the system
+    // drawer in the five-page UI (the old project-detail entry is gone).
+    await waitFor(() => run(`document.getElementById('projectSelect').value === ${JSON.stringify(projectId)}`), 'the imported project is the active project', 10000);
+    await click('#openSystem');
+    await waitFor(() => run("document.getElementById('systemDrawer').hidden === false && document.getElementById('repairWiring') !== null"), 'the system drawer', 10000);
+    assert.ok(await run("document.getElementById('repairWiring') !== null"), 'the project offers the repair action');
 
     // Only the terminal comes back. The other three keep answering 503.
     terminal.setOnline(true);
     const repairCalls = () => capture.find(entry => entry.method === 'POST' && entry.url.includes('/module-register'));
     const beforeRepair = repairCalls().length;
-    await click('[data-action="repair"]');
+    await click('#repairWiring');
     await waitFor(() => repairCalls().length > beforeRepair, 'the repair request', 20000);
     await waitFor(() => run("document.getElementById('wiringFeedback').textContent.includes('待恢复')"), 'the repair feedback', 20000);
     const firstRepair = await capture.body(repairCalls()[beforeRepair]);
@@ -186,7 +201,7 @@ async function main() {
     // The index module comes back as well; the terminal is already wired.
     vectorHub.setOnline(true);
     const beforeSecondRepair = repairCalls().length;
-    await click('[data-action="repair"]');
+    await click('#repairWiring');
     await waitFor(() => repairCalls().length > beforeSecondRepair, 'the second repair request', 20000);
     await waitFor(() => run("document.getElementById('wiringFeedback').textContent.includes('待恢复')"), 'the second repair feedback', 20000);
     const secondRepair = await capture.body(repairCalls()[beforeSecondRepair]);

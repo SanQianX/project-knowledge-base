@@ -2,6 +2,16 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+// 迁移说明（五页简化 UI，静态契约解析部分）：
+// - workFrame 断言保留：#view-work/#workFrame 仍在 DOM，但只作为隐藏服务
+//   挂载（供应商/维护模型配置经 #configureProviders 驱动）。
+// - 检索页不再内嵌 vectorHub：#vectorFrame 已删除，改为断言 #view-search
+//   存在、产品走服务端检索（/api/engine/search）且 HTML 不再含 vectorFrame。
+// - 导航结构：nav 恰好五个 data-view（home/memory/projects/search/
+//   activity），不含 work。
+// - 嵌入协议：kb:sidebar（折叠栏）已随 work 导航页删除，改断言隐藏挂载
+//   的驱动消息 kb:open-settings；kb:select-project/kb:knowledge/
+//   initializeFrame 与「会话生命周期只属于 terminal 模块」的负断言保留。
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-claude-runner-v2-'));
@@ -73,11 +83,20 @@ const runner = require('../lib/claude-cli-runner');
 
     const html = fs.readFileSync(path.join(ROOT, 'ui', 'index.html'), 'utf8');
     const app = fs.readFileSync(path.join(ROOT, 'ui', 'product.js'), 'utf8');
-    // T2: 内嵌终端取代旧 workbench 聊天面板 —— 壳经 kb:* 协议与会话/事件交互
+    // T2: 内嵌终端取代旧 workbench 聊天面板 —— 壳经 kb:* 协议与会话/事件交互。
+    // work 不再是导航页，但 workbench 帧保留为隐藏服务挂载。
     assert(html.includes('id="view-work"') && html.includes('id="workFrame"'));
-    assert(html.includes('id="view-search"') && html.includes('id="vectorFrame"'));
+    assert(html.includes('hidden><div class="work-layout" id="workLayout" hidden>'), 'the workbench mount stays hidden');
+    // 五页导航：恰好 home/memory/projects/search/activity，不含 work。
+    const nav = /<nav aria-label="主要导航">([\s\S]*?)<\/nav>/.exec(html);
+    assert(nav, 'the navigation block exists');
+    const navViews = [...nav[1].matchAll(/data-view="([a-z]+)"/g)].map(match => match[1]);
+    assert.deepStrictEqual(navViews, ['home', 'memory', 'projects', 'search', 'activity'], 'the navigation offers exactly the five pages');
+    // 检索页不再内嵌 vectorHub：服务端检索取代 vectorFrame。
+    assert(html.includes('id="view-search"') && !html.includes('id="vectorFrame"'));
+    assert(app.includes("'/api/engine/search'"), 'the search page drives the server-side engine search');
     assert(app.includes("'kb:select-project'") && app.includes("'kb:knowledge'") && app.includes('initializeFrame'));
-    assert(app.includes("'kb:sidebar'"), 'embed protocol wiring must cover fold');
+    assert(app.includes("'kb:open-settings'"), 'embed protocol wiring must still reach the hidden workbench mount');
     // 会话生命周期（archive/restore）只属于 terminal 模块，壳保持只读投影
     assert(!app.includes("'kb:archive-session'") && !app.includes("'kb:restore-session'"), 'session lifecycle wiring must stay terminal-module-only');
 

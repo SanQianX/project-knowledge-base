@@ -37,6 +37,28 @@
 // frozen source and the real UI's healthy-page projection — never about the
 // model's judgement. The health gates are read-only observations of the real
 // page; the driver never sets any availability flag.
+//
+// 迁移说明（五页简化 UI，见 patches/ui-test-mapping-spec.md；与 R4 文件的迁移
+// 保持逐条一致，仅外壳 require 不同）：
+//   * 导入项目已列出的等待：旧首页项目面板（homeContent 含项目名）已删除，
+//     等价为顶栏 #projectSelect 选项里出现项目名（同一 registry projection）。
+//     首页「待确认记忆」面板仍在（homeContent），对照候选 B 的首页门不变。
+//   * 候选卡片：[data-memory-card=<id>] → 候选箱行内的
+//     [data-action="review-candidate"][data-id=<id>]「审核」按钮；健康门的
+//     卡片计数（[data-memory-card] ≥ 2）等价为该审核按钮计数 ≥ 2。
+//   * 忽略动作：旧行内 [data-memory-action="ignore"] → 审核对话框
+//     （#appDialog > #reviewForm）里 #appDialogActions button.danger；
+//     旧 confirm 按钮（[data-memory-action="confirm"]）在新 UI 不再是行内
+//     按钮，忽略/确认都在审核对话框内，「A 无 ignore/confirm 按钮」合并为
+//     「A 无审核入口（行已消失）」。
+//   * 候选计数：旧 #candidateCount（已删除）→ 导航徽标 #memoryCount
+//     （overview.totals.candidates），期望值 '1'（只剩对照 B）。
+//   * 确认 tab：[data-memory-tab="confirmed"] → [data-memory-tab="library"]；
+//     空态「还没有已确认的长期记忆」→「没有匹配的记忆。」；重载后 tab 栏
+//     需等 boot snapshot 应答后再点击。
+//   * 离线横幅文案在新 UI 保持原文（renderMemories 的
+//     「知识引擎暂时不可用。…」），banner 门不变；/api/engine/snapshot 200
+//     门、引擎/冻结源/注入断言完全不变；真实引擎自报 dataSchemaVersion=4。
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -51,18 +73,44 @@ const TEXT_A = 'R4 健康页忽略持久性（忽略项）：对外错误信息�
 const TEXT_B = 'R4 对照记忆（保持候选）：发布前必须运行隔离回归，不允许跳过。';
 const REPO_NAME = 'mem005r4-repo';
 
-async function openMemoryView(harness) {
-  await harness.nativeClick('nav [data-view="memory"]');
+/**
+ * Open a nav view with one retry against the known reload commit-gap race
+ * (the shell's reload() gate proves the FRESH document, but a CDP click
+ * dispatched right at the commit boundary can still be lost — see the
+ * parallel-memory-shell.js reload comment). Driver robustness only: the
+ * assertion stays "the view is really active".
+ */
+async function openView(harness, view) {
+  let lastError = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await harness.nativeClick(`nav [data-view="${view}"]`);
+    try {
+      await harness.waitFor(
+        () => harness.run(`document.getElementById('view-${view}').classList.contains('active')`),
+        `the ${view} view is open`,
+        5000,
+      );
+      return;
+    } catch (error) { lastError = error; }
+  }
+  throw lastError;
+}
+
+const openMemoryView = harness => openView(harness, 'memory');
+
+/** The memory tab bar exists only after the reloaded page read engine data. */
+async function waitForMemoryTabs(harness) {
   await harness.waitFor(
-    () => harness.run("document.getElementById('view-memory').classList.contains('active')"),
-    'the memory view is open',
-    10000,
+    () => harness.run("document.querySelector('#memoryContent [data-memory-tab=\"candidate\"]') !== null"),
+    'the memory tab bar is rendered from real engine data',
+    20000,
   );
 }
 
 async function openCandidateBox(harness) {
   await openMemoryView(harness);
-  await harness.nativeClick('[data-memory-tab="candidate"]');
+  await waitForMemoryTabs(harness);
+  await harness.nativeClick('#memoryContent [data-memory-tab="candidate"]');
 }
 
 /** A memory card's text is rendered by the real page (implies engine data). */
@@ -76,6 +124,11 @@ const bannerInMemoryView = harness => harness.run(
 
 const bannerInHome = harness => harness.run(
   `document.getElementById('homeContent').textContent.includes(${JSON.stringify(BANNER)})`,
+);
+
+/** A candidate is offered by the real UI iff its 审核 (review) button exists. */
+const candidateOffered = (harness, memoryId) => harness.run(
+  `Boolean(document.querySelector('#memoryContent [data-action="review-candidate"][data-id=${JSON.stringify(memoryId)}]'))`,
 );
 
 /**
@@ -105,8 +158,10 @@ async function main() {
     const repo = makeRepo(harness.fixture, REPO_NAME, { 'README.md': '# R4 健康页忽略持久性夹具\n' });
     const { projectId, knowledgePath } = await harness.importProject(repo, 'R4健康页忽略持久性');
     await harness.requestRegistryRefresh();
+    // The new home page no longer lists projects; the registry projection is
+    // surfaced by the topbar project selector instead.
     await harness.waitFor(
-      () => harness.run("document.getElementById('homeContent').textContent.includes('R4健康页忽略持久性')"),
+      () => harness.run("document.getElementById('projectSelect').textContent.includes('R4健康页忽略持久性')"),
       'the imported project is listed',
       20000,
     );
@@ -151,15 +206,23 @@ async function main() {
     await openCandidateBox(harness);
     const gateBefore = await waitHealthyCandidateBox(harness, 'before ignore');
     assert.equal(await cardTextVisible(harness, TEXT_A), true, 'A is listed alongside B before the ignore');
-    const cardsBefore = await harness.run("document.querySelectorAll('#memoryContent [data-memory-card]').length");
+    const cardsBefore = await harness.run("document.querySelectorAll('#memoryContent [data-action=\"review-candidate\"]').length");
     assert.ok(Number(cardsBefore) >= 2, `the healthy candidate box really shows both cards: ${cardsBefore}`);
     if (harness.evidence) await harness.browser.screenshot(path.join(harness.evidence, 'mem005-r4-healthy-before-ignore.png'));
 
-    // 4. Ignore A through the real UI. The strong half: A must leave while B
-    //    STAYS — an emptied, errored or offline box can never pass this.
-    await harness.nativeClick(`[data-memory-action="ignore"][data-memory-id="${candidateA.id}"]`);
+    // 4. Ignore A through the real UI: the review dialog's danger action sends
+    //    the same engine PATCH {status:'ignored'}. The strong half: A must
+    //    leave while B STAYS — an emptied, errored or offline box can never
+    //    pass this.
+    await harness.nativeClick(`#memoryContent [data-action="review-candidate"][data-id="${candidateA.id}"]`);
     await harness.waitFor(
-      () => harness.run(`!document.getElementById('memoryContent').textContent.includes(${JSON.stringify(TEXT_A)})`),
+      () => harness.run("document.getElementById('appDialog').open === true && document.getElementById('reviewForm') !== null"),
+      'the candidate review dialog is open',
+      10000,
+    );
+    await harness.nativeClick('#appDialogActions button.danger');
+    await harness.waitFor(
+      () => harness.run(`document.getElementById('appDialog').open === false && !document.getElementById('memoryContent').textContent.includes(${JSON.stringify(TEXT_A)})`),
       'the ignored candidate A leaves the candidate box',
       15000,
     );
@@ -174,12 +237,7 @@ async function main() {
     //    and the page's own snapshot requests answered 200.
     await harness.reload();
     await harness.waitFor(() => harness.run("document.readyState === 'complete'"), 'the reloaded page is complete', 20000);
-    await harness.nativeClick('nav [data-view="home"]');
-    await harness.waitFor(
-      () => harness.run("document.getElementById('view-home').classList.contains('active')"),
-      'the home view is open after the reload',
-      10000,
-    );
+    await openView(harness, 'home');
     await harness.waitFor(
       () => harness.run(`document.getElementById('homeContent').textContent.includes(${JSON.stringify(TEXT_B)})`),
       'the home view\'s 待确认记忆 panel lists the contrast candidate B after the reload',
@@ -189,38 +247,41 @@ async function main() {
 
     await openCandidateBox(harness);
     const gateAfter = await waitHealthyCandidateBox(harness, 'after reload');
+    // The new UI has no per-row ignore/confirm buttons — the row's only action
+    // is 审核 (review-candidate), so "no review entry" covers both old checks.
     const afterReload = {
-      candidateACardPresent: await harness.run(`Boolean(document.querySelector('[data-memory-card=${JSON.stringify(candidateA.id)}]'))`),
+      candidateACardPresent: await candidateOffered(harness, candidateA.id),
       textAInMemoryView: await cardTextVisible(harness, TEXT_A),
-      candidateCountBadge: await harness.run("document.getElementById('candidateCount').textContent"),
-      ignoreButtonPresent: await harness.run(`Boolean(document.querySelector('[data-memory-action="ignore"][data-memory-id=${JSON.stringify(candidateA.id)}]'))`),
-      confirmButtonPresent: await harness.run(`Boolean(document.querySelector('[data-memory-action="confirm"][data-memory-id=${JSON.stringify(candidateA.id)}]'))`),
-      contrastCardPresent: await harness.run(`Boolean(document.querySelector('[data-memory-card=${JSON.stringify(candidateB.id)}]'))`),
+      candidateCountBadge: await harness.run("document.getElementById('memoryCount').hidden ? '' : document.getElementById('memoryCount').textContent"),
+      ignoreButtonPresent: await candidateOffered(harness, candidateA.id),
+      confirmButtonPresent: await candidateOffered(harness, candidateA.id),
+      contrastCardPresent: await candidateOffered(harness, candidateB.id),
     };
     assert.equal(afterReload.candidateACardPresent, false, 'the ignored A has no card after the reload');
     assert.equal(afterReload.textAInMemoryView, false, 'A\'s text is not in the memory view after the reload');
     assert.equal(String(afterReload.candidateCountBadge).trim(), '1', `the candidate counter counts only the contrast candidate B after the reload: ${JSON.stringify(afterReload.candidateCountBadge)}`);
-    assert.equal(afterReload.ignoreButtonPresent, false, 'A offers no ignore button after the reload');
-    assert.equal(afterReload.confirmButtonPresent, false, 'A offers no confirm button after the reload');
+    assert.equal(afterReload.ignoreButtonPresent, false, 'A offers no ignore (review) entry after the reload');
+    assert.equal(afterReload.confirmButtonPresent, false, 'A offers no confirm (review) entry after the reload');
     assert.equal(afterReload.contrastCardPresent, true, 'B\'s card is right there — the absence of A is a real filtered-out record, not an offline fallback');
     if (harness.evidence) await harness.browser.screenshot(path.join(harness.evidence, 'mem005-r4-after-reload-healthy-candidates.png'));
 
-    // 6. The confirmed tab: rendered from real data (B is not confirmed, so
-    //    the real empty-state text shows), banner absent, A not confirmed.
-    await harness.nativeClick('[data-memory-tab="confirmed"]');
+    // 6. The library tab (old confirmed tab): rendered from real data (B is
+    //    not confirmed, so the real empty-state text shows), banner absent,
+    //    A not confirmed.
+    await harness.nativeClick('#memoryContent [data-memory-tab="library"]');
     await harness.waitFor(
-      () => harness.run(`(!document.getElementById('memoryContent').textContent.includes(${JSON.stringify(BANNER)}) && (document.getElementById('memoryContent').textContent.includes('还没有已确认的长期记忆') || document.querySelectorAll('[data-memory-card]').length > 0))`),
-      'the confirmed tab is rendered from real data (not the offline banner)',
+      () => harness.run(`(!document.getElementById('memoryContent').textContent.includes(${JSON.stringify(BANNER)}) && (document.getElementById('memoryContent').textContent.includes('没有匹配的记忆。') || document.querySelectorAll('#memoryContent .memory-item').length > 0))`),
+      'the library tab is rendered from real data (not the offline banner)',
       15000,
     );
     const confirmedTab = {
-      cardAPresent: await harness.run(`Boolean(document.querySelector('[data-memory-card=${JSON.stringify(candidateA.id)}]'))`),
+      cardAPresent: await harness.run(`Boolean(document.querySelector('#memoryContent [data-action="memory-detail"][data-id=${JSON.stringify(candidateA.id)}]'))`),
       textAPresent: await cardTextVisible(harness, TEXT_A),
       bannerPresent: await bannerInMemoryView(harness),
     };
     assert.equal(confirmedTab.cardAPresent, false, 'A is not shown as a confirmed memory');
     assert.equal(confirmedTab.textAPresent, false, 'A\'s text is not shown in the confirmed tab');
-    assert.equal(confirmedTab.bannerPresent, false, 'the confirmed tab is not the offline fallback');
+    assert.equal(confirmedTab.bannerPresent, false, 'the library tab is not the offline fallback');
     if (harness.evidence) await harness.browser.screenshot(path.join(harness.evidence, 'mem005-r4-after-reload-confirmed.png'));
 
     // 7. The page's own snapshot requests after the reload answered 200.
@@ -311,7 +372,7 @@ async function main() {
       fs.writeFileSync(path.join(harness.evidence, 'mem005-r4-healthy-persistence.json'), `${JSON.stringify(evidence, null, 2)}\n`, 'utf8');
     }
 
-    console.log('parallel-memory-capture-r4-mem005-health-test PASS (on a provably healthy page — contrast candidate visible, offline banner absent, page snapshot 200s — the ignored candidate stays ignored across a real reload and never returns as candidate or confirmed, while the engine, its persisted state and the frozen source are unchanged)');
+    console.log('parallel-capture-safety-r5-mem005-health-test PASS (on a provably healthy page — contrast candidate visible, offline banner absent, page snapshot 200s — the ignored candidate stays ignored across a real reload and never returns as candidate or confirmed, while the engine, its persisted state and the frozen source are unchanged)');
   } finally {
     await harness.cleanup();
   }

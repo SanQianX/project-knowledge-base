@@ -1,4 +1,20 @@
 'use strict';
+// 迁移说明（五页简化 UI）：
+// - #importDialog 导入流程、预检（preflight/HOOK_CONFLICT/重复导入）、知识
+//   根目录往返（#setupImportRoot → #saveBrainSettings）与领域创建
+//   （#createDomain → #domainForm）全部保持原断言。
+// - work 不再是导航页：桌面视图遍历改为五页（memory/search/projects/
+//   activity/home）。
+// - 首页不再罗列项目：启动等待改为「首页读取状态落定」（本实例引擎离线，
+//   落定文案是全局状态读取失败——同样是真实的非空库状态）。
+// - 领域落库可见性：#projectTree 已删除，改为项目页领域筛选
+//   #projectDomainFilter 的选项包含新领域。
+// - 导入成功跳转项目页：#projectDetail 已删除，改为 #projectsContent 的
+//   .project-row 列表（项目名按钮 [data-action="project-detail"]）。
+// - PRJ-012 失败读取不被当作刷新结果：旧 #projectTree 从登记快照渲染，
+//   新 UI 中登记快照驱动顶栏 #projectSelect——断言失败读取期间选择器
+//   保持旧状态、恢复读取后出现第二个项目；项目页 .project-row 走独立的
+//   /api/projects/page 分页端点，不受该故障影响。
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -51,8 +67,11 @@ async function main() {
     const run = expression => browser.evaluate(expression);
     const click = selector => run(`document.querySelector(${JSON.stringify(selector)}).click()`);
     const fill = (selector, value) => run(`(() => { const field=document.querySelector(${JSON.stringify(selector)}); field.value=${JSON.stringify(value)}; field.dispatchEvent(new Event('input',{bubbles:true})); })()`);
-    await waitFor(() => run("document.getElementById('homeContent').textContent.includes('第一个项目')"), 'real empty state');
-    for (const view of ['work', 'search', 'memory', 'projects', 'activity', 'home']) {
+    // The shell's boot reads settle: this instance's engine module answers
+    // 503, so the settled home state is the reported overview failure (a real
+    // non-empty-library state), never a fabricated empty library.
+    await waitFor(() => run("(() => { const text = document.getElementById('homeContent').textContent; return text.trim().length > 0 && !text.includes('正在读取'); })()"), 'real settled home state');
+    for (const view of ['memory', 'search', 'projects', 'activity', 'home']) {
       await click(`[data-view="${view}"]`);
       assert.equal(await run(`document.getElementById('view-${view}').classList.contains('active')`), true);
       assert.equal(await run('document.documentElement.scrollWidth > innerWidth'), false, `desktop overflow in ${view}`);
@@ -69,7 +88,7 @@ async function main() {
     assert.equal(capture.find(entry => entry.method === 'POST' && entry.url.endsWith('/api/domains')).length, 0, 'an empty domain name must not reach the product');
     assert.equal(((await api('/api/settings')).settings.brain.domains || []).length, 0, 'an empty domain name must not persist a domain');
     await fill('#domainForm input[name="name"]', '回归领域'); await click('#domainForm button[type="submit"]');
-    await waitFor(() => run("!document.getElementById('domainDialog').open && document.getElementById('projectTree').textContent.includes('回归领域')"), 'domain persisted from UI');
+    await waitFor(() => run("!document.getElementById('domainDialog').open && [...document.getElementById('projectDomainFilter').options].some(option => option.textContent === '回归领域')"), 'domain persisted from UI');
     const domainsOnDisk = JSON.parse(fs.readFileSync(path.join(dataDir, 'settings.json'), 'utf8')).brain.domains || [];
     assert.ok(domainsOnDisk.some(domain => domain.name === '回归领域'), 'the domain is persisted on disk');
     assert.equal(capture.find(entry => entry.method === 'POST' && entry.url.endsWith('/api/domains')).length, 1, 'only the named domain reached the product');
@@ -106,7 +125,11 @@ async function main() {
     assert.ok(await run(`document.getElementById('preflightStatus').textContent.includes(${JSON.stringify(failureLogs[0].operationId)})`), 'UI operation ID resolves to the persisted failure');
     fs.unlinkSync(racedHook);
     await click('#confirmImport');
-    await waitFor(() => run("!document.getElementById('importDialog').open && document.getElementById('projectDetail').textContent.includes('回归项目')"), 'import feedback', 30000);
+    await waitFor(() => run("!document.getElementById('importDialog').open && document.getElementById('view-projects').classList.contains('active') && document.getElementById('projectsContent').textContent.includes('回归项目')"), 'import feedback', 30000);
+    // The import now lands on the projects page: the new list renders one
+    // .project-row per registered project, with the name as its detail button.
+    assert.equal(await run("document.querySelectorAll('#projectsContent .project-row').length"), 1, 'the imported project is listed as one project row');
+    assert.equal(await run("document.querySelectorAll('#projectsContent .project-row [data-action=\"project-detail\"]').length"), 1, 'the project row carries the project detail button');
     const selected = await run("document.getElementById('projectSelect').value");
     const project = (await api('/api/projects/aggregated')).projects.find(p => p.projectId === selected);
     assert.ok(project && Object.values(project.modules).every(module => !module.registered));
@@ -190,9 +213,11 @@ async function main() {
     const registered = (await api('/api/projects/aggregated')).projects;
     assert.equal(registered.length, 2, 'the successful import registers exactly one more project');
     assert.ok(registered.some(project => project.name === '第二个项目'), 'the second project is registered');
-    // The page does not present the failed read as fresh state.
-    assert.equal(await run("document.querySelectorAll('#projectTree [data-select-project]').length"), 1, 'the failed read leaves the project tree on the previous state');
-    assert.equal(await run("document.getElementById('projectTree').textContent.includes('第二个项目')"), false, 'the failed read is not shown as a refreshed list');
+    // The page does not present the failed read as fresh state: the registry
+    // snapshot drives the top-bar selector, which stays on the previous
+    // state until a later read really succeeds.
+    assert.equal(await run("[...document.getElementById('projectSelect').options].filter(option => option.value).length"), 1, 'the failed read leaves the registry selector on the previous state');
+    assert.equal(await run("document.getElementById('projectSelect').textContent.includes('第二个项目')"), false, 'the failed read is not shown as a refreshed registry');
     // A later read succeeds: the same import is not registered a second time.
     fetchFaults.armed = false;
     const laterRead = () => capture.find(entry => entry.method === 'GET' && entry.url.includes('/api/projects/projection') && entry.status === 200 && requests.indexOf(entry) > importIndex).length > 0;
@@ -202,8 +227,9 @@ async function main() {
       await new Promise(resolve => setTimeout(resolve, 300));
     }
     assert.ok(laterRead(), 'the later registry read succeeds');
-    await waitFor(() => run("document.getElementById('projectTree').textContent.includes('第二个项目')"), 'the refreshed project tree', 20000);
-    assert.equal(await run("document.querySelectorAll('#projectTree [data-select-project]').length"), 2, 'the retry reads the same two projects and creates no third');
+    await waitFor(() => run("document.getElementById('projectSelect').textContent.includes('第二个项目')"), 'the refreshed registry selector', 20000);
+    assert.equal(await run("[...document.getElementById('projectSelect').options].filter(option => option.value).length"), 2, 'the retry reads the same two projects and creates no third');
+    await waitFor(() => run("document.querySelectorAll('#projectsContent .project-row').length === 2"), 'the refreshed project rows', 20000);
     assert.equal((await api('/api/projects/aggregated')).projects.length, 2, 'the product registry still holds exactly two projects');
     assert.ok(fs.existsSync(knowledge2), 'the second project keeps its knowledge directory');
     await browser.send('Fetch.disable');

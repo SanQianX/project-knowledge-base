@@ -18,6 +18,30 @@
 //                                 domain memory only reaches the projects of
 //                                 that domain, a project memory only reaches
 //                                 that project.
+//
+// 迁移说明（五页简化 UI，见 patches/ui-test-mapping-spec.md）：
+//   * 添加记忆：#addMemory/#memoryDialog → #memoryContent
+//     [data-action="new-memory"] → #appDialog 内 #memoryForm。新契约要求标题
+//     （input[name="title"]，本测试以记忆正文为标题）与正文
+//     （textarea[name="text"]），均用 CDP Input.insertText（真实粘贴路径）
+//     录入；提交 = #appDialogActions button.primary。
+//   * 适用范围：#memoryScope → #memoryForm select[name="scopeType"]（新表单
+//     默认 group，global/domain/project 需显式选择，选择后 change 触发
+//     fillTargets）；适用目标：#memoryTarget →
+//     #memoryForm [data-role="scope-target"] select[name="scopeTarget"]
+//     （仅 domain/project 显示；「UI 只提供该类型的目标」断言保持为读取
+//     该 select 的 options）。
+//   * scope 存储语义断言保持：POST 响应 scopeType/scopeId + 新增 engineApi
+//     GET /api/memories 复核引擎存储的 scopeType/scopeId。
+//   * 引擎侧断言全部不变：错配 scope 的 400 INVALID_ARGUMENT
+//     （所选记忆目标不存在或不属于当前智脑。）、注入矩阵
+//     （/api/context）、磁盘文件布局（brain 共享目录下 memories/
+//     confirmed.md、domains/<domainId>.md、projects/<projectId>.md，领域目录
+//     自身无记忆文件）。
+//   * 「导入项目已列出」等待：旧首页项目面板已删除 → 顶栏 #projectSelect。
+//   * 作用域标签断言：旧 confirmed tab 的 [data-memory-card] → library tab
+//     （[data-memory-tab="library"]）的 .memory-item（卡片第三行仍标注
+//     全局记忆/领域记忆/项目记忆 与目标名称）。
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -30,47 +54,79 @@ const GLOBAL_TEXT = '全局约定：所有对外错误信息使用中文表述�
 const DOMAIN_TEXT = '平台领域约定：发布流程必须先跑完整回归。';
 const PROJECT_TEXT = '项目约定：数据库迁移脚本一律放在 db/migrations。';
 
+/**
+ * Open the memory view with retries against the known reload commit-gap race
+ * (driver robustness only: the assertion stays "the view is really active").
+ */
 async function openMemoryView(harness) {
-  await harness.nativeClick('nav [data-view="memory"]');
-  await harness.waitFor(
-    () => harness.run("document.getElementById('view-memory').classList.contains('active')"),
-    'the memory view is open',
-    10000,
-  );
+  let lastError = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await harness.nativeClick('nav [data-view="memory"]');
+    try {
+      await harness.waitFor(
+        () => harness.run("document.getElementById('view-memory').classList.contains('active')"),
+        'the memory view is open',
+        5000,
+      );
+      return;
+    } catch (error) { lastError = error; }
+  }
+  throw lastError;
 }
 
-/** Add one memory through the real UI and return what the engine answered. */
+/**
+ * Add one memory through the real UI (new-memory dialog: title + body +
+ * explicit scope) and return what the engine answered, cross-checked against
+ * the engine's own stored record.
+ */
 async function addMemoryViaUi(harness, { text, scopeType, scopeId }) {
-  await harness.nativeClick('#addMemory');
+  await harness.nativeClick('#memoryContent [data-action="new-memory"]');
   await harness.waitFor(
-    () => harness.run("document.getElementById('memoryDialog').open === true"),
-    'the add dialog is open',
+    () => harness.run("document.getElementById('appDialog').open === true && document.getElementById('memoryForm') !== null"),
+    'the add dialog with the memory form is open',
     10000,
   );
-  await harness.typeText(text);
-  await harness.selectOption('#memoryScope', scopeType);
+  // The new contract requires a title; the memory text doubles as its title.
+  await harness.nativeClick('#memoryForm input[name="title"]');
+  await harness.browser.send('Input.insertText', { text });
+  await harness.nativeClick('#memoryForm textarea[name="text"]');
+  await harness.browser.send('Input.insertText', { text });
+  await harness.selectOption('#memoryForm select[name="scopeType"]', scopeType);
   if (scopeType !== 'global') {
-    const options = await harness.run("Array.from(document.getElementById('memoryTarget').options).map(o => o.value)");
+    await harness.waitFor(
+      () => harness.run("document.querySelector('#memoryForm [data-role=\"scope-target\"]').hidden === false"),
+      `the ${scopeType} scope target select is shown`,
+      10000,
+    );
+    const options = await harness.run("Array.from(document.querySelector('#memoryForm [data-role=\"scope-target\"] select[name=\"scopeTarget\"]').options).map(o => o.value)");
     assert.ok(options.includes(scopeId), `the ${scopeType} scope offers ${scopeId}: ${JSON.stringify(options)}`);
-    await harness.selectOption('#memoryTarget', scopeId);
+    await harness.selectOption('#memoryForm [data-role="scope-target"] select[name="scopeTarget"]', scopeId);
   }
   const postsBefore = harness.network.find(entry => entry.method === 'POST' && entry.url.includes('/api/engine/memories')).length;
-  await harness.nativeClick('#confirmMemory');
+  await harness.nativeClick('#appDialogActions button.primary');
   await harness.waitFor(
-    () => harness.run("document.getElementById('memoryDialog').open === false"),
+    () => harness.run("document.getElementById('appDialog').open === false"),
     'the dialog closes after the save',
     15000,
   );
   const post = harness.network.find(entry => entry.method === 'POST' && entry.url.includes('/api/engine/memories'))[postsBefore];
   assert.ok(post, 'the shell really posted the memory');
   assert.equal(post.status, 200, `the real POST answers 200: ${JSON.stringify(post.body)}`);
+  assert.equal(post.body && post.body.scopeType, scopeType, 'the chosen scope type really travelled with the request');
+  if (scopeId) assert.equal(post.body.scopeId, scopeId, 'the chosen scope target really travelled with the request');
   const body = await harness.network.body(post);
   assert.ok(body && body.memory, `the real POST answers with the memory: ${JSON.stringify(body)}`);
   assert.equal(body.memory.text, text, 'the saved text is the text that was typed');
   assert.equal(body.memory.scopeType, scopeType, 'the saved scope type is the chosen one');
   assert.equal(body.memory.scopeId, scopeId || body.memory.brainId, 'the saved scope id belongs to the scope type');
   assert.equal(body.memory.status, 'confirmed', 'the memory is saved as confirmed');
-  return { memory: body.memory, request: post.body, url: post.url.replace(harness.base, '') };
+  // The engine's own stored record confirms the scope pair.
+  const engineRecord = (await harness.engineApi('GET', '/api/memories')).body.memories.find(memory => memory.id === body.memory.id);
+  assert.ok(engineRecord, 'the engine really stored the memory');
+  assert.equal(engineRecord.scopeType, scopeType, `the engine stores the ${scopeType} scope type`);
+  assert.equal(engineRecord.scopeId, scopeId || engineRecord.brainId, `the engine stores the ${scopeType} scope id`);
+  assert.equal(engineRecord.status, 'confirmed', 'the engine stores the memory as confirmed');
+  return { memory: body.memory, engineRecord, request: post.body, url: post.url.replace(harness.base, '') };
 }
 
 async function main() {
@@ -88,8 +144,10 @@ async function main() {
     const c = await harness.importProject(repoC, '范围丙');
 
     await harness.requestRegistryRefresh();
+    // The new home page no longer lists projects; the registry projection is
+    // surfaced by the topbar project selector instead.
     await harness.waitFor(
-      () => harness.run("document.getElementById('homeContent').textContent.includes('范围丙')"),
+      () => harness.run("document.getElementById('projectSelect').textContent.includes('范围丙')"),
       'the imported projects are listed',
       20000,
     );
@@ -109,8 +167,8 @@ async function main() {
     );
     await openMemoryView(harness);
     await harness.waitFor(
-      () => harness.run("!document.getElementById('addMemory').disabled"),
-      'the engine is reachable and the add button is live',
+      () => harness.run("document.querySelector('#memoryContent [data-action=\"new-memory\"]') !== null"),
+      'the engine is reachable and the add action is live',
       20000,
     );
 
@@ -122,6 +180,9 @@ async function main() {
     assert.equal(globalMemory.memory.scopeId, globalMemory.memory.brainId, 'a global memory targets the brain itself');
     assert.equal(domainMemory.memory.scopeId, domain.id, 'a domain memory targets the domain');
     assert.equal(projectMemory.memory.scopeId, a.projectId, 'a project memory targets the project');
+    assert.equal(globalMemory.engineRecord.scopeId, globalMemory.engineRecord.brainId, 'the engine stores the global scope against the brain');
+    assert.equal(domainMemory.engineRecord.scopeId, domain.id, 'the engine stores the domain scope');
+    assert.equal(projectMemory.engineRecord.scopeId, a.projectId, 'the engine stores the project scope');
 
     // The scope id has to belong to the scope type: the engine refuses the
     // mismatched combinations instead of silently storing them.
@@ -154,19 +215,26 @@ async function main() {
     assert.ok(!ids(injectedB).includes(projectMemory.memory.id), `the project memory does not reach 乙: ${JSON.stringify(injectedB)}`);
     assert.ok(!ids(injectedC).includes(projectMemory.memory.id), `the project memory does not reach 丙: ${JSON.stringify(injectedC)}`);
 
-    // The real UI names the scope of every memory.
+    // The real UI names the scope of every memory (the library tab lists the
+    // confirmed memories; each .memory-item card names the scope and target).
     await harness.reload();
     await openMemoryView(harness);
-    await harness.nativeClick('[data-memory-tab="confirmed"]');
+    await harness.waitFor(
+      () => harness.run("document.querySelector('#memoryContent [data-memory-tab=\"library\"]') !== null"),
+      'the memory tab bar is rendered from real data',
+      20000,
+    );
+    await harness.nativeClick('#memoryContent [data-memory-tab="library"]');
     await harness.waitFor(
       () => harness.run(`document.getElementById('memoryContent').textContent.includes(${JSON.stringify(GLOBAL_TEXT)})`),
       'the confirmed memories are listed',
       15000,
     );
-    const scopeLabels = await harness.run("Array.from(document.querySelectorAll('[data-memory-card]')).map(el => el.textContent)");
+    const scopeLabels = await harness.run("Array.from(document.querySelectorAll('#memoryContent .memory-item')).map(el => el.textContent)");
     const globalCard = scopeLabels.find(text => text.includes(GLOBAL_TEXT));
     const domainCard = scopeLabels.find(text => text.includes(DOMAIN_TEXT));
     const projectCard = scopeLabels.find(text => text.includes(PROJECT_TEXT));
+    assert.ok(globalCard && domainCard && projectCard, `all three memories have cards: ${JSON.stringify(scopeLabels)}`);
     assert.match(globalCard, /全局/, 'the UI names the global scope');
     assert.match(domainCard, /领域/, 'the UI names the domain scope');
     assert.match(domainCard, new RegExp(domain.name), 'the UI names the domain');

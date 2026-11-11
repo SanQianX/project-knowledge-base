@@ -42,6 +42,7 @@ async function main() {
   assert.equal(pkg.name, '@sanqianx/project-knowledge');
   if (mode === 'verify') assert.equal(pkg.version, expectedVersion, 'installed official version');
   const data = path.join(root, 'data'), knowledge = path.join(root, 'user-knowledge');
+  const engineStateFile = path.join(data, 'knowledge-engine', 'engine-state.json');
   const receiptFile = path.join(root, 'preservation-baseline.json');
   let baseline;
   if (mode === 'verify') {
@@ -90,6 +91,21 @@ async function main() {
       assert(selected.projectId, 'project registration retained even with offline modules');
       fs.mkdirSync(path.join(data, 'workbench'), { recursive: true });
       fs.writeFileSync(path.join(data, 'workbench', 'custom-config.fixture.json'), '{"fixture":"opaque-user-config-preserved"}\n');
+      // A pre-groups (schema v3) engine state: every legacy memory shape. The
+      // upgraded engine must migrate it in place under a backup and leave
+      // every record byte-preserved (only additive top-level keys).
+      const sha = 'a'.repeat(40);
+      fs.mkdirSync(path.join(data, 'knowledge-engine'), { recursive: true });
+      fs.writeFileSync(engineStateFile, JSON.stringify({
+        schemaVersion: 3, projects: [], runs: [], events: [], cursor: 0, journalCursors: {}, sharedScopes: [],
+        memories: [
+          { id: 'memory-legacy-scopeless', fingerprint: '1'.repeat(64), brainId: 'brain-default', text: '旧全局约定：无作用域字段', status: 'confirmed', evidence: { projectId: 'legacy-project', commitSha: sha, entryId: 'README.md', quote: '旧全局约定：无作用域字段' }, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
+          { id: 'memory-legacy-domain', fingerprint: '2'.repeat(64), brainId: 'brain-default', scopeType: 'domain', scopeId: 'domain-legacy', text: '领域记忆正文', originalText: '领域记忆正文', status: 'confirmed', evidence: { projectId: 'legacy-project', commitSha: sha, entryId: 'README.md', quote: '领域记忆正文' }, createdAt: '2026-01-02T00:00:00.000Z', updatedAt: '2026-01-02T00:00:00.000Z' },
+          { id: 'memory-legacy-manual', fingerprint: '3'.repeat(64), brainId: 'brain-default', scopeType: 'global', scopeId: 'brain-default', sourceType: 'manual', text: '手动旧记忆', originalText: '手动旧记忆', status: 'confirmed', evidence: null, createdAt: '2026-01-03T00:00:00.000Z', updatedAt: '2026-01-03T00:00:00.000Z' },
+          { id: 'memory-legacy-candidate', fingerprint: '4'.repeat(64), brainId: 'brain-default', domainId: 'domain-legacy', scopeType: 'project', scopeId: 'legacy-project', text: '旧候选', originalText: '旧候选', status: 'candidate', evidence: { projectId: 'legacy-project', commitSha: sha, entryId: 'README.md', quote: '旧候选引文依据' }, createdAt: '2026-01-04T00:00:00.000Z', updatedAt: '2026-01-04T00:00:00.000Z' },
+          { id: 'memory-legacy-tombstone', brainId: 'brain-default', scopeType: 'global', scopeId: 'brain-default', status: 'deleted', fingerprint: '5'.repeat(64), captureFingerprint: '5'.repeat(64), evidence: null, createdAt: '2026-01-05T00:00:00.000Z', updatedAt: '2026-01-05T00:00:00.000Z', deletedAt: '2026-01-05T00:00:00.000Z' },
+        ],
+      }, null, 2) + '\n');
     } else {
       const settings = (await api('GET', '/api/settings')).settings;
       assert.equal(settings.knowledge.rootPath, baseline.selected.rootPath);
@@ -97,6 +113,37 @@ async function main() {
       const state = await api('GET', '/api/state');
       assert(state.projects.some(project => (project.projectId || project.id) === baseline.selected.projectId), 'existing project remains registered after upgrade');
       assert.deepEqual(snapshot(knowledge), baseline.knowledge, 'startup preserves knowledge');
+      // The npm install itself must not touch the pre-groups engine state.
+      const engineBaseline = baseline.engine && baseline.engine['knowledge-engine/engine-state.json'];
+      if (engineBaseline) {
+        assert.equal(snapshot(data)['knowledge-engine/engine-state.json'], engineBaseline, 'engine state is untouched by installation');
+        const enginePort = await freePort();
+        assert(![5757, 5760, 5790, 8787, 8790].includes(enginePort));
+        const engineEnv = { ...env, KNOWLEDGE_ENGINE_DATA: path.join(data, 'knowledge-engine') };
+        const engineLog = fs.openSync(path.join(root, 'verify-engine.log'), 'w');
+        const engineChild = spawn(process.execPath, [path.join(core, 'node_modules', '@sanqianx', 'ai-coding-knowledge-engine', 'src', 'bin.js'), 'serve', '--port', String(enginePort), '--host', '127.0.0.1'], { cwd: core, env: engineEnv, windowsHide: true, stdio: ['ignore', engineLog, engineLog] });
+        const engineClosed = new Promise(resolve => engineChild.once('close', resolve));
+        try {
+          const engineDeadline = Date.now() + 30000;
+          let engineReady = false;
+          while (Date.now() < engineDeadline) {
+            try { const r = await fetch('http://127.0.0.1:' + enginePort + '/api/health', { signal: AbortSignal.timeout(2000) }); if (r.ok) { engineReady = true; break; } } catch { await delay(200); }
+          }
+          assert(engineReady, 'installed engine starts on the legacy data');
+          engineChild.kill();
+          await Promise.race([engineClosed, delay(10000)]);
+          const migrated = JSON.parse(fs.readFileSync(engineStateFile, 'utf8'));
+          assert.equal(migrated.schemaVersion, 4, 'engine migrated the data schema in place');
+          assert.deepEqual(migrated.memoryGroups, [], 'migration adds the empty groups projection');
+          assert.ok(migrated.memoryMigration && migrated.memoryMigration.fromVersion === 3, 'migration is recorded');
+          for (const [index, record] of baseline.engineMemories.entries()) assert.deepEqual(migrated.memories[index], record, 'every legacy memory record is byte-preserved: ' + record.id);
+          const backupBytes = fs.readFileSync(engineStateFile + '.v3.bak');
+          assert.equal(sha(backupBytes), engineBaseline, 'the v3 backup holds the exact original bytes');
+        } finally {
+          if (engineChild.exitCode === null) { engineChild.kill(); await Promise.race([engineClosed, delay(5000)]); }
+          fs.closeSync(engineLog);
+        }
+      }
     }
   } finally {
     if (child.exitCode === null) {
@@ -107,11 +154,15 @@ async function main() {
     fs.closeSync(log);
   }
   if (mode === 'seed') {
-    fs.writeFileSync(receiptFile, JSON.stringify({ version: pkg.version, selected, data: snapshot(data), knowledge: snapshot(knowledge) }, null, 2) + '\n');
+    const engineSnapshot = {};
+    const engineDir = path.join(data, 'knowledge-engine');
+    if (fs.existsSync(engineDir)) for (const [key, hash] of Object.entries(snapshot(engineDir))) engineSnapshot['knowledge-engine/' + key] = hash;
+    const engineMemories = fs.existsSync(engineStateFile) ? JSON.parse(fs.readFileSync(engineStateFile, 'utf8')).memories : null;
+    fs.writeFileSync(receiptFile, JSON.stringify({ version: pkg.version, selected, data: snapshot(data), knowledge: snapshot(knowledge), engine: engineSnapshot, engineMemories }, null, 2) + '\n');
   } else {
     for (const file of ['settings.json', 'projects.json', 'projects/' + baseline.selected.projectId + '/config.json', 'workbench/custom-config.fixture.json']) assert.equal(snapshot(data)[file], baseline.data[file], 'persistent config remains unchanged: ' + file);
     assert.deepEqual(snapshot(knowledge), baseline.knowledge);
-    fs.writeFileSync(path.join(root, 'preservation-acceptance.json'), JSON.stringify({ status: 'PASS', from: baseline.version, to: pkg.version, allDataBytesPreservedDuringInstall: true, settingsPreserved: true, projectPreserved: true, knowledgePreserved: true }, null, 2) + '\n');
+    fs.writeFileSync(path.join(root, 'preservation-acceptance.json'), JSON.stringify({ status: 'PASS', from: baseline.version, to: pkg.version, allDataBytesPreservedDuringInstall: true, settingsPreserved: true, projectPreserved: true, knowledgePreserved: true, engineMigrationPreserved: true }, null, 2) + '\n');
   }
   console.log(JSON.stringify({ status: 'PASS', mode, version: pkg.version, root }));
 }
