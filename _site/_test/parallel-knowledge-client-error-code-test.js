@@ -1,6 +1,16 @@
 'use strict';
 // Parallel knowledge lane — regression for the engine error-code contract.
 //
+// 迁移说明（五页简化 UI，见 patches/ui-test-mapping-spec.md）：
+//   * 本文件不驱动 UI，唯一的迁移点是引擎 schema：lib/engine-knowledge-client
+//     的身份门现要求 /api/health 返回 dataSchemaVersion === 4，stub 引擎的
+//     health 响应从 3 改为 4，否则四个失败场景全部被误判为
+//     ENGINE_IDENTITY_MISMATCH（409）而不是各自的错误码。
+//   * 业务断言（字符串/对象信封保留错误码、非法码回退
+//     ENGINE_REQUEST_FAILED、ok:false+200 → 502、HTTP 状态保留、成功读取
+//     不变）逐字保持，未改任何断言。
+//
+//
 // The vendored knowledge-engine reports a failed read as { ok:false,
 // error:'<CODE>' } with the code as a plain string. The product client used to
 // read the code only from payload.error.code, so every genuine business
@@ -51,7 +61,7 @@ function createEngineStub({ repoPath, knowledgePath, projectId, envelope }) {
       res.writeHead(status, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(body));
     };
-    if (req.url === '/api/health') return send(200, { name: 'knowledge-engine', dataSchemaVersion: 3 });
+    if (req.url === '/api/health') return send(200, { name: 'knowledge-engine', dataSchemaVersion: 4 });
     if (req.url === '/api/projects') {
       return send(200, { ok: true, projects: [{ projectId, enabled: true, repoPath, knowledgePath }] });
     }

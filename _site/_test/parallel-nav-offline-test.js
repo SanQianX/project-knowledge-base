@@ -1,6 +1,18 @@
 'use strict';
 // NAV-008 — 断网恢复。
 //
+// 迁移说明（五页简化 UI）：
+// - 运行记录（commit 短 SHA）不再显示在首页：改显示在活动记录页
+//   #activityUpdates（updates tab 的 .run 摘要「项目名 · 短SHA」），
+//   「快照恢复后新运行出现在页面上」的断言全部改查 #activityUpdates。
+// - 离线时「内容不伪装为实时」的等价断言：活动页 updates 列表被
+//   「知识引擎离线。记录仍保留在本机…」替代（旧首页横幅文案
+//   「知识引擎暂时不可用」现位于长期记忆页 #memoryContent，语义相同：
+//   未读到的记录不显示为在线数据）。
+// - #activityConnection 连接标签（已连接实时更新/连接中断）语义与文案
+//   不变；WebSocket/live 通道、#api/engine/snapshot 读取证据均不变。
+// - reload 后立即点导航有已知 commit-gap 竞态：openView 加 3 次重试。
+//
 // When the browser loses the network the shell must close the old stream, and
 // when the network comes back it must restore the snapshot and open a new
 // stream — exactly one subscription per stream, and no content that pretends
@@ -78,7 +90,19 @@ const sentMessages = harness => harness.run('window.__sent || []');
 const closeEvents = harness => harness.run('window.__closed || []');
 const liveStats = harness => harness.run('window.KnowledgeLive.stats()');
 const connectionLabel = harness => harness.run("document.getElementById('activityConnection').textContent");
-const homeText = harness => harness.run("document.getElementById('homeContent').textContent");
+// The five-page shell shows the run records on the activity page (updates
+// tab); the home page no longer lists knowledge updates.
+const activityText = harness => harness.run("document.getElementById('activityUpdates').textContent");
+
+/** Open a navigation view; the click after a reload hits a known commit-gap race, so retry. */
+async function openView(harness, view) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await harness.run(`document.querySelector('nav [data-view=${JSON.stringify(view)}]').click()`);
+    if (await harness.run(`document.getElementById('view-${view}').classList.contains('active')`)) return;
+    await harness.wait(200);
+  }
+  throw new Error(`the ${view} view did not open`);
+}
 
 /** The subscriptions that are still live on one socket generation. */
 function activeSubscriptions(messages, generation) {
@@ -118,8 +142,9 @@ async function main() {
     await harness.browser.send('Page.addScriptToEvaluateOnNewDocument', { source: SOCKET_HOOK });
     await harness.browser.send('Page.reload', { ignoreCache: true });
     await harness.waitFor(() => harness.run("document.readyState === 'complete'"), 'the reloaded page');
+    await openView(harness, 'activity');
     await harness.waitFor(
-      async () => (await homeText(harness)).includes(shortFirst),
+      async () => (await activityText(harness)).includes(shortFirst),
       'the reloaded page shows the run of the project',
       20000,
     );
@@ -188,12 +213,15 @@ async function main() {
 
     // NAV-008 expected 3: the content does not pretend to be live. The shell
     // says the connection is broken, and it does not show the update list as
-    // if it were live information.
+    // if it were live information. The updates list is replaced by the
+    // offline notice (the legacy home banner「知识引擎暂时不可用」now lives
+    // on the memory page with the same semantics).
     const offlineLabel = await connectionLabel(harness);
     assert.equal(offlineLabel.includes('已连接实时更新'), false, `the shell does not claim a live connection while it is offline: ${offlineLabel}`);
     assert.ok(offlineLabel.includes('连接中断'), `the shell reports the broken connection: ${offlineLabel}`);
-    const offlineHome = await homeText(harness);
-    assert.ok(offlineHome.includes('知识引擎暂时不可用'), `the home does not show stale updates as live information: ${offlineHome}`);
+    const offlineActivity = await activityText(harness);
+    assert.ok(offlineActivity.includes('知识引擎离线'), `the updates page does not show stale records as live information: ${offlineActivity}`);
+    assert.equal(offlineActivity.includes(shortFirst), false, `the stale run rows are not rendered as live data while offline: ${offlineActivity}`);
     await harness.browser.screenshot(path.join(harness.evidence, 'nav008-offline.png'));
 
     // No read of the snapshot reached the product while the browser was
@@ -252,13 +280,13 @@ async function main() {
     const lastSnapshot = snapshotReads[snapshotReads.length - 1];
     assert.equal(lastSnapshot.status, 200, `the last snapshot read really succeeded: ${JSON.stringify(lastSnapshot)}`);
     await harness.waitFor(
-      async () => (await homeText(harness)).includes(shortSecond),
+      async () => (await activityText(harness)).includes(shortSecond),
       'the run that appeared while the browser was offline is on the page now',
       20000,
     );
-    const recoveredHome = await homeText(harness);
-    assert.ok(recoveredHome.includes(shortFirst), 'the run of before the outage is still on the page');
-    assert.equal(recoveredHome.includes('知识引擎暂时不可用'), false, 'the page shows the real records again');
+    const recoveredActivity = await activityText(harness);
+    assert.ok(recoveredActivity.includes(shortFirst), 'the run of before the outage is still on the page');
+    assert.equal(recoveredActivity.includes('知识引擎离线'), false, 'the page shows the real records again');
     await harness.browser.screenshot(path.join(harness.evidence, 'nav008-recovered.png'));
 
     assert.equal(harness.browser.exceptions.length, 0, `no uncaught product JavaScript exceptions: ${JSON.stringify(harness.browser.exceptions)}`);

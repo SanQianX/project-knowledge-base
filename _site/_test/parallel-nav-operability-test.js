@@ -1,6 +1,17 @@
 'use strict';
 // NAV-006 — 可操作性。
 //
+// 迁移说明（五页简化 UI）：
+// - 「项目已登记」等待改查顶栏 #projectSelect 选项含项目名（首页不再
+//   罗列项目，同一 registry projection）。
+// - 导航按钮仍为 nav [data-view]（五页 home/memory/projects/search/
+//   activity），指针/键盘可达性与命中测试断言不变。
+// - 键盘 Tab 遍历在新 DOM 上进行：侧栏（品牌版本、五页导航、系统状态）
+//   → 顶栏（#projectSelect、#themeToggle）→ 当前视图控件，停止点数量
+//   与焦点环（:focus-visible 2px 实线描边，CSS 未变）断言保持等价。
+// - 表单可达性用例不变：项目页 #createDomain → #domainDialog
+//   input[name="name"]（元素仍存在），Esc 关闭对话框。
+//
 // The shell must be operable by a real pointer and by a real keyboard: a
 // native pointer click must reach the control, the focus must be visible, and
 // nothing transparent may intercept the click.
@@ -113,7 +124,7 @@ async function main() {
     await harness.importProject(repo, 'NAV006 甲');
     await harness.requestRegistryRefresh();
     await harness.waitFor(
-      () => harness.run("document.getElementById('homeContent').textContent.includes('NAV006 甲')"),
+      () => harness.run("[...document.getElementById('projectSelect').options].some(option => option.textContent === 'NAV006 甲')"),
       'the imported project is listed',
       20000,
     );

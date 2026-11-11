@@ -3,6 +3,22 @@
 //
 // MEM-008 来源边界（维护 / 委派不自动成为人类偏好）.
 //
+// 迁移说明（五页简化 UI，见 patches/ui-test-mapping-spec.md）：
+//   * 「导入项目已列出」等待：旧首页项目面板已删除 → 顶栏 #projectSelect
+//     选项含项目名（同一 registry projection）。
+//   * 导航/视图切换：nav [data-view] 与 #view-* 的 active 断言不变；按前批
+//     经验对 reload 后的导航点击加 3 次重试（commit-gap 竞态是驱动鲁棒性
+//     问题，断言仍是「视图真正激活」）。
+//   * 候选箱 tab：[data-memory-tab="candidate"] 选择器不变；tab 栏由
+//     #memoryContent 动态渲染且仅引擎可达时出现，先等 tab 渲染再点击。
+//   * 候选箱空态文案仍含「候选箱为空。」断言不变。
+//   * 首页边界文案：「没有待确认记忆。」→「没有待确认的记忆。」（新 UI
+//     措辞微调），语义（智脑不会自动把项目行为当作偏好）不变。
+//   * 冻结来源：本例四个候选全部被引擎来源门拒绝，没有可审核对象，UI 侧
+//     不涉及审核流（新 UI 冻结来源/quote 的展示位是 #appDialog 内
+//     #reviewForm / #appDialogBody，供候选存活的用例使用）；引擎侧
+//     accepted/rejected 错误码、零存储、零注入断言逐字保持。
+//
 // Real isolated product instance, real browser, real HTTP and real disk.
 //
 // Every case runs the REAL pipeline: a real follow-up commit, a real frozen
@@ -46,8 +62,9 @@ async function main() {
     const repo = makeRepo(harness.fixture, 'memsource-repo', { 'README.md': '# 来源甲\n' });
     const { projectId } = await harness.importProject(repo, '来源甲');
     await harness.requestRegistryRefresh();
+    // 迁移：首页不再列出项目；登记状态由顶栏 #projectSelect 呈现。
     await harness.waitFor(
-      () => harness.run("document.getElementById('homeContent').textContent.includes('来源甲')"),
+      () => harness.run("document.getElementById('projectSelect').textContent.includes('来源甲')"),
       'the imported project is listed',
       20000,
     );
@@ -147,18 +164,33 @@ async function main() {
       } catch {}
     };
     await harness.reload();
-    await harness.nativeClick('nav [data-view="memory"]');
-    try {
-      await harness.waitFor(
-        () => harness.run("document.getElementById('view-memory').classList.contains('active')"),
-        'the memory view is open',
-        10000,
-      );
-    } catch (error) {
-      await debugNavigationFailure('memory-view-open');
-      throw error;
-    }
-    await harness.nativeClick('[data-memory-tab="candidate"]');
+    // 迁移：reload 后导航点击有已知 commit-gap 竞态，按前批经验加 3 次重试；
+    // 断言本身仍是「视图真正激活」。
+    const openViewWithRetry = async (view, stage) => {
+      let lastError = null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        await harness.nativeClick(`nav [data-view="${view}"]`);
+        try {
+          await harness.waitFor(
+            () => harness.run(`document.getElementById('view-${view}').classList.contains('active')`),
+            `the ${view} view is open`,
+            5000,
+          );
+          return;
+        } catch (error) { lastError = error; }
+      }
+      await debugNavigationFailure(stage);
+      throw lastError;
+    };
+    await openViewWithRetry('memory', 'memory-view-open');
+    // The tab bar lives in #memoryContent and is rendered only once the
+    // engine is reachable, so wait for the real tab before clicking it.
+    await harness.waitFor(
+      () => harness.run("document.querySelector('#memoryContent [data-memory-tab=\"candidate\"]') !== null"),
+      'the memory tab bar is rendered from real data',
+      20000,
+    );
+    await harness.nativeClick('#memoryContent [data-memory-tab="candidate"]');
     try {
       await harness.waitFor(
         () => harness.run("document.getElementById('memoryContent').textContent.includes('候选箱为空。')"),
@@ -175,19 +207,16 @@ async function main() {
     assert.ok(!candidateBox.includes(UNSOURCED_TEXT), 'the unsourced preference is not listed');
     if (harness.evidence) await harness.browser.screenshot(path.join(harness.evidence, 'mem008-candidate-empty.png'));
 
-    await harness.nativeClick('nav [data-view="home"]');
-    try {
-      await harness.waitFor(
-        () => harness.run("document.getElementById('view-home').classList.contains('active')"),
-        'the home view is open',
-        10000,
-      );
-    } catch (error) {
-      await debugNavigationFailure('home-view-open');
-      throw error;
-    }
+    await openViewWithRetry('home', 'home-view-open');
+    // The home overview loads asynchronously after the view activates; gate on
+    // the boundary sentence before reading the whole panel.
+    await harness.waitFor(
+      () => harness.run("document.getElementById('homeContent').textContent.includes('没有待确认的记忆。')"),
+      'the home view states the boundary',
+      20000,
+    );
     const home = await harness.run("document.getElementById('homeContent').textContent");
-    assert.match(home, /没有待确认记忆。智脑不会自动把项目行为当作你的偏好。/, `the home view states the boundary: ${home}`);
+    assert.match(home, /没有待确认的记忆。智脑不会自动把项目行为当作你的偏好。/, `the home view states the boundary: ${home}`);
     if (harness.evidence) await harness.browser.screenshot(path.join(harness.evidence, 'mem008-home.png'));
 
     evidence.push({

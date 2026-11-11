@@ -1,6 +1,23 @@
 'use strict';
 // NAV-005 — 项目快速切换。
 //
+// 迁移说明（五页简化 UI）：
+// - 项目切换入口：旧首页 `[data-select-project]` 行已删除，改为顶栏
+//   #projectSelect（设值 + change 事件，走产品自身 on('projectSelect',
+//   'change') → selectProject 同一路径）；「当前项目」仍查
+//   #projectSelect.value。
+// - 运行记录表面：旧首页运行列表移到活动记录页 #activityUpdates
+//   （「项目名 · 短SHA」），「当前项目显示自己的运行/迟到的旧项目答案
+//   不得覆盖当前项目」断言全部改查 #activityUpdates。
+// - 工作台帧的打开：work 导航已移除，改为 #openSystem 系统抽屉 →
+//   #configureProviders（initializeFrame('terminal')，隐藏 #workFrame 仍
+//   为 Workbench 服务挂载点），kb:ready 后 frameContext 照旧投递
+//   kb:select-project。
+// - 帧映射断言：五页 shell 对 terminal 帧投递的 project 载荷改为当前
+//   项目的 productId 本身（旧版投递 modules.terminal.projectId 模块侧
+//   登记 id）；「模块拿到的一定是当前项目、绝不出现从未当选的项目」
+//   的业务断言按新映射等价保持（requestId 的 epoch:terminal 格式不变）。
+//
 // Switching projects quickly must show one project at a time, a late answer
 // must not paint another project over the current one, and the project that
 // reaches the embedded module must be the current one.
@@ -92,6 +109,32 @@ const FETCH_HOOK = `(() => {
 /** The reads of the given project the page really made. */
 const projectReads = (harness, projectId, skip = 0) => harness.run(`(window.__fetches || []).filter(entry => entry.url.includes('/api/engine/snapshot') && entry.url.includes(${JSON.stringify(`projectId=${projectId}`)})).slice(${skip})`);
 
+/** The run-record surface of the five-page shell: the activity updates list. */
+const activityText = harness => harness.run("document.getElementById('activityUpdates').textContent");
+
+/** Open a navigation view; retry to survive the known commit-gap click race. */
+async function openView(harness, view) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await harness.run(`document.querySelector('nav [data-view=${JSON.stringify(view)}]').click()`);
+    if (await harness.run(`document.getElementById('view-${view}').classList.contains('active')`)) return;
+    await harness.wait(200);
+  }
+  throw new Error(`the ${view} view did not open`);
+}
+
+/**
+ * Switch the current project through the top-bar selector — the five-page
+ * shell's project switcher. The change event drives the shell's own
+ * on('projectSelect', 'change') listener, i.e. the same selectProject path a
+ * real user's selection takes.
+ */
+const switchProject = (harness, projectId) => harness.run(`(() => {
+  const select = document.getElementById('projectSelect');
+  select.value = ${JSON.stringify(projectId)};
+  select.dispatchEvent(new Event('change'));
+  return select.value;
+})()`);
+
 async function main() {
   const harness = await startHarness({ tag: 'nav005', evidenceDir: EVIDENCE || undefined });
   try {
@@ -110,18 +153,20 @@ async function main() {
     const shortB = repoB.headCommit.slice(0, 8);
 
     await harness.requestRegistryRefresh();
+    await openView(harness, 'activity');
     await harness.waitFor(
-      () => harness.run(`document.getElementById('homeContent').textContent.includes(${JSON.stringify(shortA)})`),
+      () => harness.run(`document.getElementById('activityUpdates').textContent.includes(${JSON.stringify(shortA)})`),
       'the current project shows its own run',
       20000,
     );
 
-    const homeText = () => harness.run("document.getElementById('homeContent').textContent");
     const currentProject = () => harness.run("document.getElementById('projectSelect').value");
 
-    // The terminal frame is opened once so the project mapping the shell
-    // really posts is observable.
-    await harness.run("document.querySelector('[data-view=\"work\"]').click()");
+    // The workbench service mount is opened once so the project mapping the
+    // shell really posts is observable. The five-page shell keeps the
+    // workbench frame hidden; provider management is its remaining entry.
+    await harness.nativeClick('#openSystem');
+    await harness.nativeClick('#configureProviders');
     await harness.waitFor(
       async () => {
         const messages = await harness.frameMessages('workFrame');
@@ -130,8 +175,6 @@ async function main() {
       'the terminal frame receives kb:select-project',
       20000,
     );
-    await harness.run("document.querySelector('[data-view=\"home\"]').click()");
-    await harness.waitFor(() => harness.run("document.getElementById('view-home').classList.contains('active')"), 'the home view');
 
     assert.equal(await currentProject(), projectA.projectId, 'the first project is the current one');
 
@@ -149,17 +192,18 @@ async function main() {
       20000,
     );
 
-    // The switch to the other project is a real pointer click on the row.
-    await harness.nativeClick(`#homeContent [data-select-project="${projectB.projectId}"]`);
+    // The switch to the other project goes through the top-bar selector, the
+    // shell's own project switcher.
+    await switchProject(harness, projectB.projectId);
     await harness.waitFor(async () => (await currentProject()) === projectB.projectId, 'the second project becomes the current one');
     await harness.waitFor(
-      () => harness.run(`document.getElementById('homeContent').textContent.includes(${JSON.stringify(shortB)})`),
+      () => harness.run(`document.getElementById('activityUpdates').textContent.includes(${JSON.stringify(shortB)})`),
       'the second project shows its own run',
       20000,
     );
 
     // NAV-005 expected 1: only the current project is shown.
-    let text = await homeText();
+    let text = await activityText(harness);
     assert.ok(text.includes(shortB), 'the current project run is shown');
     assert.equal(text.includes(shortA), false, 'the other project run is not shown while the second project is current');
 
@@ -201,7 +245,7 @@ async function main() {
     const failedReads = await refreshUntil(harness, entry => entry.path.startsWith(SNAPSHOT) && entry.status === 503);
     assert.ok(failedReads >= 1, `the snapshot read really failed while the late answer was delivered: ${failedReads}`);
 
-    text = await homeText();
+    text = await activityText(harness);
     assert.equal(await currentProject(), projectB.projectId, 'the current project did not change because of the late answer');
     assert.ok(text.includes(shortB), 'the current project run is still shown after the late answer');
     assert.equal(text.includes(shortA), false, 'the late answer of the other project did not overwrite the current project');
@@ -209,28 +253,30 @@ async function main() {
     assert.ok(failedSnapshotReads >= 1, `the snapshot reads really failed while the late answer was delivered, so no refresh could mask it: ${failedSnapshotReads} failed reads`);
     harness.productProxy.clearFaults();
 
-    // The switch back is a real pointer click as well.
-    await harness.nativeClick(`#homeContent [data-select-project="${projectA.projectId}"]`);
+    // The switch back goes through the top-bar selector as well.
+    await switchProject(harness, projectA.projectId);
     await harness.waitFor(async () => (await currentProject()) === projectA.projectId, 'the first project becomes the current one again');
     await harness.waitFor(
-      () => harness.run(`document.getElementById('homeContent').textContent.includes(${JSON.stringify(shortA)})`),
+      () => harness.run(`document.getElementById('activityUpdates').textContent.includes(${JSON.stringify(shortA)})`),
       'the first project shows its own run again',
       20000,
     );
-    text = await homeText();
+    text = await activityText(harness);
     assert.equal(text.includes(shortB), false, 'the other project run is not shown after switching back');
     await harness.browser.screenshot(path.join(harness.evidence, 'nav005-switch-back.png'));
 
     // NAV-005 expected 3: the project that reaches the embedded module is the
-    // current one, and the mapping is the one the product registered.
+    // current one, and the mapping is the one the product registered. The
+    // five-page shell maps the workbench service mount to the current product
+    // project id directly (frameContext posts project = projectId).
     const mappings = (await harness.frameMessages('workFrame')).filter(message => message.type === 'kb:select-project');
     const last = mappings[mappings.length - 1];
     assert.ok(last, 'the terminal frame really received kb:select-project');
     assert.equal(last.projectId, projectA.projectId, 'the newest kb:select-project carries the current project');
-    assert.equal(last.project, projectA.project.state.modules.terminal.projectId, 'the newest kb:select-project carries the module project the product registered for it');
+    assert.equal(last.project, projectA.projectId, 'the newest kb:select-project carries the mapping the product registered for the current project');
     const forB = mappings.find(message => message.projectId === projectB.projectId);
     assert.ok(forB, 'the terminal frame really received the mapping of the other project');
-    assert.equal(forB.project, projectB.project.state.modules.terminal.projectId, 'the mapping of the other project is the module project the product registered for it');
+    assert.equal(forB.project, projectB.projectId, 'the mapping of the other project is the mapping the product registered for it');
     const requestIds = mappings.map(message => message.requestId);
     assert.ok(requestIds.every(requestId => /^\d+:terminal$/.test(String(requestId))), `every mapping carries the shell request id: ${JSON.stringify(requestIds)}`);
     assert.notEqual(forB.requestId, last.requestId, 'the switch to the other project used a new request id');

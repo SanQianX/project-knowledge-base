@@ -1,7 +1,15 @@
 'use strict';
 // NAV-007 — 分辨率矩阵。
 //
-// The six pages of the shell must render without unintended horizontal
+// 迁移说明（五页简化 UI）：
+// - 页面矩阵从六页改为五页：home/memory/projects/search/activity
+//   （work 导航已移除；#view-work 常驻 hidden，不参与矩阵）。
+// - 「项目已登记」等待改查顶栏 #projectSelect 选项含项目名（首页不再
+//   罗列项目，同一 registry projection）。
+// - 几何证据（容器横向溢出、控件可见矩形、elementFromPoint 命中）、
+//   截图像素统计、明暗主题真实重绘的断言保持不变。
+//
+// The five pages of the shell must render without unintended horizontal
 // overflow and without a control being covered, in four desktop viewports
 // and in both themes.
 //
@@ -43,12 +51,13 @@ const VIEWPORTS = [
 
 const THEMES = ['light', 'dark'];
 
+// The five-page navigation contract: home, memory, projects, search,
+// activity. The workbench section stays hidden and is not a page.
 const PAGES = [
   { key: 'home', view: 'home' },
-  { key: 'work', view: 'work' },
-  { key: 'search', view: 'search' },
   { key: 'memory', view: 'memory' },
   { key: 'projects', view: 'projects' },
+  { key: 'search', view: 'search' },
   { key: 'activity', view: 'activity' },
 ];
 
@@ -198,7 +207,7 @@ async function main() {
     await harness.importProject(repo, 'NAV007 甲');
     await harness.requestRegistryRefresh();
     await harness.waitFor(
-      () => harness.run("document.getElementById('homeContent').textContent.includes('NAV007 甲')"),
+      () => harness.run("[...document.getElementById('projectSelect').options].some(option => option.textContent === 'NAV007 甲')"),
       'the imported project is listed',
       20000,
     );

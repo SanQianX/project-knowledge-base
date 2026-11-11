@@ -2,18 +2,30 @@
 // P-LOG-ACCEPTANCE-01 LOG-008 acceptance driver (real product page in a real
 // browser against an isolated managed instance).
 //
+// 迁移说明（五页简化 UI，见 patches/ui-test-mapping-spec.md）：
+//   * 系统抽屉与诊断对话框选择器全部未变：#openSystem / #openLogs /
+//     #logsScope / #logsSearch / #loadLogs / #exportLogs / #logsContent /
+//     .log-entry / #logsDialog / #toast 均保留，驱动流程不变。
+//   * 唯一的产品行为变化：ui/product.js 的 api() 对 GET 的读取超时从 3s
+//     提高到 8s。观察代理对 /api/logs 的延迟从 5s（> 3s）改为 10s（> 8s），
+//     等待窗口相应放宽（toast 8s→20s，延迟响应落地的静置 5.2s→11s）。
+//   * 业务断言逐字保持：超时 toast 文案「状态读取超时」、超时不清空已渲染
+//     记录、查询未收窄、导出失败 toast「诊断导出失败。」、零下载文件、
+//     解除阻塞后导出路由恢复并含种子记录。
+//
 // Case (qa-autopilot/config/test-cases.json LOG-008, P1):
 //   steps:    查询超时和导出失败分别触发。
 //   expected: 1) UI显示失败。
 //             2) 不能生成空文件冒充成功导出。
 //
-// Real behaviour under test: api() (ui/product.js:31-43) aborts GETs after
-// 3s and loadLogs leaves the previous DOM intact on failure; on() toasts the
-// error message. The lane observation proxy delays /api/logs by 5s (> the 3s
-// timeout) for the query-timeout phase. For export failure, a file placed at
-// <dataDir>/cache/exports makes exportToFile's mkdirSync throw → the route
-// returns 500 → exportLogs throws 诊断导出失败。 → toast, and no download may
-// appear. A control export after unblocking proves the route recovers.
+// Real behaviour under test: api() (ui/product.js, GET timeoutMs 8000)
+// aborts GETs after 8s and loadLogs leaves the previous DOM intact on
+// failure; on() toasts the error message. The lane observation proxy delays
+// /api/logs by 10s (> the 8s timeout) for the query-timeout phase. For
+// export failure, a file placed at <dataDir>/cache/exports makes
+// exportToFile's mkdirSync throw → the route returns 500 → exportLogs
+// throws 诊断导出失败。 → toast, and no download may appear. A control
+// export after unblocking proves the route recovers.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -87,14 +99,14 @@ async function main() {
     }, 'diagnostics dialog rendered the project records', 20000);
     const domBaseline = JSON.parse(await readDom());
 
-    // expected1a (query timeout): delay /api/logs past api()'s 3s timeout.
-    proxy.setDelay('/api/logs', 5000);
+    // expected1a (query timeout): delay /api/logs past api()'s 8s GET timeout.
+    proxy.setDelay('/api/logs', 10000);
     await runExpr(`document.getElementById('logsSearch').value = ${JSON.stringify(MARK)}`);
     await click('#loadLogs');
     await waitFor(async () => {
       const dom = JSON.parse(await readDom());
       return !dom.toastHidden && dom.toastText.includes('状态读取超时');
-    }, 'timeout toast appears for the slow query', 8000);
+    }, 'timeout toast appears for the slow query', 20000);
     const domTimeout = JSON.parse(await readDom());
     evidence.phases.queryTimeout = {
       baselineEntries: domBaseline.count,
@@ -108,7 +120,7 @@ async function main() {
     await browser.screenshot(path.join(ARTIFACTS, 'log008-query-timeout-toast.png'));
     proxy.setDelay('/api/logs', null);
     // Let the delayed response land and the toast clear before the next phase.
-    await new Promise(resolve => setTimeout(resolve, 5200));
+    await new Promise(resolve => setTimeout(resolve, 11000));
 
     // expected1b + expected2 (export failure): block cache/exports with a file.
     const downloadDir = path.join(ARTIFACTS, 'downloads');

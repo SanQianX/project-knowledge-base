@@ -1,4 +1,20 @@
 'use strict';
+// 进度状态：活动页 SSE 连接状态、维护受阻可见性、重复 online 与真实离线重连。
+//
+// 迁移说明（五页简化 UI，见 patches/ui-test-mapping-spec.md）：
+// - 引擎 dataSchemaVersion 现为 4：测试桩 /api/health 由 3 改为 4，
+//   否则 shell 的 engine-connection 判定 ENGINE_VERSION_MISMATCH，
+//   /api/engine/* 代理全部 503，SSE 永远连不上。
+// - 活动页空态文案「没有知识维护记录」→「此分类没有记录。」（活动页
+//   新增 all/recovering/needs/completed/changes 筛选，空态按分类显示）。
+// - 「失败不得伪装为空」：新 UI 在 runs 为空时仍会显示通用空态文案，
+//   维护受阻以独立错误通告呈现（#activityUpdates 顶部的 .empty.error，
+//   strong 标题「提交事件消费受阻」）。原「空态文案必须消失」断言映射为
+//   「错误通告必须存在且带受阻标题」；恢复断言映射为「通告消失且空态
+//   文案回归」。
+// - 维护失败明细渲染字段从 message 改为 code · journalId · sequence
+//   （textContent 写入）；XSS 载荷从 message 移到 code（当前真实渲染的
+//   字段），message 保留载荷作纵深防御。
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -28,7 +44,7 @@ async function main() {
     if (cleanPath === '/api/snapshot') snapshots++;
     if (cleanPath.includes('/health')) healthRequests++;
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(cleanPath === '/api/snapshot' ? snapshot : cleanPath === '/api/projects' ? { projects: [] } : { ok: true, name: 'knowledge-engine', dataSchemaVersion: 3 }));
+    res.end(JSON.stringify(cleanPath === '/api/snapshot' ? snapshot : cleanPath === '/api/projects' ? { projects: [] } : { ok: true, name: 'knowledge-engine', dataSchemaVersion: 4 }));
   });
   await new Promise(resolve => upstream.listen(0, '127.0.0.1', resolve));
   const moduleUrl = `http://127.0.0.1:${upstream.address().port}`;
@@ -48,16 +64,16 @@ async function main() {
     await waitFor(async () => await status() === '已连接实时更新', 'initial SSE snapshot');
     assert.equal(connections, 1);
     await run("document.querySelector('[data-view=activity]').click()");
-    await waitFor(() => run("document.getElementById('activityUpdates').textContent.includes('没有知识维护记录')"), 'genuine empty history');
+    await waitFor(() => run("document.getElementById('activityUpdates').textContent.includes('此分类没有记录')"), 'genuine empty history');
     const maintenance = journal => { snapshot.maintenance = { executionEnabled: true, consuming: true, journal }; for (const stream of streams) stream.write('event: progress\ndata: {"type":"knowledge.journal"}\n\n'); };
-    maintenance({ error: '事件消费异常', failures: [{ journalId: 'test-journal', sequence: 7, code: 'INVALID_ARGUMENT', message: '<img src=x onerror=window.__quotaXss=1>' }] });
+    maintenance({ error: '事件消费异常', failures: [{ journalId: 'test-journal', sequence: 7, code: '<img src=x onerror=window.__quotaXss=1>', message: '<img src=x onerror=window.__quotaXss=1>' }] });
     await waitFor(() => run("document.getElementById('activityUpdates').textContent.includes('事件消费受阻')"), 'pre-queue failure must be visible without a run');
-    assert.equal(await run("document.getElementById('activityUpdates').textContent.includes('没有知识维护记录')"), false, 'blocked consumption cannot masquerade as an empty history');
+    assert.equal(await run("document.querySelector('#activityUpdates .empty.error strong')?.textContent"), '提交事件消费受阻', 'blocked consumption surfaces as an error notice instead of a plain empty history');
     assert.equal(await run("document.querySelectorAll('#activityUpdates img').length"), 0);
     assert.equal(await run('window.__quotaXss'), undefined);
     assert.equal(await run("document.getElementById('systemTitle').textContent"), '提交事件消费受阻');
     maintenance({ error: null, failures: [] });
-    await waitFor(() => run("document.getElementById('activityUpdates').textContent.includes('没有知识维护记录')"), 'consumption recovery clears the warning');
+    await waitFor(() => run("document.getElementById('activityUpdates').textContent.includes('此分类没有记录') && !document.querySelector('#activityUpdates .empty.error')"), 'consumption recovery clears the warning');
     for (let attempt = 0; attempt < 2; attempt++) {
       const beforeHealth = healthRequests, beforeSnapshot = snapshots;
       await run("window.dispatchEvent(new Event('online'))");
