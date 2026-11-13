@@ -26,6 +26,7 @@
     detailGroups: { detail: null, epoch: 0 },
     search: { q: '', draft: '', projectId: '', scope: 'brain', type: 'all', done: false, results: [], page: 0, loading: false, epoch: 0 },
     activityFilter: 'all', activityTab: 'updates', activityProject: null, activityBefore: null, activityPage: null, runDetails: new Map(),
+    pendingOpenRun: '',
   };
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const activeProject = () => state.projects.find(p => p.projectId === state.projectId);
@@ -275,7 +276,7 @@
     render();
   }
   function needRow(item) {
-    if (item.kind === 'run') return `<div class="row"><div><b>${esc(item.title)} · ${esc(projectName(item.projectId))}</b><small>${esc(item.commitSha?.slice(0, 8) || '')} ${esc(item.error?.message || '')}</small></div>${badge(recoveryLabel(item) || '需要处理', 'issue')}</div>`;
+    if (item.kind === 'run') return `<div class="row"><div><b>${esc(item.title)} · ${esc(projectName(item.projectId))}</b><small>${esc(item.commitSha?.slice(0, 8) || '')} ${esc(item.error?.message || '')}</small></div>${badge(recoveryLabel(item) || '需要处理', 'issue')}<button data-open-run="${esc(item.runId)}" data-run-project="${esc(item.projectId)}">去处理</button></div>`;
     if (item.kind === 'journal') return `<div class="row"><div><b>提交事件消费受阻</b><small>${esc(item.journalId)} · ${esc(item.message)}</small></div>${badge('需要处理', 'issue')}</div>`;
     if (item.kind === 'late-commit') return `<div class="row"><div><b>晚到的旧提交待受控处理</b><small>${esc(projectName(item.projectId))} · ${esc(String(item.commitSha || '').slice(0, 12))}</small></div>${badge('需要处理', 'issue')}</div>`;
     if (item.kind === 'scope-index') return `<div class="row"><div><b>共享知识索引待恢复</b><small>${esc(item.name)} · ${esc(item.message)}</small></div>${badge('需要处理', 'issue')}</div>`;
@@ -585,7 +586,20 @@
       body += nav;
     }
     $('activityUpdates').innerHTML = filterBar + body;
+    applyPendingOpenRun();
     renderMaintenanceWarning();
+  }
+  // A home「去处理」click must land on its exact run even though the activity
+  // list re-renders from several async sources (snapshot refresh, SSE, older-
+  // page loads): the pending id survives those renders and is applied once
+  // the row really exists, so the race can never swallow the expansion.
+  function applyPendingOpenRun() {
+    if (!state.pendingOpenRun) return;
+    const row = document.querySelector(`details.run[data-run-id="${CSS.escape(state.pendingOpenRun)}"]`);
+    if (!row) return;
+    state.pendingOpenRun = '';
+    if (!row.open) row.open = true;
+    row.scrollIntoView({ block: 'center' });
   }
   function renderMaintenanceWarning() {
     const warning = maintenanceWarning();
@@ -603,6 +617,22 @@
     }
   }
   let activityEpoch = 0;
+  // The home「需要处理」panel is an entry into handling, not a read-only
+  // preview: one click opens the exact failed run in the activity view —
+  // expanded, details loading, retry within reach — instead of leaving the
+  // user to hunt for the record the home page already named.
+  async function openRunDetail(runId, projectId) {
+    state.activityTab = 'updates';
+    state.pendingOpenRun = runId;
+    if (projectId && projectId !== state.projectId) selectProject(projectId);
+    setView('activity');
+    await loadActivityPage();
+    applyPendingOpenRun();
+    if (!document.querySelector(`details.run[data-run-id="${CSS.escape(runId)}"]`)) {
+      state.pendingOpenRun = '';
+      toast('这条记录不在最近一页运行中，请从活动记录列表手动查找。');
+    }
+  }
   async function loadActivityPage(before = state.activityBefore) {
     const epoch = ++activityEpoch, projectId = state.projectId;
     if (!projectId) return;
@@ -1265,6 +1295,7 @@
       if (button.dataset.agentSwitch) await changeAgentAccess(button.dataset.agentClient, button.dataset.agentSwitch);
       if (button.dataset.agentRetry) await retryAgentRepair(button.dataset.agentClient);
       if (button.dataset.action === 'unbind') { const p = activeProject(); if (p && !unbinding) { unbindProjectId = p.projectId; $('unbindProjectName').textContent = `解绑「${p.name}」？`; $('unbindFeedback').textContent = ''; $('unbindDialog').showModal(); } }
+      if (button.dataset.openRun) await openRunDetail(button.dataset.openRun, button.dataset.runProject || '');
       if (button.dataset.retryRun) { await api(`/api/engine/runs/${encodeURIComponent(button.dataset.retryRun)}/retry`, { method: 'POST', body: {} }); await refreshSnapshot(); toast('已重新执行失败阶段。'); }
       if (button.dataset.runPage !== undefined) await loadActivityPage(button.dataset.runPage || null);
       if (button.dataset.action === 'toast-undo') { const undo = toastUndo; toastUndo = null; $('toast').hidden = true; await undo?.(); }
