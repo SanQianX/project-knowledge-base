@@ -48,6 +48,11 @@ const REGISTER_TIMEOUT_MS = 60000;
 const INDEX_TIMEOUT_MS = 120000;
 // Native folder dialogs wait for the user without a bound.
 const PICKER_TIMEOUT_MS = 10 * 60 * 1000;
+// A supervised service that stayed up this long proved a healthy run: its next
+// exit opens a fresh incident instead of accumulating toward the restart cap.
+// Without this, one-off exits spread over weeks eventually abandoned a module
+// while the shell kept proxying to its dead port (endless MODULE_UNREACHABLE).
+const SUPERVISOR_STABLE_MS = 60_000;
 
 // All four services resolve through the host's pinned npm dependencies.
 const MODULE_ENTRIES = {
@@ -799,6 +804,7 @@ class ModuleBridge {
     const parts = (spec.command.match(/"[^"]+"|\S+/g) || [])
       .map(part => { if (!part.startsWith('"') || !part.endsWith('"')) return part; try { return JSON.parse(part); } catch { return part.slice(1, -1); } });
     const nodeProcess = parts[0] === 'node' || parts[0] === process.execPath;
+    const spawnedAt = Date.now();
     const child = spawn(nodeProcess ? process.execPath : parts[0], parts.slice(1), {
       // Module banners (ports, data roots) are diagnostics — inherit stdout
       // so they land on the console in --fg mode and in launcher.log when the
@@ -822,14 +828,18 @@ class ModuleBridge {
     child.on('exit', code => {
       this.onStateChange?.(spec.name);
       this.supervised = this.supervised.filter(existing => existing !== child);
-      attempts += 1;
-      if (attempts > 5 || this.stopped) {
-        this.logger.warn('modules.supervisor', 'Module service stopped.', { context: { name: spec.name, code, attempts } });
+      // A stable run (see SUPERVISOR_STABLE_MS) means the prior exits belong to
+      // bygone incidents: count this exit as the first of a fresh one. Only a
+      // service that keeps dying quickly accumulates toward the give-up cap.
+      const stable = Date.now() - spawnedAt >= (spec._stableAfterMs ?? SUPERVISOR_STABLE_MS);
+      const incidentAttempts = stable ? 1 : attempts + 1;
+      if (incidentAttempts > 5 || this.stopped) {
+        this.logger.warn('modules.supervisor', 'Module service stopped.', { context: { name: spec.name, code, attempts: incidentAttempts } });
         return;
       }
-      const delay = Math.min(1000 * 2 ** attempts, 15000);
-      this.logger.warn('modules.supervisor', 'Module service exited; restarting.', { context: { name: spec.name, code, retryInMs: delay } });
-      const timer = setTimeout(() => { this.restartTimers.delete(timer); this._spawnSupervised({ ...spec, _attempts: attempts }); }, delay);
+      const delay = Math.min(1000 * 2 ** incidentAttempts, 15000);
+      this.logger.warn('modules.supervisor', 'Module service exited; restarting.', { context: { name: spec.name, code, attempts: incidentAttempts, retryInMs: delay } });
+      const timer = setTimeout(() => { this.restartTimers.delete(timer); this._spawnSupervised({ ...spec, _attempts: incidentAttempts }); }, delay);
       this.restartTimers = this.restartTimers || new Set(); this.restartTimers.add(timer);
     });
     this.supervised.push(child);
