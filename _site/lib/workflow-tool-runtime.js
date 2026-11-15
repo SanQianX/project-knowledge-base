@@ -156,17 +156,36 @@ class WorkflowToolRuntime {
 
   async requestReview(args) {
     if (!args.taskId) { const e = new Error('taskId is required'); e.code = 'VALIDATION'; throw e; }
-    // Truthful capability answer: review orchestration ships in W5. Calling
-    // early must fail loudly, not pretend a review happened.
-    const e = new Error('代码审查编排尚未交付（W5）：当前版本请继续用 project_workflow_checkpoint 记录验证事实；服务端不会虚构审查收据。');
-    e.code = 'UNSUPPORTED';
-    throw e;
+    // W5: submit the current snapshot to the deterministic check pipeline.
+    // Receipt verdicts drive automated acceptance server-side; the model
+    // review stage is reported honestly as pending.
+    const result = await this.request(`workflow-tasks/${encodeURIComponent(args.taskId)}/reviews`, { method: 'POST', body: {
+      requestId: `mcp-review-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      repoPath: args.repoPath || undefined,
+      tools: Array.isArray(args.tools) ? args.tools : undefined,
+    } });
+    return {
+      ok: true,
+      snapshot: result.snapshot,
+      receipts: result.receipts,
+      decision: result.decision,
+      modelReview: result.modelReview,
+      note: '程序检查收据已记录；自动验收由服务端依据收据裁决。模型审查阶段当前为 pending（编排交付前不虚构意见）。',
+    };
   }
 
-  async reviewResult() {
-    const e = new Error('审查结果读取尚未交付（W5）。');
-    e.code = 'UNSUPPORTED';
-    throw e;
+  async reviewResult(args) {
+    if (!args.taskId) { const e = new Error('taskId is required'); e.code = 'VALIDATION'; throw e; }
+    const task = (await this.request(`workflow-tasks/${encodeURIComponent(args.taskId)}`)).task;
+    const checks = (task.runs || []).filter(r => r.kind === 'check');
+    return {
+      ok: true,
+      taskId: args.taskId,
+      status: task.status,
+      checks: checks.map(r => ({ runId: r.runId, summary: r.summary, status: r.status, finishedAt: r.finishedAt })),
+      acceptance: task.acceptance,
+      modelReview: 'pending-model-review',
+    };
   }
 }
 

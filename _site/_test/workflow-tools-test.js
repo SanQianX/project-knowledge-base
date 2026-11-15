@@ -67,12 +67,26 @@ async function withUpstream(fn) {
     const resumed2 = await tools.resume({ taskId: started.taskId });
     assert.deepEqual(resumed2.verifiedResults, ['单测通过']);
 
-    // request_review / review_result answer truthfully UNSUPPORTED until W5.
-    for (const [label, promise] of [['request_review', tools.requestReview({ taskId: started.taskId })], ['review_result', tools.reviewResult({ taskId: started.taskId })]]) {
-      try { await promise; throw new Error(`${label} should have failed`); }
-      catch (error) { assert.equal(error.code, 'UNSUPPORTED', `${label} must be truthful`); }
-    }
-    console.log('workflow-tools-test PASS (start/resume/status/checkpoint/UNSUPPORTED review over a real module instance)');
+    // request_review now runs the real check pipeline: use a synthetic repo
+    // with a real eslint violation so the receipt path is exercised (the
+    // verdict depends only on the synthetic files, never on this machine's
+    // other state).
+    const { spawnSync } = require('node:child_process');
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-mcp-review-'));
+    const git = args => { const r = spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8' }); if (r.status !== 0) throw new Error(r.stderr); };
+    git(['init', '-b', 'main']); git(['config', 'user.email', 't@t']); git(['config', 'user.name', 't']);
+    fs.writeFileSync(path.join(repo, 'package.json'), '{"name":"x","private":true}');
+    fs.writeFileSync(path.join(repo, 'eslint.config.mjs'), 'export default [{ rules: { complexity: ["error", { max: 1 }] } }];\n');
+    fs.writeFileSync(path.join(repo, 'violation.js'), 'export function b(x){if(x===1){return 1;}if(x===2){return 2;}if(x===3){return 3;}return 0;}\n');
+    git(['add', '.']); git(['commit', '-m', 'init']);
+    const review = await tools.requestReview({ taskId: started.taskId, repoPath: repo, tools: ['eslint'] });
+    assert.ok(review.receipts.some(r => r.toolId === 'eslint'));
+    assert.ok(['fail', 'warn', 'error'].includes(review.receipts[0].verdict), `real violation must not pass: ${JSON.stringify(review.receipts[0])}`);
+    assert.equal(review.decision.delivered, false);
+    assert.equal(review.modelReview, 'pending-model-review');
+    const resultRead = await tools.reviewResult({ taskId: started.taskId });
+    assert.ok(Array.isArray(resultRead.checks) && resultRead.checks.length >= 1, 'review_result reads the recorded checks');
+    console.log('workflow-tools-test PASS (start/resume/status/checkpoint + real check receipts over a real module instance)');
   });
 
   // Degradation: no live shell, no explicit URL -> structured WORKFLOW_UNAVAILABLE.
