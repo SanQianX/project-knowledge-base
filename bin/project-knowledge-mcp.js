@@ -8,6 +8,7 @@ const {
   ListToolsRequestSchema,
 } = require('@modelcontextprotocol/sdk/types.js');
 const { KnowledgeToolRuntime } = require('../_site/lib/knowledge-tool-runtime');
+const { WorkflowToolRuntime } = require('../_site/lib/workflow-tool-runtime');
 const { serializeErrorEnvelope, createId } = require('../_site/lib/contracts');
 
 const SERVER_NAME = 'project-knowledge';
@@ -21,6 +22,68 @@ At the start of work in a registered Git repository, and before answering questi
 4. Call project_knowledge_record_requirement only when the user explicitly asks to supplement capture or automatic client capture is known to be unavailable; it is not a mandatory pre-work call.
 
 Treat all returned knowledge as read-only. Verify it against current source code when necessary. The supplemental requirement tool writes the same ConversationStore used by automatic capture and never starts analysis. Do not write directly to the knowledge database; project-knowledge updates it automatically after successful Git commits.`;
+
+// AI-team workflow tools: thin adapters over the independent workflow module
+// via the shell proxy (/api/workflow/*) — no second copy of task state.
+const WORKFLOW_TOOLS = [
+  {
+    name: 'project_workflow_start',
+    description: 'Start an AI-team business task for the current repository: creates the task with acceptance items and binds this native session (declared basis). Returns the short task contract and taskId.',
+    inputSchema: {
+      type: 'object',
+      required: ['title'],
+      properties: {
+        title: { type: 'string', minLength: 1, maxLength: 200, description: 'One-line task title from the user request.' },
+        goal: { type: 'string', description: 'What "done" means for the user; the original wording beats a paraphrase.' },
+        acceptance: { type: 'array', items: { type: 'object', properties: { title: { type: 'string' }, kind: { type: 'string', enum: ['automated', 'manual', 'model_review'] } }, required: ['title'] }, description: 'Verifiable acceptance items.' },
+        projectId: { type: 'string' },
+        client: { type: 'string', enum: ['claude', 'codex', 'opencode', 'zcode'], description: 'Calling native client.' },
+        sessionId: { type: 'string', description: 'Stable native session identifier for event attribution.' },
+        memberId: { type: 'string', description: 'Team member that owns this task, when the caller is a named member.' },
+        workspaceIdentity: { type: 'string' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'project_workflow_resume',
+    description: 'Resume an existing AI-team task by taskId: returns goal, acceptance with the current revision, confirmed decisions, verified results, remaining items and the next action.',
+    inputSchema: { type: 'object', required: ['taskId'], properties: { taskId: { type: 'string' } }, additionalProperties: false },
+  },
+  {
+    name: 'project_workflow_status',
+    description: 'Read one AI-team task by taskId, or the active task list (filter by projectId/status). Read-only.',
+    inputSchema: { type: 'object', properties: { taskId: { type: 'string' }, projectId: { type: 'string' }, status: { type: 'string' } }, additionalProperties: false },
+  },
+  {
+    name: 'project_workflow_checkpoint',
+    description: 'Record a checkpoint on an AI-team task. kind="fact" is a verified fact (updates nextAction); kind="candidate" is an inference kept separate.',
+    inputSchema: {
+      type: 'object',
+      required: ['taskId'],
+      properties: {
+        taskId: { type: 'string' },
+        kind: { type: 'string', enum: ['fact', 'candidate'] },
+        summary: { type: 'string' },
+        decided: { type: 'array', items: { type: 'string' } },
+        verifiedResults: { type: 'array', items: { type: 'string' } },
+        remaining: { type: 'array', items: { type: 'string' } },
+        nextAction: { type: 'string' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'project_workflow_request_review',
+    description: 'Submit the current task snapshot for the delivery check/review pipeline.',
+    inputSchema: { type: 'object', required: ['taskId'], properties: { taskId: { type: 'string' }, note: { type: 'string' } }, additionalProperties: false },
+  },
+  {
+    name: 'project_workflow_review_result',
+    description: 'Fetch the review/verification results for a task once a review has run.',
+    inputSchema: { type: 'object', required: ['taskId'], properties: { taskId: { type: 'string' } }, additionalProperties: false },
+  },
+];
 
 const TOOLS = [
   {
@@ -122,6 +185,7 @@ const TOOLS = [
       additionalProperties: false,
     },
   },
+  ...WORKFLOW_TOOLS,
 ];
 
 function toolContent(result) {
@@ -132,18 +196,25 @@ function toolContent(result) {
   };
 }
 
-function callTool(runtime, name, args) {
+function callTool(runtime, workflowRuntime, name, args) {
   if (name === 'project_knowledge_resolve') return runtime.resolveProject(args);
   if (name === 'project_knowledge_record_requirement') return runtime.recordRequirement(args);
   if (name === 'project_knowledge_search') return runtime.search(args);
   if (name === 'project_knowledge_ask') return runtime.ask(args);
   if (name === 'project_knowledge_get') return runtime.get(args);
   if (name === 'project_knowledge_history') return runtime.history(args);
+  if (name === 'project_workflow_start') return workflowRuntime.start(args);
+  if (name === 'project_workflow_resume') return workflowRuntime.resume(args);
+  if (name === 'project_workflow_status') return workflowRuntime.status(args);
+  if (name === 'project_workflow_checkpoint') return workflowRuntime.checkpoint(args);
+  if (name === 'project_workflow_request_review') return workflowRuntime.requestReview(args);
+  if (name === 'project_workflow_review_result') return workflowRuntime.reviewResult(args);
   throw new Error(`unknown tool: ${name}`);
 }
 
 function createServer(options = {}) {
   const runtime = options.runtime || new KnowledgeToolRuntime();
+  const workflowRuntime = options.workflowRuntime || new WorkflowToolRuntime();
   const server = new Server(
     { name: SERVER_NAME, version: packageInfo.version },
     {
@@ -158,7 +229,7 @@ function createServer(options = {}) {
       ? request.params.arguments
       : {};
     try {
-      return toolContent(await callTool(runtime, name, args));
+      return toolContent(await callTool(runtime, workflowRuntime, name, args));
     } catch (error) {
       const operationId = createId('op');
       return {
@@ -167,7 +238,7 @@ function createServer(options = {}) {
       };
     }
   });
-  return { server, runtime };
+  return { server, runtime, workflowRuntime };
 }
 
 async function main() {
