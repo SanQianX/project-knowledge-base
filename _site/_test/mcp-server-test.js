@@ -107,7 +107,7 @@ async function createMcpClient() {
   const client = await createMcpClient();
   try {
     const listed = await client.request('tools/list');
-    assert.strictEqual(listed.result.tools.length, 6);
+    assert.strictEqual(listed.result.tools.length, 12, 'six knowledge tools + six workflow tools');
     assert(listed.result.tools.some(tool => tool.name === 'project_knowledge_record_requirement'));
 
     let response = await client.request('tools/call', { name: 'project_knowledge_resolve', arguments: { repoPath: repo } });

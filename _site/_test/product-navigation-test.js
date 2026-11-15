@@ -114,9 +114,9 @@ async function main() {
     const run = expression => browser.evaluate(expression);
 
     await waitFor(() => run("document.getElementById('homeContent').textContent.includes('第一个项目')"), 'the real empty home', 20000);
-    assert.equal(await run("document.querySelectorAll('nav [data-view]').length"), 5, 'the shell exposes five navigation entries');
+    assert.equal(await run("document.querySelectorAll('nav [data-view]').length"), 6, 'the shell exposes six navigation entries (AI 团队 added 2026-11)');
     assert.equal(await run("document.querySelector('[data-view=\"work\"]')"), null, 'the retired work page no longer has a navigation entry');
-    assert.equal(await run("document.querySelectorAll('.view').length"), 6, 'five pages plus the hidden work service mount');
+    assert.equal(await run("document.querySelectorAll('.view').length"), 7, 'six pages plus the hidden work service mount');
 
     const readShell = () => run(`(() => ({
       marker: window.__navMarker === undefined ? null : String(window.__navMarker),

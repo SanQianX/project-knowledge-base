@@ -591,7 +591,9 @@ class IntegrationManager {
           try { listed = await client.listTools(); } catch (error) { return failed('TOOLS_CONTRACT', { toolCount: 0 }); }
           if (settled) return;
           const names = (listed && Array.isArray(listed.tools) ? listed.tools : []).map(tool => String((tool && tool.name) || '')).filter(Boolean);
-          if (names.length !== MCP_TOOL_NAMES.length || !MCP_TOOL_NAMES.every(name => names.includes(name))) return failed('TOOLS_CONTRACT', { toolCount: names.length });
+          // The contract requires every knowledge tool to be present; additional tool
+          // families (project_workflow_*) are expected, not a violation.
+          if (!MCP_TOOL_NAMES.every(name => names.includes(name))) return failed('TOOLS_CONTRACT', { toolCount: names.length });
           settled = true;
           clearTimeout(timer);
           resolve({ state: 'ready', checkedAt, scope, expectedVersion, actualVersion: String(serverVersion.version || ''), serverName: serverVersion.name, tools: names, detail: '本地 MCP 服务已完成 initialize，并通过身份、版本与六工具契约校验。' });

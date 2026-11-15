@@ -196,7 +196,17 @@ function toolContent(result) {
   };
 }
 
-function callTool(runtime, workflowRuntime, name, args) {
+function callTool(runtime, workflowRuntimeOrName, nameOrArgs, maybeArgs) {
+  // Accept both the internal signature (runtime, workflowRuntime, name, args)
+  // and the exported legacy signature (runtime, name, args) used by tests.
+  let workflowRuntime = workflowRuntimeOrName;
+  let name = nameOrArgs;
+  let args = maybeArgs;
+  if (typeof workflowRuntimeOrName === 'string') {
+    name = workflowRuntimeOrName;
+    args = nameOrArgs;
+    workflowRuntime = null;
+  }
   if (name === 'project_knowledge_resolve') return runtime.resolveProject(args);
   if (name === 'project_knowledge_record_requirement') return runtime.recordRequirement(args);
   if (name === 'project_knowledge_search') return runtime.search(args);

@@ -91,7 +91,7 @@ const runner = require('../lib/claude-cli-runner');
     const nav = /<nav aria-label="主要导航">([\s\S]*?)<\/nav>/.exec(html);
     assert(nav, 'the navigation block exists');
     const navViews = [...nav[1].matchAll(/data-view="([a-z]+)"/g)].map(match => match[1]);
-    assert.deepStrictEqual(navViews, ['home', 'memory', 'projects', 'search', 'activity'], 'the navigation offers exactly the five pages');
+    assert.deepStrictEqual(navViews, ['home', 'team', 'memory', 'projects', 'search', 'activity'], 'the navigation offers exactly the six fixed pages (AI 团队 added 2026-11)');
     // 检索页不再内嵌 vectorHub：服务端检索取代 vectorFrame。
     assert(html.includes('id="view-search"') && !html.includes('id="vectorFrame"'));
     assert(app.includes("'/api/engine/search'"), 'the search page drives the server-side engine search');

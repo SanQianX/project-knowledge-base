@@ -328,7 +328,7 @@ async function testMcpStartupProbe() {
   assert(ready.state === 'ready', `a healthy binding must probe ready, got ${JSON.stringify(ready)}`);
   assert(ready.actualVersion === packageInfo.version && ready.expectedVersion === packageInfo.version, 'the probe must report both versions');
   assert(ready.scope === 'product-runtime' && ready.serverName === 'project-knowledge', 'A2: the probe reports its scope and the verified server identity');
-  assert(Array.isArray(ready.tools) && ready.tools.length === 6, 'A2: the probe verifies the six knowledge tools');
+  assert(Array.isArray(ready.tools) && ready.tools.length >= 6 && ['project_knowledge_resolve','project_knowledge_search','project_knowledge_ask','project_knowledge_get','project_knowledge_history','project_knowledge_record_requirement'].every(n => ready.tools.includes(n)), 'A2: the probe verifies the six knowledge tools are present (workflow tools are additive)');
   assert(typeof ready.checkedAt === 'string', 'the probe must record checkedAt');
 
   // A broken binding must surface a failed probe with a machine code.

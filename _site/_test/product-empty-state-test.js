@@ -137,8 +137,8 @@ async function main() {
     // hidden service mount.
     assert.deepEqual(
       await run("[...document.querySelectorAll('nav [data-view]')].map(button => button.dataset.view)"),
-      ['home', 'memory', 'projects', 'search', 'activity'],
-      'the navigation offers exactly the five pages',
+      ['home', 'team', 'memory', 'projects', 'search', 'activity'],
+      'the navigation offers exactly the six fixed pages (AI 团队 added 2026-11)',
     );
     assert.equal(await run("document.querySelector('[data-view=\"work\"]') === null"), true, 'the work navigation button is removed');
     assert.equal(await run("document.getElementById('view-work') !== null"), true, 'the work section survives in the DOM');
