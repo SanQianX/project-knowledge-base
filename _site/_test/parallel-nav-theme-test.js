@@ -62,12 +62,13 @@ async function main() {
       20000,
     );
 
-    // NAV-002 navigation contract (five-page UI): exactly the five pages, no
-    // work button, and the workbench survives as a hidden service mount.
+    // NAV-002 navigation contract (six-page UI, AI 团队 added 2026-11):
+    // exactly the six fixed pages, no work button, and the workbench survives
+    // as a hidden service mount.
     assert.deepEqual(
       await harness.run("[...document.querySelectorAll('nav [data-view]')].map(button => button.dataset.view)"),
-      ['home', 'memory', 'projects', 'search', 'activity'],
-      'the navigation offers exactly the five pages',
+      ['home', 'team', 'memory', 'projects', 'search', 'activity'],
+      'the navigation offers exactly the six fixed pages',
     );
     assert.equal(await harness.run("document.querySelector('[data-view=\"work\"]') === null"), true, 'the work navigation button is removed');
     assert.equal(await harness.run("document.getElementById('view-work') !== null"), true, 'the work section survives in the DOM');

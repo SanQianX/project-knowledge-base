@@ -919,6 +919,18 @@ function createRequestHandler(runtime, options = {}) {
         if (pathname.startsWith('/api/eventbridge/internal/')) throw new DomainError('FORBIDDEN', 'Internal module endpoints are not exposed to browsers.', { status: 403 });
         return runtime.moduleBridge.proxyEventBridge(req, res, pathname, url.search);
       }
+      // Fifth module (optional): team/workflow business API. The module's
+      // own base is /api/workflow/v1; the shell rewrites /api/workflow/<rest>
+      // to it. Internal (trusted-service) subroutes stay server-side only.
+      if (pathname.startsWith('/api/workflow/') || pathname === '/api/workflow') {
+        if (pathname.startsWith('/api/workflow/internal/')) throw new DomainError('FORBIDDEN', 'Internal module endpoints are not exposed to browsers.', { status: 403 });
+        return runtime.moduleBridge.proxyWorkflow(req, res, pathname, url.search);
+      }
+      // AI team page proxy: /workflow-ui/<asset> -> workflow module /<asset>.
+      // GET-only, encoded-segment and api/internal segments rejected inside
+      // proxyModuleUi; the module serves its own index.html at the root.
+      const workflowUi = pathname.match(/^\/workflow-ui\/?(.*)$/);
+      if (workflowUi && method === 'GET') return runtime.moduleBridge.proxyModuleUi(req, res, 'workflow', workflowUi[1], url.search);
       if (method === 'GET' && pathname === '/api/modules/health') {
         return send(res, 200, { ...await runtime.moduleBridge.modulesHealth(), ownership: runtime.ownership });
       }

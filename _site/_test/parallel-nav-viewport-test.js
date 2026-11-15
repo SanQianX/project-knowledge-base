@@ -51,10 +51,12 @@ const VIEWPORTS = [
 
 const THEMES = ['light', 'dark'];
 
-// The five-page navigation contract: home, memory, projects, search,
-// activity. The workbench section stays hidden and is not a page.
+// The six-page navigation contract (2026-11 adds AI 团队): home, team,
+// memory, projects, search, activity. The workbench section stays hidden and
+// is not a page; the team page is the workflow module's embedded surface.
 const PAGES = [
   { key: 'home', view: 'home' },
+  { key: 'team', view: 'team' },
   { key: 'memory', view: 'memory' },
   { key: 'projects', view: 'projects' },
   { key: 'search', view: 'search' },

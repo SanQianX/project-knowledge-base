@@ -1,4 +1,8 @@
 'use strict';
+// 迁移说明（2026-11-15 六页主导航：新增 AI 团队）：
+// - 导航契约：五页 home/memory/projects/search/activity → 六页，在 home 后
+//   插入 team（AI 团队）。team 页是独立工作流模块的同源 iframe 挂载
+//   （/workflow-ui/ 页面代理），不是 shell 业务代码；诊断仍不得成为主导航。
 // 迁移说明（2026-11 五页简化 UI）：
 // - 导航契约：旧六页（含 work 导航按钮）→ 新五页 nav [data-view] =
 //   home/memory/projects/search/activity，各出现一次；data-view 总数 6 → 5。
@@ -26,12 +30,21 @@ const root = path.resolve(__dirname, '../..');
 const html = fs.readFileSync(path.join(root, 'ui/index.html'), 'utf8');
 const script = fs.readFileSync(path.join(root, 'ui/product.js'), 'utf8');
 const css = fs.readFileSync(path.join(root, 'ui/product.css'), 'utf8');
-// Five-page navigation contract: exactly one nav button per primary view.
-for (const view of ['home', 'memory', 'projects', 'search', 'activity']) {
+// Six-page navigation contract (2026-11 adds AI 团队): exactly one nav button
+// per primary view, in the fixed order home/team/memory/projects/search/
+// activity. The original purpose survives: diagnostics and module consoles
+// still must not become another primary product.
+for (const view of ['home', 'team', 'memory', 'projects', 'search', 'activity']) {
   assert.equal((html.match(new RegExp(`data-view="${view}"`, 'g')) || []).length, 1);
   assert.ok(html.includes(`id="view-${view}"`));
 }
-assert.equal((html.match(/data-view=/g) || []).length, 5, 'exactly five primary views; diagnostics must not become another primary product');
+assert.equal((html.match(/data-view=/g) || []).length, 6, 'exactly six primary views; diagnostics must not become another primary product');
+const navOrder = [...html.matchAll(/data-view="([^"]+)"/g)].map(m => m[1]);
+assert.deepEqual(navOrder, ['home', 'team', 'memory', 'projects', 'search', 'activity'], 'six-page navigation order is fixed');
+// The AI team page is an embedded module surface, not shell business code:
+// an iframe mount plus the /workflow-ui/ proxy, and nothing else in shell UI.
+assert.match(html, /<section[^>]*id="view-team"[^>]*>\s*<div class="frame-container"><iframe id="workflowFrame"/, 'team view is a module iframe mount');
+assert.match(script, /workflow: \{ id: 'workflowFrame', url: '\/workflow-ui\/\?embed=1&apiBase=\/api\/workflow'/, 'the team frame targets the workflow-ui proxy');
 assert.ok(!html.includes('data-view="work"'), 'work is no longer a navigation target');
 // The workbench frame survives as a hidden service mount: #view-work stays in
 // the DOM (forever hidden) and keeps #workFrame for the Workbench service.

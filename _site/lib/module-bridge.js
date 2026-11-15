@@ -54,12 +54,16 @@ const PICKER_TIMEOUT_MS = 10 * 60 * 1000;
 // while the shell kept proxying to its dead port (endless MODULE_UNREACHABLE).
 const SUPERVISOR_STABLE_MS = 60_000;
 
-// All four services resolve through the host's pinned npm dependencies.
+// All four pinned services resolve through the host's npm dependencies. The
+// workflow module is fifth and OPTIONAL until its public release is pinned
+// (W8): resolveModuleEntry returning null means "not installed", which
+// degrades to an external-service warning — never a startup failure.
 const MODULE_ENTRIES = {
   terminal: 'claude-ai-workbench/packages/server/bin/agent-terminal-server.js',
   'vector-hub': '@sanqianx/vector-hub/bin.js',
   'event-bridge': '@sanqianx/ai-coding-event-bridge-console/src/bin.js',
   'knowledge-engine': '@sanqianx/ai-coding-knowledge-engine/src/bin.js',
+  workflow: '@sanqianx/ai-coding-workflow/src/bin.js',
 };
 
 function resolveModuleEntry(name) {
@@ -87,6 +91,7 @@ function defaultEventBridgeUrl() {
 }
 
 function defaultEngineUrl() { return String(process.env.KB_KNOWLEDGE_ENGINE_URL || 'http://127.0.0.1:5790').replace(/\/+$/, ''); }
+function defaultWorkflowUrl() { return String(process.env.KB_WORKFLOW_URL || 'http://127.0.0.1:5810').replace(/\/+$/, ''); }
 
 // Health identity markers: an HTTP 200 alone can come from any foreign
 // service that grabbed the port. Only a body that matches the product
@@ -97,6 +102,7 @@ const MODULE_IDENTITY = {
   vectorHub: body => body && typeof body === 'object' && Array.isArray(body.projects),
   eventBridge: body => body && typeof body === 'object' && typeof body.registeredProjects === 'number',
   engine: body => body && typeof body === 'object' && body.name === 'knowledge-engine',
+  workflow: body => body && typeof body === 'object' && body.name === 'ai-coding-workflow' && typeof body.apiVersion === 'string',
 };
 
 // kind -> bridge URL property, explicit env override, spawn spec name
@@ -105,6 +111,7 @@ const MODULE_URL_TARGETS = [
   { kind: 'vectorHub', prop: 'vectorHubUrl', env: 'KB_VECTORHUB_URL', specName: 'vector-hub' },
   { kind: 'eventBridge', prop: 'eventBridgeUrl', env: 'KB_EVENTBRIDGE_URL', specName: 'event-bridge' },
   { kind: 'engine', prop: 'engineUrl', env: 'KB_KNOWLEDGE_ENGINE_URL', specName: 'knowledge-engine' },
+  { kind: 'workflow', prop: 'workflowUrl', env: 'KB_WORKFLOW_URL', specName: 'workflow' },
 ];
 
 function specNameToKind(specName) {
@@ -129,6 +136,7 @@ class ModuleBridge {
     this.vectorHubUrl = options.vectorHubUrl || defaultVectorHubUrl();
     this.eventBridgeUrl = options.eventBridgeUrl || defaultEventBridgeUrl();
     this.engineUrl = options.engineUrl || defaultEngineUrl();
+    this.workflowUrl = options.workflowUrl || defaultWorkflowUrl();
     // Explicitly injected URLs (option or env) mean an external service;
     // only managed defaults participate in dynamic port resolution.
     this.explicitModuleUrls = {
@@ -136,8 +144,9 @@ class ModuleBridge {
       vectorHub: Boolean(options.vectorHubUrl || process.env.KB_VECTORHUB_URL),
       eventBridge: Boolean(options.eventBridgeUrl || process.env.KB_EVENTBRIDGE_URL),
       engine: Boolean(options.engineUrl || process.env.KB_KNOWLEDGE_ENGINE_URL),
+      workflow: Boolean(options.workflowUrl || process.env.KB_WORKFLOW_URL),
     };
-    this.moduleUrlSources = { terminal: 'pending', vectorHub: 'pending', eventBridge: 'pending', engine: 'pending' };
+    this.moduleUrlSources = { terminal: 'pending', vectorHub: 'pending', eventBridge: 'pending', engine: 'pending', workflow: 'pending' };
     this.runtimeToken = options.runtimeToken || crypto.randomBytes(32).toString('hex');
     this.registryStore = options.registryStore || null;
     this.projectStore = options.projectStore || null;
@@ -163,6 +172,12 @@ class ModuleBridge {
     // /api/eventbridge/<rest> -> <event-bridge console>/api/<rest>
     const rest = pathname.replace(/^\/api\/eventbridge\/?/, '');
     return `${this.eventBridgeUrl}/api/${rest}`;
+  }
+
+  _workflowApi(pathname) {
+    // /api/workflow/<rest> -> <workflow module>/api/workflow/v1/<rest>
+    const rest = pathname.replace(/^\/api\/workflow\/?/, '');
+    return `${this.workflowUrl}/api/workflow/v1/${rest}`;
   }
 
   async _fetch(url, init = {}) {
@@ -248,13 +263,17 @@ class ModuleBridge {
     return this.proxy(req, res, this._eventBridgeApi(pathname) + (search || ''));
   }
 
+  proxyWorkflow(req, res, pathname, search) {
+    return this.proxy(req, res, this._workflowApi(pathname) + (search || ''));
+  }
+
   proxyEngine(req, res, pathname, search) {
     if (this.engineCompatible === false) throw new DomainError('ENGINE_CONNECTION_PENDING', '知识引擎连接尚未确认，请查看系统状态；不会读取旧服务中的知识。', { status: 503 });
     return this.proxy(req, res, `${this.engineUrl}/api/${pathname.replace(/^\/api\/engine\/?/, '')}${search || ''}`);
   }
 
   proxyModuleUi(req, res, module, rest, search) {
-    const base = { terminal: this.terminalUrl, vectorhub: this.vectorHubUrl, eventbridge: this.eventBridgeUrl, engine: this.engineUrl }[module];
+    const base = { terminal: this.terminalUrl, vectorhub: this.vectorHubUrl, eventbridge: this.eventBridgeUrl, engine: this.engineUrl, workflow: this.workflowUrl }[module];
     let decoded;
     try { decoded = decodeURIComponent(rest); } catch { decoded = null; }
     // Reject encoded separators/dot segments before URL normalization. Static
@@ -379,17 +398,22 @@ class ModuleBridge {
   }
 
   async modulesHealth() {
-    const [terminal, vectorHub, eventBridge, engine] = await Promise.all([
+    const [terminal, vectorHub, eventBridge, engine, workflow] = await Promise.all([
       this._probe(this.terminalUrl, 'terminal'),
       this._probe(this.vectorHubUrl, 'vectorHub'),
       this._probe(this.eventBridgeUrl, 'eventBridge'),
       this._probe(this.engineUrl, 'engine'),
+      this._probe(this.workflowUrl, 'workflow'),
     ]);
     return { ok: true, modules: {
       terminal: { url: this.terminalUrl, up: terminal, source: this.moduleUrlSources.terminal },
       vectorHub: { url: this.vectorHubUrl, up: vectorHub, source: this.moduleUrlSources.vectorHub },
       eventBridge: { url: this.eventBridgeUrl, up: eventBridge, source: this.moduleUrlSources.eventBridge },
       engine: { url: this.engineUrl, up: engine, source: this.moduleUrlSources.engine },
+      // Optional fifth module: `installed` tells the UI "not installed" apart
+      // from "installed but down" so a missing package is never mistaken for
+      // a service failure of the four pinned runtimes.
+      workflow: { url: this.workflowUrl, up: workflow, source: this.moduleUrlSources.workflow, installed: Boolean(resolveModuleEntry('workflow')) },
     } };
   }
 
@@ -794,6 +818,20 @@ class ModuleBridge {
     }
     const engineEntry = resolveModuleEntry('knowledge-engine');
     if (process.env.KB_KNOWLEDGE_ENGINE_COMMAND || engineEntry) specs.push({ name: 'knowledge-engine', command: process.env.KB_KNOWLEDGE_ENGINE_COMMAND || `node ${JSON.stringify(engineEntry)} serve --port ${urlPort(this.engineUrl, 5790)} --host ${urlHost(this.engineUrl)}`, url: this.engineUrl, env: { KNOWLEDGE_ENGINE_DATA: path.join(this.dataDir || require('./data-dir').getDataDir(), 'knowledge-engine'), KB_ENGINE_MANAGED: '1', KNOWLEDGE_ENGINE_CONSUME: '0', KB_ENGINE_RUNTIME_TOKEN: this.runtimeToken, KB_EVENT_BRIDGE_URL: this.eventBridgeUrl, KB_VECTOR_HUB_URL: this.vectorHubUrl, NODE_PATH: path.resolve(__dirname, '..', '..', 'node_modules') } });
+    // Optional fifth module (workflow). Absent entry => warn and expect an
+    // external service, exactly like an unpinned optional runtime: the four
+    // pinned modules and the shell keep working.
+    const workflowEntry = resolveModuleEntry('workflow');
+    if (process.env.KB_WORKFLOW_COMMAND || workflowEntry) {
+      specs.push({
+        name: 'workflow',
+        command: process.env.KB_WORKFLOW_COMMAND || `node ${JSON.stringify(workflowEntry)} serve --port ${urlPort(this.workflowUrl, 5810)} --host ${urlHost(this.workflowUrl)} --data ${JSON.stringify(this.dataDir || require('./data-dir').getDataDir())}`,
+        url: this.workflowUrl,
+        env: { KB_WORKFLOW_MANAGED: '1', KB_WORKFLOW_RUNTIME_TOKEN: this.runtimeToken },
+      });
+    } else {
+      this.logger.warn('modules.supervisor', '@sanqianx/ai-coding-workflow runtime not installed; team features report "not installed".', {});
+    }
     return specs;
   }
 

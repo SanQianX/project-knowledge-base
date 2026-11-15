@@ -109,7 +109,7 @@ function buildAndInstallPackage() {
     }, 'packaged UI bootstrap', 20000);
 
     assert.strictEqual(await browser.evaluate("document.getElementById('projectSelect').disabled"), true);
-    assert.strictEqual(await browser.evaluate("document.querySelectorAll('nav [data-view]').length"), 5);
+    assert.strictEqual(await browser.evaluate("document.querySelectorAll('nav [data-view]').length"), 6, 'six fixed pages (AI 团队 added 2026-11)');
     assert.strictEqual(await browser.evaluate("document.querySelector('[data-view=\"work\"]')"), null, 'the packed UI ships no work navigation entry');
     assert.strictEqual(browser.exceptions.length, 0, `packaged UI runtime exceptions: ${JSON.stringify(browser.exceptions)}`);
     console.log('packaged-ui-smoke-test PASS');

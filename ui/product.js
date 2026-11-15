@@ -3,14 +3,18 @@
   const $ = id => document.getElementById(id);
   const ProgressSource = window.KnowledgeLive?.EventSource || EventSource;
   const all = selector => [...document.querySelectorAll(selector)];
-  const titles = { home: '首页', memory: '长期记忆', projects: '项目', search: '知识检索', activity: '活动记录' };
+  const titles = { home: '首页', team: 'AI 团队', memory: '长期记忆', projects: '项目', search: '知识检索', activity: '活动记录' };
   const modules = { terminal: 'Agent 工作台', vectorHub: '知识索引', eventBridge: '开发事件', engine: '知识引擎' };
+  // The workflow module is optional until its public release is pinned: an
+  // absent package is "未安装" (informational), never a service failure of
+  // the four pinned runtimes, so it renders separately from `modules`.
   // The workbench frame stays as a hidden service mount for provider/model
   // configuration from the system drawer; it is no longer a navigation page.
   const frames = {
     terminal: { id: 'workFrame', url: '/modules/terminal/agent-terminal/?embed=1&apiBase=/api/terminal&transport=live', view: '', ready: false },
     eventBridge: { id: 'bridgeFrame', url: '/modules/eventbridge/?embed=1&apiBase=/api/eventbridge', view: 'activity', ready: false },
     engine: { id: 'engineFrame', url: '/modules/engine/?embed=1&apiBase=/api/engine', ready: false },
+    workflow: { id: 'workflowFrame', url: '/workflow-ui/?embed=1&apiBase=/api/workflow', view: 'team', ready: false },
   };
   const knowledgePanel = { providerId: 'kb.knowledge.references', version: 0, registered: false, registering: false, failed: false, error: null, panelId: '', pending: null, sending: null, queued: false, deliveredPanelId: '' };
   const panelRequests = new Map();
@@ -217,6 +221,7 @@
     all('.view').forEach(section => section.classList.toggle('active', section.id === `view-${view}`));
     $('pageTitle').textContent = titles[view];
     if (view === 'activity' && state.activityTab === 'sessions' && activeProject()) initializeFrame('eventBridge');
+    if (view === 'team') initializeFrame('workflow');
     Object.keys(frames).forEach(key => post(key, { type: 'kb:visibility', visible: frameVisible(key) }));
     render();
     if (view === 'home') void loadOverview();
@@ -737,7 +742,13 @@
     if (state.root && state.scopeStatus?.status === 'pending' && !pending && !down.length) { $('systemDot').className = 'dot issue'; $('systemTitle').textContent = '共享知识接线待恢复'; $('systemDetail').textContent = '已有知识与长期记忆保留，请在系统状态中修复接线。'; }
     const maintenance = maintenanceWarning();
     if (maintenance && state.health.engine?.up && !pending) { $('systemDot').className = 'dot issue'; $('systemTitle').textContent = maintenance.title; $('systemDetail').textContent = maintenance.message; }
-    $('moduleHealth').innerHTML = Object.entries(modules).map(([key, name]) => `<div class="row"><div><b>${esc(name)}</b><small>${esc(state.health[key]?.url || '')}</small></div>${badge(state.health[key]?.up ? '在线' : '离线', state.health[key]?.up ? 'up' : 'issue')}</div>`).join('');
+    const workflowInstalled = state.health.workflow?.installed !== false;
+    const workflowRow = state.health.workflow
+      ? `<div class="row"><div><b>AI 团队工作流</b><small>${esc(state.health.workflow.url || '')}</small></div>${workflowInstalled
+        ? badge(state.health.workflow.up ? '在线' : '离线', state.health.workflow.up ? 'up' : 'issue')
+        : badge('未安装', '')}</div>`
+      : '';
+    $('moduleHealth').innerHTML = Object.entries(modules).map(([key, name]) => `<div class="row"><div><b>${esc(name)}</b><small>${esc(state.health[key]?.url || '')}</small></div>${badge(state.health[key]?.up ? '在线' : '离线', state.health[key]?.up ? 'up' : 'issue')}</div>`).join('') + workflowRow;
     if (!navigator.onLine) {
       $('systemDot').className = 'dot issue'; $('systemTitle').textContent = '网页连接中断';
       $('systemDetail').textContent = '恢复连接后自动读取状态，后台维护不受影响。';
