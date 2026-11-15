@@ -24,8 +24,10 @@
     <div class="content">
       <section class="view" id="view-home"><div class="welcome"><div><small>工作概览</small><h2 id="homeTitle">我的智脑</h2><p>需要处理的事项、待确认记忆和记忆组合，集中在一页。你的长期偏好，只在确认后使用。</p></div><div class="actions"><button data-action="import">导入项目</button></div></div><div id="homeContent"></div></section>
       <!-- AI 团队页由独立工作流模块拥有；壳只做同源页面代理（/workflow-ui/）。
-           模块未安装时 iframe 显示模块自身的不可达说明，导航与其余页面不受影响。 -->
-      <section class="view module-view" id="view-team" hidden><div class="frame-container"><iframe id="workflowFrame" title="AI 团队" referrerpolicy="same-origin"></iframe></div></section>
+           模块未安装时 iframe 显示模块自身的不可达说明，导航与其余页面不受影响。
+           （不加 hidden 属性：全局样式表有 [hidden]{display:none!important}，
+           会压过 .module-view.active；默认隐藏由 .view{display:none} 承担。） -->
+      <section class="view module-view" id="view-team"><div class="frame-container"><iframe id="workflowFrame" title="AI 团队" referrerpolicy="same-origin"></iframe></div></section>
       <!-- The workbench frame survives as a hidden service mount: provider
            management and maintenance-model config still postMessage into it
            from the system drawer, but it is no longer a navigation page. -->

@@ -1,9 +1,9 @@
 {
   "schema": "project-knowledge/module-content/v1",
   "productFiles": {
-    "ui/index.html": "6f3a2a4ff260c64cdc80c06071c5f57df65e8f8d46b9dc21beda6632197af3ff",
+    "ui/index.html": "55cbc1c20b5f88c7c21b50bc1b68d52ce3c94280f001567513e304d33c6933e1",
     "ui/knowledge-panel.html": "dfd85f15759472252d797853263e9da0054b251c56bb9ccdc8a75e6301334ca8",
-    "ui/product.js": "982e775f0cffcea72c569774a21d1bf653d7b8f17e578bfbbc682001898bbdf6",
+    "ui/product.js": "c56d565e9946e9c9e7d3d516db33ade6a5133bf5645e79969c044871ff7a79f4",
     "ui/live-client.js": "0d81fa894c629bb839e1931fc3c5ebad4d831aae8232d6ce8c0f542e9e3559e8",
     "ui/product.css": "b7e2e6b1c1429078109e7742111f03a01a61f54895cf8ac733b83672cf31dca7",
     "ui/favicon.svg": "c48be946b224112ebb0238b44263f7a61bda31e531afa895c2e9801c0ff24f32",

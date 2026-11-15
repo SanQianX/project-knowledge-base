@@ -31,6 +31,7 @@
     search: { q: '', draft: '', projectId: '', scope: 'brain', type: 'all', done: false, results: [], page: 0, loading: false, epoch: 0 },
     activityFilter: 'all', activityTab: 'updates', activityProject: null, activityBefore: null, activityPage: null, runDetails: new Map(),
     pendingOpenRun: '',
+    teamSummary: { data: null, error: null, loading: false, epoch: 0 },
   };
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const activeProject = () => state.projects.find(p => p.projectId === state.projectId);
@@ -224,7 +225,7 @@
     if (view === 'team') initializeFrame('workflow');
     Object.keys(frames).forEach(key => post(key, { type: 'kb:visibility', visible: frameVisible(key) }));
     render();
-    if (view === 'home') void loadOverview();
+    if (view === 'home') { void loadOverview(); void loadTeamSummary(); }
     if (view === 'memory') { void loadGroups(); void loadMemoryPage(); void loadCandidates(); }
     if (view === 'projects' && !state.projectsPage.detail) void loadProjectsPage();
     if (view === 'search') renderSearch();
@@ -280,6 +281,45 @@
     if (state.view === 'home') renderHome();
     render();
   }
+  // AI 团队跨项目摘要（独立工作流模块）。不可达与未安装分开呈现：未安装
+  // 是中性提示（第五模块在正式发布前是可选依赖），不冒充服务故障。
+  async function loadTeamSummary() {
+    const epoch = ++state.teamSummary.epoch;
+    state.teamSummary.loading = true;
+    try {
+      const data = await api('/api/workflow/overview');
+      if (epoch !== state.teamSummary.epoch) return;
+      state.teamSummary.data = data; state.teamSummary.error = null;
+    } catch (error) {
+      if (epoch !== state.teamSummary.epoch) return;
+      state.teamSummary.data = null;
+      state.teamSummary.error = error.code === 'MODULE_UNREACHABLE' ? 'MODULE_UNREACHABLE' : error.message;
+    } finally {
+      if (epoch === state.teamSummary.epoch) state.teamSummary.loading = false;
+    }
+    if (state.view === 'home') renderHome();
+  }
+  function teamSummaryCard() {
+    const summary = state.teamSummary;
+    const installed = state.health?.workflow?.installed !== false;
+    if (summary.error === 'MODULE_UNREACHABLE' && !installed) {
+      return `<section class="panel" style="margin-top:24px"><div class="section-heading"><h2>AI 团队</h2></div><p class="small-empty">独立工作流模块尚未安装（可选模块）。安装后这里会显示跨项目任务摘要。</p></section>`;
+    }
+    if (summary.error) {
+      return `<section class="panel" style="margin-top:24px"><div class="section-heading"><h2>AI 团队</h2></div><p class="small-empty">工作流服务不可达（${esc(summary.error)}），任务摘要暂不可用；不影响其他知识功能。<button data-action="reload-team-summary">重试</button></p></section>`;
+    }
+    if (summary.loading && !summary.data) {
+      return `<section class="panel" style="margin-top:24px"><div class="section-heading"><h2>AI 团队</h2></div><p class="small-empty">正在读取团队摘要…</p></section>`;
+    }
+    const data = summary.data;
+    if (!data) return '';
+    if (!data.team) {
+      return `<section class="panel" style="margin-top:24px"><div class="section-heading"><h2>AI 团队</h2><button data-go="team">创建我的团队</button></div><p class="small-empty">还没有 AI 开发团队。创建后在这里看到跨项目任务、阶段与阻塞。</p></section>`;
+    }
+    const enabledProjects = (data.projects || []).filter(p => p.enabled).length;
+    return `<section class="panel" style="margin-top:24px"><div class="section-heading"><h2>AI 团队 · ${esc(data.team.name)}</h2><button data-go="team">查看全部任务</button></div>
+      <p class="small-empty">${data.tasks.total} 个任务 · ${data.members.enabled}/${data.members.total} 名成员启用 · ${enabledProjects} 个项目已启用团队工作流</p></section>`;
+  }
   function needRow(item) {
     if (item.kind === 'run') return `<div class="row"><div><b>${esc(item.title)} · ${esc(projectName(item.projectId))}</b><small>${esc(item.commitSha?.slice(0, 8) || '')} ${esc(item.error?.message || '')}</small></div>${badge(recoveryLabel(item) || '需要处理', 'issue')}<button data-open-run="${esc(item.runId)}" data-run-project="${esc(item.projectId)}">去处理</button></div>`;
     if (item.kind === 'journal') return `<div class="row"><div><b>提交事件消费受阻</b><small>${esc(item.journalId)} · ${esc(item.message)}</small></div>${badge('需要处理', 'issue')}</div>`;
@@ -288,13 +328,15 @@
     return '';
   }
   function renderHome() {
-    if (!state.projectsLoaded) { $('homeContent').innerHTML = state.projectsError ? '<div class="empty">项目登记读取失败，未把失败当作空知识库。<button data-action="refresh">重试读取</button></div>' : '<div class="empty">正在读取项目登记…</div>'; return; }
+    // The team summary belongs on every home variant: a missing engine or an
+    // empty registry must not hide the cross-project task entry.
+    if (!state.projectsLoaded) { $('homeContent').innerHTML = (state.projectsError ? '<div class="empty">项目登记读取失败，未把失败当作空知识库。<button data-action="refresh">重试读取</button></div>' : '<div class="empty">正在读取项目登记…</div>') + teamSummaryCard(); return; }
     if (state.overviewError) {
-      $('homeContent').innerHTML = `<div class="empty">全局状态读取失败：${esc(state.overviewError)}<br>已保存的待办与记忆不受影响，也不会显示为零待办。<button data-action="reload-overview">重试</button></div>`;
+      $('homeContent').innerHTML = `<div class="empty">全局状态读取失败：${esc(state.overviewError)}<br>已保存的待办与记忆不受影响，也不会显示为零待办。<button data-action="reload-overview">重试</button></div>${teamSummaryCard()}`;
       return;
     }
-    if (!state.overview) { $('homeContent').innerHTML = '<div class="empty">正在读取全局待办…</div>'; return; }
-    if (!state.projects.length) { $('homeContent').innerHTML = '<div class="empty"><h2>从第一个项目开始</h2><p>选择代码目录和知识目录，保留项目原有文件。</p><button class="primary" data-action="import">导入第一个项目</button></div>'; return; }
+    if (!state.overview) { $('homeContent').innerHTML = '<div class="empty">正在读取全局待办…</div>' + teamSummaryCard(); return; }
+    if (!state.projects.length) { $('homeContent').innerHTML = `<div class="empty"><h2>从第一个项目开始</h2><p>选择代码目录和知识目录，保留项目原有文件。</p><button class="primary" data-action="import">导入第一个项目</button></div>${teamSummaryCard()}`; return; }
     const overview = state.overview;
     const needs = overview.needsPreview || [];
     const candidates = overview.candidatesPreview || [];
@@ -313,6 +355,7 @@
           ${overview.totals.candidates > candidates.length ? '<button data-go="memory">查看候选箱</button>' : ''}
         </section>
       </div>
+      ${teamSummaryCard()}
       <section class="panel" style="margin-top:24px"><div class="section-heading" style="margin-bottom:12px"><h2>记忆组合</h2><button data-go="memory">管理记忆</button></div><div class="combo-grid">${comboCards}</div></section>`;
   }
   // ============ 长期记忆：组合 + 独立小记忆 + 候选 ============
@@ -1298,7 +1341,8 @@
       }
       if (button.dataset.action === 'import') openImport();
       if (button.dataset.action === 'refresh') await refreshRegistry(true);
-      if (button.dataset.action === 'reload-overview') await loadOverview(true);
+      if (button.dataset.action === 'reload-overview') { await loadOverview(true); await loadTeamSummary(); }
+      if (button.dataset.action === 'reload-team-summary') await loadTeamSummary();
       if (button.dataset.action === 'repair') await repair();
       if (button.dataset.action === 'system') await openSystem();
       if (button.dataset.action === 'activity-needs') { state.activityFilter = 'needs'; setView('activity'); renderActivity(); }
