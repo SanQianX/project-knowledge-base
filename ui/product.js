@@ -287,38 +287,53 @@
     const epoch = ++state.teamSummary.epoch;
     state.teamSummary.loading = true;
     try {
-      const data = await api('/api/workflow/overview');
+      const [data, activeTasks] = await Promise.all([
+        api('/api/workflow/overview'),
+        api('/api/workflow/workflow-tasks?limit=5').catch(() => null),
+      ]);
       if (epoch !== state.teamSummary.epoch) return;
-      state.teamSummary.data = data; state.teamSummary.error = null;
+      state.teamSummary.data = data;
+      state.teamSummary.tasks = activeTasks && activeTasks.tasks ? activeTasks.tasks.filter(t => !['done', 'cancelled'].includes(t.status)).slice(0, 4) : [];
+      state.teamSummary.error = null;
     } catch (error) {
       if (epoch !== state.teamSummary.epoch) return;
-      state.teamSummary.data = null;
+      state.teamSummary.data = null; state.teamSummary.tasks = [];
       state.teamSummary.error = error.code === 'MODULE_UNREACHABLE' ? 'MODULE_UNREACHABLE' : error.message;
     } finally {
       if (epoch === state.teamSummary.epoch) state.teamSummary.loading = false;
     }
     if (state.view === 'home') renderHome();
   }
+  const TEAM_PHASE_LABEL = { clarify: '明确任务', plan: '规划', implement: '实现', verify: '程序验证', review: '审查', rework: '整改', deliver: '交付' };
+  const TEAM_STATUS_LABEL = { draft: '草稿', ready: '就绪', in_progress: '进行中', verifying: '验证中', in_review: '审查中', done: '已交付', blocked: '受阻', cancelled: '已取消' };
+  const TEAM_OBS_LABEL = { connected: '有活动', stale: '久无活动', disconnected: '断开', partial: '部分采集', unknown: '未观测' };
+  function teamWorkflowRow(task) {
+    const satisfied = task.acceptance ? task.acceptance.filter(a => a.status === 'satisfied' || a.status === 'waived').length : 0;
+    const rework = task.reworkItems && task.reworkItems.length ? `<span class="badge warn">整改 ${task.reworkItems.length}</span>` : '';
+    const obs = task.observation ? TEAM_OBS_LABEL[task.observation.state] || task.observation.state : '';
+    return `<div class="row"><div><b>${esc(task.title)}</b><small>${esc(projectName(task.projectId))} · ${TEAM_PHASE_LABEL[task.phase] || task.phase} · 验收 ${satisfied}/${task.acceptance ? task.acceptance.length : 0} · ${esc(obs)}${task.updatedAt ? ' · ' + time(task.updatedAt) : ''}${task.nextAction ? `<br>下一步：${esc(String(task.nextAction).slice(0, 90))}` : ''}</small></div><div class="actions-row">${rework}<span class="badge ${task.status === 'blocked' ? 'warn' : task.status === 'done' ? 'ok' : 'info'}">${TEAM_STATUS_LABEL[task.status] || task.status}</span></div></div>`;
+  }
   function teamSummaryCard() {
     const summary = state.teamSummary;
     const installed = state.health?.workflow?.installed !== false;
     if (summary.error === 'MODULE_UNREACHABLE' && !installed) {
-      return `<section class="panel" style="margin-top:24px"><div class="section-heading"><h2>AI 团队</h2></div><p class="small-empty">独立工作流模块尚未安装（可选模块）。安装后这里会显示跨项目任务摘要。</p></section>`;
+      return `<section class="panel" style="margin-top:24px"><div class="section-heading"><h2>AI 团队工作流</h2></div><p class="small-empty">独立工作流模块尚未安装（可选模块）。安装后这里会显示正在工作的任务、检查与审查状态。</p></section>`;
     }
     if (summary.error) {
-      return `<section class="panel" style="margin-top:24px"><div class="section-heading"><h2>AI 团队</h2></div><p class="small-empty">工作流服务不可达（${esc(summary.error)}），任务摘要暂不可用；不影响其他知识功能。<button data-action="reload-team-summary">重试</button></p></section>`;
+      return `<section class="panel" style="margin-top:24px"><div class="section-heading"><h2>AI 团队工作流</h2></div><p class="small-empty">工作流服务不可达（${esc(summary.error)}），任务状态暂不可用；不影响其他知识功能。<button data-action="reload-team-summary">重试</button></p></section>`;
     }
     if (summary.loading && !summary.data) {
-      return `<section class="panel" style="margin-top:24px"><div class="section-heading"><h2>AI 团队</h2></div><p class="small-empty">正在读取团队摘要…</p></section>`;
+      return `<section class="panel" style="margin-top:24px"><div class="section-heading"><h2>AI 团队工作流</h2></div><p class="small-empty">正在读取工作流状态…</p></section>`;
     }
     const data = summary.data;
     if (!data) return '';
     if (!data.team) {
-      return `<section class="panel" style="margin-top:24px"><div class="section-heading"><h2>AI 团队</h2><button data-go="team">创建我的团队</button></div><p class="small-empty">还没有 AI 开发团队。创建后在这里看到跨项目任务、阶段与阻塞。</p></section>`;
+      return `<section class="panel" style="margin-top:24px"><div class="section-heading"><h2>AI 团队工作流</h2><button data-go="team">创建我的团队</button></div><p class="small-empty">还没有 AI 开发团队。创建后这里会实时显示正在工作的任务、程序检查与审查状态。</p></section>`;
     }
-    const enabledProjects = (data.projects || []).filter(p => p.enabled).length;
-    return `<section class="panel" style="margin-top:24px"><div class="section-heading"><h2>AI 团队 · ${esc(data.team.name)}</h2><button data-go="team">查看全部任务</button></div>
-      <p class="small-empty">${data.tasks.total} 个任务 · ${data.members.enabled}/${data.members.total} 名成员启用 · ${enabledProjects} 个项目已启用团队工作流</p></section>`;
+    const rows = (summary.tasks || []).map(teamWorkflowRow).join('') || '<p class="small-empty">当前没有进行中的任务。在原生客户端用 pk-team 开始任务，或到 AI 团队页新建。</p>';
+    return `<section class="panel" style="margin-top:24px"><div class="section-heading"><h2>AI 团队工作流 · ${esc(data.team.name)}</h2><button data-go="team">查看全部任务</button></div>
+      <p class="small-empty">${data.tasks.active} 个进行中 · ${data.tasks.blocked} 个受阻 · ${data.members.enabled}/${data.members.total} 名成员启用</p>
+      ${rows}</section>`;
   }
   function needRow(item) {
     if (item.kind === 'run') return `<div class="row"><div><b>${esc(item.title)} · ${esc(projectName(item.projectId))}</b><small>${esc(item.commitSha?.slice(0, 8) || '')} ${esc(item.error?.message || '')}</small></div>${badge(recoveryLabel(item) || '需要处理', 'issue')}<button data-open-run="${esc(item.runId)}" data-run-project="${esc(item.projectId)}">去处理</button></div>`;

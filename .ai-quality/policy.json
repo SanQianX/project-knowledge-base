@@ -1,0 +1,32 @@
+{
+  "schema": "ai-quality/policy/v1",
+  "description": "AI 团队质量策略：只引用真实工具配置与门禁等级，不复制规则的执行值。",
+  "tools": {
+    "eslint": {
+      "config": "eslint.config.mjs",
+      "dimensions": ["正确性/语法", "逻辑简单性", "命名规则", "性能反模式", "维护性", "结构规模"],
+      "gate": {
+        "error": "阻断交付（收据 verdict=fail）",
+        "warn": "告警校准（计入发现，不阻断；新增/恶化优先处理）",
+        "calibratedExemptions": [
+          "测试目录的 no-await-in-loop 关闭（顺序隔离是故意语义）",
+          "测试函数长度上限放宽到 400 行（harness 场景）"
+        ]
+      }
+    },
+    "knip": {
+      "status": "pending-entry-inventory",
+      "note": "需要先建立入口清单（bin/main/exports/scripts、_site/server.js、动态模块入口、插件 hooks、浏览器 script 引用、MCP 启动器、runtime manifest）；四个固定 npm 模块为受保护运行依赖，不可自动判为可删除"
+    },
+    "jscpd": { "status": "not-enabled", "note": "按真实重复问题启用（主计划 §9.2：不同时堆满所有工具）" },
+    "dependency-cruiser": { "status": "not-enabled", "note": "模块边界规则待定后启用" }
+  },
+  "baseline": {
+    "note": "历史基线按收据指纹对照；基线失败也要展示，不伪造为零",
+    "firstReceipt": "见 ai-coding-workflow check-receipts（policyHash 引用本文件）"
+  },
+  "rework": {
+    "flow": "检查发现写入任务整改清单 → Review 成员按 file:line[rule] 修理 → 复查生成新快照收据 → 通过后服务端裁决交付",
+    "maxAutoAttempts": 2
+  }
+}

@@ -178,13 +178,30 @@ class WorkflowToolRuntime {
     if (!args.taskId) { const e = new Error('taskId is required'); e.code = 'VALIDATION'; throw e; }
     const task = (await this.request(`workflow-tasks/${encodeURIComponent(args.taskId)}`)).task;
     const checks = (task.runs || []).filter(r => r.kind === 'check');
+    // Full findings of the LATEST check run: the rework member works from
+    // concrete file:line[rule] items, not from summaries.
+    let latestFindings = null;
+    const latest = checks[checks.length - 1];
+    if (latest && latest.executionRef) {
+      try {
+        const receipt = await this.request(`check-receipts/${encodeURIComponent(latest.executionRef)}`);
+        latestFindings = (receipt.receipt.findings || []).slice(0, 100).map(f => ({ ruleId: f.ruleId, file: f.file, line: f.line, severity: f.severity, message: f.message }));
+      } catch { latestFindings = null; /* receipt purged or unavailable — reworkItems on the task still carry the queue */ }
+    }
     return {
       ok: true,
       taskId: args.taskId,
       status: task.status,
+      phase: task.phase,
+      nextAction: task.nextAction,
+      reworkItems: task.reworkItems || [],
+      latestCheckFindings: latestFindings,
       checks: checks.map(r => ({ runId: r.runId, summary: r.summary, status: r.status, finishedAt: r.finishedAt })),
       acceptance: task.acceptance,
       modelReview: 'pending-model-review',
+      note: task.reworkItems && task.reworkItems.length
+        ? `整改 ${task.reworkItems.length} 项：按 file:line[rule] 修复后重新 project_workflow_request_review。`
+        : '当前快照没有待整改项。',
     };
   }
 }
