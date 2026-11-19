@@ -29,7 +29,8 @@ function verify() {
       if (indexed.status !== 0 || indexed.stdout.toString().replace(/\r\n/g, '\n') !== fs.readFileSync(path.join(root, file), 'utf8').replace(/\r\n/g, '\n')) throw new Error(`Release blocked: Git bytes differ from runtime contract: ${file}`);
     }
   }
-  process.stdout.write(workingTree ? 'Four npm module runtimes verified; working tree is not release approval.\n' : 'Pinned npm runtime release gate passed.\n');
+  const count = Object.keys(require('./pack-module-candidates').definitions).length;
+  process.stdout.write(workingTree ? `${count} npm module runtimes verified; working tree is not release approval.\n` : 'Pinned npm runtime release gate passed.\n');
 }
 if (require.main === module) { try { verify(); } catch (error) { process.stderr.write(`${error.message}\n`); process.exitCode = 1; } }
 module.exports = { isPinnedModuleVersion };

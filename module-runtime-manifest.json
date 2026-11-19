@@ -11,9 +11,9 @@
     "plugins/project-knowledge/hooks/codex.json": "216e03c07295606ef6ebb2c4f669ad0d790b5e7c4f3f34600488033db75e4239",
     "plugins/project-knowledge/scripts/context-hook.cjs": "ddc1f6f5638c662adbbf4391557bbeb7196af2fb869e7ecfeefba76b9bab5760",
     "plugins/project-knowledge/scripts/mcp-launcher.cjs": "7c68830b5c73eb53ef030756a4de33987f7eab6b1a6cc15602835aac3f954893",
-    "plugins/project-knowledge/.claude-plugin/plugin.json": "982786f8fe14161844baf1106a129700e092e9e7a6a8d59daeaccdddf048ce71",
-    "plugins/project-knowledge/.codex-plugin/plugin.json": "ecc7305a79ed5122dbe1cf9677c9ef4f38e3e5548a9b7888d56e3be9960af8cc",
-    "plugins/project-knowledge/.mcp.json": "0ee61566bee3ca420bfa61125adf23eca6779fd228d9f374994beaa8f9df9e15",
+    "plugins/project-knowledge/.claude-plugin/plugin.json": "f0d8ce9139185495e0c7e28b8b9f2cc2fcbc014ca963ebd4e96c1581d6de8762",
+    "plugins/project-knowledge/.codex-plugin/plugin.json": "e8dd5a17e4bc99dd2a152d51fc63e54818f416e720f9480e6e26f0439201b4a5",
+    "plugins/project-knowledge/.mcp.json": "1cc8b56db7d590da76a2b83b8238a948e48b11215219676e7e1727a4f2f135c0",
     "ui/version-info.js": "01a82217b031de54b80d6c7974da9c70888c4c90a046bd4248a808f7989ddce7",
     "ui/version-info.css": "209fad8e42b661f72d2aba3280e1ca47768b5cefb776fe5459538d34fbad120f"
   },
@@ -314,6 +314,31 @@
         "ui/index.html": "ce3565cfefd4838b11d37a91a906ef26ca5a1834844fe3f7c897b56851a3c418",
         "src/memory-groups.js": "92b5edbd0ec7c9a3cf505d4683a053ea71d7ceeb7cfbe049bc65342a39c0c8f2",
         "src/retry-scheduler.js": "048c11b767617e0c621c231e91029b4e5e834ae3e7ebc3c84b5168ea9f92ec57"
+      }
+    },
+    "workflow": {
+      "name": "@sanqianx/ai-coding-workflow",
+      "installName": "@sanqianx/ai-coding-workflow",
+      "version": "0.1.1",
+      "files": {
+        "src/bin.js": "12f74b2c790d99b595cade2b83a4d74906e5a01ae041dbbe453d75573263d0c4",
+        "src/checks.js": "54043cbe773f2b6df871db6a07446ab82e42bd6bd45142ab51e238257d2e9532",
+        "src/consumer.js": "beff1aa039179ccb9ae46e014dacb4a6695b789354849843a829403dbc2033fe",
+        "src/digests.js": "dd90e639d21c3b59a604e3280f214d0b4ed178e3c659c18b90d31b5479913332",
+        "src/domain.js": "5b404a7df138aed5797dd953300c31beba56121174fb09f20578e54f3599105a",
+        "src/errors.js": "1868330aa021b3dba5e92061dbb41e15a94f4cb0746f870c49aac4bf6119d708",
+        "src/identity.js": "c9f96f74313f0dcf5dfc730dfa03b1c1f5e85ee1dfae34cdbf0c28217621c6ff",
+        "src/server.js": "8eb11482474ea92436116edbe6409cc8775b3b463f8c6879655f2c7f0b648a56",
+        "src/snapshots.js": "2a92388000780ff78889c2148131039558e853387ba3b05c0d5ef644d9e48485",
+        "src/store.js": "506fad917b9cd87538617a4ae2ef172ceb696483dad6d123b3be3ebb9f2f510e",
+        "src/tasks.js": "1e53f570b16833c8ea13b261d6d7a361bb765eaadd729de84e0f58d4ef264043",
+        "ui/index.html": "058b9c0bb727ddd8f18f1aa907eb31be2321c42b2ad778e2f037904bb53fd916",
+        "ui/app.js": "9a2ecec709f9beca01d70a0286f0fce604e526d71b73a6e8c6a414d27e285df3",
+        "ui/app.css": "4f2cf3d56c0efd99815f3d6e0280ea8dcca5757cc633aac49d8c712f3e721dac",
+        "docs/contract.md": "aba0a189744fe159702152c07c28f5975b47f917f28bc0678e1191714060a23f",
+        "README.md": "0ee483525831969a3855d942cbb2388d0c6a72e160bfa3c4fd33ee1bc729d1c7",
+        "LICENSE": "c1b9df1275e769f3dbab000d1e457a2d4b0f28eb5da6c77e48dc37eeba202ed7",
+        "package.json": "b70101d063ab6d8bb6863c69f153d771e84fb388396c8b460f569c97c55262ff"
       }
     }
   }

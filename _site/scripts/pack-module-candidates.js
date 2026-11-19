@@ -13,6 +13,7 @@ const definitions = {
   vectorHub: { option: '--vector-source', name: '@sanqianx/vector-hub', installName: '@sanqianx/vector-hub', required: ['dist/cjs/bin.js', 'dist/cjs/server/manager.js', 'ui/index.html'] },
   eventBridge: { option: '--bridge-source', name: '@sanqianx/ai-coding-event-bridge-console', installName: '@sanqianx/ai-coding-event-bridge-console', required: ['src/server.js', 'src/bridge/core/consumer-registry.js', 'console/index.html'] },
   engine: { option: '--engine-source', name: '@sanqianx/ai-coding-knowledge-engine', installName: '@sanqianx/ai-coding-knowledge-engine', required: ['src/bin.js', 'src/server.js', 'src/coordinator.js', 'src/analysis-worker.js', 'ui/index.html', 'ui/app.js', 'ui/app.css'] },
+  workflow: { option: '--workflow-source', name: '@sanqianx/ai-coding-workflow', installName: '@sanqianx/ai-coding-workflow', required: ['src/bin.js', 'src/server.js', 'src/store.js', 'src/tasks.js', 'ui/index.html', 'ui/app.js'] },
 };
 function run(command, args, cwd) {
   const result = spawnSync(command, args, { cwd, windowsHide: true, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
