@@ -16,7 +16,10 @@ function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function waitFor(fn, label, timeoutMs = 15000) {
+// 25s default: the 2026-11 CI runner image is slow enough that dialog opens
+// exceeded 15s while the assertions themselves stayed correct; the budget is
+// a ceiling, not a delay — passing calls return immediately.
+async function waitFor(fn, label, timeoutMs = 25000) {
   const deadline = Date.now() + timeoutMs;
   let lastError;
   while (Date.now() < deadline) {
