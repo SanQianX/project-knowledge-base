@@ -250,7 +250,7 @@ function hostEnv(layout, extra = {}) {
 // captured at module load. R5 uses this string exclusively to prove that no
 // isolated env value points there; this helper never touches the filesystem.
 function realWorkbenchProfileDir() {
-  return path.join(REAL_HOME, '.project-knowledge-v5', 'workbench');
+  return path.join(REAL_HOME, '.project-knowledge', 'workbench');
 }
 
 // The module that is hosted: the copy the installed product ships, unless

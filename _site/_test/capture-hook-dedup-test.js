@@ -13,7 +13,7 @@ const ROOT = path.resolve(__dirname, '../..');
 const TEMP = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-capture-dedup-'));
 const HOME = path.join(TEMP, '用户 空格');
 const OLD = path.join(HOME, '.ai-coding-event-bridge');
-const CURRENT = path.join(HOME, '.project-knowledge-v5/events');
+const CURRENT = path.join(HOME, '.project-knowledge/events');
 const options = { homeDir: HOME, bridgeHomeDir: CURRENT };
 const shim = home => path.join(home, 'bin/bridge-hook.cjs');
 const cmd = home => ({ type: 'command', command: `node "${shim(home)}"` });

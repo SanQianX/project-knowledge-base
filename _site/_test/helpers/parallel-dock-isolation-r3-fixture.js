@@ -102,7 +102,7 @@ const REAL_USERPROFILE = process.env.USERPROFILE || REAL_HOME;
 // a time, and the secret that is read there never leaves the server process
 // memory: it is handed over through a pipe, never written to a file.
 const REAL_PROFILE_STORES = [
-  path.join(REAL_HOME, '.project-knowledge-v5', 'workbench'),
+  path.join(REAL_HOME, '.project-knowledge', 'workbench'),
   path.join(REAL_HOME, '.agent-terminal'),
 ];
 

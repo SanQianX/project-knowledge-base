@@ -8,7 +8,7 @@ const { connectEngine } = require('../lib/engine-connection');
 
 (async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-fresh-product-'));
-  assert.equal(resolveDataDirPath({ dataDir: '', homeDir: root }), path.join(root, '.project-knowledge-v5'));
+  assert.equal(resolveDataDirPath({ dataDir: '', homeDir: root }), path.join(root, '.project-knowledge'));
   const old = path.join(root, 'old'); fs.mkdirSync(old);
   const bytes = JSON.stringify({ projects: ['old-project'], activeClaim: 'old-claim' });
   fs.writeFileSync(path.join(old, 'projects.json'), bytes);

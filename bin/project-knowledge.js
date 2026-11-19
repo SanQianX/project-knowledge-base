@@ -25,7 +25,7 @@ Usage:
 
 Options:
   -p, --port <port>  Port (default: 5757, startup auto-fallback +19)
-      --data <dir>   Select data directory (default: ~/.project-knowledge-v5)
+      --data <dir>   Select data directory (default: ~/.project-knowledge)
       --host <host>  Bind host (default: 127.0.0.1)
       --no-open      Do not open browser
       --fg           Run in foreground

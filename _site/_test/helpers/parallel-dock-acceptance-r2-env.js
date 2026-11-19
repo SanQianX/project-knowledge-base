@@ -42,7 +42,7 @@ const MODULE_API_PREFIX = '/api/claude-workbench/v1';
 // fixture data dir. The live desktop core 5.0.24 installation is never
 // written to, restarted or replaced.
 const REAL_PROFILE_STORES = [
-  path.join(os.homedir(), '.project-knowledge-v5', 'workbench'),
+  path.join(os.homedir(), '.project-knowledge', 'workbench'),
   path.join(os.homedir(), '.agent-terminal'),
 ];
 

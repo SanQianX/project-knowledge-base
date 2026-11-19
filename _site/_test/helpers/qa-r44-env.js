@@ -105,7 +105,7 @@ function isInside(candidate, parent) {
 // hardens its own environment, and os.homedir() reads the REDIRECTED
 // USERPROFILE once the isolation is applied. The value is therefore captured
 // at load time and refreshed by the capture, never re-derived later.
-let REAL_PROFILE_DIR = path.join(os.homedir(), '.project-knowledge-v5', 'workbench');
+let REAL_PROFILE_DIR = path.join(os.homedir(), '.project-knowledge', 'workbench');
 function realProfileDir() { return REAL_PROFILE_DIR; }
 
 // The lane's own temp root, outside the repository and outside the real
@@ -190,7 +190,7 @@ function captureRealEnvironment() {
   const chrome = findChromeDetailed();
   const claude = findClaudeExecutable();
   const present = (name) => Object.keys(process.env).some(key => key.toUpperCase() === name && String(process.env[key] || '').trim() !== '');
-  REAL_PROFILE_DIR = path.join(realHome, '.project-knowledge-v5', 'workbench');
+  REAL_PROFILE_DIR = path.join(realHome, '.project-knowledge', 'workbench');
   return {
     realHome,
     realUserProfile,

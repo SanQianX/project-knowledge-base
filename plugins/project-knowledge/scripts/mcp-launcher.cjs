@@ -32,7 +32,7 @@ function fail(code) {
 }
 
 function bindingPath() {
-  return path.join(process.env.KB_DATA_DIR || path.join(os.homedir(), '.project-knowledge-v5'), 'integration-runtime.json');
+  return path.join(process.env.KB_DATA_DIR || path.join(os.homedir(), '.project-knowledge'), 'integration-runtime.json');
 }
 
 function loadBinding() {

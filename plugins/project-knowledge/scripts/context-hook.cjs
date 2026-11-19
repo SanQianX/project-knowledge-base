@@ -29,7 +29,7 @@ function log(dataDir, event, input) {
 async function run(payload, { env = process.env, argv = process.argv.slice(2), fetchImpl = fetch, timeoutMs = 10000 } = {}) {
   if (env.KB_KNOWLEDGE_CONTEXT === '0' || !payload || payload.hook_event_name !== 'UserPromptSubmit') return {};
   const client = clientFrom(argv), requestId = `context-${crypto.randomUUID()}`, started = Date.now();
-  const dataDir = path.resolve(env.KB_DATA_DIR || path.join(os.homedir(), '.project-knowledge-v5'));
+  const dataDir = path.resolve(env.KB_DATA_DIR || path.join(os.homedir(), '.project-knowledge'));
   if (typeof payload.cwd !== 'string' || !path.isAbsolute(payload.cwd) || typeof payload.prompt !== 'string' || !payload.prompt.trim() || payload.prompt.length > 131072) return {};
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeoutMs);
   let result;

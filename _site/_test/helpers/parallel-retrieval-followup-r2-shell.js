@@ -280,7 +280,7 @@ function hostEnv(layout, extra = {}) {
 function realWorkbenchProfileDir() {
   const override = String(process.env.PK_WB_REAL_PROFILE_DIR || '').trim();
   if (override) return path.resolve(override);
-  return path.join(REAL_HOME, '.project-knowledge-v5', 'workbench');
+  return path.join(REAL_HOME, '.project-knowledge', 'workbench');
 }
 
 // Byte-level snapshot of a flat directory. The SHA-256 digests stay in the

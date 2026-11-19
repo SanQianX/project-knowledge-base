@@ -309,7 +309,7 @@ function hostEnv(layout, extra = {}) {
 // no isolated env value points there; this helper never touches the
 // filesystem.
 function realWorkbenchProfileDir() {
-  return path.join(REAL_HOME, '.project-knowledge-v5', 'workbench');
+  return path.join(REAL_HOME, '.project-knowledge', 'workbench');
 }
 
 // The module that is hosted: the copy the installed product ships, unless

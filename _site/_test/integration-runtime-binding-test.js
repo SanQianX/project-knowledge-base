@@ -230,7 +230,7 @@ async function testBootstrapResolvesForBothNativeForms() {
 
 async function testInstallerBindingLifecycle() {
   const home = path.join(TEMP, 'installer-home');
-  const dataDir = path.join(home, '.project-knowledge-v5');
+  const dataDir = path.join(home, '.project-knowledge');
   const bindingPath = path.join(dataDir, 'integration-runtime.json');
   const manager = new IntegrationManager({
     rootDir: ROOT,
@@ -274,7 +274,7 @@ async function testInstallerBindingLifecycle() {
 
 async function testInstallAllCaptureOnlySkipsBinding() {
   const home = path.join(TEMP, 'install-all-home');
-  const dataDir = path.join(home, '.project-knowledge-v5');
+  const dataDir = path.join(home, '.project-knowledge');
   const bridgeStub = {
     createBridge: () => ({
       registerConsumer: async () => ({}),
@@ -303,7 +303,7 @@ async function testInstallAllCaptureOnlySkipsBinding() {
 
 async function testMcpStartupProbe() {
   const home = path.join(TEMP, 'probe-home');
-  const dataDir = path.join(home, '.project-knowledge-v5');
+  const dataDir = path.join(home, '.project-knowledge');
   const packageInfo = readJson(path.join(ROOT, 'package.json'));
   writeBinding(dataDir, { schema: RUNTIME_SCHEMA, packageName: packageInfo.name, packageRoot: ROOT, version: packageInfo.version, updatedAt: new Date().toISOString() });
   const manager = new IntegrationManager({

@@ -508,8 +508,8 @@ async function testProbeEnvUsesManagerDataDir() {
   // not leak into the probe: the manager's own home-based binding wins.
   const goodData = stubServerPackage('ok-env');
   const goodHome = dir('env-good-home');
-  fs.mkdirSync(path.join(goodHome, '.project-knowledge-v5'), { recursive: true });
-  fs.copyFileSync(bindingPathOf(goodData), path.join(goodHome, '.project-knowledge-v5', 'integration-runtime.json'));
+  fs.mkdirSync(path.join(goodHome, '.project-knowledge'), { recursive: true });
+  fs.copyFileSync(bindingPathOf(goodData), path.join(goodHome, '.project-knowledge', 'integration-runtime.json'));
   const evilPkg = dir('env-evil-pkg');
   fakePackage(evilPkg, { version: '5.0.15' });
   const evilData = dir('env-evil-data');

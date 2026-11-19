@@ -200,7 +200,7 @@ new empty knowledge directories. Old files remain untouched but are not read.
 See [fresh v5 setup](docs/fresh-v5-start.md). Queued tasks can be cancelled by
 unbinding; only an active knowledge/index writer blocks removal.
 
-Default internal data directory: `~/.project-knowledge-v5/`
+Default internal data directory: `~/.project-knowledge/`
 
 Override it with `KB_DATA_DIR`:
 
@@ -224,7 +224,7 @@ Settings, registration metadata, caches, runtime state, logs, and recovery
 assets remain in the internal data directory; vector payloads do not:
 
 ```text
-~/.project-knowledge-v5/
+~/.project-knowledge/
 ├── settings.json
 ├── projects.json                         # minimal project ID/order index
 ├── projects/<projectId>/

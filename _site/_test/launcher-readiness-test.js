@@ -10,7 +10,7 @@ const endpoint = require('../lib/runtime-endpoint');
 const packageRoot = process.env.KB_LAUNCHER_TEST_PACKAGE || path.resolve(__dirname, '../..');
 const bin = path.join(packageRoot, 'bin/project-knowledge.js');
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-launcher-readiness-'));
-const data = path.join(root, '.project-knowledge-v5');
+const data = path.join(root, '.project-knowledge');
 const record = path.join(data, 'runtime/claude-sessions/project-a/session.json');
 const recordBytes = JSON.stringify({ schema: 'claude-workbench-session/v1', sessionId: 'old-test', projectSlug: 'project-a', state: 'running', metadata: { automation: true } });
 fs.mkdirSync(path.dirname(record), { recursive: true });
