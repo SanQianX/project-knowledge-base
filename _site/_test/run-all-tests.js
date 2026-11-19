@@ -26,9 +26,14 @@ const BACKEND_ONLY = args.includes('--backend-only');
 const PER_TEST_TIMEOUT_MS = Number(process.env.PK_TEST_TIMEOUT_MS || 90_000);
 
 function listTestFiles() {
+  // Optional exclusion list (semicolon-separated filenames) for environments
+  // where a specific browser interaction cannot run headless at all — the
+  // same files still run in every other lane and on real machines.
+  const excluded = new Set(String(process.env.PK_TEST_EXCLUDE || '').split(';').map(s => s.trim()).filter(Boolean));
   return fs.readdirSync(TEST_DIR)
     .filter(file => file.endsWith('-test.js'))
     .filter(file => file !== 'run-all-tests.js')
+    .filter(file => !excluded.has(file))
     .filter(file => !BACKEND_ONLY || !fs.readFileSync(path.join(TEST_DIR, file), 'utf8').includes('helpers/cdp-browser'))
     .sort();
 }

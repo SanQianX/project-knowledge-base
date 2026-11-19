@@ -75,6 +75,10 @@ jobs:
           PK_TEST_TEMP_ROOT: ${{ runner.temp }}
           # The startup harness uses a separate, explicit isolation root.
           KB_PREFLIGHT_ISO_ROOT: ${{ runner.temp }}
+          # Headless Windows Chrome cannot open the native folder picker
+          # (existing-picker step in memory-groups-ui); the file still runs in
+          # both Linux lanes and on real Windows machines.
+          PK_TEST_EXCLUDE: memory-groups-ui-test.js
         run: |
           # # 2026-11-19: the runner image refresh broke onnxruntime-node's GPU probe; the package ships CPU binaries and no test needs the GPU path.
           npm ci --ignore-scripts
