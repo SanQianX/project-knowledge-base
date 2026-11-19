@@ -104,8 +104,9 @@ function canConnect(port) {
   // --version
   const versionResult = run(['--version']);
   assert(versionResult.status === 0, `--version should exit 0, got ${versionResult.status}: ${versionResult.stderr}`);
-  assert(versionResult.stdout.trim() === require(path.join(ROOT, 'package.json')).version,
-    `--version output (${versionResult.stdout.trim()}) should match package.json`);
+  const versionFirstLine = versionResult.stdout.split('\n')[0].trim();
+  assert(versionFirstLine === `project-knowledge ${require(path.join(ROOT, 'package.json')).version}`,
+    `--version first line (${versionFirstLine}) should be "project-knowledge <package.json version>"; the remaining lines are the module inventory`);
 
   // --help mentions the new subcommands
   const helpResult = run(['--help']);
