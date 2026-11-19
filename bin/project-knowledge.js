@@ -168,10 +168,60 @@ async function resolveExistingForStart(dataDir) {
   }
 }
 
+// Full version report: the core package plus every pinned runtime module.
+// Live versions come from the running instance's module health endpoints;
+// anything not running (or not reporting a version) falls back to the
+// installed tree, labeled accordingly.
+async function versionReport() {
+  const { MODULE_ENTRIES, resolveModuleEntry } = require('../_site/lib/module-bridge');
+  const lines = [`project-knowledge ${pkg.version}`];
+  let instance = null;
+  try { instance = await instances.current(resolveDataDirPath({ dataDir: undefined })); } catch { /* not running */ }
+  if (instance) lines.push(`instance: running at ${instances.url(instance)} (data: ${instance.dataDir})`);
+  else lines.push('instance: not running (module versions below are from the installed tree)');
+  const liveHealth = {};
+  if (instance) {
+    const base = instances.url(instance);
+    try {
+      const aggregated = await (await fetch(`${base}/api/modules/health`, { signal: AbortSignal.timeout(4000) })).json();
+      // Aggregated keys are camelCase (vectorHub/eventBridge/engine); the
+      // entries table uses hyphenated keys — map before probing.
+      const kindByAggregatedKey = { terminal: 'terminal', vectorHub: 'vector-hub', eventBridge: 'event-bridge', engine: 'knowledge-engine', workflow: 'workflow' };
+      await Promise.all(Object.entries(aggregated.modules || {}).map(async ([aggregatedKey, module]) => {
+        const kind = kindByAggregatedKey[aggregatedKey];
+        if (!kind || !module?.up || !module.url) return;
+        const detail = await fetch(module.url + (kind === 'terminal' ? '/api/claude-workbench/v1/health' : '/api/health'), { signal: AbortSignal.timeout(4000) });
+        if (!detail.ok) return;
+        liveHealth[kind] = await detail.json().catch(() => null);
+      }));
+    } catch { /* shell unreachable: fall back to installed */ }
+  }
+  const labels = { terminal: 'Workbench (terminal)', 'vector-hub': 'vector-hub', 'event-bridge': 'event-bridge', 'knowledge-engine': 'knowledge-engine', workflow: 'workflow' };
+  for (const [kind, entry] of Object.entries(MODULE_ENTRIES)) {
+    const resolved = resolveModuleEntry(kind);
+    let installed = null;
+    if (resolved) {
+      // Walk up from the resolved entry file to the package's own package.json.
+      let dir = path.dirname(resolved);
+      for (let i = 0; i < 6 && dir; i++) {
+        const pkgPath = path.join(dir, 'package.json');
+        if (fs.existsSync(pkgPath)) {
+          try { const candidate = JSON.parse(fs.readFileSync(pkgPath, 'utf8')); if (resolved.startsWith(dir)) { installed = candidate.version; break; } } catch { /* keep walking */ }
+        }
+        dir = path.dirname(dir);
+      }
+    }
+    const live = liveHealth[kind] && typeof liveHealth[kind].version === 'string' ? liveHealth[kind].version : null;
+    const shown = live || installed;
+    lines.push(`  ${(labels[kind] || kind).padEnd(22)} ${shown || 'not installed'}${live ? '  [live]' : installed ? '  [installed]' : ''}`);
+  }
+  console.log(lines.join('\n'));
+}
+
 async function main() {
   const options = parse(process.argv.slice(2));
   if (options.help) { help(); return; }
-  if (options.version) { console.log(pkg.version); return; }
+  if (options.version) { await versionReport(); return; }
   if (options.forwarded) {
     const args = options.command === 'integrations' ? (options.forwarded.length ? options.forwarded : ['status']) : [options.command, ...options.forwarded];
     const result = spawnSync(process.execPath, [path.join(__dirname, 'project-knowledge-integrations.js'), ...args], { stdio: 'inherit', windowsHide: true });

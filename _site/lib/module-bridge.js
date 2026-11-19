@@ -910,4 +910,4 @@ class ModuleBridge {
   }
 }
 
-module.exports = { ModuleBridge, defaultTerminalUrl, defaultVectorHubUrl, defaultEventBridgeUrl, defaultEngineUrl };
+module.exports = { ModuleBridge, defaultTerminalUrl, defaultVectorHubUrl, defaultEventBridgeUrl, defaultEngineUrl, MODULE_ENTRIES, resolveModuleEntry };
