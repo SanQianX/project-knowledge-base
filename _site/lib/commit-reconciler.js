@@ -23,14 +23,34 @@ const { CommitProcessingLedger } = require('./commit-processing-ledger');
 
 const explicitQueues = new Map();
 
+const SNAPSHOT_SCHEMA_V1 = 'commit-claim-snapshot/v1';
+const SNAPSHOT_SCHEMA_V2 = 'commit-claim-snapshot/v2';
+const SNAPSHOT_SCHEMAS = [SNAPSHOT_SCHEMA_V1, SNAPSHOT_SCHEMA_V2];
+// Frozen inputs live under <dataDir>/runtime/runs/<projectId>/<runId>/input and
+// are ALWAYS re-derived from the running layout: a renamed or relocated data
+// directory keeps every claim working without rewriting historical snapshots.
+const RUN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+
+function validateRunIdSegment(runId) {
+  const value = String(runId || '');
+  if (!RUN_ID_PATTERN.test(value)) {
+    throw new DomainError('DATA_CORRUPT', 'Claim run id is invalid for frozen evidence location.', { status: 500 });
+  }
+  return value;
+}
+
 function publicFailure(error, phase) {
-  return {
+  const failure = {
     code: error && error.code || 'INVALID_ARGUMENT',
     message: String(error && error.message || 'Commit reconciliation failed.'),
     phase,
     retryable: error && error.retryable === true,
     ts: new Date().toISOString(),
   };
+  // Evidence failures must surface the concrete resource and reason so the UI
+  // can point at what is missing instead of a generic retry loop.
+  if (error && error.details && typeof error.details === 'object') failure.details = error.details;
+  return failure;
 }
 
 function validateClaim(claim, projectId, commitSha) {
@@ -78,7 +98,14 @@ class CommitClaimStore {
 
   write(projectId, commitSha, snapshot) {
     const file = this.filePath(projectId, commitSha);
-    this.atomic.writeJsonAtomic(file, { schema: 'commit-claim-snapshot/v1', ...snapshot });
+    // v2 persists only locating IDs and validation metadata; every path is
+    // derived at run time from the current layout, so a relocated data
+    // directory needs no snapshot rewrite. Marker snapshots without evidence
+    // (existence-only records) stay valid without a run id.
+    const { evidence, existingKnowledge, ...rest } = snapshot;
+    const payload = { schema: SNAPSHOT_SCHEMA_V2, ...rest, evidence: stripFrozenEvidencePaths(evidence), existingKnowledge: stripRetrievalPaths(existingKnowledge) };
+    if (payload.evidence && !payload.runId) throw new DomainError('DATA_CORRUPT', 'Claim snapshot requires a run id.', { status: 500 });
+    this.atomic.writeJsonAtomic(file, payload);
     return file;
   }
 
@@ -86,8 +113,11 @@ class CommitClaimStore {
     return this.atomic.readJsonStrict(this.filePath(projectId, commitSha), {
       category: 'commit-claim-snapshot',
       validate: snapshot => {
-        if (!snapshot || snapshot.schema !== 'commit-claim-snapshot/v1' || snapshot.projectId !== projectId || snapshot.commitSha !== commitSha) {
+        if (!snapshot || !SNAPSHOT_SCHEMAS.includes(snapshot.schema) || snapshot.projectId !== projectId || snapshot.commitSha !== commitSha) {
           throw new DomainError('DATA_CORRUPT', 'Commit claim snapshot is corrupt.', { status: 500 });
+        }
+        if (snapshot.schema === SNAPSHOT_SCHEMA_V2 && !snapshot.runId) {
+          throw new DomainError('DATA_CORRUPT', 'Commit claim snapshot is missing its run id.', { status: 500 });
         }
         return snapshot;
       },
@@ -98,6 +128,24 @@ class CommitClaimStore {
     const file = this.filePath(projectId, commitSha);
     try { fs.unlinkSync(file); } catch (error) { if (!error || error.code !== 'ENOENT') throw error; }
   }
+}
+
+// Absolute evidence locations are build-time facts of the instance that wrote
+// them; only hashes and IDs cross a data-directory relocation.
+function stripFrozenEvidencePaths(evidence) {
+  if (!evidence || typeof evidence !== 'object') return evidence;
+  const bundle = evidence.evidenceBundle;
+  if (!bundle || typeof bundle !== 'object') return { ...evidence };
+  const { root, commitPath, manifestPath, ...bundleRest } = bundle;
+  void root; void commitPath; void manifestPath;
+  return { ...evidence, evidenceBundle: bundleRest };
+}
+
+function stripRetrievalPaths(existingKnowledge) {
+  if (!existingKnowledge || typeof existingKnowledge !== 'object') return existingKnowledge;
+  const { manifestPath, ...rest } = existingKnowledge;
+  void manifestPath;
+  return rest;
 }
 
 class CommitReconciler {
@@ -136,6 +184,39 @@ class CommitReconciler {
 
   async log(level, event, message, context) {
     if (this.logger && typeof this.logger[level] === 'function') await this.logger[level](event, message, context);
+  }
+
+  // First preparation, failed retries and recovery all share one construction
+  // rule: the ACTIVE claim's runId plus the RUNNING layout decide where frozen
+  // evidence is read. Absolute paths inside historical snapshots are archival
+  // facts and never select the read location, even if the old directory still
+  // exists.
+  resolveFrozenLocations(projectId, runId) {
+    const safeRunId = validateRunIdSegment(runId);
+    const runtimeRoot = path.join(this.layout.dataDir, 'runtime');
+    const evidenceRoot = this.layout.getRuntimePath('runs', validateProjectId(projectId), safeRunId, 'input', 'evidence');
+    const retrievalManifestPath = this.layout.getRuntimePath('runs', validateProjectId(projectId), safeRunId, 'input', 'retrieval', 'manifest.json');
+    // The legacy layout joins paths without containment checks; enforce the
+    // same real-path boundary the engine layout guarantees (symlink/junction
+    // escapes on parent directories included).
+    for (const candidate of [evidenceRoot, retrievalManifestPath]) {
+      if (!this.layout.isPathInside(runtimeRoot, candidate, { realpath: true, allowRoot: false })) {
+        throw new DomainError('PATH_OUTSIDE_ROOT', 'Frozen evidence location escapes the runtime root.', { status: 403 });
+      }
+    }
+    return { runId: safeRunId, evidenceRoot, retrievalManifestPath };
+  }
+
+  relocateFrozenEvidence(evidence, locations) {
+    return {
+      ...evidence,
+      evidenceBundle: {
+        ...evidence.evidenceBundle,
+        root: locations.evidenceRoot,
+        commitPath: path.join(locations.evidenceRoot, 'commit.json'),
+        manifestPath: path.join(locations.evidenceRoot, 'patch-manifest.json'),
+      },
+    };
   }
 
   async reconcile(projectId, trigger, context = {}) {
@@ -209,7 +290,8 @@ class CommitReconciler {
       }
       const claim = validateClaim(activeClaim, projectId, commitSha);
       const snapshot = this.claimStore.read(projectId, commitSha);
-      if (snapshot.claimFingerprint !== claimFingerprint(claim)
+      if ((snapshot.schema === SNAPSHOT_SCHEMA_V2 && snapshot.runId !== claim.runId)
+        || snapshot.claimFingerprint !== claimFingerprint(claim)
         || snapshot.evidence.patchHash !== claim.patchHash
         || snapshot.evidence.evidenceHash !== claim.evidenceHash
         || !snapshot.evidence.evidenceBundle
@@ -219,20 +301,42 @@ class CommitReconciler {
         || (claim.conversationSnapshotHash && (!snapshot.conversationSnapshot || snapshot.conversationSnapshot.snapshotHash !== claim.conversationSnapshotHash))) {
         throw new DomainError('DATA_CORRUPT', 'Frozen commit claim snapshot does not match active state.', { status: 500 });
       }
-      this.scanner.verifyEvidence(snapshot.evidence);
-      const retrievalManifest = this.claimStore.atomic.readJsonStrict(snapshot.existingKnowledge.manifestPath, {
-        category: 'knowledge-retrieval-manifest',
-        validate: value => {
-          if (!value || value.schema !== 'knowledge-retrieval-manifest/v1'
-            || value.manifestHash !== claim.retrievalManifestHash
-            || calculateRetrievalManifestHash(value) !== value.manifestHash) {
-            throw new DomainError('DATA_CORRUPT', 'Frozen knowledge retrieval manifest is corrupt.', { status: 500 });
-          }
-          return value;
-        },
+      // Recompute every frozen-input location from the current data directory
+      // and the active claim's run id, then verify the SAME historical evidence
+      // (commit SHA, patch/manifest/chunk hashes) at those current paths.
+      const locations = this.resolveFrozenLocations(projectId, claim.runId);
+      const evidence = this.relocateFrozenEvidence(snapshot.evidence, locations);
+      const existingKnowledge = { ...snapshot.existingKnowledge, manifestPath: locations.retrievalManifestPath };
+      this.scanner.verifyEvidence(evidence, {
+        expectedCommitSha: claim.commitSha,
+        expectedManifestHash: claim.evidenceManifestHash,
       });
+      let retrievalManifest;
+      try {
+        retrievalManifest = this.claimStore.atomic.readJsonStrict(existingKnowledge.manifestPath, {
+          category: 'knowledge-retrieval-manifest',
+          validate: value => {
+            if (!value || value.schema !== 'knowledge-retrieval-manifest/v1'
+              || value.manifestHash !== claim.retrievalManifestHash
+              || calculateRetrievalManifestHash(value) !== value.manifestHash) {
+              throw new DomainError('DATA_CORRUPT', 'Frozen knowledge retrieval manifest is corrupt.', { status: 500 });
+            }
+            return value;
+          },
+        });
+      } catch (error) {
+        if (error instanceof DomainError) throw error;
+        if (error && error.code === 'ENOENT') {
+          throw new DomainError('EVIDENCE_MISSING', 'Frozen knowledge retrieval manifest is missing at the current data directory.', {
+            status: 500,
+            details: { resource: 'input/retrieval/manifest.json', runId: claim.runId },
+            cause: error,
+          });
+        }
+        throw error;
+      }
       const selectedById = new Map(retrievalManifest.selected.map(item => [`${item.spaceId}:${item.chunkId}`, item]));
-      for (const entry of snapshot.existingKnowledge.entries || []) {
+      for (const entry of existingKnowledge.entries || []) {
         const selected = selectedById.get(`${entry.projectId === projectId ? `project:${projectId}` : `project:${entry.projectId}`}:${entry.chunkId}`);
         if (!selected || knowledgeContentHash(entry.content) !== entry.hash || selected.contentHash !== entry.hash) {
           throw new DomainError('DATA_CORRUPT', 'Frozen authoritative Markdown context does not match its retrieval manifest.', { status: 500 });
@@ -247,11 +351,11 @@ class CommitReconciler {
       });
       return {
         claim,
-        evidence: snapshot.evidence,
+        evidence,
         prompt: snapshot.prompt,
         requirements: snapshot.requirements || [],
         conversationSnapshot: snapshot.conversationSnapshot || null,
-        existingKnowledge: snapshot.existingKnowledge,
+        existingKnowledge,
         retry: true,
       };
     }
@@ -297,6 +401,7 @@ class CommitReconciler {
     this.claimStore.write(projectId, commitSha, {
       projectId,
       commitSha,
+      runId: claim.runId,
       claimFingerprint: claim.fingerprint,
       evidence,
       prompt: rendered.prompt,
@@ -441,4 +546,6 @@ module.exports = {
   claimFingerprint,
   reconcileProjectCommits,
   validateClaim,
+  SNAPSHOT_SCHEMA_V1,
+  SNAPSHOT_SCHEMA_V2,
 };

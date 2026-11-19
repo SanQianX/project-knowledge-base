@@ -403,11 +403,17 @@ class RuntimeKnowledgeAnalyzer {
     const resolved = resolveEffectiveAiProfile(settings, input.config);
     const profile = resolved.profile;
     const contract = `\n\nOUTPUT CONTRACT\nRead exact Git evidence only beneath ${input.evidenceRoot}. Write only beneath ${input.stagingPath}. Put Markdown under files/<allowed-path> and write ${input.manifestPath} with schema knowledge-staging-manifest/v1, projectId ${input.projectId}, runId ${input.claim.runId}, commitSha ${input.claim.commitSha}, and non-empty operations. Each operation needs path, operation, sha256, reason, and evidenceReferences containing commit:${input.claim.commitSha}, patch:${input.claim.patchHash}, conversation:${input.claim.conversationSnapshotHash}, and retrieval:${input.claim.retrievalManifestHash}. Do not read or modify source files, final knowledge, other runs, or indexes.`;
+    // Large patches are frozen as read-only chunks. A prompt frozen by an
+    // earlier data directory may quote an absolute manifest path; that string
+    // is historical evidence only — this run reads the CURRENT evidence root.
+    const patchLocationContract = input.evidence && input.evidence.patchChunked
+      ? `\nPATCH EVIDENCE LOCATION (mandatory): the patch manifest for this run is ${path.join(input.evidenceRoot, 'patch-manifest.json')}. Read it, then read every chunk it lists (patches/NNNNNN.patch, same evidence root) in sequence. Any absolute patch-manifest path quoted inside the historical prompt is an archival record of a previous data directory and is NOT this run's read location.`
+      : '';
     const started = claudeCliRunner.startAutomationSession({
       slug: input.projectId,
       projectPath: input.config.repoPath,
       kbPath: input.stagingPath,
-      userPrompt: `${input.prompt}${contract}`,
+      userPrompt: `${input.prompt}${contract}${patchLocationContract}`,
       aiProfile: profile,
       permissionMode: 'acceptEdits',
       allowedTools: input.safetyPolicy.allowedTools,
@@ -531,7 +537,23 @@ async function migrateManagedHooks(runtime) {
       }
     }
     if (state.hook.migrationVersion >= 2) {
-      results.push({ projectId, ok: true, status: 'verified', reason: 'already-migrated', migrationVersion: state.hook.migrationVersion });
+      // The persisted marker alone no longer proves the binding: after a data
+      // directory relocation the installed hook can still carry the old
+      // --data-dir/--bridge-home/trigger paths and keep writing journals into
+      // the old home. Re-verify through the ordinary install/repair entry —
+      // idempotent (no write) when the body already binds this instance, a
+      // controlled rebind when it drifted, and a preserved-file conflict for
+      // third-party or other-project hooks.
+      try {
+        const rebound = hookManager.installHook({ repoPath: config.repoPath, projectId, triggerScriptPath: TRIGGER_SCRIPT_PATH, ...runtime.bridgeAdapter.hookBinding() });
+        results.push({ projectId, ...rebound, status: 'verified', reason: rebound.updated ? 'rebound-to-current-instance' : 'already-migrated', migrationVersion: state.hook.migrationVersion });
+      } catch (error) {
+        await runtime.logger.warn('hook.rebind_failed', 'Managed hook could not be re-verified against the current instance.', { projectId, error });
+        await runtime.projectStore.updateState(projectId, draft => {
+          draft.hook.lastConflict = { code: error.code || 'HOOK_INVALID', message: error.message };
+        });
+        results.push({ projectId, ok: false, status: 'conflict', reason: error.code || 'HOOK_INVALID', error: { code: error.code || 'HOOK_INVALID', message: error.message } });
+      }
       continue;
     }
     let outcome;

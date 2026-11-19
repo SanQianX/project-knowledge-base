@@ -74,6 +74,16 @@ function readManifestStrict(manifestPath, atomic = AtomicFile) {
   });
 }
 
+// A missing file is a distinct, non-retryable category: after a data-directory
+// relocation the frozen evidence must be re-derived from the current layout,
+// never re-read from a stale absolute path, and never auto-retried in a loop.
+function missingEvidence(resource, evidenceRoot) {
+  return new DomainError('EVIDENCE_MISSING', `Frozen patch evidence is missing: ${resource}.`, {
+    status: 500,
+    details: { resource, evidenceRoot },
+  });
+}
+
 function safeChunkPath(evidenceRoot, relativePath) {
   if (!/^patches\/\d{6}\.patch$/.test(String(relativePath || ''))) {
     throw new DomainError('EVIDENCE_INTEGRITY_FAILED', 'Patch evidence chunk path is invalid.', { status: 500 });
@@ -151,7 +161,7 @@ class ExactPatchEvidenceBundle {
     try {
       return this.verifyUnchecked(evidenceRoot, expected);
     } catch (error) {
-      if (error && error.code === 'EVIDENCE_INTEGRITY_FAILED') throw error;
+      if (error && ['EVIDENCE_INTEGRITY_FAILED', 'EVIDENCE_MISSING', 'PATH_OUTSIDE_ROOT'].includes(error.code)) throw error;
       throw new DomainError('EVIDENCE_INTEGRITY_FAILED', 'Patch evidence bundle could not be read or verified.', {
         status: 500,
         cause: error,
@@ -162,8 +172,12 @@ class ExactPatchEvidenceBundle {
 
   verifyUnchecked(evidenceRoot, expected = {}) {
     const root = path.resolve(evidenceRoot);
-    const manifest = readManifestStrict(path.join(root, 'patch-manifest.json'), this.atomic);
-    const commitEvidence = this.atomic.readJsonStrict(path.join(root, 'commit.json'), {
+    const manifestPath = path.join(root, 'patch-manifest.json');
+    if (!fs.existsSync(manifestPath)) throw missingEvidence('patch-manifest.json', root);
+    const manifest = readManifestStrict(manifestPath, this.atomic);
+    const commitPath = path.join(root, 'commit.json');
+    if (!fs.existsSync(commitPath)) throw missingEvidence('commit.json', root);
+    const commitEvidence = this.atomic.readJsonStrict(commitPath, {
       category: 'commit-evidence-bundle',
       validate: value => {
         if (!value || value.schema !== COMMIT_EVIDENCE_SCHEMA || value.fullPatchHash !== manifest.fullPatchHash
@@ -180,6 +194,15 @@ class ExactPatchEvidenceBundle {
     if (expected.expectedBytes != null && manifest.totalBytes !== expected.expectedBytes) {
       throw new DomainError('EVIDENCE_INTEGRITY_FAILED', 'Frozen patch evidence byte count does not match the claim.', { status: 500 });
     }
+    if (expected.expectedManifestHash && manifest.manifestHash !== expected.expectedManifestHash) {
+      throw new DomainError('EVIDENCE_INTEGRITY_FAILED', 'Frozen patch manifest hash does not match the claim.', { status: 500 });
+    }
+    if (expected.expectedCommitSha && String(commitEvidence.commit.commitSha || '').toLowerCase() !== String(expected.expectedCommitSha).toLowerCase()) {
+      throw new DomainError('EVIDENCE_INTEGRITY_FAILED', 'Frozen commit evidence belongs to a different commit than the claim.', {
+        status: 500,
+        details: { resource: 'commit.json', expectedCommitSha: expected.expectedCommitSha, actualCommitSha: commitEvidence.commit.commitSha || null },
+      });
+    }
     const aggregate = crypto.createHash('sha256');
     let bytes = 0;
     manifest.chunks.forEach((chunk, index) => {
@@ -187,12 +210,16 @@ class ExactPatchEvidenceBundle {
         throw new DomainError('EVIDENCE_INTEGRITY_FAILED', 'Patch evidence chunk order or metadata is invalid.', { status: 500 });
       }
       const filePath = safeChunkPath(root, chunk.path);
-      if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile() || fs.lstatSync(filePath).isSymbolicLink()) {
+      if (!fs.existsSync(filePath)) throw missingEvidence(chunk.path, root);
+      if (!fs.statSync(filePath).isFile() || fs.lstatSync(filePath).isSymbolicLink()) {
         throw new DomainError('EVIDENCE_INTEGRITY_FAILED', 'Patch evidence chunk is missing or unsafe.', { status: 500 });
       }
       const value = fs.readFileSync(filePath);
       if (value.length !== chunk.bytes || hashBuffer(value) !== chunk.sha256) {
-        throw new DomainError('EVIDENCE_INTEGRITY_FAILED', 'Patch evidence chunk failed integrity validation.', { status: 500 });
+        throw new DomainError('EVIDENCE_INTEGRITY_FAILED', 'Patch evidence chunk failed integrity validation.', {
+          status: 500,
+          details: { resource: chunk.path },
+        });
       }
       aggregate.update(value);
       bytes += value.length;

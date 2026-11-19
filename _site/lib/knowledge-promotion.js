@@ -11,8 +11,19 @@ const { execGit } = require('./git-runner');
 
 const MANIFEST_SCHEMA = 'knowledge-staging-manifest/v1';
 const JOURNAL_SCHEMA = 'promotion-journal/v1';
+const JOURNAL_SCHEMA_V2 = 'promotion-journal/v2';
+const JOURNAL_SCHEMAS = [JOURNAL_SCHEMA, JOURNAL_SCHEMA_V2];
+const RUN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const MAX_KNOWLEDGE_FILE_BYTES = 1024 * 1024;
 const WINDOWS_RESERVED = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
+
+function validateRunIdSegment(runId) {
+  const value = String(runId || '');
+  if (!RUN_ID_PATTERN.test(value)) {
+    throw new DomainError('DATA_CORRUPT', 'Promotion journal run id is invalid.', { status: 500 });
+  }
+  return value;
+}
 
 function hashBuffer(value) {
   return `sha256:${crypto.createHash('sha256').update(value).digest('hex')}`;
@@ -196,15 +207,66 @@ class KnowledgePromotionService {
     return { manifest, operations: operations.sort((left, right) => left.path.localeCompare(right.path)) };
   }
 
+  // New journals (v2) persist only relative references: the knowledge-relative
+  // operation path plus a backup file name inside the run's recovery root.
+  // Absolute locations are re-derived on every read, so a renamed or moved
+  // data directory never leaves a journal pointing at stale paths.
   writeJournal(journal) {
     journal.updatedAt = new Date().toISOString();
-    this.atomic.writeJsonAtomic(this.journalPath(journal.projectId, journal.runId), journal);
+    const { operations, ...head } = journal;
+    const payload = {
+      schema: JOURNAL_SCHEMA_V2,
+      ...head,
+      operations: (operations || []).map(operation => {
+        const { target, stagedPath, backupPath, ...relative } = operation;
+        void target; void stagedPath; void backupPath;
+        return { ...relative, rolledBack: operation.rolledBack === true };
+      }),
+    };
+    this.atomic.writeJsonAtomic(this.journalPath(journal.projectId, journal.runId), payload);
+  }
+
+  // Recompute absolute locations for a journal read from disk (either schema)
+  // against the RUNNING layout and the CURRENTLY registered knowledge
+  // directory. A journal whose recorded knowledge root no longer matches the
+  // registration is a path conflict: the site stays untouched and recovery
+  // reports a diagnosable conflict instead of writing into the wrong tree.
+  resolveJournalLocations(journal, config) {
+    const projectId = validateProjectId(journal.projectId);
+    const runId = validateRunIdSegment(journal.runId);
+    if (!config || !config.knowledgePath) {
+      throw new DomainError('MIGRATION_TARGET_CONFLICT', `Project ${projectId} has no registered knowledge directory; promotion journal ${runId} cannot be located.`, { status: 409 });
+    }
+    if (journal.knowledgePath && !this.layout.pathsEqual(journal.knowledgePath, config.knowledgePath)) {
+      throw new DomainError('MIGRATION_TARGET_CONFLICT', `Knowledge directory for project ${projectId} changed since promotion journal ${runId} was written; preserving the site.`, {
+        status: 409,
+        details: { journalKnowledgePath: journal.knowledgePath, registeredKnowledgePath: config.knowledgePath },
+      });
+    }
+    const backupRoot = this.backupRoot(projectId, runId);
+    const runRoot = this.layout.getRuntimePath('runs', projectId, runId, 'output');
+    journal.operations = (journal.operations || []).map((operation, index) => {
+      const relativePath = canonicalRelativePath(operation.path);
+      // Backup names follow the journal's own array position (the rule every
+      // version has used when writing); operation.index is the manifest order
+      // and must not pick the backup file.
+      const backupFile = operation.backupFile || `${String(index).padStart(4, '0')}.backup`;
+      return {
+        ...operation,
+        path: relativePath,
+        backupFile,
+        target: path.resolve(config.knowledgePath, ...relativePath.split('/')),
+        stagedPath: path.join(runRoot, 'files', ...relativePath.split('/')),
+        backupPath: operation.originalExists ? path.join(backupRoot, backupFile) : operation.backupPath || null,
+      };
+    });
+    return journal;
   }
 
   prepareJournal(projectId, config, claim, validated) {
     const backupRoot = this.backupRoot(projectId, claim.runId);
     const journal = {
-      schema: JOURNAL_SCHEMA,
+      schema: JOURNAL_SCHEMA_V2,
       projectId,
       runId: claim.runId,
       commitSha: claim.commitSha,
@@ -221,6 +283,7 @@ class KnowledgePromotionService {
       createdAt: new Date().toISOString(),
       operations: validated.operations.map((operation, index) => ({
         ...operation,
+        backupFile: `${String(index).padStart(4, '0')}.backup`,
         backupPath: operation.originalExists ? path.join(backupRoot, `${String(index).padStart(4, '0')}.backup`) : null,
         applied: false,
       })),
@@ -356,18 +419,38 @@ class KnowledgePromotionService {
     }
   }
 
+  // Rollback is safe to re-enter: an operation already restored to its
+  // original hash (or removed, when it never existed) is recognized as done
+  // instead of a conflict, and every restore is journalled before moving on.
   rollbackJournal(journal) {
     let conflict = null;
     for (const operation of [...journal.operations].reverse()) {
-      if (!operation.applied) continue;
+      if (!operation.applied || operation.rolledBack === true) continue;
       const currentHash = fileHash(operation.target);
       const expectedApplied = operation.operation === 'delete' ? null : operation.newHash;
-      if (currentHash !== expectedApplied) {
-        conflict = operation.path;
+      const alreadyRestored = operation.originalExists
+        ? currentHash === operation.originalHash
+        : currentHash === null;
+      if (currentHash !== expectedApplied && !alreadyRestored) {
+        conflict = `${operation.path} (target no longer the promoted version)`;
         break;
       }
-      if (operation.originalExists) this.atomic.writeFileAtomic(operation.target, fs.readFileSync(operation.backupPath));
-      else if (fs.existsSync(operation.target)) fs.unlinkSync(operation.target);
+      if (!alreadyRestored) {
+        if (operation.originalExists) {
+          if (!fs.existsSync(operation.backupPath)) {
+            conflict = `${operation.path} (backup missing)`;
+            break;
+          }
+          if (fileHash(operation.backupPath) !== operation.originalHash) {
+            conflict = `${operation.path} (backup content does not match originalHash)`;
+            break;
+          }
+          this.atomic.writeFileAtomic(operation.target, fs.readFileSync(operation.backupPath));
+        } else if (fs.existsSync(operation.target)) fs.unlinkSync(operation.target);
+      }
+      operation.rolledBack = true;
+      this.writeJournal(journal);
+      this.fault(`operation-rolled-back:${operation.index}`, journal);
     }
     if (conflict) {
       journal.phase = 'recovery-conflict';
@@ -382,10 +465,27 @@ class KnowledgePromotionService {
 
   async recoverJournal(journal) {
     if (journal.phase === 'completed' || journal.phase === 'rolled-back') return { ok: true, phase: journal.phase, skipped: true };
-    const appliedCount = journal.operations.filter(operation => operation.applied).length;
-    const allApplied = appliedCount === journal.operations.length;
+    const config = this.projectStore.readConfig(journal.projectId);
+    this.resolveJournalLocations(journal, config);
+    // An operation may still carry applied=true from before a partially
+    // completed rollback; once restored it is no longer promoted, so the
+    // advance path must not treat the journal as fully applied.
+    const promotedCount = journal.operations.filter(operation => operation.applied && operation.rolledBack !== true).length;
+    const allApplied = promotedCount === journal.operations.length;
     if (journal.phase === 'awaiting-state-advance' || (allApplied && ['applying', 'prepared'].includes(journal.phase))) {
-      this.verifyPromoted(journal);
+      try {
+        this.verifyPromoted(journal);
+      } catch (error) {
+        if (error instanceof DomainError && error.code === 'DATA_CORRUPT') {
+          // The target stopped matching what this promotion wrote (user edit or
+          // external corruption): preserve the site and report the conflict.
+          journal.phase = 'recovery-conflict';
+          journal.error = `Promoted knowledge no longer matches the promotion journal: ${error.message}`;
+          this.writeJournal(journal);
+          return { ok: false, phase: 'recovery-conflict', conflict: journal.error };
+        }
+        throw error;
+      }
       await this.advanceState(journal);
       journal.phase = 'completed';
       journal.recoveredAt = new Date().toISOString();
@@ -413,11 +513,22 @@ class KnowledgePromotionService {
       const journal = this.atomic.readJsonStrict(file, {
         category: 'promotion-journal',
         validate: value => {
-          if (!value || value.schema !== JOURNAL_SCHEMA || !Array.isArray(value.operations)) throw new DomainError('DATA_CORRUPT', 'Promotion journal is corrupt.', { status: 500 });
+          if (!value || !JOURNAL_SCHEMAS.includes(value.schema) || !Array.isArray(value.operations)) throw new DomainError('DATA_CORRUPT', 'Promotion journal is corrupt.', { status: 500 });
           return value;
         },
       });
-      results.push({ file, ...(await this.recoverJournal(journal)) });
+      // One broken or conflicting journal must neither abort the recovery
+      // sweep nor mutate an ambiguous site: it lands in a diagnosable
+      // recovery-conflict state and its evidence stays on disk.
+      try {
+        results.push({ file, ...(await this.recoverJournal(journal)) });
+      } catch (error) {
+        if (error instanceof DomainError && error.code === 'DATA_CORRUPT') throw error;
+        journal.phase = 'recovery-conflict';
+        journal.error = String(error && error.message || error);
+        this.writeJournal(journal);
+        results.push({ file, ok: false, phase: 'recovery-conflict', error: journal.error, conflict: journal.error });
+      }
     }
     return results;
   }
@@ -425,6 +536,7 @@ class KnowledgePromotionService {
 
 module.exports = {
   JOURNAL_SCHEMA,
+  JOURNAL_SCHEMA_V2,
   MANIFEST_SCHEMA,
   MAX_KNOWLEDGE_FILE_BYTES,
   KnowledgePromotionService,

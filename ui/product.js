@@ -43,9 +43,13 @@
   const recoveryLabel = run => {
     const recovery = run.recovery;
     if (['failed', 'index-pending'].includes(run.state)) {
-      if (!recovery) return run.state === 'index-pending' ? '自动恢复中' : '需要处理';
+      // 与 retry-scheduler 对齐：数据错误、无待执行恢复、暂停或耗尽预算都是
+      // 「需要处理」；配置问题「等待配置」；只有已有下一次自动恢复安排才显示
+      // 「自动恢复中」。data-failed 从不安排 nextRetryAt，不能落进自动恢复。
+      if (!recovery) return '需要处理';
       if (recovery.kind === 'config-blocked') return '等待配置';
-      if (recovery.budgetExhaustedAt) return '需要处理';
+      if (recovery.budgetExhaustedAt || recovery.paused) return '需要处理';
+      if (recovery.kind === 'data-failed' || !recovery.nextRetryAt) return '需要处理';
       return '自动恢复中';
     }
     return '';
@@ -222,12 +226,18 @@
     all('.view').forEach(section => section.classList.toggle('active', section.id === `view-${view}`));
     $('pageTitle').textContent = titles[view];
     if (view === 'activity' && state.activityTab === 'sessions' && activeProject()) initializeFrame('eventBridge');
-    if (view === 'team') initializeFrame('workflow');
+    if (view === 'team') {
+      initializeFrame('workflow');
+      if (changed) post('workflow', { type: 'kb:refresh' });
+    }
     Object.keys(frames).forEach(key => post(key, { type: 'kb:visibility', visible: frameVisible(key) }));
     render();
-    if (view === 'home') { void loadOverview(); void loadTeamSummary(); }
+    if (view === 'home') { void loadOverview(); void loadTeamSummary(true); }
     if (view === 'memory') { void loadGroups(); void loadMemoryPage(); void loadCandidates(); }
-    if (view === 'projects' && !state.projectsPage.detail) void loadProjectsPage();
+    if (view === 'projects') {
+      void loadTeamSummary();
+      if (!state.projectsPage.detail) void loadProjectsPage();
+    }
     if (view === 'search') renderSearch();
     if (view === 'activity' && (changed || state.activityProject !== state.projectId)) void loadActivityPage();
   }
@@ -283,13 +293,13 @@
   }
   // AI 团队跨项目摘要（独立工作流模块）。不可达与未安装分开呈现：未安装
   // 是中性提示（第五模块在正式发布前是可选依赖），不冒充服务故障。
-  async function loadTeamSummary() {
+  async function loadTeamSummary(includeTasks = false) {
     const epoch = ++state.teamSummary.epoch;
     state.teamSummary.loading = true;
     try {
       const [data, activeTasks] = await Promise.all([
         api('/api/workflow/overview'),
-        api('/api/workflow/workflow-tasks?limit=5').catch(() => null),
+        includeTasks ? api('/api/workflow/workflow-tasks?limit=5').catch(() => null) : null,
       ]);
       if (epoch !== state.teamSummary.epoch) return;
       state.teamSummary.data = data;
@@ -303,6 +313,7 @@
       if (epoch === state.teamSummary.epoch) state.teamSummary.loading = false;
     }
     if (state.view === 'home') renderHome();
+    if (state.view === 'projects') renderProjectTeams();
   }
   const TEAM_PHASE_LABEL = { clarify: '明确任务', plan: '规划', implement: '实现', verify: '程序验证', review: '审查', rework: '整改', deliver: '交付' };
   const TEAM_STATUS_LABEL = { draft: '草稿', ready: '就绪', in_progress: '进行中', verifying: '验证中', in_review: '审查中', done: '已交付', blocked: '受阻', cancelled: '已取消' };
@@ -526,6 +537,27 @@
   function groupTag(group, projectId) {
     return `<span class="group-tag" draggable="true" data-drag-group="${esc(group.id)}" data-project="${esc(projectId)}"><span>${esc(group.name)}</span><button data-action="unlink-group" data-id="${esc(group.id)}" data-project="${esc(projectId)}" aria-label="从项目移除组合 ${esc(group.name)}" draggable="false">×</button></span>`;
   }
+  function projectHasTeam(projectId) {
+    return state.teamSummary.data?.projects?.some(project => project.projectId === projectId && project.enabled);
+  }
+  function projectTeamActions(projectId) {
+    const { data, error } = state.teamSummary;
+    if (error) return '<button class="link-button" data-action="reload-project-teams">团队状态读取失败 · 重试</button>';
+    if (!data) return '<small>正在读取团队…</small>';
+    if (!data.team) return '<button data-go="team">创建团队</button>';
+    const id = esc(projectId);
+    if (!projectHasTeam(projectId)) return `<button data-action="project-team" data-id="${id}">＋ 团队</button>`;
+    const name = esc(data.team.name);
+    return `<span class="group-tag team-tag"><span>团队 · ${name}</span><button data-action="project-team" data-id="${id}" aria-label="解除挂载团队 ${name}" title="解除挂载">×</button></span>`;
+  }
+  function projectTeamControl(projectId) {
+    return `<div data-project-team="${esc(projectId)}">${projectTeamActions(projectId)}</div>`;
+  }
+  function renderProjectTeams() {
+    all('[data-project-team]').forEach(control => {
+      control.innerHTML = projectTeamActions(control.dataset.projectTeam);
+    });
+  }
   function renderProjects() {
     const detailId = state.projectsPage.detail;
     const detailLoading = state.detailGroups.loadingDetail === detailId;
@@ -536,6 +568,7 @@
         <div class="project-name"><button class="link-button" data-action="project-detail" data-id="${esc(p.projectId)}">${esc(p.name)}</button><small>${esc(domainName(p.domainId))}</small></div>
         <div class="group-tags">${(p.groups || []).slice(0, 3).map(g => groupTag(g, p.projectId)).join('') || '<small>未挂载组合</small>'}${(p.groups || []).length > 3 ? `<button class="link-button" data-action="project-detail" data-id="${esc(p.projectId)}">＋${p.groups.length - 3}</button>` : ''}</div>
         <button data-action="project-groups" data-id="${esc(p.projectId)}">＋ 组合</button>
+        ${projectTeamControl(p.projectId)}
       </div>`).join('') || '<div class="empty small-empty">没有匹配的项目。</div>';
     $('projectsContent').innerHTML = `
       <div class="actions" style="margin-bottom:16px">
@@ -558,6 +591,7 @@
       <div class="detail-path">${esc(project.workspacePath)}</div>
       <section class="panel" style="margin-top:20px"><div class="section-heading" style="margin-bottom:12px"><h2>使用的组合</h2><button data-action="project-groups" data-id="${esc(project.projectId)}">＋ 添加组合</button></div>
         <div class="group-tags">${detail.groups.map(g => groupTag(g, project.projectId)).join('') || '<small>尚未添加组合</small>'}</div></section>
+      <section class="panel" style="margin-top:20px"><div class="section-heading"><h2>AI 团队</h2>${projectTeamControl(project.projectId)}</div></section>
       <section class="panel" style="margin-top:20px"><h2>生效记忆 <small>${effective.total} 条 · 已按记忆去重</small></h2>
         <div class="memory-list">${items}</div>
         ${pagerUi('effective', effective.page, effective.total, 10)}</section>`;
@@ -644,7 +678,7 @@
           || (state.activityFilter === 'recovering' && recoveryLabel(r) === '自动恢复中')
           || (state.activityFilter === 'completed' && r.state === 'succeeded'));
       const open = new Set(all('.run[open]').map(d => d.dataset.runId));
-      body = state.engineAvailable ? runs.map(r => `<details class="run" data-run-id="${esc(r.runId)}" ${open.has(r.runId) ? 'open' : ''}><summary><time>${time(r.startedAt)}</time><strong>${esc(projectName(r.projectId))} · ${esc(r.commitSha.slice(0, 8))}</strong>${badge(label(r), ['failed', 'index-pending'].includes(r.state) && recoveryLabel(r) !== '自动恢复中' ? 'issue' : r.state === 'succeeded' ? 'up' : '')}</summary><div><p>提交：${esc(r.commitSha)}<br>阶段：${esc(r.phase)} · 入口：${esc(r.trigger)}<br>知识晋升：${time(r.promotedAt)} · 索引：${esc(r.indexState)}${r.recovery ? `<br>恢复：${esc(recoveryLabel(r))} · 已尝试 ${r.recovery.attempts} 次${r.recovery.nextRetryAt ? ` · 下次 ${time(r.recovery.nextRetryAt)}` : ''}` : ''}</p>${r.error ? `<p class="error">${esc(r.error.message)} (${esc(r.error.code)})</p>${r.error.details ? `<p>失败原因：${esc(r.error.details.upstreamMessage)}<br>类别：${esc(r.error.details.failureKind)} · HTTP：${esc(r.error.details.httpStatus ?? '—')} · 尝试：${esc(r.error.details.attempt)}</p>` : ''}` : ''}${(r.staging?.operations || []).map(op => `<div class="operation">${esc(op.operation)} · ${esc(op.path)}<br>${esc(op.reason)}</div>`).join('')}${['failed', 'index-pending'].includes(r.state) ? `<button data-retry-run="${esc(r.runId)}">重试失败阶段</button>` : ''}</div></details>`).join('') || '<div class="empty small-empty">此分类没有记录。</div>' : '<div class="empty small-empty">知识引擎离线。记录仍保留在本机，连接恢复后自动读取。</div>';
+      body = state.engineAvailable ? runs.map(r => `<details class="run" data-run-id="${esc(r.runId)}" ${open.has(r.runId) ? 'open' : ''}><summary><time>${time(r.startedAt)}</time><strong>${esc(projectName(r.projectId))} · ${esc(r.commitSha.slice(0, 8))}</strong>${badge(label(r), ['failed', 'index-pending'].includes(r.state) && recoveryLabel(r) !== '自动恢复中' ? 'issue' : r.state === 'succeeded' ? 'up' : '')}</summary><div><p>提交：${esc(r.commitSha)}<br>阶段：${esc(r.phase)} · 入口：${esc(r.trigger)}<br>知识晋升：${time(r.promotedAt)} · 索引：${esc(r.indexState)}${r.recovery ? `<br>恢复：${esc(recoveryLabel(r))} · 本轮已尝试 ${r.recovery.attempts} 次${r.recovery.nextRetryAt ? ` · 下次 ${time(r.recovery.nextRetryAt)}` : ''}` : ''}</p>${r.error ? `<p class="error">${esc(r.error.message)} (${esc(r.error.code)})</p>${r.error.details?.resource ? `<p>失败资源：${esc(r.error.details.resource)}${r.error.details.evidenceRoot ? `（${esc(r.error.details.evidenceRoot)}）` : ''}</p>` : ''}${r.error.details?.upstreamMessage ? `<p>失败原因：${esc(r.error.details.upstreamMessage)}<br>类别：${esc(r.error.details.failureKind)} · HTTP：${esc(r.error.details.httpStatus ?? '—')} · 尝试：${esc(r.error.details.attempt)}</p>` : ''}` : ''}${(r.staging?.operations || []).map(op => `<div class="operation">${esc(op.operation)} · ${esc(op.path)}<br>${esc(op.reason)}</div>`).join('')}${['failed', 'index-pending'].includes(r.state) ? `<button data-retry-run="${esc(r.runId)}">重试失败阶段</button>` : ''}</div></details>`).join('') || '<div class="empty small-empty">此分类没有记录。</div>' : '<div class="empty small-empty">知识引擎离线。记录仍保留在本机，连接恢复后自动读取。</div>';
       const nav = `<div class="actions" style="margin-top:12px">${state.activityBefore ? '<button data-run-page="">回到最新记录</button>' : ''}${state.activityPage?.nextCursor ? `<button data-run-page="${esc(state.activityPage.nextCursor)}">更早的记录</button>` : ''}</div>`;
       body += nav;
     }
@@ -1282,6 +1316,37 @@
     body.addEventListener('change', onChange);
     $('appDialog').addEventListener('close', () => body.removeEventListener('change', onChange), { once: true });
   }
+  function projectTeamDialog(projectId) {
+    const project = state.projectsPage.items.find(p => p.projectId === projectId);
+    const team = state.teamSummary.data?.team;
+    if (!project || !team) return;
+    const enabled = !projectHasTeam(projectId);
+    const title = enabled ? '挂载团队' : '解除挂载';
+    const detail = enabled ? '此项目将启用该团队的工作流。' : '此项目将停用团队工作流，已有任务和检查记录会保留。';
+    const url = `/api/workflow/projects/${encodeURIComponent(projectId)}/settings`;
+    let saving = false;
+    appDialogOpen(`${project.name} · ${title}`, `<p><b>${esc(team.name)}</b></p><p class="muted">${detail}</p>`, [
+      { label: '取消', run: () => { if (!saving) appDialogClose(); } },
+      { label: title, class: 'primary', run: async () => {
+        if (saving) return;
+        saving = true;
+        try {
+          const { settings } = await api(url);
+          if (settings.enabled !== enabled) {
+            await api(url, { method: 'PUT', body: {
+              ...settings,
+              enabled,
+              expectedRevision: settings.revision ?? 0,
+              requestId: `project-team-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
+            } });
+          }
+          appDialogClose();
+          toast(enabled ? '已挂载团队。' : '已解除挂载。');
+          await loadTeamSummary();
+        } finally { saving = false; }
+      } },
+    ]);
+  }
   // ---- 选入已有记忆到组合 ----
   async function addExistingDialog(group) {
     const selected = new Set();
@@ -1356,8 +1421,8 @@
       }
       if (button.dataset.action === 'import') openImport();
       if (button.dataset.action === 'refresh') await refreshRegistry(true);
-      if (button.dataset.action === 'reload-overview') { await loadOverview(true); await loadTeamSummary(); }
-      if (button.dataset.action === 'reload-team-summary') await loadTeamSummary();
+      if (button.dataset.action === 'reload-overview') { await loadOverview(true); await loadTeamSummary(true); }
+      if (button.dataset.action === 'reload-team-summary') await loadTeamSummary(true);
       if (button.dataset.action === 'repair') await repair();
       if (button.dataset.action === 'system') await openSystem();
       if (button.dataset.action === 'activity-needs') { state.activityFilter = 'needs'; setView('activity'); renderActivity(); }
@@ -1366,7 +1431,7 @@
       if (button.dataset.agentRetry) await retryAgentRepair(button.dataset.agentClient);
       if (button.dataset.action === 'unbind') { const p = activeProject(); if (p && !unbinding) { unbindProjectId = p.projectId; $('unbindProjectName').textContent = `解绑「${p.name}」？`; $('unbindFeedback').textContent = ''; $('unbindDialog').showModal(); } }
       if (button.dataset.openRun) await openRunDetail(button.dataset.openRun, button.dataset.runProject || '');
-      if (button.dataset.retryRun) { await api(`/api/engine/runs/${encodeURIComponent(button.dataset.retryRun)}/retry`, { method: 'POST', body: {} }); await refreshSnapshot(); toast('已重新执行失败阶段。'); }
+      if (button.dataset.retryRun) { await api(`/api/engine/runs/${encodeURIComponent(button.dataset.retryRun)}/retry`, { method: 'POST', body: {} }); await refreshSnapshot(); toast('已提交重试，最终结果以运行状态为准。'); }
       if (button.dataset.runPage !== undefined) await loadActivityPage(button.dataset.runPage || null);
       if (button.dataset.action === 'toast-undo') { const undo = toastUndo; toastUndo = null; $('toast').hidden = true; await undo?.(); }
       if (button.dataset.action === 'new-group') groupEditor();
@@ -1398,6 +1463,8 @@
       if (button.dataset.action === 'project-detail') await openProjectDetail(button.dataset.id);
       if (button.dataset.action === 'project-list') { state.projectsPage.detail = null; renderProjects(); }
       if (button.dataset.action === 'project-groups') await projectGroupsDialog(button.dataset.id);
+      if (button.dataset.action === 'project-team') projectTeamDialog(button.dataset.id);
+      if (button.dataset.action === 'reload-project-teams') await loadTeamSummary();
       if (button.dataset.action === 'edit-project') { const p = state.projectsPage.items.find(x => x.projectId === button.dataset.id); if (p) { await openProjectDetail(p.projectId); selectProject(p.projectId); await openSystem(); } }
       if (button.dataset.action === 'add-existing') { const group = groupById(state.memory.folder); if (group) await addExistingDialog(group); else toast('请先在左侧选择一个组合。'); }
       if (button.dataset.action === 'search-detail') { const row = state.search.results[Number(button.dataset.index)]; if (row) await openReference({ projectId: row.scope_project_id || row.projectId, spaceId: row.space_id, entryId: row.entry_id, commitSha: row.commitSha, title: row.title, text: row.snippet || row.chunk_text }); }

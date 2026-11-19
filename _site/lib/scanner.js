@@ -169,7 +169,7 @@ class TrustedGitReader {
     };
   }
 
-  verifyEvidence(evidence) {
+  verifyEvidence(evidence, expected = {}) {
     if (!evidence || !evidence.patchHash || !Number.isInteger(evidence.patchBytes)) {
       throw new DomainError('EVIDENCE_INTEGRITY_FAILED', 'Commit evidence is incomplete.', { status: 500 });
     }
@@ -177,6 +177,8 @@ class TrustedGitReader {
       return this.evidenceBundle.verify(evidence.evidenceBundle.root, {
         expectedPatchHash: evidence.patchHash,
         expectedBytes: evidence.patchBytes,
+        ...(expected.expectedCommitSha ? { expectedCommitSha: expected.expectedCommitSha } : {}),
+        ...(expected.expectedManifestHash ? { expectedManifestHash: expected.expectedManifestHash } : {}),
       });
     }
     if (evidence.patchChunked) {
@@ -232,8 +234,8 @@ class CommitScanner {
     return this.git.collectEvidence(config.repoPath, commitSha, options);
   }
 
-  verifyEvidence(evidence) {
-    return this.git.verifyEvidence(evidence);
+  verifyEvidence(evidence, expected = {}) {
+    return this.git.verifyEvidence(evidence, expected);
   }
 }
 

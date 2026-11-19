@@ -84,14 +84,17 @@ function formatChanges(evidence) {
 function formatPatch(evidence) {
   if (!evidence.patchChunked) return evidence.patch || '(empty patch)';
   const bundle = evidence.evidenceBundle || {};
+  // The frozen prompt stays valid across data-directory relocations: it names
+  // the manifest relative to the evidence root, never an absolute path. The
+  // execution contract delivers the current absolute location for this run.
   return [
     '[EXACT PATCH AVAILABLE AS READ-ONLY CHUNKS]',
     `fullPatchHash: ${evidence.patchHash}`,
     `fullPatchBytes: ${evidence.patchBytes}`,
     `patchManifestHash: ${bundle.manifestHash || '(unavailable)'}`,
-    `patchManifestPath: ${bundle.manifestPath || '(unavailable)'}`,
+    'patchManifestPath: patch-manifest.json (inside this run\'s frozen evidence root; the execution contract states its absolute location)',
     `chunkCount: ${bundle.chunkCount == null ? '(unavailable)' : bundle.chunkCount}`,
-    'Read patch-manifest.json, then Read exact patch chunks in manifest sequence. The chunks cover the full Git diff.',
+    'Read patch-manifest.json, then Read exact patch chunks (patches/NNNNNN.patch) in manifest sequence from the frozen evidence root. The chunks cover the full Git diff.',
     'Do not read the source worktree and do not infer unread evidence.',
   ].join('\n');
 }
