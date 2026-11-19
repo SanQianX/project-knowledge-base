@@ -364,10 +364,10 @@
       <div class="grid2">
         <section class="panel"><h2>需要处理 ${overview.needsTotal ? badge(overview.needsTotal, 'issue') : ''}</h2>${needsRows}
           ${overview.needsTotal > needs.length ? '<button data-action="activity-needs">查看全部待办</button>' : ''}
-          ${overview.totals.recovering ? `<div class="recovery-banner">${overview.totals.recovering} 项正在自动恢复，无需操作<button data-action="activity-recovering">查看</button></div>` : ''}
+          ${overview.totals?.recovering ? `<div class="recovery-banner">${overview.totals?.recovering} 项正在自动恢复，无需操作<button data-action="activity-recovering">查看</button></div>` : ''}
         </section>
-        <section class="panel"><h2>待确认记忆 ${overview.totals.candidates ? badge(overview.totals.candidates, '') : ''}</h2>${candidateRows}
-          ${overview.totals.candidates > candidates.length ? '<button data-go="memory">查看候选箱</button>' : ''}
+        <section class="panel"><h2>待确认记忆 ${overview.totals?.candidates ? badge(overview.totals?.candidates, '') : ''}</h2>${candidateRows}
+          ${overview.totals?.candidates > candidates.length ? '<button data-go="memory">查看候选箱</button>' : ''}
         </section>
       </div>
       ${teamSummaryCard()}
