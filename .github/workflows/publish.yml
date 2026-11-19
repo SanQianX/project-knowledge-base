@@ -202,7 +202,12 @@ jobs:
         with:
           node-version: '24.x'
       - name: Restore the reviewed lockfile exactly
-        run: npm ci
+        # --ignore-scripts: the restore exists to reproduce the reviewed
+        # dependency tree for verification/packing, not to run native
+        # postinstalls (onnxruntime-node's GPU probe fails on runners since
+        # the 2026-11 image refresh and its binaries are never part of the
+        # tarball). Skipped scripts cannot alter the packed bytes.
+        run: npm ci --ignore-scripts
       - name: Verify the reviewed version lockstep
         run: node _site/scripts/sync-release-version.js --check --web-only
       - name: Verify all four pinned npm runtimes
