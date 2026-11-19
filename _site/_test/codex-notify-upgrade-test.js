@@ -172,6 +172,13 @@ async function main() {
   await rawLegacy.manager.uninstallCaptureCodex();
   assert.strictEqual(readNotify(rawLegacy.configFile), null, 'uninstall must not resurrect a retired Bridge home');
 
+  const v5Command = ['node', path.join(TEMP, 'legacy-v5-data-home', 'home', '.project-knowledge-v5', 'events', 'bin', 'bridge-hook.cjs')];
+  const rawV5 = fixture('legacy-v5-data-home', v5Command);
+  await assertInstallIdempotent(rawV5);
+  assert(!descendants(readNotify(rawV5.configFile)).some(command => command[1] === v5Command[1]), 'retire the old default data-directory hook rather than chaining its missing script');
+  await rawV5.manager.uninstallCaptureCodex();
+  assert.strictEqual(readNotify(rawV5.configFile), null, 'uninstall cannot resurrect the retired v5 data-directory hook');
+
   const nestedLegacyCommand = defaultLegacy('nested-legacy-default-home');
   const legacyRadar = [...radar, '--previous-notify', JSON.stringify(nestedLegacyCommand)];
   const nestedLegacy = fixture('nested-legacy-default-home', oldFanout('old-with-legacy-next', legacyRadar, staleBridge));

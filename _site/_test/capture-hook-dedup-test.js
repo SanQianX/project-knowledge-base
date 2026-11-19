@@ -13,6 +13,7 @@ const ROOT = path.resolve(__dirname, '../..');
 const TEMP = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-capture-dedup-'));
 const HOME = path.join(TEMP, '用户 空格');
 const OLD = path.join(HOME, '.ai-coding-event-bridge');
+const OLD_V5 = path.join(HOME, '.project-knowledge-v5/events');
 const CURRENT = path.join(HOME, '.project-knowledge/events');
 const options = { homeDir: HOME, bridgeHomeDir: CURRENT };
 const shim = home => path.join(home, 'bin/bridge-hook.cjs');
@@ -73,6 +74,45 @@ async function main() {
   await item.uninstallCaptureZCode();
   assert.deepEqual(read(zcode).env, unrelated.env);
   assert.deepEqual(read(zcode).hooks.events.UserPromptSubmit[0].hooks, [third, zContext]);
+
+  // Renaming the default data directory leaves absolute hooks behind. The
+  // missing v5 shim must be retired even when the current hook already exists.
+  for (const client of ['claude', 'zcode']) {
+    const file = path.join(HOME, client, 'v5-migration.json');
+    const managed = client === 'zcode' ? processHook : cmd;
+    const eventMap = Object.fromEntries(events.map(event => [event, [
+      { matcher: '*', hooks: [managed(OLD_V5), third, managed(CURRENT), managed(customHome), lookalike] },
+    ]]));
+    write(file, { ...unrelated, hooks: client === 'zcode' ? { enabled: true, events: eventMap } : eventMap });
+    const migrated = manager(client === 'zcode' ? { zcodeConfigFile: file } : { claudeSettingsFile: file });
+    const status = () => client === 'zcode' ? migrated.statusCaptureZCode() : migrated.statusCaptureClaude();
+    const install = () => client === 'zcode' ? migrated.installCaptureZCode() : migrated.installCaptureClaude();
+    const original = fs.readFileSync(file, 'utf8');
+    assert(!fs.existsSync(shim(OLD_V5)), 'the retired v5 runtime is absent');
+    assert.equal((await status()).state, 'needs-repair', `${client}: stale v5 hooks cannot be reported healthy`);
+    assert.equal(fs.readFileSync(file, 'utf8'), original, 'migration status remains read-only');
+    const repaired = await install();
+    assert.equal(repaired.removedLegacy, 2);
+    assert.equal(repaired.removedDuplicates, 0);
+    const config = read(file), fixedEvents = client === 'zcode' ? config.hooks.events : config.hooks;
+    assert.deepEqual(config.env, unrelated.env);
+    for (const event of events) {
+      const hooks = fixedEvents[event].flatMap(group => group.hooks);
+      assert(!hooks.some(hook => JSON.stringify(hook) === JSON.stringify(managed(OLD_V5))));
+      assert.equal(hooks.filter(hook => JSON.stringify(hook) === JSON.stringify(managed(CURRENT))).length, 1);
+      for (const keep of [third, managed(customHome), lookalike]) assert(hooks.some(hook => JSON.stringify(hook) === JSON.stringify(keep)));
+      assert.equal(fixedEvents[event][0].matcher, '*');
+    }
+    assert.equal((await status()).state, 'installed');
+    const fixed = fs.readFileSync(file, 'utf8');
+    assert.equal((await install()).changed, false);
+    assert.equal(fs.readFileSync(file, 'utf8'), fixed, 'v5 migration is byte-idempotent');
+  }
+  assert.equal(bridgeBinding(['node', shim(OLD_V5)], options), 'legacy');
+  assert.equal(bridgeBinding(['node', shim(OLD_V5)], { ...options, bridgeHomeDir: OLD_V5 }), 'current', 'an explicitly selected v5 data directory remains current');
+  assert.equal(bridgeBinding(['node', shim(OLD_V5), '--custom-argument'], options), '');
+  assert.equal(bridgeBinding(['node', `${shim(OLD_V5)}.user-script`], options), '');
+  assert.equal(bridgeBinding(['node', shim(path.join(TEMP, 'another-user/.project-knowledge-v5/events'))], options), '', 'another account is not owned');
 
   write(claude, { hooks: Object.fromEntries(events.map(event => [event, [{ hooks: [cmd(OLD)] }]])) });
   const onlyLegacy = fs.readFileSync(claude, 'utf8');
@@ -135,7 +175,7 @@ async function main() {
   const captured = fs.readFileSync(journal, 'utf8').trim().split(/\r?\n/).map(line => JSON.parse(line));
   assert.deepEqual(captured.map(row => row.eventType), ['user_prompt', 'assistant_response']);
   assert(!fs.existsSync(obsoleteStore), 'the stale second directory is not recreated');
-  write(zcode, { hooks: { enabled: true, events: Object.fromEntries(events.map(event => [event, [{ hooks: [processHook(OLD), processHook(CURRENT), processHook(CURRENT)] }]])) } });
+  write(zcode, { hooks: { enabled: true, events: Object.fromEntries(events.map(event => [event, [{ hooks: [processHook(OLD_V5), processHook(CURRENT), processHook(CURRENT)] }]])) } });
   await item.installCaptureZCode();
   for (const [event, payload] of [
     ['UserPromptSubmit', { prompt: 'isolated zcode dedup request' }],

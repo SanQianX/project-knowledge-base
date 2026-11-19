@@ -20,8 +20,15 @@ function bridgeBinding(args, options) {
   if (args.length !== 2 && !(args.length === 4 && args[2] === '--source' && ['claude-code', 'claude', 'zcode', 'codex', 'opencode'].includes(args[3]))) return '';
   const actual = normalized(args[1]);
   const current = normalized(path.join(options.bridgeHomeDir, 'bin', 'bridge-hook.cjs'));
-  const legacy = normalized(path.join(options.homeDir || os.homedir(), '.ai-coding-event-bridge', 'bin', 'bridge-hook.cjs'));
-  return actual === current ? 'current' : actual === legacy ? 'legacy' : '';
+  const homeDir = options.homeDir || os.homedir();
+  // The default data-dir rename does not rewrite absolute client hooks.
+  // Match only our two historical defaults in this account; custom Bridge
+  // homes and other accounts remain untouched. An explicit v5 home is current.
+  const legacy = [
+    path.join(homeDir, '.ai-coding-event-bridge', 'bin', 'bridge-hook.cjs'),
+    path.join(homeDir, '.project-knowledge-v5', 'events', 'bin', 'bridge-hook.cjs'),
+  ].map(normalized);
+  return actual === current ? 'current' : legacy.includes(actual) ? 'legacy' : '';
 }
 
 function hookArgs(hook) {
