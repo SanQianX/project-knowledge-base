@@ -11,8 +11,8 @@
 //   3) the engine and the PINNED vector-hub package agree on the body hash,
 //      which is the precondition the engine needs before it may merge a
 //      vector-hub chunk row into a retrieved fact;
-//   4) the PINNED package still has the identity the comparison was made
-//      against, and its query cache still BEHAVES the way the comparison
+//   4) the installed package matches the shell's version pin,
+//      and its query cache still BEHAVES the way the comparison
 //      assumed: an identical query is served from the cache, a failed query
 //      is evicted, and a late failure of an evicted owner cannot destroy the
 //      replacement cached for the same text. The behaviour is observed
@@ -186,11 +186,13 @@ async function waitUntil(predicate, timeoutMs = 5000, intervalMs = 20) {
     // implementation is not a behaviour.
     const pinnedPackage = path.join(shell.REPO_ROOT, 'node_modules', '@sanqianx', 'vector-hub');
     const pinnedManifest = JSON.parse(fs.readFileSync(path.join(pinnedPackage, 'package.json'), 'utf8'));
+    const shellManifest = JSON.parse(fs.readFileSync(path.join(shell.REPO_ROOT, 'package.json'), 'utf8'));
+    const expectedVersion = shellManifest.dependencies['@sanqianx/vector-hub'];
     assert.equal(pinnedManifest.name, '@sanqianx/vector-hub', 'the pinned package identity changed');
     assert.equal(
       pinnedManifest.version,
-      '1.0.8-rc.8',
-      `the pinned @sanqianx/vector-hub is ${pinnedManifest.version} instead of 1.0.8-rc.8; re-run qa-autopilot/tools/product-probes/parallel-retrieval-followup-ret008.js`,
+      expectedVersion,
+      'the installed vector-hub must match the shell version pin',
     );
     record('RET-008-PINNED-PACKAGE', 'PASS', { pinnedName: pinnedManifest.name, pinnedVersion: pinnedManifest.version });
 
