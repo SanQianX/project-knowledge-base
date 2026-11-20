@@ -79,6 +79,9 @@ const ERROR_CODES = Object.freeze([
   'ENGINE_INVALID_RESPONSE',
   'ENGINE_REQUEST_FAILED',
   'ENGINE_URL_INVALID',
+  // Workflow module (fifth module) tool surface — additive M0-C.
+  'WORKFLOW_UNAVAILABLE',
+  'WORKFLOW_HTTP_ERROR',
 ]);
 
 const IMMUTABLE_PROJECT_FIELDS = Object.freeze([

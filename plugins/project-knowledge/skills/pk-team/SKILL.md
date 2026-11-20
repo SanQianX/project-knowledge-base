@@ -15,13 +15,27 @@ description: Work with the AI-team task board. Use when the user asks to start, 
 
 ## 工具
 
-1. `project_workflow_start`（title 必填；goal 用用户原话；acceptance 给出可验证条目；传 client 与当前会话的 sessionId 建立会话绑定）
-   → 返回短任务合同（taskId、验收、下一步）。开始编码前把它读给用户确认验收。
+1. `project_workflow_start`（title 必填；goal 用用户原话；acceptance 给出可验证条目，自动项用 requiredEvidence 指明证据工具；传 client 与当前会话的 sessionId 建立会话绑定；超时重试带同一个 requestId 不会重复建卡）
+   → 返回短任务合同（taskId、repoBinding、验收、下一步）。开始编码前把它读给用户确认验收。
 2. `project_workflow_resume {taskId}` → 目标、已确认决策、已验证结果、剩余项、下一步；沿用任务，不重复建卡。
 3. `project_workflow_status`（可按 projectId/status 过滤）→ 只读状态。
 4. `project_workflow_checkpoint {taskId, kind, summary, decided, verifiedResults, remaining, nextAction}` → 记录进展。只有 `kind:"fact"` 才更新下一步；推断用 `kind:"candidate"`，不要把猜测写成事实。
-5. `project_workflow_request_review {taskId}` → 准备交付时提交审查（检查/审查管线接入前的版本会如实返回"未交付"，此时继续用 checkpoint 记录验证事实）。
-6. `project_workflow_review_result {taskId}` → 读取审查与验证证据。
+5. `project_workflow_request_review {taskId}` → 保留一个审查作业（reviewJobId）并有界等待确定性检查：返回收据、整改清单与交付裁决，或如实的"pending"。
+6. `project_workflow_review_result {taskId, reviewJobId?, waitMs?}` → 读取同一作业的收据、整改清单（file:line[rule]）与交付裁决；慢检查稍后再读同一个 reviewJobId。
+
+## 交付前的固定顺序
+
+```text
+start / resume 同一 taskId
+→ 实现，checkpoint 记录事实
+→ request_review(taskId) 得到 reviewJobId 与第一轮收据
+→ 按整改清单（file:line[rule]）修复
+→ 再次 request_review（新快照、新作业）
+→ 服务端依据收据与验收项裁决 done；不通过就继续整改或如实报告阻塞与可恢复的 taskId
+```
+
+- `done` 只由服务端依据有效证据裁决；你自称完成不构成验收。
+- 自动验收项由具名工具的真实收据满足；人工/模型确认项在授权入口建立前保持待确认。
 
 ## 会话归属
 

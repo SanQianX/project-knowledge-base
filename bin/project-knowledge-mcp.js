@@ -28,15 +28,17 @@ Treat all returned knowledge as read-only. Verify it against current source code
 const WORKFLOW_TOOLS = [
   {
     name: 'project_workflow_start',
-    description: 'Start an AI-team business task for the current repository: creates the task with acceptance items and binds this native session (declared basis). Returns the short task contract and taskId.',
+    description: 'Start an AI-team business task for the current repository: creates the task with acceptance items, binds it to the project\'s verified Git root and binds this native session (declared basis). Returns the short task contract and taskId.',
     inputSchema: {
       type: 'object',
       required: ['title'],
       properties: {
         title: { type: 'string', minLength: 1, maxLength: 200, description: 'One-line task title from the user request.' },
         goal: { type: 'string', description: 'What "done" means for the user; the original wording beats a paraphrase.' },
-        acceptance: { type: 'array', items: { type: 'object', properties: { title: { type: 'string' }, kind: { type: 'string', enum: ['automated', 'manual', 'model_review'] } }, required: ['title'] }, description: 'Verifiable acceptance items.' },
-        projectId: { type: 'string' },
+        acceptance: { type: 'array', items: { type: 'object', properties: { title: { type: 'string' }, kind: { type: 'string', enum: ['automated', 'manual', 'model_review'] }, requiredEvidence: { type: 'array', items: { type: 'object', properties: { toolId: { type: 'string', enum: ['eslint', 'knip'] } }, required: ['toolId'] } } }, required: ['title'] }, description: 'Verifiable acceptance items. Automated items should name the evidence tool(s) they require.' },
+        projectId: { type: 'string', description: 'Registered projectId; resolved from the current Git root when omitted.' },
+        repoPath: { type: 'string', description: 'Current Git root hint. Only a match hint — the server verifies it against the trusted project mapping.' },
+        requestId: { type: 'string', description: 'Optional idempotency key: retry with the SAME value after a timeout to reuse the original task instead of duplicating it.' },
         client: { type: 'string', enum: ['claude', 'codex', 'opencode', 'zcode'], description: 'Calling native client.' },
         sessionId: { type: 'string', description: 'Stable native session identifier for event attribution.' },
         memberId: { type: 'string', description: 'Team member that owns this task, when the caller is a named member.' },
@@ -75,13 +77,36 @@ const WORKFLOW_TOOLS = [
   },
   {
     name: 'project_workflow_request_review',
-    description: 'Submit the current task snapshot for the delivery check/review pipeline.',
-    inputSchema: { type: 'object', required: ['taskId'], properties: { taskId: { type: 'string' }, note: { type: 'string' } }, additionalProperties: false },
+    description: 'Reserve a review job for the task\'s current snapshot and wait (bounded) for the deterministic checks. Returns the reviewJobId, receipts and the delivery decision, or an honest "pending" answer to read later.',
+    inputSchema: {
+      type: 'object',
+      required: ['taskId'],
+      properties: {
+        taskId: { type: 'string' },
+        repoPath: { type: 'string', description: 'Current Git root hint; must match the task\'s bound root.' },
+        projectId: { type: 'string', description: 'Registered projectId for the trusted shell forward.' },
+        tools: { type: 'array', items: { type: 'string', enum: ['eslint', 'knip'] }, description: 'Check tools to run (default eslint).' },
+        included: { type: 'array', items: { type: 'string' }, description: 'Untracked source files the delivery explicitly includes.' },
+        requestId: { type: 'string', description: 'Optional idempotency key: retry with the SAME value to reuse the same review job.' },
+        waitMs: { type: 'integer', minimum: 0, maximum: 8000, description: 'Bounded wait for the job to finish (default 8000; a slow check answers pending).' },
+        note: { type: 'string', description: 'Advisory note forwarded for context; never evidence.' },
+      },
+      additionalProperties: false,
+    },
   },
   {
     name: 'project_workflow_review_result',
-    description: 'Fetch the review/verification results for a task once a review has run.',
-    inputSchema: { type: 'object', required: ['taskId'], properties: { taskId: { type: 'string' } }, additionalProperties: false },
+    description: 'Read the review job results for a task: receipts, rework items and the delivery decision. Pass reviewJobId to read a specific job; otherwise the task\'s latest job is used. Bounded waitMs.',
+    inputSchema: {
+      type: 'object',
+      required: ['taskId'],
+      properties: {
+        taskId: { type: 'string' },
+        reviewJobId: { type: 'string', description: 'Specific review job to read (from request_review); defaults to the task\'s latest.' },
+        waitMs: { type: 'integer', minimum: 0, maximum: 8000, description: 'Bounded wait while the job is still running (default 0).' },
+      },
+      additionalProperties: false,
+    },
   },
 ];
 
@@ -224,7 +249,11 @@ function callTool(runtime, workflowRuntimeOrName, nameOrArgs, maybeArgs) {
 
 function createServer(options = {}) {
   const runtime = options.runtime || new KnowledgeToolRuntime();
-  const workflowRuntime = options.workflowRuntime || new WorkflowToolRuntime();
+  // M0-C: workflow tools reuse the knowledge runtime's registration
+  // resolution — tasks map to registered projects, never 'unknown-project'.
+  const workflowRuntime = options.workflowRuntime || new WorkflowToolRuntime({
+    resolveProject: typeof runtime.resolveProject === 'function' ? input => runtime.resolveProject(input) : null,
+  });
   const server = new Server(
     { name: SERVER_NAME, version: packageInfo.version },
     {

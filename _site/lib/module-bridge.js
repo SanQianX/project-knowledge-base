@@ -148,6 +148,10 @@ class ModuleBridge {
     };
     this.moduleUrlSources = { terminal: 'pending', vectorHub: 'pending', eventBridge: 'pending', engine: 'pending', workflow: 'pending' };
     this.runtimeToken = options.runtimeToken || crypto.randomBytes(32).toString('hex');
+    // M0-C: read-only registration resolver (knowledge runtime) — the shell
+    // uses it AFTER its own safety checks to attach the canonical Git root
+    // to trusted review forwards. Client tokens never become module trust.
+    this.workflowProjectResolver = typeof options.workflowProjectResolver === 'function' ? options.workflowProjectResolver : null;
     this.registryStore = options.registryStore || null;
     this.projectStore = options.projectStore || null;
     this.projectWiringQueue = new Map();
@@ -191,10 +195,15 @@ class ModuleBridge {
   }
 
   /** Same-origin proxy. SSE has a headers deadline, never a whole-turn deadline. */
-  async proxy(req, res, target) {
+  async proxy(req, res, target, { bodyOverride, extraHeaders } = {}) {
     const chunks = [];
-    for await (const chunk of req) chunks.push(chunk);
-    const body = chunks.length ? Buffer.concat(chunks) : undefined;
+    if (bodyOverride !== undefined) {
+      // A prepared body (trusted review forward): the incoming request was
+      // already read; forward the rewritten payload instead of the raw one.
+    } else {
+      for await (const chunk of req) chunks.push(chunk);
+    }
+    const body = bodyOverride !== undefined ? bodyOverride : (chunks.length ? Buffer.concat(chunks) : undefined);
     // The native folder pickers hold the request open until the user closes
     // the dialog — they need a human-scale budget, not the API budget.
     const isPicker = /\/(system\/)?pick-folder/.test(target);
@@ -213,7 +222,11 @@ class ModuleBridge {
       upstream = await fetch(target, {
         method: req.method,
         signal: controller.signal,
-        headers: { ...(body ? { 'Content-Type': req.headers['content-type'] || 'application/json' } : {}), ...(req.headers['last-event-id'] ? { 'Last-Event-ID': req.headers['last-event-id'] } : {}) },
+        headers: {
+          ...(body ? { 'Content-Type': req.headers['content-type'] || 'application/json' } : {}),
+          ...(req.headers['last-event-id'] ? { 'Last-Event-ID': req.headers['last-event-id'] } : {}),
+          ...(extraHeaders || {}),
+        },
         body: ['GET', 'HEAD'].includes(req.method) ? undefined : body,
       });
     } catch (error) {
@@ -264,7 +277,39 @@ class ModuleBridge {
   }
 
   proxyWorkflow(req, res, pathname, search) {
+    // M0-C: the reviews subroute is forwarded as a TRUSTED internal call —
+    // the shell resolves the registered project after its own safety checks
+    // and attaches its private runtime token plus the canonical Git root.
+    // A client's own token header is never forwarded as module trust; the
+    // generic proxy shape (headers passthrough) stays untouched otherwise.
+    if (req.method === 'POST' && /^\/api\/workflow\/workflow-tasks\/[^/]+\/reviews\/?$/.test(pathname)) {
+      return this._proxyWorkflowReviewTrusted(req, res, pathname, search);
+    }
     return this.proxy(req, res, this._workflowApi(pathname) + (search || ''));
+  }
+
+  async _proxyWorkflowReviewTrusted(req, res, pathname, search) {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    let body = {};
+    try { body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}; } catch {
+      throw new DomainError('VALIDATION', 'Review 请求体必须是合法 JSON。', { status: 400 });
+    }
+    const forward = { ...body };
+    if (this.workflowProjectResolver && (forward.projectId || forward.repoPath)) {
+      try {
+        const project = this.workflowProjectResolver({ projectId: forward.projectId, repoPath: forward.repoPath });
+        if (project && project.projectId) {
+          forward.projectId = project.projectId;
+          forward.canonicalGitRoot = project.repoPath;
+        }
+      } catch { /* an unresolvable project forwards as-is; the workflow module keeps its own binding gate */ }
+    }
+    const extraHeaders = forward.canonicalGitRoot && this.runtimeToken ? { 'X-KB-Runtime-Token': this.runtimeToken } : {};
+    return this.proxy(req, res, this._workflowApi(pathname) + (search || ''), {
+      bodyOverride: Buffer.from(JSON.stringify(forward), 'utf8'),
+      extraHeaders,
+    });
   }
 
   proxyEngine(req, res, pathname, search) {
@@ -827,7 +872,7 @@ class ModuleBridge {
         name: 'workflow',
         command: process.env.KB_WORKFLOW_COMMAND || `node ${JSON.stringify(workflowEntry)} serve --port ${urlPort(this.workflowUrl, 5810)} --host ${urlHost(this.workflowUrl)} --data ${JSON.stringify(this.dataDir || require('./data-dir').getDataDir())}`,
         url: this.workflowUrl,
-        env: { KB_WORKFLOW_MANAGED: '1', KB_WORKFLOW_RUNTIME_TOKEN: this.runtimeToken },
+        env: { KB_WORKFLOW_MANAGED: '1', KB_WORKFLOW_RUNTIME_TOKEN: this.runtimeToken, KB_EVENT_BRIDGE_URL: this.eventBridgeUrl },
       });
     } else {
       this.logger.warn('modules.supervisor', '@sanqianx/ai-coding-workflow runtime not installed; team features report "not installed".', {});
