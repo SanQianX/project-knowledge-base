@@ -42,4 +42,14 @@ assert(app.includes('已提交重试'), 'retry button toast must acknowledge sub
 // Evidence failures render their concrete resource.
 assert(app.includes('失败资源：'), 'evidence failures must show the concrete resource');
 
+const coverageRenderer = app.match(/function gitEvidenceCoverage\(coverage\) \{[\s\S]*?\n  \}/);
+assert(coverageRenderer, 'activity must explain the evidence coverage for oversized commits');
+const renderCoverage = new Function('esc', 'return (' + coverageRenderer[0] + ')')(String);
+assert.strictEqual(renderCoverage(null), '');
+assert.match(renderCoverage({ kind: 'text-patch' }), /完整文本差异.*二进制 Git 对象标识/);
+assert.match(renderCoverage({ kind: 'selected-file-patches', textPathCount: 3 }), /3 项文本补丁/);
+assert.match(renderCoverage({ kind: 'selected-file-patches', textPathCount: 1, preflightSkippedPaths: 2 }), /2 项在生成补丁前已仅归档对象标识/);
+assert.match(renderCoverage({ kind: 'file-object-list' }), /补丁未收录/);
+assert(app.includes('${gitEvidenceCoverage(r.patchCoverage)}'), 'activity cards must use the reported evidence coverage');
+
 console.log('recovery-label-contract-test PASS');

@@ -668,8 +668,19 @@
       Number.isFinite(details.timeoutMs) && `限时 ${details.timeoutMs / 1000} 秒`,
       Number.isFinite(details.outputBytes) && `已读取 ${(details.outputBytes / (1024 * 1024)).toFixed(1)} MiB`,
     ].filter(Boolean);
-    const explanation = { timeout: '耗时超限', 'git-output-limit': '输出超限' }[reason] || details.error;
+    const explanation = details.outputStream === 'stderr' ? 'Git 诊断输出超限' : ({ timeout: '耗时超限', 'git-output-limit': '输出超限' }[reason] || details.error);
     return `<p>失败阶段：Git 补丁生成${explanation ? ` · ${esc(explanation)}` : ''}${timing.length ? `<br>${timing.join(' · ')}` : ''}</p>`;
+  }
+  function gitEvidenceCoverage(coverage) {
+    const scope = {
+      'text-patch': '已保留完整文本差异与二进制 Git 对象标识',
+      'selected-file-patches': `已保留全部变更路径与 Git 对象标识，以及 ${coverage?.textPathCount ?? 0} 项文本补丁`,
+      'file-object-list': '已按 Git 变更清单与对象标识归档，补丁未收录',
+    }[coverage?.kind];
+    if (!scope) return '';
+    const skipped = Number.isInteger(coverage?.preflightSkippedPaths) && coverage.preflightSkippedPaths > 0
+      ? ` · ${coverage.preflightSkippedPaths} 项在生成补丁前已仅归档对象标识` : '';
+    return `<p>证据范围：${esc(scope)}${skipped}</p>`;
   }
   function renderActivity() {
     all('[data-activity-tab]').forEach(button => button.classList.toggle('active', button.dataset.activityTab === state.activityTab));
@@ -690,7 +701,7 @@
           || (state.activityFilter === 'recovering' && recoveryLabel(r) === '自动恢复中')
           || (state.activityFilter === 'completed' && r.state === 'succeeded'));
       const open = new Set(all('.run[open]').map(d => d.dataset.runId));
-      body = state.engineAvailable ? runs.map(r => `<details class="run" data-run-id="${esc(r.runId)}" ${open.has(r.runId) ? 'open' : ''}><summary><time>${time(r.startedAt)}</time><strong>${esc(projectName(r.projectId))} · ${esc(r.commitSha.slice(0, 8))}</strong>${badge(label(r), ['failed', 'index-pending'].includes(r.state) && recoveryLabel(r) !== '自动恢复中' ? 'issue' : r.state === 'succeeded' ? 'up' : '')}</summary><div><p>提交：${esc(r.commitSha)}<br>阶段：${esc(r.phase)} · 入口：${esc(r.trigger)}<br>知识晋升：${time(r.promotedAt)} · 索引：${esc(r.indexState)}${r.recovery ? `<br>恢复：${esc(recoveryLabel(r))} · 本轮已尝试 ${r.recovery.attempts} 次${r.recovery.nextRetryAt ? ` · 下次 ${time(r.recovery.nextRetryAt)}` : ''}` : ''}</p>${r.error ? `<p class="error">${esc(r.error.message)} (${esc(r.error.code)})</p>${gitFailureDetails(r.error)}${r.error.details?.resource ? `<p>失败资源：${esc(r.error.details.resource)}${r.error.details.evidenceRoot ? `（${esc(r.error.details.evidenceRoot)}）` : ''}</p>` : ''}${r.error.details?.upstreamMessage ? `<p>失败原因：${esc(r.error.details.upstreamMessage)}<br>类别：${esc(r.error.details.failureKind)} · HTTP：${esc(r.error.details.httpStatus ?? '—')} · 尝试：${esc(r.error.details.attempt)}</p>` : ''}` : ''}${(r.staging?.operations || []).map(op => `<div class="operation">${esc(op.operation)} · ${esc(op.path)}<br>${esc(op.reason)}</div>`).join('')}${['failed', 'index-pending'].includes(r.state) ? `<button data-retry-run="${esc(r.runId)}">重试失败阶段</button>` : ''}</div></details>`).join('') || '<div class="empty small-empty">此分类没有记录。</div>' : '<div class="empty small-empty">知识引擎离线。记录仍保留在本机，连接恢复后自动读取。</div>';
+      body = state.engineAvailable ? runs.map(r => `<details class="run" data-run-id="${esc(r.runId)}" ${open.has(r.runId) ? 'open' : ''}><summary><time>${time(r.startedAt)}</time><strong>${esc(projectName(r.projectId))} · ${esc(r.commitSha.slice(0, 8))}</strong>${badge(label(r), ['failed', 'index-pending'].includes(r.state) && recoveryLabel(r) !== '自动恢复中' ? 'issue' : r.state === 'succeeded' ? 'up' : '')}</summary><div><p>提交：${esc(r.commitSha)}<br>阶段：${esc(r.phase)} · 入口：${esc(r.trigger)}<br>知识晋升：${time(r.promotedAt)} · 索引：${esc(r.indexState)}${r.recovery ? `<br>恢复：${esc(recoveryLabel(r))} · 本轮已尝试 ${r.recovery.attempts} 次${r.recovery.nextRetryAt ? ` · 下次 ${time(r.recovery.nextRetryAt)}` : ''}` : ''}</p>${gitEvidenceCoverage(r.patchCoverage)}${r.error ? `<p class="error">${esc(r.error.message)} (${esc(r.error.code)})</p>${gitFailureDetails(r.error)}${r.error.details?.resource ? `<p>失败资源：${esc(r.error.details.resource)}${r.error.details.evidenceRoot ? `（${esc(r.error.details.evidenceRoot)}）` : ''}</p>` : ''}${r.error.details?.upstreamMessage ? `<p>失败原因：${esc(r.error.details.upstreamMessage)}<br>类别：${esc(r.error.details.failureKind)} · HTTP：${esc(r.error.details.httpStatus ?? '—')} · 尝试：${esc(r.error.details.attempt)}</p>` : ''}` : ''}${(r.staging?.operations || []).map(op => `<div class="operation">${esc(op.operation)} · ${esc(op.path)}<br>${esc(op.reason)}</div>`).join('')}${['failed', 'index-pending'].includes(r.state) ? `<button data-retry-run="${esc(r.runId)}">重试失败阶段</button>` : ''}</div></details>`).join('') || '<div class="empty small-empty">此分类没有记录。</div>' : '<div class="empty small-empty">知识引擎离线。记录仍保留在本机，连接恢复后自动读取。</div>';
       const nav = `<div class="actions" style="margin-top:12px">${state.activityBefore ? '<button data-run-page="">回到最新记录</button>' : ''}${state.activityPage?.nextCursor ? `<button data-run-page="${esc(state.activityPage.nextCursor)}">更早的记录</button>` : ''}</div>`;
       body += nav;
     }
