@@ -659,6 +659,18 @@
     if (status.executionEnabled === false || status.consuming === false) return { title: '提交维护尚未启用', message: '请在系统状态中检查项目接线；事件消费恢复后，已捕获的提交才能进入分析队列。', failures: [] };
     return null;
   }
+  function gitFailureDetails(error) {
+    const details = error?.details;
+    if (details?.gitStage !== 'patch' && !(error?.phase === 'evidence.prepared' && details?.args?.[0] === 'diff')) return '';
+    const reason = details.reason || details.error;
+    const timing = [
+      Number.isFinite(details.elapsedMs) && `已运行 ${(details.elapsedMs / 1000).toFixed(1)} 秒`,
+      Number.isFinite(details.timeoutMs) && `限时 ${details.timeoutMs / 1000} 秒`,
+      Number.isFinite(details.outputBytes) && `已读取 ${(details.outputBytes / (1024 * 1024)).toFixed(1)} MiB`,
+    ].filter(Boolean);
+    const explanation = { timeout: '耗时超限', 'git-output-limit': '输出超限' }[reason] || details.error;
+    return `<p>失败阶段：Git 补丁生成${explanation ? ` · ${esc(explanation)}` : ''}${timing.length ? `<br>${timing.join(' · ')}` : ''}</p>`;
+  }
   function renderActivity() {
     all('[data-activity-tab]').forEach(button => button.classList.toggle('active', button.dataset.activityTab === state.activityTab));
     $('activityUpdates').hidden = state.activityTab !== 'updates'; $('activitySessions').hidden = state.activityTab !== 'sessions';
@@ -678,7 +690,7 @@
           || (state.activityFilter === 'recovering' && recoveryLabel(r) === '自动恢复中')
           || (state.activityFilter === 'completed' && r.state === 'succeeded'));
       const open = new Set(all('.run[open]').map(d => d.dataset.runId));
-      body = state.engineAvailable ? runs.map(r => `<details class="run" data-run-id="${esc(r.runId)}" ${open.has(r.runId) ? 'open' : ''}><summary><time>${time(r.startedAt)}</time><strong>${esc(projectName(r.projectId))} · ${esc(r.commitSha.slice(0, 8))}</strong>${badge(label(r), ['failed', 'index-pending'].includes(r.state) && recoveryLabel(r) !== '自动恢复中' ? 'issue' : r.state === 'succeeded' ? 'up' : '')}</summary><div><p>提交：${esc(r.commitSha)}<br>阶段：${esc(r.phase)} · 入口：${esc(r.trigger)}<br>知识晋升：${time(r.promotedAt)} · 索引：${esc(r.indexState)}${r.recovery ? `<br>恢复：${esc(recoveryLabel(r))} · 本轮已尝试 ${r.recovery.attempts} 次${r.recovery.nextRetryAt ? ` · 下次 ${time(r.recovery.nextRetryAt)}` : ''}` : ''}</p>${r.error ? `<p class="error">${esc(r.error.message)} (${esc(r.error.code)})</p>${r.error.details?.resource ? `<p>失败资源：${esc(r.error.details.resource)}${r.error.details.evidenceRoot ? `（${esc(r.error.details.evidenceRoot)}）` : ''}</p>` : ''}${r.error.details?.upstreamMessage ? `<p>失败原因：${esc(r.error.details.upstreamMessage)}<br>类别：${esc(r.error.details.failureKind)} · HTTP：${esc(r.error.details.httpStatus ?? '—')} · 尝试：${esc(r.error.details.attempt)}</p>` : ''}` : ''}${(r.staging?.operations || []).map(op => `<div class="operation">${esc(op.operation)} · ${esc(op.path)}<br>${esc(op.reason)}</div>`).join('')}${['failed', 'index-pending'].includes(r.state) ? `<button data-retry-run="${esc(r.runId)}">重试失败阶段</button>` : ''}</div></details>`).join('') || '<div class="empty small-empty">此分类没有记录。</div>' : '<div class="empty small-empty">知识引擎离线。记录仍保留在本机，连接恢复后自动读取。</div>';
+      body = state.engineAvailable ? runs.map(r => `<details class="run" data-run-id="${esc(r.runId)}" ${open.has(r.runId) ? 'open' : ''}><summary><time>${time(r.startedAt)}</time><strong>${esc(projectName(r.projectId))} · ${esc(r.commitSha.slice(0, 8))}</strong>${badge(label(r), ['failed', 'index-pending'].includes(r.state) && recoveryLabel(r) !== '自动恢复中' ? 'issue' : r.state === 'succeeded' ? 'up' : '')}</summary><div><p>提交：${esc(r.commitSha)}<br>阶段：${esc(r.phase)} · 入口：${esc(r.trigger)}<br>知识晋升：${time(r.promotedAt)} · 索引：${esc(r.indexState)}${r.recovery ? `<br>恢复：${esc(recoveryLabel(r))} · 本轮已尝试 ${r.recovery.attempts} 次${r.recovery.nextRetryAt ? ` · 下次 ${time(r.recovery.nextRetryAt)}` : ''}` : ''}</p>${r.error ? `<p class="error">${esc(r.error.message)} (${esc(r.error.code)})</p>${gitFailureDetails(r.error)}${r.error.details?.resource ? `<p>失败资源：${esc(r.error.details.resource)}${r.error.details.evidenceRoot ? `（${esc(r.error.details.evidenceRoot)}）` : ''}</p>` : ''}${r.error.details?.upstreamMessage ? `<p>失败原因：${esc(r.error.details.upstreamMessage)}<br>类别：${esc(r.error.details.failureKind)} · HTTP：${esc(r.error.details.httpStatus ?? '—')} · 尝试：${esc(r.error.details.attempt)}</p>` : ''}` : ''}${(r.staging?.operations || []).map(op => `<div class="operation">${esc(op.operation)} · ${esc(op.path)}<br>${esc(op.reason)}</div>`).join('')}${['failed', 'index-pending'].includes(r.state) ? `<button data-retry-run="${esc(r.runId)}">重试失败阶段</button>` : ''}</div></details>`).join('') || '<div class="empty small-empty">此分类没有记录。</div>' : '<div class="empty small-empty">知识引擎离线。记录仍保留在本机，连接恢复后自动读取。</div>';
       const nav = `<div class="actions" style="margin-top:12px">${state.activityBefore ? '<button data-run-page="">回到最新记录</button>' : ''}${state.activityPage?.nextCursor ? `<button data-run-page="${esc(state.activityPage.nextCursor)}">更早的记录</button>` : ''}</div>`;
       body += nav;
     }
@@ -851,31 +863,35 @@
     $('systemDrawer').hidden = false; $('drawerBackdrop').hidden = false;
     $('brainName').value = state.brain.name; $('knowledgeRoot').value = state.root;
     renderStorageInfo();
-    await Promise.all([loadMaintenance(), loadAgentCapture()]);
+    const view = agentCaptureView(state.projectId);
+    const pending = [...view.checks.entries()].filter(([key, check]) => key !== 'overview' && check.checkedAt === 0);
+    await Promise.all([loadMaintenance(), loadAgentCapture(), ...pending.map(([key]) => {
+      const full = key.startsWith('details:');
+      return loadAgentCapture({ client: full ? key.slice('details:'.length) : key, full });
+    })]);
   }
   function renderStorageInfo() {
     $('indexStoragePath').textContent = state.indexStorage?.actualPath || state.indexStorage?.path || '设置知识根目录后自动确定';
     $('indexStorageStatus').textContent = state.indexStorage?.status === 'ready' ? '索引目录已生效。' : `索引接线待恢复；目标目录：${state.indexStorage?.expectedPath || state.indexStorage?.path || '尚未设置'}`;
   }
-  let captureScanTimer = null;
-  async function loadAgentCapture() {
-    clearTimeout(captureScanTimer);
-    const epoch = ++captureEpoch;
-    try {
-      const projectId = state.projectId;
-      const params = new URLSearchParams();
-      if (projectId) params.set('projectId', projectId);
-      const result = await api('/api/integrations/status?' + params);
-      if (projectId !== state.projectId || epoch !== captureEpoch) return;
-      const list = $('agentCaptureList');
-      const opened = new Set(Array.from(list.querySelectorAll('.agent-detail[open]'), detail => detail.closest('.agent-capture-row').dataset.agentClient));
-      const badgeState = { connected: 'up', error: 'issue', 'check-failed': 'issue' };
-      const badgeText = { checking: '检测中', connected: '已接入', disconnected: '未接入', error: '异常', 'not-detected': '未检测到', 'check-failed': '检测未完成' };
-      list.innerHTML = result.clients.map(agent => {
+  const agentCaptureViews = new Map();
+  const agentCaptureMarkup = new WeakMap();
+  const AGENT_CAPTURE_CACHE_MS = 30_000;
+  function agentCaptureView(projectId) {
+    if (!agentCaptureViews.has(projectId)) agentCaptureViews.set(projectId, { agents: new Map(), checks: new Map() });
+    return agentCaptureViews.get(projectId);
+  }
+  function renderAgentCapture(view) {
+    const list = $('agentCaptureList');
+    const rows = new Map(Array.from(list.querySelectorAll('.agent-capture-row'), row => [row.dataset.agentClient, row]));
+    if (!rows.size && view.agents.size) list.replaceChildren();
+    const badgeState = { connected: 'up', error: 'issue', 'check-failed': 'issue' };
+    const badgeText = { checking: '检测中', connected: '已接入', disconnected: '未接入', error: '异常', 'not-detected': '未检测到', 'check-failed': '检测未完成' };
+    for (const agent of view.agents.values()) {
         const capture = agent.developmentCapture || {};
         const knowledge = agent.knowledgeIntegration;
         const scan = agent.scan;
-        const checkError = scan?.error || knowledge?.error || capture.error || agent.commandCheck || (capture.state === 'check-failed' ? result.error : null);
+        const checkError = scan?.error || knowledge?.error || capture.error || agent.commandCheck;
         const timedOut = ['ETIMEDOUT', 'INTEGRATION_STATUS_TIMEOUT'].includes(checkError?.code);
         const summary = capture.installed === true ? 'connected'
           : capture.state === 'check-failed' && agent.summary !== 'error' ? 'check-failed' : agent.summary || 'checking';
@@ -888,45 +904,117 @@
         const mcp = agent.mcpStartup;
         const mcpLine = mcp ? `<small>MCP ${mcp.state === 'ready' ? '已通过' : '未通过'}${mcp.code ? `（${esc(mcp.code)}）` : ''}${mcp.detail ? ` · ${esc(mcp.detail)}` : ''}</small>` : '';
         const repairLine = agent.repair ? `<small>启动自动修复：${agent.repair.state === 'repaired' ? '成功' : `失败${agent.repair.error ? ` · ${esc(agent.repair.error)}` : ''}`}</small>` : '';
+        const recheck = Boolean(checkError) || summary === 'check-failed' || auto?.state === 'check-failed' || mcp?.code === 'PROBE_TIMEOUT';
+        const refresh = `<button data-agent-check="${esc(agent.client)}" ${captureBusy ? 'disabled' : ''}>重新检测</button>`;
         const details = [
           `<small>${esc(software)}${capture.detail ? ` · ${esc(capture.detail)}` : ''}</small>`,
           knowledge?.detail ? `<small>知识插件：${esc(knowledge.detail)}</small>` : '',
           auto ? `<small>开发前知识：${esc(auto.detail)}</small>` : '',
           mcpLine,
           checkError ? `<small>${timedOut ? '本次检查超时' : '本次检查未完成'}（${esc(checkError.code)}）</small>` : '',
-          scan?.stale && scan.checkedAt ? `<small>上次核验 ${esc(time(scan.checkedAt))}</small>` : '',
+          `<small data-agent-checked-at></small>`,
           repairLine,
           summary === 'error' ? `<div class="actions"><button data-agent-retry="1" data-agent-client="${esc(agent.client)}" ${captureBusy ? 'disabled' : ''}>重试修复</button></div>` : '',
+          recheck ? '' : `<div class="actions">${refresh}</div>`,
         ].filter(Boolean).join('');
-        const recheck = Boolean(checkError) || summary === 'check-failed' || auto?.state === 'check-failed' || mcp?.code === 'PROBE_TIMEOUT';
-        const refresh = recheck ? `<button data-agent-check="${esc(agent.client)}" ${captureBusy ? 'disabled' : ''}>重新检测</button>` : '';
         const detected = agent.available || agent.configFound;
         const disabled = captureBusy || (!switchOn && (!detected || ['checking', 'check-failed'].includes(summary)));
-        return `<div class="agent-capture-row" data-agent-client="${esc(agent.client)}"><div><b>${esc(agent.label)}</b> ${badge(title, badgeState[summary] || '')}<details class="agent-detail" ${opened.has(agent.client) ? 'open' : ''}><summary>详情</summary>${details}</details></div><div class="actions">${refresh}<button data-agent-switch="${switchOn ? 'uninstall' : 'install'}" data-agent-client="${esc(agent.client)}" ${disabled ? 'disabled' : ''}>${switchOn ? '移除' : '接入'}</button></div></div>`;
-      }).join('');
-      const pendingScan = ['checking', 'refreshing'].includes(result.scan?.state)
-        || (result.clients || []).some(client => client.developmentCapture?.state === 'checking' || client.knowledgeIntegration?.state === 'checking' || client.summary === 'checking');
-      if (pendingScan) captureScanTimer = setTimeout(() => {
-        if (epoch === captureEpoch && !$('systemDrawer').hidden) loadAgentCapture().catch(error => toast(error.message));
-      }, 1500);
-    } catch (error) {
-      if (epoch !== captureEpoch) return;
-      const message = `无法刷新采集状态：${error.message}`;
-      if ($('agentCaptureList').childElementCount) toast(message);
-      else $('agentCaptureList').textContent = message;
+        const markup = `<div class="agent-capture-row" data-agent-client="${esc(agent.client)}"><div><b>${esc(agent.label)}</b> ${badge(title, badgeState[summary] || '')}<details class="agent-detail"><summary>详情</summary>${details}</details></div><div class="actions">${recheck ? refresh : ''}<button data-agent-switch="${switchOn ? 'uninstall' : 'install'}" data-agent-client="${esc(agent.client)}" ${disabled ? 'disabled' : ''}>${switchOn ? '移除' : '接入'}</button></div></div>`;
+        let row = rows.get(agent.client);
+        rows.delete(agent.client);
+        if (agentCaptureMarkup.get(row) !== markup) {
+          const template = document.createElement('template');
+          template.innerHTML = markup;
+          const next = template.content.firstElementChild;
+          const oldDetails = row?.querySelector('details');
+          next.querySelector('details').open = oldDetails?.open === true;
+          const focused = document.activeElement;
+          const focusSelector = row?.contains(focused) && ['summary', '[data-agent-switch]', '[data-agent-check]', '[data-agent-retry]'].find(selector => focused.matches(selector));
+          if (row) row.replaceWith(next); else list.append(next);
+          if (focusSelector) next.querySelector(focusSelector)?.focus({ preventScroll: true });
+          row = next;
+          agentCaptureMarkup.set(row, markup);
+        }
+        const timestamp = row.querySelector('[data-agent-checked-at]');
+        const checkedAt = scan?.checkedAt ? `上次核验 ${time(scan.checkedAt)}` : '';
+        if (timestamp.textContent !== checkedAt) timestamp.textContent = checkedAt;
     }
+    for (const row of rows.values()) row.remove();
+    if (!view.agents.size && !list.textContent) list.textContent = '正在检查采集配置…';
   }
-  async function retryAgentCheck(client) {
+  async function loadAgentCapture({ client, full = false, force = false } = {}) {
     const projectId = state.projectId;
-    const params = new URLSearchParams({ clients: client, refresh: '1' });
+    const view = agentCaptureView(projectId);
+    const visible = () => projectId === state.projectId && !$('systemDrawer').hidden;
+    if (visible()) renderAgentCapture(view);
+    if (captureBusy) return;
+    const key = full ? `details:${client}` : client || 'overview';
+    const check = view.checks.get(key) || {};
+    if (check.request && check.epoch === captureEpoch) return check.request;
+    if (!force && check.checkedAt && Date.now() - check.checkedAt < AGENT_CAPTURE_CACHE_MS) return;
+    clearTimeout(check.timer);
+    view.checks.set(key, check);
+    const epoch = captureEpoch;
+    check.epoch = epoch;
+    const params = new URLSearchParams();
     if (projectId) params.set('projectId', projectId);
-    await api('/api/integrations/status?' + params);
-    if (projectId === state.projectId && !$('systemDrawer').hidden) await loadAgentCapture();
+    if (client) params.set('clients', client);
+    if (!full) params.set('captureOnly', '1');
+    if (force) params.set('refresh', '1');
+    const request = api('/api/integrations/status?' + params).then(result => {
+      if (epoch !== captureEpoch || view.checks.get(key) !== check) return;
+      for (const row of result.clients) {
+        const previous = view.agents.get(row.client);
+        const next = { ...previous, ...row };
+        if (previous && row.developmentCapture?.state === 'checking' && typeof previous.developmentCapture?.installed === 'boolean') {
+          Object.assign(next, { developmentCapture: previous.developmentCapture, summary: previous.summary, available: previous.available, configFound: previous.configFound });
+        }
+        if (full && !row.mcpStartup && row.scan?.state === 'ready') delete next.mcpStartup;
+        view.agents.set(row.client, next);
+      }
+      const pending = ['checking', 'refreshing'].includes(result.scan?.state)
+        || result.clients.some(row => row.developmentCapture?.state === 'checking' || row.knowledgeIntegration?.state === 'checking' || row.summary === 'checking');
+      check.checkedAt = pending ? 0 : Date.now();
+      if (visible()) {
+        renderAgentCapture(view);
+        if (pending) check.timer = setTimeout(() => {
+          if (visible() && epoch === captureEpoch) void loadAgentCapture({ client, full });
+        }, 1500);
+      }
+    }).catch(error => {
+      if (epoch !== captureEpoch || !visible()) return;
+      const message = `无法刷新采集状态：${error.message}`;
+      if (view.agents.size) toast(message);
+      else $('agentCaptureList').textContent = message;
+    }).finally(() => {
+      if (check.request === request) check.request = null;
+    });
+    check.request = request;
+    return request;
+  }
+  function retryAgentCheck(client) {
+    return loadAgentCapture({ client, full: true, force: true });
+  }
+  async function refreshChangedAgent(client) {
+    for (const [projectId, view] of agentCaptureViews) {
+      for (const key of [client, `details:${client}`]) {
+        clearTimeout(view.checks.get(key)?.timer);
+        view.checks.delete(key);
+      }
+      const agent = view.agents.get(client);
+      if (agent) {
+        delete agent.knowledgeIntegration;
+        delete agent.automaticContext;
+        delete agent.mcpStartup;
+      }
+      if (projectId !== state.projectId) view.checks.delete('overview');
+    }
+    return loadAgentCapture({ client, force: true });
   }
   async function changeAgentAccess(client, operation) {
     if (captureBusy) return;
     captureBusy = true; captureEpoch++;
-    all('[data-agent-switch]').forEach(button => { button.disabled = true; });
+    renderAgentCapture(agentCaptureView(state.projectId));
     $('agentCaptureFeedback').textContent = operation === 'install' ? '正在接入，保留第三方配置…' : '正在移除，已有记录保留…';
     try {
       const result = await api(`/api/integrations/${operation}`, { method: 'POST', body: { clients: [client] } });
@@ -936,18 +1024,19 @@
         : `操作未完成，展开详情查看原因；更多请查系统诊断记录（操作 ID：${result.operationId || '—'}）。`;
       $('agentCaptureFeedback').classList.toggle('issue', !success);
     } catch (error) { $('agentCaptureFeedback').textContent = `操作失败：${error.message}`; $('agentCaptureFeedback').classList.add('issue'); }
-    finally { captureBusy = false; await loadAgentCapture(); post('eventBridge', { type: 'kb:refresh-agents' }); }
+    finally { captureBusy = false; await refreshChangedAgent(client); post('eventBridge', { type: 'kb:refresh-agents' }); }
   }
   async function retryAgentRepair(client) {
     if (captureBusy) return;
     captureBusy = true; captureEpoch++;
+    renderAgentCapture(agentCaptureView(state.projectId));
     $('agentCaptureFeedback').textContent = '正在重试修复…';
     try {
       const result = await api('/api/integrations/install', { method: 'POST', body: { clients: [client] } });
       $('agentCaptureFeedback').textContent = result.complete === true ? '修复成功，重新打开客户端后生效。' : `修复未完成，详情见系统诊断记录（操作 ID：${result.operationId || '—'}）。`;
       $('agentCaptureFeedback').classList.toggle('issue', result.complete !== true);
     } catch (error) { $('agentCaptureFeedback').textContent = `修复失败：${error.message}`; $('agentCaptureFeedback').classList.add('issue'); }
-    finally { captureBusy = false; await loadAgentCapture(); post('eventBridge', { type: 'kb:refresh-agents' }); }
+    finally { captureBusy = false; await refreshChangedAgent(client); post('eventBridge', { type: 'kb:refresh-agents' }); }
   }
   async function loadLogs() {
     const epoch = ++logEpoch;
@@ -980,7 +1069,7 @@
     while ($('logsContent').childElementCount > 100) $('logsContent').firstElementChild.remove();
   }
   function closeSystem() {
-    clearTimeout(captureScanTimer);
+    for (const check of agentCaptureView(state.projectId).checks.values()) clearTimeout(check.timer);
     $('systemDrawer').hidden = true; $('drawerBackdrop').hidden = true;
     if (resumeImport) {
       resumeImport = false;
@@ -1645,6 +1734,12 @@
     } catch (error) { toast(`导入失败：${error.message}`); }
   });
   on('openSystem', 'click', openSystem); on('closeSystem', 'click', closeSystem); on('drawerBackdrop', 'click', closeSystem);
+  on('agentCaptureList', 'click', event => {
+    const summary = event.target.closest('.agent-detail > summary');
+    if (summary && !summary.parentElement.open) {
+      return loadAgentCapture({ client: summary.closest('.agent-capture-row').dataset.agentClient, full: true });
+    }
+  });
   on('repairWiring', 'click', repair);
   on('configureProviders', 'click', () => {
     closeSystem();

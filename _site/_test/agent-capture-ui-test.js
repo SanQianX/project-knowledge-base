@@ -73,6 +73,7 @@ async function main() {
     // Confirmed invalid config is actionable, and the installer preserves it.
     fs.writeFileSync(configFile, '{invalid JSON');
     await click('#closeSystem'); await click('#openSystem');
+    await click('.agent-capture-row[data-agent-client=zcode] summary');
     await waitFor(() => run("(() => { const b = document.querySelector('[data-agent-client=zcode][data-agent-switch=install]'); return b !== null && !b.disabled && b.closest('.agent-capture-row').textContent.includes('异常'); })()"), 'invalid ZCode config is shown as actionable');
     await click('[data-agent-client=zcode][data-agent-switch=install]');
     await waitFor(() => run("document.getElementById('agentCaptureFeedback').textContent.includes('操作未完成')"), 'partial failure rendered');
@@ -81,7 +82,7 @@ async function main() {
     assert(logs.some(entry => entry.error?.code === 'AGENT_CONFIG_INVALID'));
     assert.equal(fs.readFileSync(configFile, 'utf8'), '{invalid JSON');
     fs.writeFileSync(configFile, JSON.stringify(config));
-    await click('#closeSystem'); await click('#openSystem');
+    await click('[data-agent-check=zcode]');
     await waitFor(() => run("document.querySelector('[data-agent-client=zcode][data-agent-switch=uninstall]') !== null"), 'switch repair succeeds');
     // Switch OFF: removal keeps third-party config and prior evidence.
     await click('[data-agent-client=zcode][data-agent-switch=uninstall]');

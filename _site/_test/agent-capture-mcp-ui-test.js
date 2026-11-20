@@ -54,9 +54,38 @@ async function main() {
     browser = await launchCdpBrowser({ chrome: findChrome(), profileDir: path.join(temp, 'browser'), url: base, width: 1440, height: 900 });
     const run = expression => browser.evaluate(expression);
     const click = selector => run('document.querySelector(' + JSON.stringify(selector) + ').click()');
-    await run('(() => { const original = window.fetch; window.__integrationRequests = []; window.fetch = (input, init) => { const url = String(input && input.url || input); if (url.includes(\'/api/integrations/\')) { window.__integrationRequests.push([url, init?.method || \'GET\']); return Promise.resolve({ ok: true, json: async () => (' + payload + ') }); } return original(input, init); }; })()');
+    await run(`(${function mockAgentStatus(fixture) {
+      const original = window.fetch;
+      window.__integrationRequests = [];
+      window.fetch = (input, init) => {
+        const url = new URL(String(input?.url || input), location.href);
+        if (url.pathname !== '/api/integrations/status') return original(input, init);
+        window.__integrationRequests.push([url.href, init?.method || 'GET']);
+        const client = url.searchParams.get('clients');
+        const clients = fixture.clients.filter(row => !client || row.client === client).map(row => {
+          if (url.searchParams.get('captureOnly') !== '1') return row;
+          const { knowledgeIntegration, automaticContext, mcpStartup, ...capture } = row;
+          return capture;
+        });
+        return Promise.resolve({ ok: true, json: async () => ({ ...fixture, clients }) });
+      };
+    }})(${payload})`);
     await click('#openSystem');
     await waitFor(() => run("document.querySelectorAll('#agentCaptureList .agent-capture-row').length === 4"), 'capture rows render');
+    assert.equal(await run("window.__integrationRequests.length"), 1);
+    assert.equal(await run("window.__integrationRequests[0][0].includes('captureOnly=1')"), true, 'opening the overview only checks capture');
+    assert.equal(await run("document.getElementById('agentCaptureList').textContent.includes('PROBE_TIMEOUT')"), false);
+    await run("window.__openCodeRow = document.querySelector('.agent-capture-row[data-agent-client=opencode]')");
+    await click('#closeSystem');
+    await click('#openSystem');
+    assert.equal(await run("window.__integrationRequests.length"), 1, 'a fresh reopen uses the snapshot without fetching');
+    assert.equal(await run("window.__openCodeRow === document.querySelector('.agent-capture-row[data-agent-client=opencode]')"), true);
+    await click('.agent-capture-row[data-agent-client=codex] summary');
+    await waitFor(() => run("document.getElementById('agentCaptureList').textContent.includes('PROBE_TIMEOUT')"), 'Codex details load on demand');
+    assert.equal(await run("window.__integrationRequests.length"), 2);
+    assert.equal(await run("window.__integrationRequests[1][0].includes('clients=codex') && !window.__integrationRequests[1][0].includes('captureOnly')"), true);
+    assert.equal(await run("document.querySelector('.agent-capture-row[data-agent-client=codex] details').open"), true);
+    assert.equal(await run("window.__openCodeRow === document.querySelector('.agent-capture-row[data-agent-client=opencode]')"), true, 'a targeted update keeps other cards');
     assert(await run("document.getElementById('agentCaptureList').textContent.includes('PROBE_TIMEOUT')"), 'the MCP startup failure code must be rendered for MCP-capable clients');
     const codexRowHtml = await run("document.querySelector('.agent-capture-row[data-agent-client=codex]').innerHTML");
     assert(codexRowHtml.includes('&lt;img'), 'hostile mcpStartup detail must be HTML-escaped, got: ' + codexRowHtml.slice(0, 300));
@@ -66,11 +95,18 @@ async function main() {
     assert(smalls.split('|').some(text => text.startsWith('MCP')), 'the MCP diagnostic is its own line item, got: ' + smalls);
     const badges = await run("Object.fromEntries(Array.from(document.querySelectorAll('.agent-capture-row'), row => [row.dataset.agentClient, row.querySelector('.status').textContent]))");
     assert.deepEqual(badges, { claude: '检测超时', codex: '已接入', zcode: '已接入', opencode: '未检测到' });
+    await run("(() => { const originalNow = Date.now; Date.now = () => originalNow() + 31_000; })()");
+    await click('#closeSystem');
+    await click('#openSystem');
+    await waitFor(() => run("window.__integrationRequests.length === 3"), 'an expired overview rechecks capture');
+    assert.equal(await run("window.__integrationRequests[2][0].includes('captureOnly=1')"), true);
+    assert.equal(await run("window.__openCodeRow === document.querySelector('.agent-capture-row[data-agent-client=opencode]')"), true, 'an unchanged card stays on the same DOM node');
     await click('[data-agent-check="claude"]');
     await waitFor(() => run("window.__integrationRequests.some(([url]) => url.includes('clients=claude') && url.includes('refresh=1'))"), 'single-client refresh request');
+    assert.equal(await run("window.__integrationRequests.length"), 4, 'manual recheck issues no follow-up request for all agents');
     assert.equal(await run("window.__integrationRequests.every(([,method]) => method === 'GET')"), true, 'rechecking a timeout never installs or repairs an agent');
     assert.equal(browser.exceptions.length, 0, JSON.stringify(browser.exceptions));
-    console.log('agent-capture-mcp-ui-test PASS (independent states, targeted retry and escaped MCP diagnostics)');
+    console.log('agent-capture-mcp-ui-test PASS (cached reopen, stable rows, lazy MCP and targeted retry)');
   } finally {
     runtime.integrationStatusScan?.close();
     await browser?.close(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
