@@ -39,11 +39,20 @@ function hookArgs(hook) {
   return match ? [match[1] || match[2] || match[3], match[4] || match[5] || match[6], ...(match[7] ? ['--source', match[7]] : [])] : null;
 }
 
+function invalidAgentConfig(message) {
+  return Object.assign(new Error(message), { code: 'AGENT_CONFIG_INVALID' });
+}
+
 function configuration(file) {
-  const source = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+  let source;
+  try { source = fs.readFileSync(file, 'utf8'); }
+  catch (error) {
+    if (error.code === 'ENOENT') return { source: '', config: {} };
+    throw error;
+  }
   let config;
-  try { config = source ? JSON.parse(source) : {}; } catch { throw new Error('Agent 配置不是有效 JSON，未修改。'); }
-  if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('Agent 配置必须是 JSON 对象，未修改。');
+  try { config = JSON.parse(source); } catch { throw invalidAgentConfig('Agent 配置不是有效 JSON，未修改。'); }
+  if (!config || typeof config !== 'object' || Array.isArray(config)) throw invalidAgentConfig('Agent 配置必须是 JSON 对象，未修改。');
   return { source, config };
 }
 
@@ -51,17 +60,17 @@ function planCaptureHooks(file, client, options, removeCurrent = false) {
   if (!['claude', 'zcode'].includes(client)) throw new Error('不支持的采集配置类型。');
   const { source, config } = configuration(file);
   const hooks = config.hooks;
-  if (hooks != null && (typeof hooks !== 'object' || Array.isArray(hooks))) throw new Error('Agent hooks 配置格式异常，未修改。');
+  if (hooks != null && (typeof hooks !== 'object' || Array.isArray(hooks))) throw invalidAgentConfig('Agent hooks 配置格式异常，未修改。');
   const events = client === 'zcode' ? hooks?.events : hooks;
-  if (events != null && (typeof events !== 'object' || Array.isArray(events))) throw new Error('Agent 事件配置格式异常，未修改。');
+  if (events != null && (typeof events !== 'object' || Array.isArray(events))) throw invalidAgentConfig('Agent 事件配置格式异常，未修改。');
   const removed = [], counts = {};
   for (const event of EVENTS) {
     const groups = events?.[event];
     if (groups == null) { counts[event] = { current: 0, legacy: 0 }; continue; }
-    if (!Array.isArray(groups)) throw new Error('Agent 事件列表格式异常，未修改。');
+    if (!Array.isArray(groups)) throw invalidAgentConfig('Agent 事件列表格式异常，未修改。');
     const count = { current: 0, legacy: 0 };
     for (const group of groups) {
-      if (group?.hooks != null && !Array.isArray(group.hooks)) throw new Error('Agent Hook 列表格式异常，未修改。');
+      if (group?.hooks != null && !Array.isArray(group.hooks)) throw invalidAgentConfig('Agent Hook 列表格式异常，未修改。');
       for (const hook of group?.hooks || []) { const binding = bridgeBinding(hookArgs(hook), options); if (binding) count[binding]++; }
     }
     counts[event] = count;

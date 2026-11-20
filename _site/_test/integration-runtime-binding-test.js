@@ -376,8 +376,7 @@ async function testStatusScanDoesNotRespawn() {
   fs.writeFileSync(worker, `${'const fs = require(\'node:fs\');'}
 process.once('message', async input => {
   const counter = ${JSON.stringify(counter)};
-  const count = fs.existsSync(counter) ? Number(fs.readFileSync(counter, 'utf8')) + 1 : 1;
-  fs.writeFileSync(counter, String(count));
+  fs.appendFileSync(counter, (input.statusOptions.sharedOnly ? 'shared' : input.statusOptions.clients[0]) + '\\n');
   process.send({ ok: true, summary: { bridge: { ok: true }, clients: [{ client: input.statusOptions.clients?.[0] || 'claude', mcpStartup: { state: 'ready' } }] } }, () => process.disconnect());
 });
 `);
@@ -385,9 +384,10 @@ process.once('message', async input => {
   const options = { rootDir: ROOT, homeDir: TEMP, bridgeHomeDir: TEMP };
   await scan.read(options, { clients: ['claude'] }, { waitMs: 5000 });
   await scan.read(options, { clients: ['claude'] }, { waitMs: 5000 });
-  assert(Number(fs.readFileSync(counter, 'utf8')) === 1, 'a cached scan must not fork another worker for the same key');
+  const calls = () => fs.readFileSync(counter, 'utf8').trim().split(/\r?\n/).sort();
+  assert(calls().join(',') === 'claude,shared', 'cached reads reuse the client and shared results');
   await scan.read(options, { clients: ['claude'] }, { force: true, waitMs: 5000 });
-  assert(Number(fs.readFileSync(counter, 'utf8')) === 2, 'force refresh must re-run the scan');
+  assert(calls().join(',') === 'claude,claude,shared', 'a targeted refresh re-runs only the requested client');
   scan.close();
 }
 

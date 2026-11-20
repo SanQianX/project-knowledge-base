@@ -68,7 +68,9 @@ function bootstrapIntent(dataDir, clientsStatus) {
   let changed = false;
   for (const entry of clientsStatus || []) {
     if (!entry || !entry.client || entry.client in clients) continue;
-    if (entry.developmentCapture?.state === 'checking' || entry.developmentCapture?.installed === undefined) continue;
+    const capture = entry.developmentCapture;
+    if (entry.scan?.stale || capture?.ok === false || ['checking', 'check-failed', 'failed', 'conflict'].includes(capture?.state)
+        || typeof capture?.installed !== 'boolean') continue;
     clients[entry.client] = entry.developmentCapture?.installed === true ? 'connected' : 'disconnected';
     changed = true;
   }
@@ -78,11 +80,16 @@ function bootstrapIntent(dataDir, clientsStatus) {
 
 // Aggregate badge state for the single-switch UI.
 function summarizeClient(entry, repair) {
-  if (entry.developmentCapture?.state === 'checking' || entry.knowledgeIntegration?.state === 'checking') return 'checking';
-  if (!(entry.available || entry.configFound)) return 'not-detected';
-  if (entry.developmentCapture?.installed === true) return 'connected';
+  const capture = entry.developmentCapture;
+  if (capture?.installed === true) return 'connected';
+  if (capture?.state === 'conflict') return 'error';
+  if (capture?.state === 'checking' || (capture?.installed === undefined && entry.knowledgeIntegration?.state === 'checking')) return 'checking';
+  if (capture?.ok === false || capture?.state === 'check-failed' || capture?.state === 'failed'
+      || (entry.scan?.stale && entry.scan?.error)) return 'check-failed';
   if (repair?.[entry.client]?.state === 'failed') return 'error';
-  return 'disconnected';
+  if (entry.available || entry.configFound) return 'disconnected';
+  if (entry.available === false && entry.configFound === false && !entry.scan?.stale) return 'not-detected';
+  return 'check-failed';
 }
 
 module.exports = { SCHEMA, FILENAME, intentPath, readIntent, markIntent, bootstrapIntent, summarizeClient };

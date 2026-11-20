@@ -41,6 +41,7 @@ html[data-skin=steel][data-theme=dark]{--page:#171a1f;--surface:#20252d;--surfac
 .group-tag{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:6px;background:var(--surface2);padding:3px 6px;font-size:11px;cursor:grab;max-width:100%}
 .group-tag span{overflow-wrap:anywhere}
 .group-tag button{border:0;background:transparent;min-width:22px;min-height:22px;padding:0;font-size:14px}
+.team-tag{cursor:default;background:var(--accent-soft)}
 .combo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
 .combo-card{display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:left;padding:14px 16px;min-height:60px}
 .combo-card small{display:block;margin-top:2px}

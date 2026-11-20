@@ -46,10 +46,11 @@ class IntegrationAutoRepair {
     if (!intent) return this.status();
     const clients = Object.entries(intent.clients).filter(([, state]) => state === 'connected').map(([client]) => client);
     if (!clients.length) return this.status();
-    const status = await this.createManager().statusAll({ clients });
+    const status = await this.createManager().statusAll({ clients, captureOnly: true, includeShared: false });
     for (const entry of status?.clients || []) {
       if (readIntent(this.dataDir)?.clients[entry.client] !== 'connected') continue;
-      if (entry.developmentCapture?.installed !== false) continue;
+      const capture = entry.developmentCapture;
+      if (capture?.installed !== false || capture.ok === false || ['checking', 'check-failed', 'failed', 'conflict'].includes(capture.state)) continue;
       if (this.attempted.has(entry.client)) continue;
       await this._attempt(entry.client);
     }

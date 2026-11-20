@@ -75,7 +75,7 @@ function commitFile(repo, file, content, message = 'follow-up') {
   return repo.headCommit;
 }
 
-async function startHarness({ tag, evidenceDir, viewport = { width: 1600, height: 900 } } = {}) {
+async function startHarness({ tag, evidenceDir, viewport = { width: 1600, height: 900 }, productRoot = ROOT, workflowEntry } = {}) {
   // Full driver isolation FIRST, before any product module load or fixture
   // directory: the environment is rebuilt from a system whitelist with every
   // product surface pointed at a per-run layout. Chrome is captured from the
@@ -125,10 +125,18 @@ async function startHarness({ tag, evidenceDir, viewport = { width: 1600, height
   const engineProxy = createUpstreamProxy({ target: engineUrl, token: engineToken, tag: 'engine' });
   await engineProxy.start();
 
+  let workflow;
+  let workflowUrl = 'http://127.0.0.1:1';
+  if (workflowEntry) {
+    const { createWorkflowServer } = require(workflowEntry);
+    workflow = createWorkflowServer({ dataDir: path.join(fixture, 'workflow-runtime') });
+    const bound = await workflow.listen(0);
+    workflowUrl = `http://127.0.0.1:${bound.port}`;
+  }
   const port = await freePort();
   const base = `http://127.0.0.1:${port}`;
   const server = spawnServer({
-    root: ROOT,
+    root: productRoot,
     port,
     dataDir,
     tag: `parallel-memory-${tag}`,
@@ -140,6 +148,7 @@ async function startHarness({ tag, evidenceDir, viewport = { width: 1600, height
       KB_VECTORHUB_URL: vectorHub.url,
       KB_EVENTBRIDGE_URL: eventBridge.url,
       KB_KNOWLEDGE_ENGINE_URL: engineProxy.url,
+      KB_WORKFLOW_URL: workflowUrl,
     },
   });
 
@@ -192,6 +201,7 @@ async function startHarness({ tag, evidenceDir, viewport = { width: 1600, height
     await vectorHub.close();
     await eventBridge.close();
     await engine.close().catch(() => {});
+    await workflow?.close();
     fs.rmSync(fixture, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     throw error;
   }
@@ -450,6 +460,7 @@ async function startHarness({ tag, evidenceDir, viewport = { width: 1600, height
     await eventBridge.close();
     await engine.close().catch(() => {});
     await engineVector.close().catch(() => {});
+    await workflow?.close();
     fs.rmSync(fixture, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   };
 

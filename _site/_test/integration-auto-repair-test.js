@@ -98,7 +98,9 @@ const makeManager = ({ statusClients, onInstall }) => {
     markIntent(dir, 'codex', 'connected');
     manager.statusAll = async options => {
       assert.deepEqual(options.clients, ['codex']);
-      return { clients: [{ client: 'codex', developmentCapture: { state: 'check-failed' } }] };
+      assert.equal(options.captureOnly, true, 'startup should only check the configuration it can repair');
+      assert.equal(options.includeShared, false, 'startup capture checks do not need a shared MCP probe');
+      return { clients: [{ client: 'codex', developmentCapture: { state: 'check-failed', installed: false } }] };
     };
     await repair.runOnce();
     assert.equal(manager.calls.installAll.length, 0, 'an unknown status must not be treated as an absent integration');

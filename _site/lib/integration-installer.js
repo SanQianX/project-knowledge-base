@@ -10,6 +10,7 @@ const packageInfo = require('../../package.json');
 const { resolveDataDirPath } = require('./data-dir');
 const { planNotify, writeNotify } = require('./codex-notify-config');
 const { planCaptureHooks, repairCaptureHooks, removeCaptureHooks } = require('./capture-hook-config');
+const { readClaudePluginStatus } = require('./claude-plugin-status');
 const { writeJsonAtomic } = require('./atomic-file');
 
 // Fail-open module resolution: a missing/unloadable Bridge package must
@@ -23,6 +24,7 @@ try {
 
 const INTEGRATION_NAME = 'project-knowledge';
 const MARKETPLACE_NAME = 'project-knowledge';
+const PLUGIN_ID = `${INTEGRATION_NAME}@${MARKETPLACE_NAME}`;
 const DEFAULT_MARKETPLACE_SOURCE = 'SanQianX/project-knowledge-base';
 const INTEGRATION_RUNTIME_SCHEMA = 'project-knowledge/integration-runtime/v1';
 const MCP_LAUNCHER_ERROR_SCHEMA = 'project-knowledge/mcp-launcher-error/v1';
@@ -103,13 +105,38 @@ function defaultCommandResolver(name, env = process.env) {
   return candidates[0] || '';
 }
 
+function statusCommandResolver(name, env) {
+  const windows = process.platform === 'win32';
+  const envValue = key => windows ? env[Object.keys(env).find(name => name.toUpperCase() === key)] : env[key];
+  const extensions = windows
+    ? (envValue('PATHEXT') || '.COM;.EXE;.BAT;.CMD').split(';').filter(ext => /^\.[a-z0-9]+$/i.test(ext))
+    : [''];
+  let lookupError;
+  for (const entry of (envValue('PATH') || '').split(path.delimiter)) {
+    const directory = windows ? entry.trim().replace(/^"(.*)"$/, '$1') : entry;
+    if (!directory) continue;
+    for (const extension of extensions) {
+      const candidate = path.resolve(directory, name + extension);
+      try {
+        if (!fs.statSync(candidate).isFile()) continue;
+        if (!windows) fs.accessSync(candidate, fs.constants.X_OK);
+        return candidate;
+      } catch (error) {
+        if (!['ENOENT', 'ENOTDIR'].includes(error.code)) lookupError = error;
+      }
+    }
+  }
+  if (lookupError) throw lookupError;
+  return '';
+}
+
 function defaultRunner(command, args, options = {}) {
   return crossSpawn.sync(command, args, {
     encoding: 'utf8',
     windowsHide: true,
     env: options.env || process.env,
     cwd: options.cwd,
-    timeout: options.timeout || (process.env.KB_INTEGRATION_STATUS_WORKER === '1' ? 5000 : 120_000),
+    timeout: options.timeout || (process.env.KB_INTEGRATION_STATUS_WORKER === '1' ? 12_000 : 120_000),
   });
 }
 
@@ -227,7 +254,9 @@ class IntegrationManager {
     this.codexMarketplaceAddSource = options.codexMarketplaceSource || options.marketplaceSource || this.rootDir;
     this.explicitCodexMarketplace = Boolean(options.codexMarketplaceSource || options.marketplaceSource);
     this.runner = options.runner || defaultRunner;
-    this.commandResolver = options.commandResolver || defaultCommandResolver;
+    this.localStatus = options.localStatus === true;
+    this.commandResolver = options.commandResolver || (this.localStatus ? statusCommandResolver : defaultCommandResolver);
+    this.statusCommands = this.localStatus ? new Map() : null;
     this.codexHookProbe = options.codexHookProbe || require('./codex-context-status').readCodexHooks;
     this.mcpProbe = options.mcpProbe || null;
     this.dryRun = Boolean(options.dryRun);
@@ -239,7 +268,8 @@ class IntegrationManager {
     this.bridgeHomeDir = options.bridgeHomeDir
       || this.env.AI_CODING_EVENT_BRIDGE_HOME
       || path.join(resolveDataDirPath({ dataDir: this.env.KB_DATA_DIR || '', homeDir: this.homeDir }), 'events');
-    this.claudeSettingsFile = options.claudeSettingsFile || path.join(this.homeDir, '.claude', 'settings.json');
+    this.claudeConfigDir = this.env.CLAUDE_CONFIG_DIR || path.join(this.homeDir, '.claude');
+    this.claudeSettingsFile = options.claudeSettingsFile || path.join(this.claudeConfigDir, 'settings.json');
     this.codexConfigFile = options.codexConfigFile || path.join(this.homeDir, '.codex', 'config.toml');
     this.openCodePluginsDir = options.openCodePluginsDir || path.join(openCodeConfigDir(this.homeDir, this.env), 'plugin');
     this.zcodeConfigFile = options.zcodeConfigFile || path.join(this.homeDir, '.zcode', 'cli', 'config.json');
@@ -304,6 +334,10 @@ class IntegrationManager {
       return { ok, ...result, ...(!ok ? { error: { code: 'CAPTURE_CONFLICT', message: result.detail } } : {}) };
     } catch (error) {
       this.log('error', 'integration.capture.failed', 'Agent 采集接线操作失败。', { operationId: this.operationId, durationMs: Date.now() - startedAt, error, context });
+      if (operation === 'status' && error.code === 'AGENT_CONFIG_INVALID') {
+        return { ok: false, state: 'conflict', conflict: true, detail: error.message, error: { code: error.code } };
+      }
+      if (operation === 'status') return { ok: false, state: 'check-failed', detail: '无法核实会话采集配置。', error: { code: error.code || 'CAPTURE_STATUS_FAILED' } };
       return { ok: false, state: 'failed', installed: false, detail: error.message, error: { code: error.code || 'CAPTURE_FAILED', message: error.message } };
     }
   }
@@ -322,8 +356,8 @@ class IntegrationManager {
   }
 
   async statusCaptureZCode() {
-    const status = await this.bridge.installers.zcode.statusZcodeHook(this._captureInstallerOptions('zcode'));
     const plan = planCaptureHooks(this.zcodeConfigFile, 'zcode', this);
+    const status = await this.bridge.installers.zcode.statusZcodeHook(this._captureInstallerOptions('zcode'));
     if (plan.repairNeeded || status.installed && !fs.existsSync(path.join(this.bridgeHomeDir, 'bin', 'bridge-hook.cjs'))) return { state: 'needs-repair', installed: false, conflict: false, repairNeeded: true, detail: '检测到重复、旧接线或缺失的 Bridge 入口，请执行接入/修复。' };
     return { state: status.installed ? 'installed' : 'not-installed', installed: status.installed, conflict: false, detail: status.installed ? '已配置用户输入与回答采集；请重新打开 ZCode 会话。' : 'ZCode 会话采集尚未接入。' };
   }
@@ -348,8 +382,8 @@ class IntegrationManager {
   }
 
   async statusCaptureClaude() {
-    const status = await this.bridge.installers.claudeCode.statusClaudeCodeHook(this._captureInstallerOptions());
     const plan = planCaptureHooks(this.claudeSettingsFile, 'claude', this);
+    const status = await this.bridge.installers.claudeCode.statusClaudeCodeHook(this._captureInstallerOptions());
     if (plan.repairNeeded || status.installed && !fs.existsSync(path.join(this.bridgeHomeDir, 'bin', 'bridge-hook.cjs'))) return { state: 'needs-repair', installed: false, conflict: false, repairNeeded: true, detail: '检测到重复、旧接线或缺失的 Bridge 入口，请执行接入/修复。' };
     return {
       state: status.installed ? 'installed' : 'not-installed',
@@ -446,9 +480,13 @@ class IntegrationManager {
   executable(client) {
     const name = client === 'claude' ? 'claude' : client;
     if (this.dryRun) return process.platform === 'win32' ? `${name}.cmd` : name;
-    const command = this.commandResolver(name, this.env);
-    if (command || client !== 'zcode' || this.commandResolver !== defaultCommandResolver) return command;
-    try { return require('claude-ai-workbench/packages/server/lib/drivers/zcode-driver').discoverZCodeCli({ env: this.env })?.path || ''; } catch { return ''; }
+    if (this.statusCommands?.has(client)) return this.statusCommands.get(client);
+    let command = this.commandResolver(name, this.env);
+    if (!command && client === 'zcode' && [defaultCommandResolver, statusCommandResolver].includes(this.commandResolver)) {
+      try { command = require('claude-ai-workbench/packages/server/lib/drivers/zcode-driver').discoverZCodeCli({ env: this.env })?.path || ''; } catch { /* keep the PATH result */ }
+    }
+    this.statusCommands?.set(client, command);
+    return command;
   }
 
   detectClients() {
@@ -629,7 +667,9 @@ class IntegrationManager {
     const command = this.executable(client);
     this.planned.push({ command: command || client, args: [...args] });
     const argsHash = `sha256:${crypto.createHash('sha256').update(JSON.stringify(args), 'utf8').digest('hex')}`;
-    this.log('info', 'integration.command_started', 'Integration CLI command started.', { context: { client, argumentCount: args.length, argsHash, dryRun: this.dryRun } });
+    const resolvedAt = Date.now();
+    const resolveMs = resolvedAt - startedAt;
+    this.log('info', 'integration.command_started', 'Integration CLI command started.', { context: { client, argumentCount: args.length, argsHash, dryRun: this.dryRun, resolveMs } });
     if (this.dryRun) {
       this.log('info', 'integration.command_completed', 'Integration CLI command completed.', { durationMs: Date.now() - startedAt, context: { client, status: 0, argsHash, dryRun: true } });
       return { status: 0, stdout: '', stderr: '' };
@@ -643,8 +683,9 @@ class IntegrationManager {
       cwd: options.cwd || this.rootDir,
       timeout: options.timeout,
     });
+    const commandMs = Date.now() - resolvedAt;
     if (result.error) {
-      this.log('error', 'integration.command_failed', 'Integration CLI command failed.', { durationMs: Date.now() - startedAt, error: Object.assign(new Error('Integration CLI command failed.'), { code: result.error.code || 'INTEGRATION_COMMAND_FAILED' }), context: { client, argsHash } });
+      this.log('error', 'integration.command_failed', 'Integration CLI command failed.', { durationMs: Date.now() - startedAt, error: Object.assign(new Error('Integration CLI command failed.'), { code: result.error.code || 'INTEGRATION_COMMAND_FAILED' }), context: { client, argsHash, resolveMs, commandMs } });
       throw result.error;
     }
     const localRefFailure = client === 'codex' && String(result.stderr || '').trim() === 'Error: --ref is only supported for git marketplace sources';
@@ -661,7 +702,7 @@ class IntegrationManager {
     });
     this.log(completed ? 'info' : 'warn', completed ? 'integration.command_completed' : 'integration.command_failed', completed ? 'Integration CLI command completed.' : 'Integration CLI command returned a failure.', {
       durationMs: Date.now() - startedAt, error: safeError,
-      context: { client, status: result.status, argsHash },
+      context: { client, status: result.status, argsHash, resolveMs, commandMs },
     });
     return result;
   }
@@ -680,9 +721,12 @@ class IntegrationManager {
     return Array.isArray(marketplaces) && marketplaces.some(item => item.name === MARKETPLACE_NAME);
   }
 
-  codexPlugin() {
+  codexPlugin(strict = false) {
     const result = this.execute('codex', ['plugin', 'list', '--json'], { allowFailure: true });
     const data = parseJson(result.stdout, {});
+    if (strict && (result.status !== 0 || !Array.isArray(data?.installed))) {
+      throw Object.assign(new Error('Could not verify the Codex plugin inventory.'), { code: 'CODEX_PLUGIN_LIST_FAILED' });
+    }
     return Array.isArray(data?.installed)
       ? data.installed.find(item => item.pluginId === `${INTEGRATION_NAME}@${MARKETPLACE_NAME}`)
       : undefined;
@@ -720,7 +764,7 @@ class IntegrationManager {
     if (!this.dryRun && this.claudeMarketplaceExists()) {
       if (this.explicitMarketplace) return;
       let source;
-      try { source = JSON.parse(fs.readFileSync(path.join(this.homeDir, '.claude/plugins/known_marketplaces.json'), 'utf8'))[MARKETPLACE_NAME]?.source; } catch {}
+      try { source = JSON.parse(fs.readFileSync(path.join(this.claudeConfigDir, 'plugins', 'known_marketplaces.json'), 'utf8'))[MARKETPLACE_NAME]?.source; } catch {}
       const directory = source?.path || source?.directory;
       if (directory && path.resolve(directory).toLowerCase() === path.resolve(this.rootDir).toLowerCase()) return;
       const remote = source?.repo === DEFAULT_MARKETPLACE_SOURCE || /^https:\/\/github\.com\/SanQianX\/project-knowledge-base(?:\.git)?\/?$/i.test(source?.url || '');
@@ -827,7 +871,10 @@ class IntegrationManager {
   statusClaude() {
     const command = this.executable('claude');
     if (!command) return { state: 'unavailable', installed: false, detail: 'Claude Code CLI not found' };
-    const plugin = this.claudePlugin();
+    return this.claudeKnowledgeStatus(this.claudePlugin());
+  }
+
+  claudeKnowledgeStatus(plugin) {
     return {
       state: plugin?.enabled === false ? 'disabled' : plugin && plugin.version !== this.version ? 'needs-update' : plugin ? 'installed' : 'not-installed',
       installed: Boolean(plugin),
@@ -908,7 +955,7 @@ class IntegrationManager {
   statusCodex() {
     const command = this.executable('codex');
     if (!command) return { state: 'unavailable', installed: false, detail: 'Codex CLI not found' };
-    const plugin = this.codexPlugin();
+    const plugin = this.codexPlugin(this.localStatus);
     return {
       state: plugin?.enabled === false ? 'disabled' : plugin && plugin.version !== this.version ? 'needs-update' : plugin ? 'installed' : 'not-installed',
       installed: Boolean(plugin),
@@ -1106,7 +1153,7 @@ class IntegrationManager {
     return summary;
   }
 
-  installedMcpLauncherPaths(client) {
+  installedMcpLauncherPaths(client, knowledge, claudeInventory) {
     const launchers = [];
     const seen = new Set();
     const consider = directory => {
@@ -1117,70 +1164,99 @@ class IntegrationManager {
       seen.add(launcher);
       launchers.push(launcher);
     };
-    if (client === 'claude') {
+    if (client === 'claude' && this.localStatus) {
+      const plugin = claudeInventory?.plugin;
+      if (plugin?.enabled && plugin.version === this.version) consider(plugin.installPath);
+    } else if (client === 'claude') {
       try {
-        const index = JSON.parse(fs.readFileSync(path.join(this.homeDir, '.claude', 'plugins', 'installed_plugins.json'), 'utf8'));
+        const index = JSON.parse(fs.readFileSync(path.join(this.claudeConfigDir, 'plugins', 'installed_plugins.json'), 'utf8'));
         for (const record of (index.plugins?.[`${INTEGRATION_NAME}@${MARKETPLACE_NAME}`] || [])) {
           if (record && record.version === this.version) consider(record.installPath);
         }
       } catch { /* no native install index yet */ }
-      consider(path.join(this.homeDir, '.claude', 'plugins', 'cache', MARKETPLACE_NAME, INTEGRATION_NAME, this.version));
+      consider(path.join(this.claudeConfigDir, 'plugins', 'cache', MARKETPLACE_NAME, INTEGRATION_NAME, this.version));
     }
-    if (client === 'codex' && this.executable('codex')) {
-      try { consider(this.codexPlugin()?.source?.path); } catch { /* the client CLI failed to list plugins; there is no installed entry to probe */ }
-    }
+    if (client === 'codex') consider(knowledge?.source?.path);
     return launchers;
   }
 
-  async statusAll(options = {}) {
-    const clients = options.clients && options.clients.length ? options.clients.map(normalizeClient) : SUPPORTED_CLIENTS;
-    const summary = { clients: [], bridge: null };
+  async statusClient(client, options, runProbe) {
+    const entry = { client, label: CLIENT_LABELS[client], configFound: this.captureConfigFound(client) };
+    try { entry.available = Boolean(this.executable(client)); }
+    catch (error) { entry.commandCheck = { code: error.code || 'COMMAND_LOOKUP_FAILED' }; }
+    entry.developmentCapture = await this.captureOperation('status', client);
+    if (options.captureOnly) return entry;
+    options.onClientStatus?.({ ...entry });
+
+    let claudeInventory;
     try {
-      summary.bridge = { ok: true, ...(await this.bridgeStatus()) };
+      let knowledge;
+      if (client === 'claude' && this.localStatus) {
+        claudeInventory = readClaudePluginStatus({ configDir: this.claudeConfigDir, settingsFile: this.claudeSettingsFile, pluginId: PLUGIN_ID, cwd: options.cwd });
+        knowledge = this.claudeKnowledgeStatus(claudeInventory.plugin);
+      } else {
+        if (entry.commandCheck) throw Object.assign(new Error('Command lookup failed.'), entry.commandCheck);
+        knowledge = await this[`status${CLIENT_METHOD_SUFFIX[client]}`]();
+      }
+      entry.knowledgeIntegration = { ok: true, ...knowledge };
     } catch (error) {
-      summary.bridge = { ok: false, state: 'failed', bridgeHealthy: false, detail: error.message };
+      const code = error.code || 'KNOWLEDGE_INTEGRATION_CHECK_FAILED';
+      entry.knowledgeIntegration = { ok: false, state: 'check-failed', error: { code },
+        detail: code === 'ETIMEDOUT' ? '知识插件检查超时。' : '无法核实知识插件状态。' };
     }
-    // Probes start in parallel so one hung launcher costs a single timeout.
-    // Client probes exercise the entry that client would actually launch
-    // (never the host source tree); identical entries share one host check,
-    // and the shared product-runtime probe covers the shipping runtime.
-    const runProbe = info => (this.mcpProbe ? this.mcpProbe(info) : this.probeMcpStartup(info)).catch(() => ({ state: 'failed', checkedAt: new Date().toISOString(), code: 'PROBE_CRASH', expectedVersion: this.version, detail: MCP_PROBE_FAILURE_DETAILS.PROBE_CRASH }));
-    const clientProbes = new Map();
-    const hostProbe = options.captureOnly ? null : runProbe({ client: 'host', scope: 'product-runtime', version: this.version });
-    if (!options.captureOnly) {
-      const sharedByLauncher = new Map();
-      for (const client of clients) {
-        if (client !== 'claude' && client !== 'codex') continue;
-        const launcherPath = this.installedMcpLauncherPaths(client)[0];
-        if (!launcherPath) continue;
-        if (!sharedByLauncher.has(launcherPath)) sharedByLauncher.set(launcherPath, runProbe({ client, scope: `client:${client}`, launcherPath, version: this.version }));
-        clientProbes.set(client, sharedByLauncher.get(launcherPath).then(result => ({ ...result, scope: `client:${client}` })));
+    options.onClientStatus?.({ ...entry });
+
+    const knowledge = entry.knowledgeIntegration;
+    let mcpProbe;
+    const scope = `client:${client}`;
+    if (client === 'claude' || client === 'codex') {
+      const launcherPath = this.installedMcpLauncherPaths(client, knowledge, claudeInventory)[0];
+      if (launcherPath) {
+        mcpProbe = runProbe({ client, scope, launcherPath, version: this.version });
+      } else {
+        const code = knowledge.error?.code || (knowledge.state === 'disabled' ? 'CLIENT_PLUGIN_DISABLED' : 'CLIENT_PLUGIN_ENTRY_MISSING');
+        const detail = knowledge.error ? '知识插件状态尚未核实。' : knowledge.state === 'disabled'
+          ? '客户端知识插件已被禁用。' : '没有找到该客户端的知识插件启动文件。';
+        entry.mcpStartup = { state: 'failed', checkedAt: new Date().toISOString(), scope, code, expectedVersion: this.version, detail };
       }
     }
-    for (const client of clients) {
-      const suffix = CLIENT_METHOD_SUFFIX[client];
-      const entry = { client, label: CLIENT_LABELS[client], available: Boolean(this.executable(client)), configFound: this.captureConfigFound(client) };
-      if (!options.captureOnly) {
-        try {
-          entry.knowledgeIntegration = { ok: true, ...(await this[`status${suffix}`]()) };
-        } catch (error) {
-          entry.knowledgeIntegration = { ok: false, state: 'failed', detail: error.message };
-        }
-        entry.automaticContext = client === 'codex' ? await this.automaticCodexContextStatus(entry.knowledgeIntegration, options.cwd) : this.automaticContextStatus(client, entry.knowledgeIntegration);
-        if (client === 'claude' || client === 'codex') {
-          entry.mcpStartup = clientProbes.has(client)
-            ? await clientProbes.get(client)
-            : { state: 'failed', checkedAt: new Date().toISOString(), scope: `client:${client}`, code: 'CLIENT_PLUGIN_ENTRY_MISSING', expectedVersion: this.version, detail: '该客户端没有已安装的知识插件入口；未用宿主源码入口代替客户端实际启动入口做健康判定。' };
-        }
-      }
-      entry.developmentCapture = await this.captureOperation('status', client);
-      summary.clients.push(entry);
-    }
-    if (hostProbe) summary.mcpRuntime = await hostProbe;
-    return summary;
+    entry.automaticContext = client === 'codex'
+      ? await this.automaticCodexContextStatus(knowledge, options.cwd)
+      : this.automaticContextStatus(client, knowledge, claudeInventory);
+    if (mcpProbe) entry.mcpStartup = { ...(await mcpProbe), scope };
+    return entry;
   }
 
-  automaticContextStatus(client, knowledge) {
+  async statusShared(options, runProbe) {
+    const bridgeCheck = this.bridgeStatus().then(
+      bridge => ({ ok: true, ...bridge }),
+      error => ({ ok: false, state: 'failed', bridgeHealthy: false, detail: error.message }),
+    );
+    const hostProbe = options.captureOnly ? undefined : runProbe({ client: 'host', scope: 'product-runtime', version: this.version });
+    const [bridge, mcpRuntime] = await Promise.all([bridgeCheck, hostProbe]);
+    return { bridge, ...(mcpRuntime ? { mcpRuntime } : {}) };
+  }
+
+  async statusAll(options = {}) {
+    const clients = options.sharedOnly ? [] : options.clients?.length ? options.clients.map(normalizeClient) : SUPPORTED_CLIENTS;
+    const probes = new Map();
+    const runProbe = info => {
+      const key = info.launcherPath || info.scope;
+      if (!probes.has(key)) {
+        const probe = Promise.resolve().then(() => this.mcpProbe ? this.mcpProbe(info) : this.probeMcpStartup(info))
+          .catch(() => ({ state: 'failed', checkedAt: new Date().toISOString(), code: 'PROBE_CRASH', expectedVersion: this.version, detail: MCP_PROBE_FAILURE_DETAILS.PROBE_CRASH }));
+        probes.set(key, probe);
+      }
+      return probes.get(key);
+    };
+    const [shared, results] = await Promise.all([
+      options.includeShared === false ? {} : this.statusShared(options, runProbe),
+      Promise.all(clients.map(client => this.statusClient(client, options, runProbe))),
+    ]);
+    return { ...shared, clients: results };
+  }
+
+  automaticContextStatus(client, knowledge, claudeInventory) {
     if (client === 'zcode') { const available = Boolean(this.executable('zcode')); return { supported: true, configured: available && knowledge?.state === 'installed', state: available ? knowledge?.state || 'not-installed' : 'unavailable', detail: available ? knowledge?.detail || '前置读取尚未接入。' : '未找到可运行的 ZCode；配置存在不等于原生入口可用。' }; }
     if (client === 'codex') {
       const filesVerified = knowledge?.state === 'installed' && this.codexContextFilesMatch({ source: knowledge.source });
@@ -1188,15 +1264,21 @@ class IntegrationManager {
     }
     if (client !== 'claude') return { supported: false, state: 'not-supported', configured: false, detail: '当前版本尚未验收此客户端的自动前置读取；知识工具与采集状态单独显示。' };
     const state = knowledge?.state || 'not-installed';
-    try { if (JSON.parse(fs.readFileSync(this.claudeSettingsFile, 'utf8')).disableAllHooks === true) return { supported: true, state: 'disabled', configured: false, detail: 'Claude Code 的 Hook 已被用户禁用，未擅自修改。' }; } catch {}
-    if (state !== 'installed') return { supported: true, state, configured: false, expectedVersion: this.version, detail: state === 'needs-update' ? '知识插件版本不匹配，请接入/修复后重新打开 Claude Code。' : state === 'disabled' ? '插件已被禁用；请在客户端明确启用。' : '前置知识读取尚未接入。' };
+    let hooksDisabled = claudeInventory?.hooksDisabled;
+    if (!claudeInventory) {
+      try { hooksDisabled = JSON.parse(fs.readFileSync(this.claudeSettingsFile, 'utf8')).disableAllHooks === true; } catch {}
+    }
+    if (hooksDisabled) return { supported: true, state: 'disabled', configured: false, detail: 'Claude Code 的 Hook 已被用户禁用，未擅自修改。' };
+    if (state !== 'installed') return { supported: true, state, configured: false, expectedVersion: this.version, detail: state === 'check-failed' ? '前置知识读取尚未核实。' : state === 'needs-update' ? '知识插件版本不匹配，请接入/修复后重新打开 Claude Code。' : state === 'disabled' ? '插件已被禁用；请在客户端明确启用。' : '前置知识读取尚未接入。' };
     if (!/^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$/.test(knowledge.version || '')) return { supported: true, state: 'needs-update', configured: false, detail: '无法验证插件版本。' };
-    let locations = [];
-    try {
-      const index = JSON.parse(fs.readFileSync(path.join(this.homeDir, '.claude/plugins/installed_plugins.json'), 'utf8'));
-      locations = (index.plugins?.[`${INTEGRATION_NAME}@${MARKETPLACE_NAME}`] || []).filter(p => p.version === knowledge.version).map(p => p.installPath);
-    } catch {}
-    if (!locations.length) locations.push(path.join(this.homeDir, '.claude/plugins/cache', MARKETPLACE_NAME, INTEGRATION_NAME, knowledge.version));
+    let locations = claudeInventory?.plugin ? [claudeInventory.plugin.installPath] : [];
+    if (!claudeInventory) {
+      try {
+        const index = JSON.parse(fs.readFileSync(path.join(this.claudeConfigDir, 'plugins', 'installed_plugins.json'), 'utf8'));
+        locations = (index.plugins?.[PLUGIN_ID] || []).filter(p => p.version === knowledge.version).map(p => p.installPath);
+      } catch {}
+      if (!locations.length) locations.push(path.join(this.claudeConfigDir, 'plugins', 'cache', MARKETPLACE_NAME, INTEGRATION_NAME, knowledge.version));
+    }
     const files = ['hooks/claude.json', 'scripts/context-hook.cjs', '.mcp.json', '.claude-plugin/plugin.json'];
     const configured = locations.some(directory => typeof directory === 'string' && files.every(file => {
       // Native marketplaces use Git checkout newline rules; npm integrity

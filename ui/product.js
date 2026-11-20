@@ -851,50 +851,77 @@
     $('systemDrawer').hidden = false; $('drawerBackdrop').hidden = false;
     $('brainName').value = state.brain.name; $('knowledgeRoot').value = state.root;
     renderStorageInfo();
-    await Promise.all([loadMaintenance(), loadAgentCapture(true)]);
+    await Promise.all([loadMaintenance(), loadAgentCapture()]);
   }
   function renderStorageInfo() {
     $('indexStoragePath').textContent = state.indexStorage?.actualPath || state.indexStorage?.path || '设置知识根目录后自动确定';
     $('indexStorageStatus').textContent = state.indexStorage?.status === 'ready' ? '索引目录已生效。' : `索引接线待恢复；目标目录：${state.indexStorage?.expectedPath || state.indexStorage?.path || '尚未设置'}`;
   }
   let captureScanTimer = null;
-  async function loadAgentCapture(force = false) {
+  async function loadAgentCapture() {
     clearTimeout(captureScanTimer);
     const epoch = ++captureEpoch;
     try {
       const projectId = state.projectId;
       const params = new URLSearchParams();
       if (projectId) params.set('projectId', projectId);
-      if (force) params.set('refresh', '1');
       const result = await api('/api/integrations/status?' + params);
       if (projectId !== state.projectId || epoch !== captureEpoch) return;
-      const badgeState = { connected: 'up', error: 'issue' };
-      const badgeText = { checking: '检测中', connected: '已接入', disconnected: '未接入', error: '异常', 'not-detected': '未检测到' };
-      $('agentCaptureList').innerHTML = result.clients.map(agent => {
-        const capture = agent.developmentCapture;
-        const found = agent.available || agent.configFound;
-        const software = agent.available ? '检测到命令' : agent.configFound ? '检测到配置' : capture.state === 'checking' ? '正在检测客户端' : '未检测到';
+      const list = $('agentCaptureList');
+      const opened = new Set(Array.from(list.querySelectorAll('.agent-detail[open]'), detail => detail.closest('.agent-capture-row').dataset.agentClient));
+      const badgeState = { connected: 'up', error: 'issue', 'check-failed': 'issue' };
+      const badgeText = { checking: '检测中', connected: '已接入', disconnected: '未接入', error: '异常', 'not-detected': '未检测到', 'check-failed': '检测未完成' };
+      list.innerHTML = result.clients.map(agent => {
+        const capture = agent.developmentCapture || {};
+        const knowledge = agent.knowledgeIntegration;
+        const scan = agent.scan;
+        const checkError = scan?.error || knowledge?.error || capture.error || agent.commandCheck || (capture.state === 'check-failed' ? result.error : null);
+        const timedOut = ['ETIMEDOUT', 'INTEGRATION_STATUS_TIMEOUT'].includes(checkError?.code);
+        const summary = capture.installed === true ? 'connected'
+          : capture.state === 'check-failed' && agent.summary !== 'error' ? 'check-failed' : agent.summary || 'checking';
+        const switchOn = summary === 'connected';
+        const title = summary === 'check-failed' && timedOut ? '检测超时'
+          : scan?.stale && switchOn ? '上次核验已接入' : badgeText[summary] || summary;
+        const software = agent.available ? '检测到命令' : agent.configFound ? '检测到配置'
+          : summary === 'not-detected' ? '未找到命令或配置' : '客户端状态尚未核实';
         const auto = agent.automaticContext;
         const mcp = agent.mcpStartup;
-        const mcpLine = mcp ? `MCP ${mcp.state === 'ready' ? '已通过' : '未通过'}${mcp.code ? `（${esc(mcp.code)}）` : ''}${mcp.detail ? ` · ${esc(mcp.detail)}` : ''}` : '';
-        const repairLine = agent.repair ? `启动自动修复：${agent.repair.state === 'repaired' ? '成功' : `失败${agent.repair.error ? ` · ${esc(agent.repair.error)}` : ''}`}` : '';
-        const summary = agent.summary || 'checking';
-        const switchOn = summary === 'connected';
+        const mcpLine = mcp ? `<small>MCP ${mcp.state === 'ready' ? '已通过' : '未通过'}${mcp.code ? `（${esc(mcp.code)}）` : ''}${mcp.detail ? ` · ${esc(mcp.detail)}` : ''}</small>` : '';
+        const repairLine = agent.repair ? `<small>启动自动修复：${agent.repair.state === 'repaired' ? '成功' : `失败${agent.repair.error ? ` · ${esc(agent.repair.error)}` : ''}`}</small>` : '';
         const details = [
-          `<small>${esc(software)} · ${esc(capture.detail || '')}</small>`,
+          `<small>${esc(software)}${capture.detail ? ` · ${esc(capture.detail)}` : ''}</small>`,
+          knowledge?.detail ? `<small>知识插件：${esc(knowledge.detail)}</small>` : '',
           auto ? `<small>开发前知识：${esc(auto.detail)}</small>` : '',
-          mcpLine ? `<small>${mcpLine}</small>` : '',
-          repairLine ? `<small>${repairLine}</small>` : '',
+          mcpLine,
+          checkError ? `<small>${timedOut ? '本次检查超时' : '本次检查未完成'}（${esc(checkError.code)}）</small>` : '',
+          scan?.stale && scan.checkedAt ? `<small>上次核验 ${esc(time(scan.checkedAt))}</small>` : '',
+          repairLine,
           summary === 'error' ? `<div class="actions"><button data-agent-retry="1" data-agent-client="${esc(agent.client)}" ${captureBusy ? 'disabled' : ''}>重试修复</button></div>` : '',
         ].filter(Boolean).join('');
-        return `<div class="agent-capture-row"><div><b>${esc(agent.label)}</b> ${badge(badgeText[summary] || summary, badgeState[summary] || '')}<details class="agent-detail"><summary>详情</summary>${details}</details></div><div class="actions"><button data-agent-switch="${switchOn ? 'uninstall' : 'install'}" data-agent-client="${esc(agent.client)}" ${!found || captureBusy ? 'disabled' : ''}>${switchOn ? '移除' : '接入'}</button></div></div>`;
+        const recheck = Boolean(checkError) || summary === 'check-failed' || auto?.state === 'check-failed' || mcp?.code === 'PROBE_TIMEOUT';
+        const refresh = recheck ? `<button data-agent-check="${esc(agent.client)}" ${captureBusy ? 'disabled' : ''}>重新检测</button>` : '';
+        const detected = agent.available || agent.configFound;
+        const disabled = captureBusy || (!switchOn && (!detected || ['checking', 'check-failed'].includes(summary)));
+        return `<div class="agent-capture-row" data-agent-client="${esc(agent.client)}"><div><b>${esc(agent.label)}</b> ${badge(title, badgeState[summary] || '')}<details class="agent-detail" ${opened.has(agent.client) ? 'open' : ''}><summary>详情</summary>${details}</details></div><div class="actions">${refresh}<button data-agent-switch="${switchOn ? 'uninstall' : 'install'}" data-agent-client="${esc(agent.client)}" ${disabled ? 'disabled' : ''}>${switchOn ? '移除' : '接入'}</button></div></div>`;
       }).join('');
       const pendingScan = ['checking', 'refreshing'].includes(result.scan?.state)
         || (result.clients || []).some(client => client.developmentCapture?.state === 'checking' || client.knowledgeIntegration?.state === 'checking' || client.summary === 'checking');
       if (pendingScan) captureScanTimer = setTimeout(() => {
         if (epoch === captureEpoch && !$('systemDrawer').hidden) loadAgentCapture().catch(error => toast(error.message));
       }, 1500);
-    } catch (error) { if (epoch === captureEpoch) $('agentCaptureList').textContent = `无法检查采集状态：${error.message}`; }
+    } catch (error) {
+      if (epoch !== captureEpoch) return;
+      const message = `无法刷新采集状态：${error.message}`;
+      if ($('agentCaptureList').childElementCount) toast(message);
+      else $('agentCaptureList').textContent = message;
+    }
+  }
+  async function retryAgentCheck(client) {
+    const projectId = state.projectId;
+    const params = new URLSearchParams({ clients: client, refresh: '1' });
+    if (projectId) params.set('projectId', projectId);
+    await api('/api/integrations/status?' + params);
+    if (projectId === state.projectId && !$('systemDrawer').hidden) await loadAgentCapture();
   }
   async function changeAgentAccess(client, operation) {
     if (captureBusy) return;
@@ -905,7 +932,7 @@
       const result = await api(`/api/integrations/${operation}`, { method: 'POST', body: { clients: [client] } });
       const success = result.complete === true;
       $('agentCaptureFeedback').textContent = success
-        ? operation === 'install' ? '已接入。重新打开客户端后生效，实际记录可在活动页面查看。' : '已移除，第三方配置与已有记录保留。'
+        ? operation === 'install' ? '已写入接入配置。重新打开该客户端后，可在活动页面核实采集。' : '已移除，第三方配置与已有记录保留。'
         : `操作未完成，展开详情查看原因；更多请查系统诊断记录（操作 ID：${result.operationId || '—'}）。`;
       $('agentCaptureFeedback').classList.toggle('issue', !success);
     } catch (error) { $('agentCaptureFeedback').textContent = `操作失败：${error.message}`; $('agentCaptureFeedback').classList.add('issue'); }
@@ -1429,6 +1456,7 @@
       if (button.dataset.action === 'activity-recovering') { state.activityFilter = 'recovering'; setView('activity'); renderActivity(); }
       if (button.dataset.agentSwitch) await changeAgentAccess(button.dataset.agentClient, button.dataset.agentSwitch);
       if (button.dataset.agentRetry) await retryAgentRepair(button.dataset.agentClient);
+      if (button.dataset.agentCheck) await retryAgentCheck(button.dataset.agentCheck);
       if (button.dataset.action === 'unbind') { const p = activeProject(); if (p && !unbinding) { unbindProjectId = p.projectId; $('unbindProjectName').textContent = `解绑「${p.name}」？`; $('unbindFeedback').textContent = ''; $('unbindDialog').showModal(); } }
       if (button.dataset.openRun) await openRunDetail(button.dataset.openRun, button.dataset.runProject || '');
       if (button.dataset.retryRun) { await api(`/api/engine/runs/${encodeURIComponent(button.dataset.retryRun)}/retry`, { method: 'POST', body: {} }); await refreshSnapshot(); toast('已提交重试，最终结果以运行状态为准。'); }

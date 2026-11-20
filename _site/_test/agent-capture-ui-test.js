@@ -70,15 +70,16 @@ async function main() {
     await click('#closeSystem'); await click('#themeToggle'); await click('#openSystem');
     await waitFor(() => run("document.querySelector('[data-agent-client=zcode][data-agent-switch=uninstall]') !== null"), 'theme retains capture status');
     await browser.screenshot(path.join(artifacts, '1920-dark.png'));
-    // Broken config: the single switch acts as the explicit repair path.
+    // Confirmed invalid config is actionable, and the installer preserves it.
     fs.writeFileSync(configFile, '{invalid JSON');
     await click('#closeSystem'); await click('#openSystem');
-    await waitFor(() => run("(() => { const b = document.querySelector('[data-agent-client=zcode][data-agent-switch=install]'); return b !== null && !b.disabled; })()"), 'capture row settled before invalid config');
+    await waitFor(() => run("(() => { const b = document.querySelector('[data-agent-client=zcode][data-agent-switch=install]'); return b !== null && !b.disabled && b.closest('.agent-capture-row').textContent.includes('异常'); })()"), 'invalid ZCode config is shown as actionable');
     await click('[data-agent-client=zcode][data-agent-switch=install]');
     await waitFor(() => run("document.getElementById('agentCaptureFeedback').textContent.includes('操作未完成')"), 'partial failure rendered');
     assert(await run("document.getElementById('agentCaptureFeedback').classList.contains('issue')"));
     const logs = (await (await fetch(base + '/api/logs?event=integration.capture.failed')).json()).entries;
-    assert(logs.length > 0 && logs[0].error.message.includes('valid JSON'));
+    assert(logs.some(entry => entry.error?.code === 'AGENT_CONFIG_INVALID'));
+    assert.equal(fs.readFileSync(configFile, 'utf8'), '{invalid JSON');
     fs.writeFileSync(configFile, JSON.stringify(config));
     await click('#closeSystem'); await click('#openSystem');
     await waitFor(() => run("document.querySelector('[data-agent-client=zcode][data-agent-switch=uninstall]') !== null"), 'switch repair succeeds');

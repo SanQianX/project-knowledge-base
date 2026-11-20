@@ -1404,7 +1404,6 @@ function createRequestHandler(runtime, options = {}) {
         return send(res, 200, { ok: true, ...summary });
       }
       if (method === 'POST' && pathname === '/api/integrations/install') {
-        runtime.integrationStatusScan?.invalidate();
         const body = await readJsonBody(req);
         await runtime.integrationAutoRepair?.close();
         const manager = new IntegrationManager({ ...options.integrationOptions, rootDir: runtime.rootDir, logger: runtime.logger, operationId: requestOperationId, bridgeHomeDir: runtime.bridgeAdapter.hookBinding().bridgeHomeDir });
@@ -1416,7 +1415,7 @@ function createRequestHandler(runtime, options = {}) {
           knowledgeOnly: body.knowledgeOnly === true,
           captureOnly: body.captureOnly === true,
           scope: body.scope || 'user',
-        });
+        }).finally(() => runtime.integrationStatusScan?.invalidate(clients));
         const complete = summary.bridge.ok && summary.clients.every(entry => (!entry.knowledgeIntegration || entry.knowledgeIntegration.ok) && (!entry.developmentCapture || entry.developmentCapture.ok));
         if (complete) {
           const intentStore = require('./integration-intent');
@@ -1433,14 +1432,20 @@ function createRequestHandler(runtime, options = {}) {
         await runtime.integrationAutoRepair?.close();
         const manager = new IntegrationManager({ ...options.integrationOptions, rootDir: runtime.rootDir, logger: runtime.logger, operationId: requestOperationId, bridgeHomeDir: runtime.bridgeAdapter.hookBinding().bridgeHomeDir });
         if (body.disableAllCapture === true) {
-          const summary = await manager.disableAllCapture({});
+          const summary = await manager.disableAllCapture({}).finally(() => runtime.integrationStatusScan?.invalidate());
           return send(res, 200, { ok: true, ...summary });
         }
         const clients = Array.isArray(body.clients) && body.clients.length
           ? body.clients.map(client => String(client))
           : undefined;
-        const knowledgeResults = body.captureOnly === true ? [] : await manager.operate('uninstall', clients && clients.length ? clients : manager.detectClients(), { scope: body.scope || 'user' });
-        const captureResults = body.knowledgeOnly === true ? [] : await manager.operateCapture('uninstall', clients && clients.length ? clients : manager.detectClients(), {});
+        let knowledgeResults;
+        let captureResults;
+        try {
+          knowledgeResults = body.captureOnly === true ? [] : await manager.operate('uninstall', clients && clients.length ? clients : manager.detectClients(), { scope: body.scope || 'user' });
+          captureResults = body.knowledgeOnly === true ? [] : await manager.operateCapture('uninstall', clients && clients.length ? clients : manager.detectClients(), {});
+        } finally {
+          runtime.integrationStatusScan?.invalidate(clients);
+        }
         const complete = [...knowledgeResults, ...captureResults].every(entry => entry.ok);
         if (complete) {
           const intentStore = require('./integration-intent');

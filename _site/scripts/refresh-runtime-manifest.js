@@ -37,7 +37,7 @@ for (const [key, module] of Object.entries(manifest.modules || {})) {
   const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
   const pinned = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).dependencies[module.installName];
   if (pkg.version !== module.version) {
-    if (pkg.version === pinned) {
+    if (pkg.version === pinned || `npm:${pkg.name}@${pkg.version}` === pinned) {
       // The pin moved to a new exact version and node_modules already holds
       // it: adopt the version and refresh that module's hashes from the
       // actually installed bytes.

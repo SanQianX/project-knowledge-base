@@ -55,8 +55,9 @@ const intentPath = dataDir => path.join(dataDir, 'integration-intent.json');
   const midFlight = tmpDataDir();
   const unsettled = bootstrapIntent(midFlight, [
     { client: 'claude', developmentCapture: { state: 'checking', installed: undefined } },
-    { client: 'codex', developmentCapture: {} },
+    { client: 'codex', developmentCapture: { state: 'check-failed', installed: false } },
     { client: 'zcode', developmentCapture: { state: 'installed', installed: true } },
+    { client: 'opencode', scan: { stale: true }, developmentCapture: { state: 'installed', installed: true } },
   ]);
   assert.deepEqual(unsettled, { schema: SCHEMA, clients: { zcode: 'connected' } }, 'checking/undefined entries must stay absent');
   const settled = bootstrapIntent(midFlight, [
@@ -66,7 +67,7 @@ const intentPath = dataDir => path.join(dataDir, 'integration-intent.json');
   assert.equal(settled.clients.claude, 'connected', 'later settled scan fills the skipped client correctly');
   assert.equal(settled.clients.codex, 'disconnected');
 }
-// C: summarizeClient covers all five states plus precedence rules.
+// C: summarizeClient covers the status transitions and their precedence.
 {
   const failedRepair = { claude: { state: 'failed', at: new Date().toISOString(), error: 'boom' } };
   assert.equal(summarizeClient({ client: 'claude', available: true, developmentCapture: { state: 'checking' } }, null), 'checking');
@@ -75,6 +76,9 @@ const intentPath = dataDir => path.join(dataDir, 'integration-intent.json');
   assert.equal(summarizeClient({ client: 'claude', available: false, configFound: false, developmentCapture: {} }, null), 'not-detected');
   assert.equal(summarizeClient({ client: 'claude', available: false, configFound: true, developmentCapture: {} }, null), 'disconnected', 'configFound alone counts as detected');
   assert.equal(summarizeClient({ client: 'claude', available: true, developmentCapture: { installed: true } }, failedRepair), 'connected', 'installed outranks a failed repair');
+  assert.equal(summarizeClient({ client: 'claude', developmentCapture: { installed: true }, knowledgeIntegration: { state: 'checking' } }, null), 'connected', 'confirmed capture outranks a pending detailed check');
+  assert.equal(summarizeClient({ client: 'claude', available: false, configFound: false, developmentCapture: { state: 'check-failed' } }, null), 'check-failed', 'a failed scan cannot prove absence');
+  assert.equal(summarizeClient({ client: 'claude', available: true, developmentCapture: { state: 'check-failed' } }, failedRepair), 'check-failed', 'a new unknown status should offer a check, not an install');
   assert.equal(summarizeClient({ client: 'claude', available: true, developmentCapture: {} }, failedRepair), 'error');
   assert.equal(summarizeClient({ client: 'claude', available: true, developmentCapture: {} }, null), 'disconnected');
 }
