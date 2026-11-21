@@ -1,6 +1,6 @@
 {
   "name": "@sanqianx/project-knowledge",
-  "version": "5.1.7",
+  "version": "5.2.0",
   "description": "Knowledge base manager with Git integration, AI-driven analysis, and bilingual (zh-CN/en-US) knowledge output",
   "main": "_site/server.js",
   "scripts": {
@@ -88,7 +88,7 @@
     "@modelcontextprotocol/sdk": "1.29.0",
     "@sanqianx/ai-coding-event-bridge-console": "0.7.5-rc.1",
     "@sanqianx/ai-coding-knowledge-engine": "0.3.4",
-    "@sanqianx/ai-coding-workflow": "0.1.2",
+    "@sanqianx/ai-coding-workflow": "0.2.0",
     "@sanqianx/vector-hub": "1.0.8-rc.9",
     "buffer": "^6.0.3",
     "cheerio": "^1.2.0",
