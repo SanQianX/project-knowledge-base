@@ -195,7 +195,12 @@ class WorkflowToolRuntime {
     let payload;
     for (;;) {
       payload = await this._readReviewJob(reviewJobId);
-      if (['completed', 'failed', 'stale'].includes(payload.job.status)) return payload;
+      const overall = payload.job && payload.job.overallStatus;
+      // P1b: wait on the WHOLE review (checks + model), not just job.status —
+      // 'completed' with a pending model phase is still worth polling.
+      const settled = overall ? ['review-complete', 'failed', 'stale', 'review-blocked', 'blocked-missing-config'].includes(overall)
+        : ['completed', 'failed', 'stale'].includes(payload.job.status);
+      if (settled) return payload;
       if (Date.now() >= deadline) return payload;
       await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
     }
@@ -203,29 +208,61 @@ class WorkflowToolRuntime {
 
   _reviewAnswer(args, payload) {
     const job = payload.job || {};
+    const overall = job.overallStatus || job.status;
     const finished = ['completed', 'failed', 'stale'].includes(job.status);
+    const settled = ['review-complete', 'failed', 'stale', 'review-blocked', 'blocked-missing-config'].includes(overall);
     const answer = {
       ok: true,
       taskId: args.taskId,
       reviewJobId: job.reviewJobId,
       reviewStatus: job.status,
-      pending: !finished,
+      overallStatus: overall || null,
+      modelRequired: job.modelRequired === true,
+      modelState: job.modelState || null,
+      pending: !settled,
       snapshotId: job.snapshotId || null,
       acceptanceRevision: job.acceptanceRevision ?? null,
-      modelReview: 'pending-model-review',
     };
-    if (finished && job.status === 'completed') {
+    // P1b: the REAL model phase, never a hard-coded string. Old modules
+    // without the projection degrade to 'pending-model-review'.
+    const mr = job.modelReview || null;
+    if (mr) {
+      answer.modelReview = {
+        status: mr.status,
+        identity: mr.identity || null,
+        identityVerified: Boolean(mr.identityVerified),
+        blockedReason: mr.blockedReason || null,
+        summary: mr.summary || null,
+        findings: (mr.findings || []).slice(0, 50),
+      };
+    } else {
+      answer.modelReview = job.modelRequired ? { status: job.modelState || 'pending', identity: null, identityVerified: false, blockedReason: null, summary: null, findings: [] } : 'not-required';
+    }
+    if (settled && overall === 'review-complete') {
       answer.snapshot = { snapshotId: job.snapshotId, fileCount: job.fileCount };
       answer.receipts = payload.receipts || [];
       answer.decision = job.decision || null;
-      answer.note = '程序检查收据已记录；自动验收由服务端依据收据裁决。模型审查阶段当前为 pending（编排交付前不虚构意见）。';
+      answer.note = '程序检查与模型审查（如要求）均完成；自动验收由服务端依据收据与已核实模型意见裁决。';
+    } else if (settled && overall === 'review-blocked') {
+      answer.error = (mr && mr.blockedReason) || job.error || null;
+      answer.note = `模型审查阻塞：${answer.error || '见 modelReview 详情'}。处理后重新 request_review。`;
+    } else if (settled && overall === 'blocked-missing-config') {
+      answer.error = 'REVIEWER_CONFIG_MISSING';
+      answer.note = '本轮要求模型审查但服务端未配置受信 Reviewer（/api/internal/reviewer-config）。程序收据已记录；配置后重新 request_review。';
     } else if (finished) {
       answer.error = job.error || null;
       answer.note = `审查作业 ${job.status}：${job.error || '保留诊断；处理后重新 request_review。'}`;
     } else {
-      answer.note = `审查仍在运行（本次等待上限 ${MAX_WAIT_MS}ms 已到）：稍后用 project_workflow_review_result 读取同一 reviewJobId。`;
+      answer.note = overall === 'awaiting-model' || overall === 'awaiting-model-config'
+        ? `程序检查已完成，模型审查进行中（等待上限 ${MAX_WAIT_MS}ms 已到）：稍后用 project_workflow_review_result 读取同一 reviewJobId。`
+        : `审查仍在运行（本次等待上限 ${MAX_WAIT_MS}ms 已到）：稍后用 project_workflow_review_result 读取同一 reviewJobId。`;
     }
-    if (payload.task) answer.task = payload.task;
+    if (payload.task) {
+      // P1b: attribute carefully — the TASK-level rework list may be newer
+      // than this job; surface it read-only with the job's own phase.
+      answer.task = { status: payload.task.status, phase: payload.task.phase, nextAction: payload.task.nextAction, reworkItems: (payload.task.reworkItems || []).slice(0, 50) };
+      answer.decision = answer.decision || (job.decision || null);
+    }
     return answer;
   }
 
@@ -264,6 +301,7 @@ class WorkflowToolRuntime {
     if (!args.taskId) throw new DomainError('INVALID_ARGUMENT', 'taskId is required.', { details: { tool: 'project_workflow_*' } });
     const waitMs = Math.min(Math.max(Number(args.waitMs) || 0, 0), MAX_WAIT_MS);
     let reviewJobId = args.reviewJobId ? String(args.reviewJobId) : null;
+    let historical = false;
     if (!reviewJobId) {
       const task = (await this.request(`workflow-tasks/${encodeURIComponent(args.taskId)}`)).task;
       const jobIds = task.reviewJobIds || [];
@@ -271,18 +309,42 @@ class WorkflowToolRuntime {
       reviewJobId = jobIds[jobIds.length - 1];
     }
     const payload = await this._awaitJob(reviewJobId, waitMs);
+    const job = payload.job || {};
+    // P1b: an explicitly passed job must belong to the passed task — a job
+    // id from another task is a caller bug, never silently served.
+    if (args.reviewJobId && job.taskId && job.taskId !== args.taskId) {
+      const error = new DomainError('INVALID_ARGUMENT', `reviewJobId ${reviewJobId} 属于任务 ${job.taskId}，不是 ${args.taskId}。`, { status: 400, details: { reason: 'job-task-mismatch', jobTaskId: job.taskId } });
+      throw error;
+    }
+    if (job.taskId && job.taskId !== args.taskId) {
+      // Derived-by-default should never mismatch; treat as unavailable.
+      const task = (await this.request(`workflow-tasks/${encodeURIComponent(args.taskId)}`)).task;
+      const jobIds = task.reviewJobIds || [];
+      if (!jobIds.length) return this._legacyReviewResult(task);
+      historical = true;
+      const fallback = await this._awaitJob(jobIds[jobIds.length - 1], 0);
+      return this._reviewAnswer(args, fallback);
+    }
+    // Mark historical jobs explicitly: the task's LATEST round is what the
+    // rework/next-step summary may speak for; older rounds are read-only.
+    const taskNow = payload.task || null;
+    if (taskNow && (taskNow.reviewJobIds || []).length && (taskNow.reviewJobIds || []).at(-1) !== reviewJobId) historical = true;
     const answer = this._reviewAnswer(args, payload);
-    const task = payload.task || {};
+    const task = taskNow || {};
     const checks = (task.runs || []).filter(r => r.kind === 'check');
     return {
       ...answer,
+      historical,
       status: task.status,
       phase: task.phase,
       nextAction: task.nextAction,
       reworkItems: task.reworkItems || [],
       checks: checks.map(r => ({ runId: r.runId, summary: r.summary, status: r.status, finishedAt: r.finishedAt })),
       acceptance: task.acceptance,
-      ...(answer.pending && (task.reworkItems || []).length
+      ...(historical
+        ? { note: `这是历史审查作业（当前最新一轮不是它）；最新整改与下一步以不带 reviewJobId 的 review_result 为准。` }
+        : {}),
+      ...(!historical && answer.pending && (task.reworkItems || []).length
         ? { note: `作业仍在运行；当前整改清单 ${task.reworkItems.length} 项（来自上一轮快照）。` }
         : {}),
     };

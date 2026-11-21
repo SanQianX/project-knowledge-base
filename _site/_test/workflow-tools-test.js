@@ -181,7 +181,47 @@ class McpClient {
         assert.ok(['completed', 'running', 'failed', 'stale'].includes(resultRead.reviewStatus));
         assert.ok(Array.isArray(resultRead.acceptance));
       }
-    } finally { mcp.close(); }
+      } finally { mcp.close(); }
+
+    // ---------- P1b: real model-phase projection + job/task attribution ----------
+    if (upstream.hasProjectRoots) {
+      const runtime = new (require('../lib/workflow-tool-runtime').WorkflowToolRuntime)({ workflowUrl: upstream.base });
+      // A model-required task with no reviewer config must answer the honest
+      // blocked projection, never 'pending-model-review'.
+      const modelTask = (await runtime.request('workflow-tasks', { method: 'POST', body: {
+        requestId: 'p1b-t1', projectId: 'p1', title: 'P1b 模型审查任务',
+        acceptance: [{ title: '独立 Review', kind: 'model_review' }],
+      } })).task;
+      const otherTask = (await runtime.request('workflow-tasks', { method: 'POST', body: {
+        requestId: 'p1b-t2', projectId: 'p1', title: 'P1b 另一任务',
+        acceptance: [{ title: '独立 Review', kind: 'model_review' }],
+      } })).task;
+      const reviewA = await runtime.requestReview({ taskId: modelTask.taskId, repoPath: repo, tools: ['eslint'], requestId: 'p1b-rv1' });
+      if (reviewA.reviewJobId) {
+        const deadline = Date.now() + 60_000;
+        let answer = reviewA;
+        while (Date.now() < deadline && answer.pending) {
+          await new Promise(r => setTimeout(r, 500));
+          answer = await runtime.reviewResult({ taskId: modelTask.taskId, reviewJobId: reviewA.reviewJobId, waitMs: 0 });
+        }
+        assert.equal(answer.overallStatus, 'blocked-missing-config', `P1b: honest projection, got ${answer.overallStatus}`);
+        assert.equal(answer.modelReview.status, 'blocked-missing-config');
+        assert.equal(answer.pending, false);
+        // An explicit job of ANOTHER task must be rejected, never served.
+        let mismatch = null;
+        try { await runtime.reviewResult({ taskId: otherTask.taskId, reviewJobId: reviewA.reviewJobId, waitMs: 0 }); }
+        catch (error) { mismatch = error; }
+        assert.ok(mismatch && /属于任务/.test(mismatch.message), 'P1b: cross-task job rejected');
+        // A second round makes the first job historical; review_result marks it.
+        const reviewB = await runtime.requestReview({ taskId: modelTask.taskId, repoPath: repo, tools: ['eslint'], requestId: 'p1b-rv2' });
+        if (reviewB.reviewJobId) {
+          const hist = await runtime.reviewResult({ taskId: modelTask.taskId, reviewJobId: reviewA.reviewJobId, waitMs: 0 });
+          assert.equal(hist.historical, true, 'P1b: superseded job reads as history');
+          assert.match(hist.note || '', /历史/);
+        }
+      }
+      console.log('workflow-tools-test PASS (P1b: model-phase projection, cross-task job rejection, historical marking)');
+    }
 
     console.log(`workflow-tools-test PASS (real stdio MCP over a real workflow module [${boundMode ? 'job+binding' : 'legacy'} mode]: 6 tools, review flow)`);
   } finally {
