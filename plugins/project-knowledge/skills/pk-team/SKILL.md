@@ -7,6 +7,15 @@ description: Work with the AI-team task board. Use when the user asks to start, 
 
 独立工作流模块通过 MCP 工具管理跨项目业务任务。任务有验收项与固定工作流（目标 → 实现 → 程序检查 → 适用 Review → 整改 → 交付）；`done` 由服务端依据有效证据裁决，任何一方（包括你）说"完成了"都不算。
 
+## 团队直执行（仅当用户明确要求）
+
+用户只发一条类似下面的指令时，start 传 executionMode:"team"（其余场合绝不传）：
+
+> 用 pk-team 为这个复杂需求创建任务，给我 taskId，然后按项目团队配置直接执行。
+> 需求：<实际需求和验收要求>
+
+团队模式要求项目已启用并开启 autoDispatch。返回 taskId 后立即回报编号与验收，再继续服务端推进；用 resume/status 读取进展，不要代替服务端拆分或派发。降级（degraded:true）时如实告知原因并按普通任务继续。
+
 ## 何时建任务
 
 - 用户明确要求开始/跟踪一项开发工作 → `project_workflow_start`。

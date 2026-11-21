@@ -43,6 +43,7 @@ const WORKFLOW_TOOLS = [
         sessionId: { type: 'string', description: 'Stable native session identifier for event attribution.' },
         memberId: { type: 'string', description: 'Team member that owns this task, when the caller is a named member.' },
         workspaceIdentity: { type: 'string' },
+        executionMode: { type: 'string', enum: ['team'], description: 'Explicit team execution: only when the user clearly asks the configured team to run this task end to end. Requires an enabled project with autoDispatch; untrusted callers are degraded to a plain task.' },
       },
       additionalProperties: false,
     },

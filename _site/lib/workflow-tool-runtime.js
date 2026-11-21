@@ -110,6 +110,7 @@ class WorkflowToolRuntime {
       acceptance: Array.isArray(args.acceptance) ? args.acceptance : undefined,
       ownerMemberId: args.memberId || null,
       repoPath: args.repoPath || (resolved && resolved.repoPath) || undefined,
+      executionMode: args.executionMode === 'team' ? 'team' : undefined,
     };
     const created = await this.request('workflow-tasks', { method: 'POST', body: payload });
     const taskId = created.task.taskId;
@@ -132,7 +133,11 @@ class WorkflowToolRuntime {
       task: created.task,
       repoBinding: created.task.repoBinding || { status: 'unbound' },
       sessionBinding: binding ? { bindingId: binding.binding.bindingId, basis: 'declared' } : null,
-      nextStep: '实现需求；完成后用 project_workflow_checkpoint 记录事实，再 request_review 并用 review_result 读取证据。',
+      nextStep: args.executionMode === 'team'
+        ? '团队任务已激活（taskId 已返回）：服务端按项目团队配置推进计划、执行与独立审查；用 resume/status 读取进展。'
+        : '实现需求；完成后用 project_workflow_checkpoint 记录事实，再 request_review 并用 review_result 读取证据。',
+      ...(created.task.executionMode === 'team' ? { teamActivated: true, planStatus: created.task.planStatus } : {}),
+      ...(args.executionMode === 'team' && created.task.executionMode !== 'team' ? { degraded: true, degradedReason: '团队模式未生效：请求未通过受信通道（项目未登记/未开启 autoDispatch 的模块会降级为普通任务）。' } : {}),
       note: '会话绑定当前为声明级：事件观察按采集会话归因，验收始终由服务端裁决。',
     };
   }

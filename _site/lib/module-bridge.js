@@ -285,7 +285,43 @@ class ModuleBridge {
     if (req.method === 'POST' && /^\/api\/workflow\/workflow-tasks\/[^/]+\/reviews\/?$/.test(pathname)) {
       return this._proxyWorkflowReviewTrusted(req, res, pathname, search);
     }
+    // P2b: a team-mode task creation is trusted-forwarded the same way — the
+    // shell injects its runtime token ONLY when the body's project/repoPath
+    // resolves to a REGISTERED project; the workflow module strips
+    // executionMode from anything arriving without the token, so browsers
+    // cannot arm team execution no matter what they POST.
+    if (req.method === 'POST' && /^\/api\/workflow\/workflow-tasks\/?$/.test(pathname)) {
+      return this._proxyWorkflowTeamCreateTrusted(req, res, pathname, search);
+    }
     return this.proxy(req, res, this._workflowApi(pathname) + (search || ''));
+  }
+
+  async _proxyWorkflowTeamCreateTrusted(req, res, pathname, search) {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    let body = {};
+    try { body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}; } catch {
+      throw new DomainError('VALIDATION', '请求体必须是合法 JSON。', { status: 400 });
+    }
+    let forward = { ...body };
+    let token = null;
+    // Trust is earned by RESOLUTION: only a body whose project/repoPath maps
+    // to a registered project gets the runtime token attached. Everything
+    // else is proxied verbatim WITHOUT the token (the module degrades it).
+    if (body.executionMode === 'team' && this.workflowProjectResolver) {
+      try {
+        const project = this.workflowProjectResolver({ projectId: body.projectId, repoPath: body.repoPath });
+        if (project && project.projectId) {
+          forward.projectId = project.projectId;
+          forward.canonicalGitRoot = project.repoPath;
+          if (this.runtimeToken) token = this.runtimeToken;
+        }
+      } catch { /* unresolved: forward as-is, module degrades to plain task */ }
+    }
+    return this.proxy(req, res, this._workflowApi(pathname) + (search || ''), {
+      bodyOverride: Buffer.from(JSON.stringify(forward), 'utf8'),
+      extraHeaders: token ? { 'X-KB-Runtime-Token': token } : {},
+    });
   }
 
   async _proxyWorkflowReviewTrusted(req, res, pathname, search) {
