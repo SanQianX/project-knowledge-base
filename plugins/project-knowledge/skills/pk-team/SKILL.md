@@ -7,6 +7,16 @@ description: Work with the AI-team task board. Use when the user asks to start, 
 
 独立工作流模块通过 MCP 工具管理跨项目业务任务。任务有验收项与固定工作流（目标 → 实现 → 程序检查 → 适用 Review → 整改 → 交付）；`done` 由服务端依据有效证据裁决，任何一方（包括你）说"完成了"都不算。
 
+## 团队任务的会话内执行顺序
+
+团队任务的计划项由当前对话亲自执行（服务端跟踪认领与交付）。
+
+1. resume(taskId) 读 team.current —— 当前应执行的工作项（含执行成员与依赖）。
+2. 认领：POST workflow-tasks/<taskId>/work-items/<itemId>/claim（requestId + claimedBy=成员ID）；依赖未交付会被拒——按顺序来。
+3. 实现该工作项，然后 POST 同路径 /report（claimedBy + summary + testedWith + artifacts）。交付不等于验收。
+4. 全部工作项 delivered 后 request_review(taskId) 做整任务最终验证，review_result 读裁决。
+5. 用户问进展就 resume/status；只读，不重复认领。
+
 ## 团队直执行（仅当用户明确要求）
 
 用户只发一条类似下面的指令时，start 传 executionMode:"team"（其余场合绝不传）：

@@ -162,11 +162,21 @@ class WorkflowToolRuntime {
       remaining: latest ? latest.remaining : task.acceptance.filter(a => a.status === 'pending').map(a => a.title),
       nextAction: task.nextAction,
       revision: task.revision,
+      ...(task.teamPlan ? { team: {
+        planStatus: task.planStatus,
+        leaderMemberId: task.teamPlan.leaderMemberId,
+        current: (() => { const items = task.teamPlan.items || []; const ip = items.find(i => i.status === 'in_progress'); const rd = items.find(i => i.status === 'ready'); const cur = ip || rd || null; return cur ? { id: cur.id, goal: cur.goal, executorMemberId: cur.executorMemberId, status: cur.status, claimedBy: cur.claimedBy || null } : null; })(),
+        progress: { delivered: (task.teamPlan.items || []).filter(i => ['delivered', 'verified'].includes(i.status)).length, total: (task.teamPlan.items || []).length },
+        items: (task.teamPlan.items || []).map(i => ({ id: i.id, status: i.status, dependsOn: i.dependsOn })),
+      } } : {}),
     };
   }
 
   async status(args) {
-    if (args.taskId) return { ok: true, task: (await this.request(`workflow-tasks/${encodeURIComponent(args.taskId)}`)).task };
+    if (args.taskId) {
+      const t = (await this.request(`workflow-tasks/${encodeURIComponent(args.taskId)}`)).task;
+      return { ok: true, task: t, ...(t.teamPlan ? { team: { planStatus: t.planStatus, items: (t.teamPlan.items || []).map(i => ({ id: i.id, status: i.status, executorMemberId: i.executorMemberId })) } } : {}) };
+    }
     const query = new URLSearchParams();
     if (args.projectId) query.set('projectId', args.projectId);
     if (args.status) query.set('status', args.status);
