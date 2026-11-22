@@ -3,12 +3,12 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { StorageLayout } = require('../_site/lib/storage-layout');
-const { SettingsStore } = require('../_site/lib/settings-store');
-const { ProjectRegistryStore } = require('../_site/lib/project-registry-store');
-const { ProjectStore } = require('../_site/lib/project-store');
-const { ProjectLifecycleService } = require('../_site/lib/project-lifecycle-service');
-const hooks = require('../_site/lib/hook-manager');
+const { StorageLayout } = require('../src/server/storage-layout');
+const { SettingsStore } = require('../src/projects/settings-store');
+const { ProjectRegistryStore } = require('../src/projects/project-registry-store');
+const { ProjectStore } = require('../src/projects/project-store');
+const { ProjectLifecycleService } = require('../src/projects/project-lifecycle-service');
+const hooks = require('../src/automation/hook-manager');
 
 (async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-fresh-hook-'));
@@ -16,7 +16,7 @@ const hooks = require('../_site/lib/hook-manager');
   const settingsStore = new SettingsStore({ layout });
   const registryStore = new ProjectRegistryStore({ layout });
   const projectStore = new ProjectStore({ layout });
-  const triggerScriptPath = path.resolve(__dirname, '../_site/scripts/hook-trigger.js');
+  const triggerScriptPath = path.resolve(__dirname, '../src/scripts/hook-trigger.js');
   await settingsStore.initialize({ knowledge: { rootPath: path.join(root, 'knowledge') } });
   await registryStore.initialize();
   const options = { layout, settingsStore, registryStore, projectStore, triggerScriptPath };

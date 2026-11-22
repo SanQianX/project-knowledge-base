@@ -64,8 +64,8 @@ const { execFileSync, spawnSync } = require('node:child_process');
 
 const { startCapHarness, consoleIdentity, sha256File, realHomeDir } = require('./helpers/parallel-capture-safety-r5-cap-shell');
 const r3cap = require('./helpers/parallel-memory-capture-r3-cap-shell');
-const { BridgeAdapter } = require(path.join(r3cap.ROOT, '_site', 'lib', 'bridge-adapter'));
-const { parseManagedMarker } = require(path.join(r3cap.ROOT, '_site', 'lib', 'hook-manager'));
+const { BridgeAdapter } = require(path.join(r3cap.ROOT, 'src', 'conversations', 'bridge-adapter'));
+const { parseManagedMarker } = require(path.join(r3cap.ROOT, 'src', 'automation', 'hook-manager'));
 
 const EVIDENCE = process.env.PK_TEST_EVIDENCE_DIR ? path.resolve(process.env.PK_TEST_EVIDENCE_DIR) : null;
 const CLIENT = 'claude';
@@ -109,7 +109,7 @@ function runGitRaw(repo, args) {
 
 /** The identity chain of the default path: core, engine, console, shim. */
 function identityChain(shimPath) {
-  const coreFiles = ['_site/lib/server-app.js', '_site/lib/engine-connection.js', '_site/lib/module-bridge.js', '_site/lib/bridge-adapter.js', '_site/lib/hook-manager.js'];
+  const coreFiles = ['src/server/server-app.js', 'src/module_bridge/engine-connection.js', 'src/module_bridge/module-bridge.js', 'src/conversations/bridge-adapter.js', 'src/automation/hook-manager.js'];
   const engineFiles = ['src/server.js', 'src/coordinator.js', 'src/bridge-client.js', 'src/store.js', 'src/runtime/conversation-store.js', 'src/runtime/layout.js'];
   const consoleHookSource = path.join(r3cap.ROOT, 'node_modules', '@sanqianx', 'ai-coding-event-bridge-console', 'src', 'bridge', 'connectors', 'claude-code', 'hook-entry.js');
   return {

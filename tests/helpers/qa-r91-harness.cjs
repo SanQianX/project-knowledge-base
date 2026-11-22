@@ -17,7 +17,7 @@
 // R99 (P-MEMORY-RELEASE-PREP-R99): startHarness({ productRoot }) — or the
 // QA_R91_PRODUCT_ROOT env — runs the SAME isolated acceptance against an
 // explicitly chosen OFFICIAL installed prefix: the spawned product server,
-// its cwd and the static UI come from <productRoot>/_site/lib/server-app.js,
+// its cwd and the static UI come from <productRoot>/src/server/server-app.js,
 // and the in-process engine defaults to the prefix's vendored
 // _modules/knowledge-engine (QA_R91_ENGINE_SRC still overrides). Helpers,
 // isolation and stand-in analyzers stay canonical. Invalid roots are
@@ -62,7 +62,7 @@ const REAL_ENV_MARKERS = {
 const PRODUCT_ROOT_ENV = process.env.QA_R91_PRODUCT_ROOT;
 const DENY_ROOTS_ENV = process.env.QA_R99_DENY_ROOTS;
 
-const PRODUCT_SITE_ENTRY = path.join('_site', 'lib', 'server-app.js');
+const PRODUCT_SITE_ENTRY = path.join('src', 'server', 'server-app.js');
 
 function invalidProductRoot(reason, detail) {
   return Object.assign(new Error(`QA_R91_PRODUCT_ROOT ${reason}: ${detail}`), { code: 'INVALID_PRODUCT_ROOT', reason });
@@ -76,7 +76,7 @@ function pathInside(parent, child) {
 // R99: validates an explicitly chosen product root for official-artifact
 // acceptance. A product root is where a REAL installed prefix lives: the
 // spawned server, its cwd and its static UI all come from
-// <root>/_site/lib/server-app.js. Location rules run BEFORE the existence
+// <root>/src/server/server-app.js. Location rules run BEFORE the existence
 // check, so a protected location is rejected deterministically even when the
 // path does not exist yet. The canonical source checkout stays reachable
 // only through the DEFAULT behaviour (no productRoot).

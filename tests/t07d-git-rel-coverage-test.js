@@ -172,7 +172,7 @@ function main() {
   // ---------------- REL-003 制品泄漏 ------------------------------------
   {
     const { validatePack } = require(path.join(REPO, 'qa-autopilot', 'lib', 'registry.cjs'));
-    const essentials = ['package.json', '_site/server.js', 'ui/index.html', 'ui/product.js', 'ui/live-client.js', 'module-runtime-manifest.json'];
+    const essentials = ['package.json', 'src/server.js', 'ui/index.html', 'ui/product.js', 'ui/live-client.js', 'module-runtime-manifest.json'];
     assert.throws(() => validatePack([...essentials, 'qa-autopilot/tools/x.cjs']), /Forbidden package file.*qa-autopilot/,
       'QA-SPEC-REL-003: qa/ paths are refused in the pack');
     assert.throws(() => validatePack([...essentials, 'state/runs/1.json']), /Forbidden package file.*state/,
@@ -181,7 +181,7 @@ function main() {
       'QA-SPEC-REL-003: .env is refused');
     assert.throws(() => validatePack([...essentials, 'ai-profiles.json']), /Forbidden package file.*ai-profiles/,
       'QA-SPEC-REL-003: credentials-shaped files are refused');
-    for (const required of ['_site/server.js', 'module-runtime-manifest.json', 'ui/product.js']) {
+    for (const required of ['src/server.js', 'module-runtime-manifest.json', 'ui/product.js']) {
       assert.throws(() => validatePack(essentials.filter(f => f !== required)), /Required runtime missing/,
         `QA-SPEC-REL-003: removing the essential ${required} is refused — the engine/plugins runtime cannot be cleaned away`);
     }

@@ -15,8 +15,8 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const githubTeamStore = require('../_site/lib/github-team-store');
-const gitRunner = require('../_site/lib/git-runner');
+const githubTeamStore = require('../src/projects/github-team-store');
+const gitRunner = require('../src/common/git-runner');
 
 function assert(cond, msg) {
   if (!cond) throw new Error(msg);

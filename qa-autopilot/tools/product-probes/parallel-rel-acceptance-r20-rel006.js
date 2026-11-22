@@ -32,7 +32,7 @@ const http = require('node:http');
 const { spawn, spawnSync, execFileSync } = require('node:child_process');
 
 const PKB_ROOT = path.resolve(__dirname, '..', '..', '..');
-const r3fixture = require(path.join(PKB_ROOT, '_site', '_test', 'helpers', 'parallel-dock-isolation-r3-fixture'));
+const r3fixture = require(path.join(PKB_ROOT, 'tests', 'helpers', 'parallel-dock-isolation-r3-fixture'));
 
 const ARTIFACTS = path.join(PKB_ROOT, 'qa-autopilot', 'artifacts', 'parallel-20261106', 'rel-acceptance-r20');
 const OFFICIAL_TGZ = 'D:/SanQian.Xu/.project-knowledge-test-temp/release-5.0.30-20261106-leader/core5030-official/official-artifacts/sanqianx-project-knowledge-5.0.30.tgz';

@@ -45,7 +45,7 @@ const { spawn, spawnSync } = require('node:child_process');
 const ROOT = path.resolve(__dirname, '..', '..', '..');
 const HARNESS = path.join(ROOT, 'desktop', 'test', 'slow-startup-env.cjs');
 const DEFAULT_DRIVER = path.join(ROOT, '_site', '_test', 'qa-r49-sys003-real-blank-probe.js');
-const HOST = path.join(ROOT, '_site', '_test', 'helpers', 'qa-r49-wb-host.js');
+const HOST = path.join(ROOT, 'tests', 'helpers', 'qa-r49-wb-host.js');
 const DEFAULT_RUNS_ROOT = path.join(ROOT, 'qa-autopilot', 'artifacts', 'parallel-20261023', 'profile-blank-real-r49', 'runs');
 
 // R49 frozen execution hashes (report.json artifacts table). The probe and

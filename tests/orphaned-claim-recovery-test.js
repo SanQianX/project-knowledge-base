@@ -4,10 +4,10 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { StorageLayout } = require('../_site/lib/storage-layout');
-const { ProjectRegistryStore } = require('../_site/lib/project-registry-store');
-const { ProjectStore } = require('../_site/lib/project-store');
-const { recoverOrphanedClaims } = require('../_site/lib/post-commit-automation');
+const { StorageLayout } = require('../src/server/storage-layout');
+const { ProjectRegistryStore } = require('../src/projects/project-registry-store');
+const { ProjectStore } = require('../src/projects/project-store');
+const { recoverOrphanedClaims } = require('../src/automation/post-commit-automation');
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), `kb-orphaned-claim-${process.pid}-`));
 const layout = new StorageLayout({ dataDir: path.join(temp, 'data') });

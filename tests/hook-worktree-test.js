@@ -3,10 +3,10 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { installHook, readHookStatus, migrateManagedHook, LEGACY_HOOK_MARKER } = require('../_site/lib/hook-manager');
+const { installHook, readHookStatus, migrateManagedHook, LEGACY_HOOK_MARKER } = require('../src/automation/hook-manager');
 
 const ROOT = require("./paths").ROOT;
-const TRIGGER = path.join(ROOT, '_site', 'scripts', 'hook-trigger.js');
+const TRIGGER = path.join(ROOT, 'src', 'scripts', 'hook-trigger.js');
 
 function git(repo, args) {
   const result = spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8', windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });

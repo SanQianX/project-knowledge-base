@@ -8,9 +8,9 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn, spawnSync, fork } = require('node:child_process');
-const { IntegrationManager, INTEGRATION_NAME } = require('../_site/lib/integration-installer');
-const { IntegrationStatusScan } = require('../_site/lib/integration-status-scan');
-const { inspectReleaseVersion } = require('../_site/scripts/sync-release-version');
+const { IntegrationManager, INTEGRATION_NAME } = require('../src/integrations/integration-installer');
+const { IntegrationStatusScan } = require('../src/integrations/integration-status-scan');
+const { inspectReleaseVersion } = require('../src/scripts/sync-release-version');
 
 const ROOT = require("./paths").ROOT;
 const PLUGIN_ROOT = path.join(ROOT, 'plugins', 'project-knowledge');
@@ -448,7 +448,7 @@ async function testReleaseContracts() {
 
   const manifest = readJson(path.join(ROOT, 'module-runtime-manifest.json'));
   assert(manifest.productFiles && manifest.productFiles['plugins/project-knowledge/scripts/mcp-launcher.cjs'], 'the packaged product manifest must track the launcher');
-  for (const script of ['_site/scripts/sync-product-content.js', '_site/scripts/verify-product-runtime.js']) {
+  for (const script of ['src/scripts/sync-product-content.js', 'src/scripts/verify-product-runtime.js']) {
     assert(fs.readFileSync(path.join(ROOT, script), 'utf8').includes('mcp-launcher.cjs'), `${script} must include the launcher in the product asset checklist`);
   }
 }

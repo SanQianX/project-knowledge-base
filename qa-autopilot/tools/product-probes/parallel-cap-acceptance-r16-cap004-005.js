@@ -29,8 +29,8 @@ const path = require('node:path');
 const assert = require('node:assert/strict');
 
 const PKB_ROOT = path.resolve(__dirname, '..', '..', '..');
-const { startCapHarness } = require(path.join(PKB_ROOT, '_site', '_test', 'helpers', 'parallel-memory-capture-r3-cap-shell'));
-const zcodeContext = require(path.join(PKB_ROOT, '_site', 'lib', 'zcode-context-integration.js'));
+const { startCapHarness } = require(path.join(PKB_ROOT, 'tests', 'helpers', 'parallel-memory-capture-r3-cap-shell'));
+const zcodeContext = require(path.join(PKB_ROOT, 'src', 'conversations', 'zcode-context-integration.js'));
 
 const ARTIFACTS = path.join(PKB_ROOT, 'qa-autopilot', 'artifacts', 'parallel-20261106', 'cap-acceptance-r16');
 
@@ -128,7 +128,7 @@ async function main() {
       });
 
       // (3) The installed-state detail must not promise MCP success.
-      const source = fs.readFileSync(path.join(PKB_ROOT, '_site', 'lib', 'zcode-context-integration.js'), 'utf8');
+      const source = fs.readFileSync(path.join(PKB_ROOT, 'src', 'conversations', 'zcode-context-integration.js'), 'utf8');
       const honestInstalled = source.includes('MCP 插件状态不作已安装承诺');
       ev.expectations.push({
         key: 'installed-state-never-promises-mcp',
@@ -139,7 +139,7 @@ async function main() {
       // (4) Third-party preserved by the zcode CAPTURE hook install: the
       //     same shipped planner as claude (capture-hook-config) — drive it
       //     directly on a fixture zcode config with a third-party entry.
-      const { repairCaptureHooks, removeCaptureHooks } = require(path.join(PKB_ROOT, '_site', 'lib', 'capture-hook-config.js'));
+      const { repairCaptureHooks, removeCaptureHooks } = require(path.join(PKB_ROOT, 'src', 'automation', 'capture-hook-config.js'));
       const zcfg = cfg('capture');
       const bridgeHome = path.join(harness.tempRoot, 'zcode-bridge-fixture');
       fs.mkdirSync(path.join(bridgeHome, 'bin'), { recursive: true });

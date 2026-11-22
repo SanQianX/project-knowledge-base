@@ -8,8 +8,8 @@ const path = require('path');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), `kb-framework-${process.pid}-`));
 process.env.KB_DATA_DIR = path.join(temp, 'data');
 process.env.KB_SKIP_MIGRATION = '1';
-require('../_site/lib/data-dir')._resetCache();
-const framework = require('../_site/lib/kb-framework');
+require('../src/common/data-dir')._resetCache();
+const framework = require('../src/knowledge/kb-framework');
 
 (() => {
   try {

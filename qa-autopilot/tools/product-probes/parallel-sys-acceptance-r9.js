@@ -3,7 +3,7 @@
 // qa-autopilot/tools/product-probes/parallel-sys-acceptance-r9.js
 //
 // P-SYS-ACCEPTANCE-R9 — SYS-002 / SYS-004 / SYS-007 / SYS-008 in one isolated
-// real-server lane (spawnServer bootstrap = the real _site/lib/server-app.js).
+// real-server lane (spawnServer bootstrap = the real src/server/server-app.js).
 // No engine, no model, no credential; every request is a real HTTP request
 // against a real product process on an owned port.
 //
@@ -27,8 +27,8 @@ const http = require('node:http');
 const { spawnSync } = require('node:child_process');
 
 const PKB_ROOT = path.resolve(__dirname, '..', '..', '..');
-const { spawnServer } = require(path.join(PKB_ROOT, '_site', '_test', 'helpers', 'spawn-server'));
-const freePort = require(path.join(PKB_ROOT, '_site', '_test', 'helpers', 'free-port'));
+const { spawnServer } = require(path.join(PKB_ROOT, 'tests', 'helpers', 'spawn-server'));
+const freePort = require(path.join(PKB_ROOT, 'tests', 'helpers', 'free-port'));
 
 const ARTIFACTS = path.join(PKB_ROOT, 'qa-autopilot', 'artifacts', 'parallel-20261106', 'sys-acceptance-r9');
 

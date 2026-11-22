@@ -603,7 +603,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "_site/lib/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
+      "source": "src/server/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
       "candidateSuite": "engine",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -632,7 +632,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "_site/lib/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
+      "source": "src/server/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
       "candidateSuite": "engine",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -662,7 +662,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "_site/lib/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
+      "source": "src/server/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
       "candidateSuite": "engine",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -691,7 +691,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "_site/lib/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
+      "source": "src/server/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
       "candidateSuite": "engine",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -720,7 +720,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "_site/lib/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
+      "source": "src/server/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
       "candidateSuite": "engine",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -749,7 +749,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "_site/lib/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
+      "source": "src/server/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
       "candidateSuite": "engine",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -778,7 +778,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "_site/lib/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
+      "source": "src/server/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
       "candidateSuite": "engine",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -808,7 +808,7 @@
       "priority": "P0",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "_site/lib/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
+      "source": "src/server/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
       "candidateSuite": "engine",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -838,7 +838,7 @@
       "priority": "P0",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "_site/lib/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
+      "source": "src/server/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
       "candidateSuite": "engine",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -868,7 +868,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "_site/lib/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
+      "source": "src/server/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
       "candidateSuite": "engine",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -897,7 +897,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "_site/lib/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
+      "source": "src/server/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
       "candidateSuite": "engine",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -927,7 +927,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "_site/lib/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
+      "source": "src/server/server-app.js:1-45; README.md运行合同；对应原生测试需本地阅读全文",
       "candidateSuite": "engine",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -2582,7 +2582,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
+      "source": "src/server.js; src/server/server-app.js:1-180; ui/product.js:580-835",
       "candidateSuite": "lifecycle",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -2610,7 +2610,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
+      "source": "src/server.js; src/server/server-app.js:1-180; ui/product.js:580-835",
       "candidateSuite": "lifecycle",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -2638,7 +2638,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
+      "source": "src/server.js; src/server/server-app.js:1-180; ui/product.js:580-835",
       "candidateSuite": "lifecycle",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -2667,7 +2667,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
+      "source": "src/server.js; src/server/server-app.js:1-180; ui/product.js:580-835",
       "candidateSuite": "lifecycle",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -2696,7 +2696,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
+      "source": "src/server.js; src/server/server-app.js:1-180; ui/product.js:580-835",
       "candidateSuite": "lifecycle",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -2725,7 +2725,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
+      "source": "src/server.js; src/server/server-app.js:1-180; ui/product.js:580-835",
       "candidateSuite": "lifecycle",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -2754,7 +2754,7 @@
       "priority": "P0",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
+      "source": "src/server.js; src/server/server-app.js:1-180; ui/product.js:580-835",
       "candidateSuite": "lifecycle",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -2783,7 +2783,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
+      "source": "src/server.js; src/server/server-app.js:1-180; ui/product.js:580-835",
       "candidateSuite": "lifecycle",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -2812,7 +2812,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
+      "source": "src/server.js; src/server/server-app.js:1-180; ui/product.js:580-835",
       "candidateSuite": "lifecycle",
       "preconditions": [
         "使用独立测试数据和受管实例",
@@ -2841,7 +2841,7 @@
       "priority": "P1",
       "mode": "SOURCE_GUIDED_PROCEDURE",
       "implementation": "待本地核对或扩展既有测试；不是已运行结果",
-      "source": "_site/server.js; _site/lib/server-app.js:1-180; ui/product.js:580-835",
+      "source": "src/server.js; src/server/server-app.js:1-180; ui/product.js:580-835",
       "candidateSuite": "lifecycle",
       "preconditions": [
         "使用独立测试数据和受管实例",

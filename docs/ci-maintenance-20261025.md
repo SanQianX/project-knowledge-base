@@ -54,5 +54,5 @@ qa-controller / qa-controller-windows）、矩阵与功能命令不变。
 明确不采用 paths-ignore：文档/README 也可能是包字节，exact-SHA 发布门禁仍需
 CI 必跑，不能让 required checks 因路径过滤而永远 pending。
 
-验证：`_site/_test/non-release-ci-test.js` PASS（该 guard 只断言 `push:` 与
+验证：`tests/non-release-ci-test.js` PASS（该 guard 只断言 `push:` 与
 `pull_request:` 键存在，不锁定分支列表）。

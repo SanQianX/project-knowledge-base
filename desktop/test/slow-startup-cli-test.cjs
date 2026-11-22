@@ -137,7 +137,7 @@ const endpointPid = (dir) => {
     fs.mkdirSync(dataDir, { recursive: true });
     const dead = spawn(process.execPath, ['-e', 'process.exit(0)'], { windowsHide: true, env: harness.nodeEnv({}) });
     await new Promise(resolve => dead.once('exit', resolve));
-    const endpointStore = require(path.join(ROOT, '_site', 'lib', 'runtime-endpoint.js'));
+    const endpointStore = require(path.join(ROOT, 'src', 'common', 'runtime-endpoint.js'));
     endpointStore.writeEndpoint(dataDir, { pid: dead.pid, host: '127.0.0.1', port: 59998, mode: 'cli' });
     const ownPort = await harness.freePort();
     try {

@@ -1,16 +1,16 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { StorageLayout } = require('../../_site/lib/storage-layout');
-const { SettingsStore } = require('../../_site/lib/settings-store');
-const { ProjectRegistryStore } = require('../../_site/lib/project-registry-store');
-const { ProjectStore } = require('../../_site/lib/project-store');
-const { Logger } = require('../../_site/lib/structured-logger');
+const { StorageLayout } = require('../../src/server/storage-layout');
+const { SettingsStore } = require('../../src/projects/settings-store');
+const { ProjectRegistryStore } = require('../../src/projects/project-registry-store');
+const { ProjectStore } = require('../../src/projects/project-store');
+const { Logger } = require('../../src/common/structured-logger');
 const { makeRepo } = require('../fixtures/make-git-repos');
 
 async function createLoggingUiFixture(options = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "pk-logging-ui-" + process.pid + "-"));
-  if (options.freshProduct) require('../../_site/lib/product-data').initializeProductData(dataDir);
+  if (options.freshProduct) require('../../src/server/product-data').initializeProductData(dataDir);
   const knowledgeRoot = path.join(dataDir, "knowledge-root");
   fs.mkdirSync(knowledgeRoot, { recursive: true });
   const repo = makeRepo({ kind: "one-commit" });
@@ -79,7 +79,7 @@ async function createLoggingUiFixture(options = {}) {
   await logger.close();
 
   if (Number(options.conversationTurns || 0) > 0) {
-    const { ConversationStore } = require('../../_site/lib/conversation-store');
+    const { ConversationStore } = require('../../src/conversations/conversation-store');
     const conversationStore = new ConversationStore({ layout, projectStore });
     const turnCount = Number(options.conversationTurns);
     const repoIdentity = { repoId: 'visual-project-repo' };

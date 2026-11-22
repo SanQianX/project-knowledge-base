@@ -31,8 +31,8 @@ async function main() {
     ok(name);
   };
   const stubEntry = root => {
-    fs.mkdirSync(path.join(root, '_site', 'lib'), { recursive: true });
-    fs.writeFileSync(path.join(root, '_site', 'lib', 'server-app.js'), '// stub entry — validation only, never spawned\n');
+    fs.mkdirSync(path.join(root, 'src', 'server'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'src', 'server', 'server-app.js'), '// stub entry — validation only, never spawned\n');
   };
 
   // -------------------------------------------------- shape rejections
@@ -52,7 +52,7 @@ async function main() {
 
   // --------------------------- canonical source roots are not official prefixes
   expectReject(ROOT, 'PROTECTED_SOURCE_ROOT', 'the canonical test repository is rejected');
-  expectReject(path.join(ROOT, '_site'), 'PROTECTED_SOURCE_ROOT', 'inside the canonical repository is rejected');
+  expectReject(path.join(ROOT, 'src'), 'PROTECTED_SOURCE_ROOT', 'inside the canonical repository is rejected');
   expectReject(ENGINE_SOURCE_ROOT, 'PROTECTED_SOURCE_ROOT', 'the engine source checkout is rejected');
 
   // ------------------------------------ missing root outside protected areas
@@ -60,7 +60,7 @@ async function main() {
 
   // --------------------------------------------- root exists, entry missing
   const noEntry = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-r99-no-entry-'));
-  expectReject(noEntry, 'MISSING_SITE_ENTRY', 'existing directory without _site/lib/server-app.js');
+  expectReject(noEntry, 'MISSING_SITE_ENTRY', 'existing directory without src/server/server-app.js');
 
   // ----------------------------------------------- invalid package shapes
   const badJson = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-r99-bad-json-'));
@@ -84,7 +84,7 @@ async function main() {
   fs.writeFileSync(path.join(fixtureEngine, 'package.json'), JSON.stringify({ name: '@sanqianx/ai-coding-knowledge-engine', version: '0.2.7-rc.12' }));
   const resolved = resolveProductRoot(good);
   assert.equal(resolved.root, path.resolve(good));
-  assert.equal(resolved.siteEntry, path.join(path.resolve(good), '_site', 'lib', 'server-app.js'));
+  assert.equal(resolved.siteEntry, path.join(path.resolve(good), 'src', 'server', 'server-app.js'));
   assert.equal(resolved.engineRoot, fixtureEngine);
   assert.deepEqual({ name: resolved.packageJson.name, version: resolved.packageJson.version }, { name: 'qa-r99-synthetic-prefix', version: '9.9.9-test' });
   ok('synthetic official prefix accepted with root/siteEntry/engineRoot/packageJson');

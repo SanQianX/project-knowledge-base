@@ -19,7 +19,7 @@ function coreCliPath(coreRoot) {
 
 function coreDataDir(coreRoot, override) {
   if (override) return path.resolve(override);
-  const { getDataDir } = require(path.join(coreRoot, '_site', 'lib', 'data-dir.js'));
+  const { getDataDir } = require(path.join(coreRoot, 'src', 'common', 'data-dir.js'));
   return getDataDir();
 }
 

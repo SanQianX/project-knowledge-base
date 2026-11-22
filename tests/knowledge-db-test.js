@@ -2,10 +2,10 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { KnowledgeDatabase, sqlString, inPredicate } = require('../_site/lib/knowledge-db');
-const { LocalEmbeddingService, QUERY_PREFIX } = require('../_site/lib/embedding-service');
-const { EMBEDDING_DIMENSIONS, sha256 } = require('../_site/lib/knowledge-schema');
-const { MarkdownKnowledgeIndexer, chunkMarkdown } = require('../_site/lib/markdown-knowledge-indexer');
+const { KnowledgeDatabase, sqlString, inPredicate } = require('../src/knowledge/knowledge-db');
+const { LocalEmbeddingService, QUERY_PREFIX } = require('../src/knowledge/embedding-service');
+const { EMBEDDING_DIMENSIONS, sha256 } = require('../src/knowledge/knowledge-schema');
+const { MarkdownKnowledgeIndexer, chunkMarkdown } = require('../src/knowledge/markdown-knowledge-indexer');
 
 function vectorAt(index) {
   const vector = new Array(EMBEDDING_DIMENSIONS).fill(0);

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { SCHEMA, readIntent, markIntent, bootstrapIntent, summarizeClient } = require('../_site/lib/integration-intent');
+const { SCHEMA, readIntent, markIntent, bootstrapIntent, summarizeClient } = require('../src/integrations/integration-intent');
 
 const tmpDataDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'kb-intent-'));
 const intentPath = dataDir => path.join(dataDir, 'integration-intent.json');

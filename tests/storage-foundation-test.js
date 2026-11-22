@@ -2,9 +2,9 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { StorageLayout } = require('../_site/lib/storage-layout');
-const AtomicFile = require('../_site/lib/atomic-file');
-const { SettingsStore } = require('../_site/lib/settings-store');
+const { StorageLayout } = require('../src/server/storage-layout');
+const AtomicFile = require('../src/common/atomic-file');
+const { SettingsStore } = require('../src/projects/settings-store');
 
 (async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-storage-foundation-'));

@@ -33,7 +33,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const PKB_ROOT = path.resolve(__dirname, '..', '..', '..');
-const { startCapHarness } = require(path.join(PKB_ROOT, '_site', '_test', 'helpers', 'parallel-memory-capture-r3-cap-shell'));
+const { startCapHarness } = require(path.join(PKB_ROOT, 'tests', 'helpers', 'parallel-memory-capture-r3-cap-shell'));
 
 const ARTIFACTS = path.join(PKB_ROOT, 'qa-autopilot', 'artifacts', 'parallel-20261106', 'capture-acceptance-r8');
 const CLIENT = 'claude';
@@ -208,7 +208,7 @@ async function main() {
         { key: 'invalid-json-blocked-not-overwritten', pass: invalidBlocked, observed: { invalidBlocked, feedback: String(invalidFeedback || '').slice(0, 200) } },
       ],
       damagedStatus: claudeDamaged,
-      note: 'the service-side startup repair path is covered by the same status/repair semantics through the real UI; the restart variant shares this code path (_site/lib/capture-hook-config.js repairCaptureHooks)',
+      note: 'the service-side startup repair path is covered by the same status/repair semantics through the real UI; the restart variant shares this code path (src/automation/capture-hook-config.js repairCaptureHooks)',
     };
     console.log(`[r8] CAP-009 ${evidence.cases['CAP-009'].verdict}`);
 

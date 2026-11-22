@@ -24,8 +24,8 @@ const KB_ROOT = 'D:/SanQian.Xu/project-knowledge-base';
 const ARTIFACT_DIR = path.join(KB_ROOT, 'qa-autopilot', 'artifacts', 'parallel-20261023', 'model-quota-feature');
 const { createWorkbenchServer, ProfileStore } = require(path.join(MODULE_ROOT, 'packages', 'server'));
 const { createClaudeWorkbenchClient } = require(path.join(MODULE_ROOT, 'packages', 'client'));
-const { launchCdpBrowser } = require(path.join(KB_ROOT, '_site', '_test', 'helpers', 'cdp-browser'));
-const { findChromeDetailed } = require(path.join(KB_ROOT, '_site', '_test', 'helpers', 'find-chrome'));
+const { launchCdpBrowser } = require(path.join(KB_ROOT, 'tests', 'helpers', 'cdp-browser'));
+const { findChromeDetailed } = require(path.join(KB_ROOT, 'tests', 'helpers', 'find-chrome'));
 const { createFakeRunner } = require(path.join(MODULE_ROOT, 'tests', 'helpers', 'fake-runner'));
 
 const results = [];

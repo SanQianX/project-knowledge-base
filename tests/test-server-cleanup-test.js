@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnServer } = require('./helpers/spawn-server');
 const freePort = require('./helpers/free-port');
-const { readEndpoint } = require('../_site/lib/runtime-endpoint');
+const { readEndpoint } = require('../src/common/runtime-endpoint');
 const { spawn } = require('node:child_process');
 
 (async () => {

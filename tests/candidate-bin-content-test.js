@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { installedFileBytes } = require('../_site/scripts/pack-module-candidates');
+const { installedFileBytes } = require('../src/scripts/pack-module-candidates');
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-bin-content-'));
 const npmCli = process.env.npm_execpath || path.join(path.dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js');
 function npm(args, cwd) {

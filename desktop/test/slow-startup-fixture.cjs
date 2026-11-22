@@ -15,7 +15,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const envLib = require('./release-preflight-5025-env.cjs');
 
-const CORE_LIB = require('node:path').resolve(__dirname, '..', '..', '_site', 'lib');
+const CORE_LIB = require('node:path').resolve(__dirname, '..', '..', 'src', 'common');
 const runtimeControl = require(path.join(CORE_LIB, 'runtime-control.js'));
 const runtimeEndpoint = require(path.join(CORE_LIB, 'runtime-endpoint.js'));
 

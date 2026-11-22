@@ -56,12 +56,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
-const fixture = require(path.join(REPO_ROOT, '_site', '_test', 'helpers', 'parallel-knowledge-fixture'));
+const fixture = require(path.join(REPO_ROOT, 'tests', 'helpers', 'parallel-knowledge-fixture'));
 // Isolate before any product module loads.
 fixture.isolateProcess();
 
-const { LocalEmbeddingService, DEFAULT_MODEL_ID } = require(path.join(REPO_ROOT, '_site', 'lib', 'embedding-service'));
-const { EMBEDDING_DIMENSIONS } = require(path.join(REPO_ROOT, '_site', 'lib', 'knowledge-schema'));
+const { LocalEmbeddingService, DEFAULT_MODEL_ID } = require(path.join(REPO_ROOT, 'src', 'knowledge', 'embedding-service'));
+const { EMBEDDING_DIMENSIONS } = require(path.join(REPO_ROOT, 'src', 'knowledge', 'knowledge-schema'));
 const HUB_DIST = path.join(REPO_ROOT, 'node_modules', '@sanqianx', 'vector-hub', 'dist', 'cjs');
 
 const QUERY = '配额采样为什么要串行执行';
@@ -455,7 +455,7 @@ async function main() {
             'RET-006.c-old-root-retained',
             'RET-006.d-project-knowledge-kept',
           ],
-          canonicalEntryPoint: '_site/_test/parallel-knowledge-vector-test.js',
+          canonicalEntryPoint: tests/parallel-knowledge-vector-test.js',
           reason: ret006 === 'PASS'
             ? 'the new root was really rebuilt with a real vector index and searched, and the old root kept its data'
             : 'the new-root rebuild was not verified: it needs a real embedder and a real vector index in the new root',

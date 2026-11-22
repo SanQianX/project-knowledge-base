@@ -4,7 +4,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { spawnServer } = require('./helpers/spawn-server');
-const hookManager = require('../_site/lib/hook-manager');
+const hookManager = require('../src/automation/hook-manager');
 
 const ROOT = require("./paths").ROOT;
 const PORT = 7900 + (process.pid % 500);
@@ -63,7 +63,7 @@ async function waitForServer() {
     assert(projects.data.projects.some(project => project.projectId === projectId), 'Hook failure must preserve registry');
 
     fs.rmSync(hookPath, { force: true });
-    hookManager.installHook({ repoPath, projectId, triggerScriptPath: path.join(ROOT, '_site', 'scripts', 'hook-trigger.js') });
+    hookManager.installHook({ repoPath, projectId, triggerScriptPath: path.join(ROOT, 'src', 'scripts', 'hook-trigger.js') });
     const knowledgePath = imported.data.project.config.knowledgePath;
     removed = await json('DELETE', `/api/projects/${projectId}`, { deleteKnowledge: false });
     assert.strictEqual(removed.status, 200, JSON.stringify(removed.data));

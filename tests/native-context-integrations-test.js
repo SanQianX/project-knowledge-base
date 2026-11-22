@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { IntegrationManager } = require('../_site/lib/integration-installer');
+const { IntegrationManager } = require('../src/integrations/integration-installer');
 const { run } = require('../plugins/project-knowledge/scripts/context-hook.cjs');
 
 async function main() {

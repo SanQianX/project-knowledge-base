@@ -2,7 +2,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { BridgeAdapter } = require('../_site/lib/bridge-adapter');
+const { BridgeAdapter } = require('../src/conversations/bridge-adapter');
 const bridgeModule = require('@sanqianx/ai-coding-event-bridge-console/src/bridge');
 
 (async () => {

@@ -14,13 +14,13 @@ const fixture = require('./helpers/parallel-knowledge-fixture');
 // directories and the real HOME are cleared here, before any product module
 // is loaded, so the test never depends on the caller running `env -u`.
 fixture.isolateProcess();
-const { StorageLayout } = require('../_site/lib/storage-layout');
-const { ProjectStore } = require('../_site/lib/project-store');
-const { ProjectRegistryStore } = require('../_site/lib/project-registry-store');
-const { KnowledgeRetrievalService } = require('../_site/lib/knowledge-retrieval-service');
-const { EngineKnowledgeClient } = require('../_site/lib/engine-knowledge-client');
-const { CHUNKER_VERSION } = require('../_site/lib/markdown-knowledge-indexer');
-const { sha256 } = require('../_site/lib/knowledge-schema');
+const { StorageLayout } = require('../src/server/storage-layout');
+const { ProjectStore } = require('../src/projects/project-store');
+const { ProjectRegistryStore } = require('../src/projects/project-registry-store');
+const { KnowledgeRetrievalService } = require('../src/knowledge/knowledge-retrieval-service');
+const { EngineKnowledgeClient } = require('../src/module_bridge/engine-knowledge-client');
+const { CHUNKER_VERSION } = require('../src/knowledge/markdown-knowledge-indexer');
+const { sha256 } = require('../src/knowledge/knowledge-schema');
 const { createEngineServer } = require('@sanqianx/ai-coding-knowledge-engine/src/server');
 const AtomicFile = require('@sanqianx/ai-coding-knowledge-engine/src/runtime/atomic-file');
 

@@ -2,7 +2,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { activeTaskPromises, isProjectBusy, taskForProject } = require('../_site/lib/server-app');
+const { activeTaskPromises, isProjectBusy, taskForProject } = require('../src/server/server-app');
 
 function deferred() {
   let resolve;

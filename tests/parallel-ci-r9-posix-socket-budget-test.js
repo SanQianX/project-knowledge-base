@@ -39,7 +39,7 @@ const assert = require('node:assert/strict');
 const { applyDriverIsolation } = require('./helpers/parallel-qa-engine-endpoint-isolate');
 const isolation = applyDriverIsolation({ prefix: 'r9-socket-budget' });
 const ownedRoot = fs.realpathSync(isolation.layout.root);
-const { controlPath } = require('../_site/lib/runtime-control');
+const { controlPath } = require('../src/common/runtime-control');
 const { assertPosixSocketBudget, POSIX_SOCKET_CHAR_LIMIT } = require('./helpers/parallel-logging-acceptance-fixture');
 
 const CI_LINUX_TEMP_ROOT = '/home/runner/work/_temp'; // from the 40075242420 log (PK_TEST_TEMP_ROOT)

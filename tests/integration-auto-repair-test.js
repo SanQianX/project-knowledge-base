@@ -3,8 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { markIntent } = require('../_site/lib/integration-intent');
-const { IntegrationAutoRepair } = require('../_site/lib/integration-auto-repair');
+const { markIntent } = require('../src/integrations/integration-intent');
+const { IntegrationAutoRepair } = require('../src/integrations/integration-auto-repair');
 
 const tmpDataDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'kb-auto-repair-'));
 

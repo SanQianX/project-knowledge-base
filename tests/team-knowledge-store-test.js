@@ -5,7 +5,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { spawnServer } = require('./helpers/spawn-server');
 const freePort = require('./helpers/free-port');
-const githubTeamStore = require('../_site/lib/github-team-store');
+const githubTeamStore = require('../src/projects/github-team-store');
 
 const ROOT = require("./paths").ROOT;
 let PORT, BASE_URL;

@@ -32,7 +32,7 @@ const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
-const wbf = require(path.join(REPO_ROOT, '_site', '_test', 'helpers', 'parallel-workbench-drafts-r5-fixture.js'));
+const wbf = require(path.join(REPO_ROOT, 'tests', 'helpers', 'parallel-workbench-drafts-r5-fixture.js'));
 
 const LANE_DIR = path.join(REPO_ROOT, 'qa-autopilot', 'artifacts', 'parallel-20261023', 'capture-safety-r5');
 const REPORT = path.join(LANE_DIR, 'report.json');

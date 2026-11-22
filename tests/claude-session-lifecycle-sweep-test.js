@@ -23,11 +23,11 @@ const path = require('path');
 const TMP_DATA = fs.mkdtempSync(path.join(os.tmpdir(), `kb-sweep-test-${process.pid}-`));
 process.env.KB_DATA_DIR = TMP_DATA;
 process.env.KB_STALE_ACTIVE_MS = '60000';
-require(path.resolve(__dirname, '..', '_site', 'lib', 'data-dir'))._resetCache();
+require(path.resolve(__dirname, '..', 'src', 'common', 'data-dir'))._resetCache();
 
 // Seed the v2 registry and per-project config/state before loading the runner.
 const PROJECT_IDS = ['demo-zombie-persisted', 'demo-zombie-memory', 'demo-fresh', 'demo-broadcast', 'demo-callback'];
-const { defaultProjectConfig, defaultProjectState } = require('../_site/lib/project-store');
+const { defaultProjectConfig, defaultProjectState } = require('../src/projects/project-store');
 const now = new Date().toISOString();
 fs.mkdirSync(path.join(TMP_DATA, 'projects'), { recursive: true });
 for (const projectId of PROJECT_IDS) {
@@ -47,7 +47,7 @@ fs.writeFileSync(path.join(TMP_DATA, 'projects.json'), JSON.stringify({
 }, null, 2) + '\n', 'utf8');
 fs.writeFileSync(path.join(TMP_DATA, 'claude-prompts.json'), '{"schema":"prompts/v1","prompts":{}}', 'utf-8');
 
-const runner = require('../_site/lib/claude-cli-runner');
+const runner = require('../src/integrations/claude-cli-runner');
 const {
   createSession,
   demoteStaleActiveSessions,

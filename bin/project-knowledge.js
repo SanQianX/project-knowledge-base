@@ -4,9 +4,9 @@ const path = require('node:path');
 const fs = require('node:fs');
 const net = require('node:net');
 const { spawn, spawnSync, exec } = require('node:child_process');
-const { resolveDataDirPath } = require('../_site/lib/data-dir');
-const endpoint = require('../_site/lib/runtime-endpoint');
-const instances = require('../_site/lib/cli-instances');
+const { resolveDataDirPath } = require('../src/common/data-dir');
+const endpoint = require('../src/common/runtime-endpoint');
+const instances = require('../src/common/cli-instances');
 const pkg = require('../package.json');
 
 function help() {
@@ -173,7 +173,7 @@ async function resolveExistingForStart(dataDir) {
 // anything not running (or not reporting a version) falls back to the
 // installed tree, labeled accordingly.
 async function versionReport() {
-  const { MODULE_ENTRIES, resolveModuleEntry } = require('../_site/lib/module-bridge');
+  const { MODULE_ENTRIES, resolveModuleEntry } = require('../src/module_bridge/module-bridge');
   const lines = [`project-knowledge ${pkg.version}`];
   let instance = null;
   try { instance = await instances.current(resolveDataDirPath({ dataDir: undefined })); } catch { /* not running */ }
@@ -298,7 +298,7 @@ async function main() {
   process.env.KB_SITE_HOST = options.host; process.env.KB_SITE_PORT = String(port);
   console.log(`project-knowledge ${pkg.version}\nData dir: ${dataDir}`);
   if (port !== options.port) console.log(`(Port ${options.port} was busy, using ${port} instead)`);
-  const { startServer, installProcessHandlers } = require('../_site/lib/server-app');
+  const { startServer, installProcessHandlers } = require('../src/server/server-app');
   const promise = startServer(); installProcessHandlers(promise);
   const instance = await promise;
   if (process.platform === 'win32') process.once('SIGBREAK', () => instance.stop('SIGBREAK'));

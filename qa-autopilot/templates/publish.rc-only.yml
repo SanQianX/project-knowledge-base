@@ -31,7 +31,7 @@ jobs:
         run: node qa-autopilot/tools/ci-rc-guard.cjs pre
       - run: npm ci
       - run: npm run release:verify
-      - run: node _site/scripts/sync-release-version.js --check --web-only
+      - run: node src/scripts/sync-release-version.js --check --web-only
       - run: npm test -- --no-report
       - name: Select reviewed npm major and record actual version
         run: npm install -g npm@11 && npm --version

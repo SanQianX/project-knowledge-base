@@ -1,8 +1,8 @@
 'use strict';
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const { RegistryEvents } = require('../_site/lib/registry-events');
-const { createRequestHandler } = require('../_site/lib/server-app');
+const { RegistryEvents } = require('../src/tools/registry-events');
+const { createRequestHandler } = require('../src/server/server-app');
 
 (async () => {
   const events = new RegistryEvents(), received = [];

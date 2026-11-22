@@ -16,11 +16,11 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { StorageLayout } = require('../_site/lib/storage-layout');
-const { IndexService } = require('../_site/lib/index-service');
-const { CommitReconciler } = require('../_site/lib/commit-reconciler');
-const { renderCommitPrompt } = require('../_site/lib/commit-prompt');
-const { normalizeAutomationConfig } = require('../_site/lib/automation-config');
+const { StorageLayout } = require('../src/server/storage-layout');
+const { IndexService } = require('../src/knowledge/index-service');
+const { CommitReconciler } = require('../src/automation/commit-reconciler');
+const { renderCommitPrompt } = require('../src/automation/commit-prompt');
+const { normalizeAutomationConfig } = require('../src/automation/automation-config');
 const { automationConfig: removedAutomationConfig } = (() => ({ automationConfig: undefined }))();
 void removedAutomationConfig;
 
@@ -78,7 +78,7 @@ void removedAutomationConfig;
   // I-13: No CLAUDE.md manager reintroduced. We assert the hook-manager
   // buildHookBody produces output that does NOT write CLAUDE.md, and the
   // runtime modules do not export any claudeMdManager.
-  const hookManager = require('../_site/lib/hook-manager');
+  const hookManager = require('../src/automation/hook-manager');
   assert(typeof hookManager.buildHookBody === 'function');
   // Spot-check the body content has no CLAUDE.md rewrite instructions.
   const fakeTrigger = path.join(os.tmpdir(), 'fake-trigger-' + process.pid + '.js');
@@ -93,12 +93,12 @@ void removedAutomationConfig;
   // automatically re-analyze the entire historical repository.
   // (ProjectLifecycleService.importProject sets trackingStartCommit and
   // never runs reconciliation over historical commits by itself.)
-  const { ProjectLifecycleService } = require('../_site/lib/project-lifecycle-service');
+  const { ProjectLifecycleService } = require('../src/projects/project-lifecycle-service');
   assert(typeof ProjectLifecycleService.prototype.importProject === 'function');
 
   // C-04: One AI profile resolver. Importing the resolver + checking that
   // there is exactly one exported resolveEffectiveAiProfile function.
-  const resolver = require('../_site/lib/ai-profile-resolver');
+  const resolver = require('../src/integrations/ai-profile-resolver');
   assert(typeof resolver.resolveEffectiveAiProfile === 'function');
   assert(resolver.resolveEffectiveAiProfile({ ai: { profiles: [{ id: 'p', enabled: true }] } }, { aiProfileId: 'p' }).profileId === 'p',
     'T01 resolver must surface the configured profile');
@@ -109,7 +109,7 @@ void removedAutomationConfig;
   const noHookRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-nohook-'));
   spawnSync('git', ['-C', noHookRepo, 'init', '-q', '-b', 'main']);
   assert.strictEqual(
-    require('../_site/lib/hook-manager').migrateManagedHook({ repoPath: noHookRepo }).reason,
+    require('../src/automation/hook-manager').migrateManagedHook({ repoPath: noHookRepo }).reason,
     'missing',
     'migrateManagedHook must report reason=missing for missing hook (T03 contract)',
   );

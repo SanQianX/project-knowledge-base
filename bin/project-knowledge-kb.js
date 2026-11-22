@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-const { KnowledgeToolRuntime } = require('../_site/lib/knowledge-tool-runtime');
-const { serializeErrorEnvelope, createId } = require('../_site/lib/contracts');
+const { KnowledgeToolRuntime } = require('../src/tools/knowledge-tool-runtime');
+const { serializeErrorEnvelope, createId } = require('../src/common/contracts');
 
 function parseOptions(args) {
   const first = args[0] || 'help';

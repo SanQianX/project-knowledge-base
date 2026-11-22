@@ -85,7 +85,7 @@ async function main() {
     startedAt: now(),
     serverAppSha256: (() => {
       const crypto = require('node:crypto');
-      return crypto.createHash('sha256').update(fs.readFileSync(path.join(ROOT, '_site', 'lib', 'server-app.js'))).digest('hex');
+      return crypto.createHash('sha256').update(fs.readFileSync(path.join(ROOT, 'src', 'server', 'server-app.js'))).digest('hex');
     })(),
   };
 

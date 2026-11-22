@@ -38,19 +38,19 @@
     },
     {
       "name": "terminal-reuse-guard-removed",
-      "target": "_site/lib/module-bridge.js `} else if (existingTerminal) {`",
+      "target": "src/module_bridge/module-bridge.js `} else if (existingTerminal) {`",
       "expectedFailure": "the second repair reuses the terminal registration instead of creating a second one",
       "proves": "PRJ-007 的“不重复登记”绑定能检测终端复用守卫失效"
     },
     {
       "name": "git-init-confirmation-guard-removed",
-      "target": "_site/lib/project-lifecycle-service.js `if (options.confirmGitInit !== true) throw ...`",
+      "target": "src/projects/project-lifecycle-service.js `if (options.confirmGitInit !== true) throw ...`",
       "expectedFailure": "未确认时导入返回 400 INVALID_ARGUMENT",
       "proves": "PRJ-008 的“未明确勾选不得 git init”绑定能检测确认守卫失效"
     },
     {
       "name": "writer-busy-guard-removed",
-      "target": "_site/lib/module-bridge.js `if (response.status === 409) throw new DomainError('PROJECT_BUSY', ...)`",
+      "target": "src/module_bridge/module-bridge.js `if (response.status === 409) throw new DomainError('PROJECT_BUSY', ...)`",
       "expectedFailure": "活动写入时解绑必须返回 409 PROJECT_BUSY",
       "proves": "PRJ-009 的“活动 writer 阻断解绑”绑定能检测忙碌守卫失效"
     },
@@ -62,7 +62,7 @@
     },
     {
       "name": "domain-change-reregistration-removed",
-      "target": "_site/lib/server-app.js `if (['domainId', 'knowledgeLanguage'].some(...)) modules = await runtime.moduleBridge.registerProjectLinks(...)`",
+      "target": "src/server/server-app.js `if (['domainId', 'knowledgeLanguage'].some(...)) modules = await runtime.moduleBridge.registerProjectLinks(...)`",
       "expectedFailure": "the engine registration carries the new domain",
       "proves": "PRJ-011 的“作用范围随登记更新”绑定能检测重新登记失效"
     },

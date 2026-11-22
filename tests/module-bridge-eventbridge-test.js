@@ -11,7 +11,7 @@
 const assert = require('assert');
 const http = require('http');
 const { PassThrough } = require('stream');
-const { ModuleBridge, defaultEventBridgeUrl } = require('../_site/lib/module-bridge');
+const { ModuleBridge, defaultEventBridgeUrl } = require('../src/module_bridge/module-bridge');
 
 const DEAD_URL = 'http://127.0.0.1:1'; // reserved port: connection refused, never a real service
 

@@ -18,7 +18,7 @@ vm.runInNewContext(fs.readFileSync(helper, 'utf8'), {
   require(id) {
     if (id === 'child_process') return { spawn: (...args) => { calls.push(args); return { pid: 1 }; } };
     if (id === 'fs') return { mkdtempSync: prefix => prefix + 'owned' };
-    if (id === '../../_site/lib/runtime-control' || id === '../../_site/lib/runtime-endpoint') return {};
+    if (id === '../../src/common/runtime-control' || id === '../../src/common/runtime-endpoint') return {};
     return require(id);
   },
   process: { execPath: process.execPath, pid: process.pid, env: inherited },

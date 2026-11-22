@@ -1,7 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
-const { ModuleBridge } = require('../_site/lib/module-bridge');
-const { connectEngine } = require('../_site/lib/engine-connection');
+const { ModuleBridge } = require('../src/module_bridge/module-bridge');
+const { connectEngine } = require('../src/module_bridge/engine-connection');
 
 async function main() {
   const state = { modules: { terminal: { projectId: 'terminal-original' } } };

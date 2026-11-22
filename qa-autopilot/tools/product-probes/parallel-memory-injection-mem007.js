@@ -172,10 +172,10 @@ const EXPECTED_ITEMS = [
     },
     files: {
       added: [
-        '_site/_test/parallel-memory-injection-probe.js',
-        '_site/_test/parallel-memory-injection-origin-probe.js',
-        '_site/_test/helpers/parallel-memory-injection-shell.js',
-        '_site/_test/helpers/parallel-memory-injection-wb-host.js',
+        tests/parallel-memory-injection-probe.js',
+        tests/parallel-memory-injection-origin-probe.js',
+        tests/helpers/parallel-memory-injection-shell.js',
+        tests/helpers/parallel-memory-injection-wb-host.js',
         'qa-autopilot/tools/product-probes/parallel-memory-injection-mem007.js',
         'qa-autopilot/artifacts/parallel-20261023/memory-injection/report.json',
         'qa-autopilot/artifacts/parallel-20261023/memory-injection/evidence/mem007-four-layer.json',
@@ -187,14 +187,14 @@ const EXPECTED_ITEMS = [
         '_modules/knowledge-engine/src/**',
         'node_modules/claude-ai-workbench/**',
         'node_modules/@sanqianx/ai-coding-event-bridge-console/**',
-        '_site/_test/parallel-memory-*-test.js（上一批 8 个源文件）',
-        '_site/_test/helpers/parallel-memory-shell.js 等共享 helper',
+        tests/parallel-memory-*-test.js（上一批 8 个源文件）',
+        tests/helpers/parallel-memory-shell.js 等共享 helper',
       ],
     },
     ownership: {
       laneOwned: [
-        '_site/_test/parallel-memory-injection-*.js',
-        '_site/_test/helpers/parallel-memory-injection-*',
+        tests/parallel-memory-injection-*.js',
+        tests/helpers/parallel-memory-injection-*',
         'qa-autopilot/tools/product-probes/parallel-memory-injection-*',
         'qa-autopilot/artifacts/parallel-20261023/memory-injection/**',
       ],

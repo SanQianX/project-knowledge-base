@@ -1,7 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const { ModuleBridge } = require('../_site/lib/module-bridge');
+const { ModuleBridge } = require('../src/module_bridge/module-bridge');
 
 (async () => {
   let disconnected = false; let cursor;

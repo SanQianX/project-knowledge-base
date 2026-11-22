@@ -4,10 +4,10 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { StorageLayout } = require('../_site/lib/storage-layout');
-const { ProjectRegistryStore } = require('../_site/lib/project-registry-store');
-const { ProjectStore } = require('../_site/lib/project-store');
-const { IndexService } = require('../_site/lib/index-service');
+const { StorageLayout } = require('../src/server/storage-layout');
+const { ProjectRegistryStore } = require('../src/projects/project-registry-store');
+const { ProjectStore } = require('../src/projects/project-store');
+const { IndexService } = require('../src/knowledge/index-service');
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), `kb-index-writer-${process.pid}-`));
 const layout = new StorageLayout({ dataDir: path.join(temp, 'data') });

@@ -1,6 +1,6 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),crypto=require('node:crypto');
-const {productFiles}=require('../_site/scripts/pack-module-candidates');
+const {productFiles}=require('../src/scripts/pack-module-candidates');
 const root=fs.mkdtempSync(path.join(os.tmpdir(),'kb-candidate-assets-'));
 try{
   const files=['ui/index.html','ui/knowledge-panel.html','ui/product.js','ui/live-client.js','ui/product.css','ui/favicon.svg','plugins/project-knowledge/scripts/context-hook.cjs'];

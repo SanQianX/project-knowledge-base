@@ -13,11 +13,13 @@ const os = require('os');
 const TEST_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-workbench-unit-'));
 process.env.KB_DATA_DIR = TEST_DATA;
 process.on('exit', () => fs.rmSync(TEST_DATA, { recursive: true, force: true }));
-const runner = require('../_site/lib/claude-cli-runner');
+const runner = require('../src/integrations/claude-cli-runner');
 
 const ROOT = require("./paths").ROOT;
 const TEMP_KB = path.join(ROOT, 'projects', 'claude-workbench-test-temp');
-const TEMP_AI = path.join(ROOT, '_site', '_ai', 'claude-workbench-test-temp');
+// 临时 AI 目录改用忽略的 .agent-state（原 _site/_ai 已随布局迁移退役）。
+// The temp AI dir moves under the ignored .agent-state root.
+const TEMP_AI = path.join(ROOT, '.agent-state', 'claude-workbench-test-temp');
 
 function assert(cond, msg) {
   if (!cond) throw new Error(msg);
@@ -106,7 +108,7 @@ function assert(cond, msg) {
 
   // Session metadata uses durable atomic replacement, but a disk fault must
   // remain fail-open for the live Workbench session and become observable.
-  const AtomicFile = require('../_site/lib/atomic-file');
+  const AtomicFile = require('../src/common/atomic-file');
   const originalAtomicWrite = AtomicFile.writeJsonAtomic;
   const persistenceLogs = [];
   runner.setLogger({ error: async (event, message, payload) => { persistenceLogs.push({ event, message, payload }); } });

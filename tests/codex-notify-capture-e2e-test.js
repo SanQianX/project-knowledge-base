@@ -6,7 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { IntegrationManager } = require('../_site/lib/integration-installer');
+const { IntegrationManager } = require('../src/integrations/integration-installer');
 const bridge = require('@sanqianx/ai-coding-event-bridge-console/src/bridge');
 
 const ROOT = require("./paths").ROOT;

@@ -3,9 +3,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { StartupIntegrationRepair } = require('../_site/lib/startup-integration-repair');
-const { markIntent } = require('../_site/lib/integration-intent');
-const { isProcessAlive } = require('../_site/lib/runtime-endpoint');
+const { StartupIntegrationRepair } = require('../src/integrations/startup-integration-repair');
+const { markIntent } = require('../src/integrations/integration-intent');
+const { isProcessAlive } = require('../src/common/runtime-endpoint');
 const workerFile = path.join(__dirname, 'fixtures/startup-repair-worker.cjs');
 async function main() {
   const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-startup-repair-empty-'));

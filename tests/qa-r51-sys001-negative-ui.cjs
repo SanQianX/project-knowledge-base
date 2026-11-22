@@ -6,7 +6,7 @@
 // browser or model. Explicit --run executes the bounded OWN probe.
 //
 // Negative control (real product bytes under test):
-//   * the ROOT server (_site/lib/server-app.js via the shared frozen
+//   * the ROOT server (src/server/server-app.js via the shared frozen
 //     spawn-server helper) runs on an OWN ephemeral port, fully isolated;
 //   * its port is ONLINE (/api/health 200) the whole time;
 //   * three OWN fake module services answer the product's identity-marked
@@ -72,7 +72,7 @@ async function fetchJson(url, timeoutMs = 8000) {
 async function main() {
   if (!RUN) {
     // --check: side-effect-free prerequisite validation.
-    for (const rel of ['bin/project-knowledge.js', '_site/lib/server-app.js', '_site/lib/module-bridge.js', 'ui/product.js', 'tests/helpers/spawn-server.js', 'tests/helpers/cdp-browser.js', 'tests/helpers/free-port.js']) {
+    for (const rel of ['bin/project-knowledge.js', 'src/server/server-app.js', 'src/module_bridge/module-bridge.js', 'ui/product.js', 'tests/helpers/spawn-server.js', 'tests/helpers/cdp-browser.js', 'tests/helpers/free-port.js']) {
       assert.ok(fs.existsSync(path.join(ROOT, rel)), `missing ${rel}`);
     }
     const chrome = resolveChromeBeforeIsolation();

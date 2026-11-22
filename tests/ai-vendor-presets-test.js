@@ -1,6 +1,6 @@
 // Tests for ai-vendor-presets: 4 vendors with full fields, name/id lookup.
 
-const { AI_VENDOR_PRESETS, listVendorPresetNames, findVendorPresetByName } = require('../_site/lib/ai-vendor-presets');
+const { AI_VENDOR_PRESETS, listVendorPresetNames, findVendorPresetByName } = require('../src/integrations/ai-vendor-presets');
 
 function assert(cond, msg) { if (!cond) throw new Error(msg); }
 

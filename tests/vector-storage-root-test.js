@@ -1,9 +1,9 @@
 'use strict';
 const assert = require('node:assert/strict');
 const path = require('node:path');
-const { StorageLayout } = require('../_site/lib/storage-layout');
-const { ModuleBridge } = require('../_site/lib/module-bridge');
-const { KnowledgeToolRuntime } = require('../_site/lib/knowledge-tool-runtime');
+const { StorageLayout } = require('../src/server/storage-layout');
+const { ModuleBridge } = require('../src/module_bridge/module-bridge');
+const { KnowledgeToolRuntime } = require('../src/tools/knowledge-tool-runtime');
 const root = path.resolve('D:/knowledge storage 中文');
 const layout = new StorageLayout({ dataDir: path.resolve('D:/metadata') });
 assert.equal(layout.getVectorRootPath({ knowledge: { rootPath: root } }), path.join(root, '.indexes'));

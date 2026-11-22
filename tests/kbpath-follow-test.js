@@ -2,17 +2,17 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { StorageLayout } = require('../_site/lib/storage-layout');
-const { SettingsStore } = require('../_site/lib/settings-store');
-const { ProjectRegistryStore } = require('../_site/lib/project-registry-store');
-const { ProjectStore } = require('../_site/lib/project-store');
+const { StorageLayout } = require('../src/server/storage-layout');
+const { SettingsStore } = require('../src/projects/settings-store');
+const { ProjectRegistryStore } = require('../src/projects/project-registry-store');
+const { ProjectStore } = require('../src/projects/project-store');
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pkb-kbpath-v2-'));
 const projectId = 'project-kbpath-follow';
 const oldKnowledgePath = path.join(dataDir, 'knowledge-old');
 const newKnowledgePath = path.join(dataDir, 'knowledge-new');
 process.env.KB_DATA_DIR = dataDir;
-require('../_site/lib/data-dir')._resetCache();
+require('../src/common/data-dir')._resetCache();
 
 (async () => {
   try {
@@ -27,7 +27,7 @@ require('../_site/lib/data-dir')._resetCache();
     await projectStore.create(projectId, { displayName: 'KB path follow', storageName: 'kbpath', repoPath: dataDir, knowledgePath: oldKnowledgePath });
     await registryStore.add(projectId, { displayNameSnapshot: 'KB path follow' });
 
-    const runner = require('../_site/lib/claude-cli-runner');
+    const runner = require('../src/integrations/claude-cli-runner');
     const started = runner.startChatSession({
       slug: projectId,
       projectPath: dataDir,
@@ -41,8 +41,8 @@ require('../_site/lib/data-dir')._resetCache();
     fs.writeFileSync(recordPath, `${JSON.stringify(persisted, null, 2)}\n`, 'utf8');
 
     await projectStore.updateConfig(projectId, { knowledgePath: newKnowledgePath }, { allowKnowledgePath: true });
-    delete require.cache[require.resolve('../_site/lib/claude-cli-runner')];
-    const restoredRunner = require('../_site/lib/claude-cli-runner');
+    delete require.cache[require.resolve('../src/integrations/claude-cli-runner')];
+    const restoredRunner = require('../src/integrations/claude-cli-runner');
     const events = [];
     restoredRunner.subscribe(started.sessionId, event => events.push(event));
     const restored = restoredRunner.getSession(started.sessionId);

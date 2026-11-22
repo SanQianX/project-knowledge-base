@@ -26,8 +26,8 @@ const runtime = require('./lib/backend-runtime.cjs');
 const coreRoot = runtime.resolveCoreRoot();
 const corePkg = require(path.join(coreRoot, 'package.json'));
 const coreCliPath = runtime.coreCliPath(coreRoot);
-const endpointStore = require(path.join(coreRoot, '_site', 'lib', 'runtime-endpoint.js'));
-const instances = require(path.join(coreRoot, '_site', 'lib', 'cli-instances.js'));
+const endpointStore = require(path.join(coreRoot, 'src', 'common', 'runtime-endpoint.js'));
+const instances = require(path.join(coreRoot, 'src', 'common', 'cli-instances.js'));
 
 let mainWindow = null;
 let tray = null;

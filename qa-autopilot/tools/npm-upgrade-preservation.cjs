@@ -55,7 +55,7 @@ async function main() {
   assert(![5757, 5760, 5790, 8787, 8790].includes(port));
   const env = { ...process.env, KB_DATA_DIR: data, KB_SITE_HOST: '127.0.0.1', KB_SITE_PORT: String(port), KB_MODULES_AUTOSTART: '0', KB_MODULES_REGISTER: '0', KB_TERMINAL_URL: 'http://127.0.0.1:9', KB_VECTORHUB_URL: 'http://127.0.0.1:9', KB_EVENTBRIDGE_URL: 'http://127.0.0.1:9', KB_KNOWLEDGE_ENGINE_URL: 'http://127.0.0.1:9' };
   const log = fs.openSync(path.join(root, mode + '-server.log'), 'w');
-  const child = spawn(process.execPath, [path.join(core, '_site/server.js')], { cwd: core, env, windowsHide: true, stdio: ['ignore', log, log] });
+  const child = spawn(process.execPath, [path.join(core, 'src/server.js')], { cwd: core, env, windowsHide: true, stdio: ['ignore', log, log] });
   const closed = new Promise(resolve => child.once('close', resolve));
   const api = async (method, route, body) => {
     const response = await fetch('http://127.0.0.1:' + port + route, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(10000) });

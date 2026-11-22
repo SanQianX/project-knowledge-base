@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { WorkflowToolRuntime } = require('../_site/lib/workflow-tool-runtime');
+const { WorkflowToolRuntime } = require('../src/tools/workflow-tool-runtime');
 
 // Development-machine suite: the upstream is the real workflow module from
 // its private source checkout. CI without that checkout gets an explicit,

@@ -3,7 +3,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const runner = require('../_site/lib/claude-cli-runner');
+const runner = require('../src/integrations/claude-cli-runner');
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-discovery-test-'));
 

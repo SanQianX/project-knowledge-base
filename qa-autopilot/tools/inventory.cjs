@@ -16,7 +16,7 @@ function inventory(cfg) {
             continue;
         const entry = { file, bytes: st.size, sha256: hash(fs.readFileSync(full)), category: file.startsWith('tests/') ? 'existing-test' : file.startsWith('_modules/') ? 'vendored-runtime' : file.startsWith('plugins/') ? 'integration' : 'source-or-document' };
         entries.push(entry);
-        if (file === 'ui/index.html' || file === 'ui/product.js' || file === '_site/lib/server-app.js') {
+        if (file === 'ui/index.html' || file === 'ui/product.js' || file === 'src/server/server-app.js') {
             const text = fs.readFileSync(full, 'utf8'), lines = text.split(/\r?\n/);
             lines.forEach((line, i) => {
                 for (const m of line.matchAll(/\bid="([A-Za-z0-9_-]+)"/g))

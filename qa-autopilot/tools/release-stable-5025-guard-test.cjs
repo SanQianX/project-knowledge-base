@@ -156,10 +156,10 @@ test('desktop candidate: immutability (VERSION_EXISTS)', () => {
 
 // ---- checkPack ---------------------------------------------------------------
 
-const CORE_FILES = ['package.json', '_site/server.js', 'ui/index.html', 'ui/product.js', 'ui/live-client.js', 'module-runtime-manifest.json'];
+const CORE_FILES = ['package.json', 'src/server.js', 'ui/index.html', 'ui/product.js', 'ui/live-client.js', 'module-runtime-manifest.json'];
 
 test('pack: core positive with required runtime files', () => {
-  const verdict = g.checkPack(packInput(packList(CORE_FILES), { required: ['package.json', '_site/server.js'] }));
+  const verdict = g.checkPack(packInput(packList(CORE_FILES), { required: ['package.json', 'src/server.js'] }));
   assert.deepStrictEqual(verdict, { ok: true });
 });
 

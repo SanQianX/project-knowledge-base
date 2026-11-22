@@ -8,8 +8,8 @@ const { guardedCreateEngineServer, createEngineVectorStandin, createEngineBridge
 (async () => {
   const applied = applyDriverIsolation({ prefix: 'pk-qa-shared-scope' });
   // Product modules load only after the driver environment is isolated.
-  const { SettingsStore } = require('../_site/lib/settings-store');
-  const { ModuleBridge } = require('../_site/lib/module-bridge');
+  const { SettingsStore } = require('../src/projects/settings-store');
+  const { ModuleBridge } = require('../src/module_bridge/module-bridge');
   const root = fs.mkdtempSync(path.join(applied.layout.temp, 'kb-shared-bindings-'));
   const oldRoot = path.join(root, '原知识根目录'), newRoot = path.join(root, '新知识根目录');
   const settings = new SettingsStore({ dataDir: path.join(root, 'shell') });

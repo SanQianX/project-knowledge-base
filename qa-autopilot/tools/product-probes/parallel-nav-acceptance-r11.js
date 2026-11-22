@@ -22,8 +22,8 @@ const os = require('node:os');
 const path = require('node:path');
 
 const PKB_ROOT = path.resolve(__dirname, '..', '..', '..');
-const UI = require(path.join(PKB_ROOT, '_site', '_test', 'helpers', 'parallel-dock-acceptance-ui.js'));
-const { createDockAcceptanceEnv } = require(path.join(PKB_ROOT, '_site', '_test', 'helpers', 'parallel-dock-acceptance-env.js'));
+const UI = require(path.join(PKB_ROOT, 'tests', 'helpers', 'parallel-dock-acceptance-ui.js'));
+const { createDockAcceptanceEnv } = require(path.join(PKB_ROOT, 'tests', 'helpers', 'parallel-dock-acceptance-env.js'));
 
 const ARTIFACTS = path.join(PKB_ROOT, 'qa-autopilot', 'artifacts', 'parallel-20261106', 'nav-acceptance-r11');
 const VIEWPORTS = [

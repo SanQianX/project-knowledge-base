@@ -32,8 +32,8 @@ const os = require('os');
 const path = require('path');
 
 const PKB_ROOT = path.resolve(__dirname, '..', '..', '..');
-const UI = require(path.join(PKB_ROOT, '_site', '_test', 'helpers', 'parallel-dock-acceptance-r2-ui.js'));
-const { createDockAcceptanceEnv } = require(path.join(PKB_ROOT, '_site', '_test', 'helpers', 'parallel-dock-acceptance-r2-env.js'));
+const UI = require(path.join(PKB_ROOT, 'tests', 'helpers', 'parallel-dock-acceptance-r2-ui.js'));
+const { createDockAcceptanceEnv } = require(path.join(PKB_ROOT, 'tests', 'helpers', 'parallel-dock-acceptance-r2-env.js'));
 
 const ARTIFACTS = path.join(PKB_ROOT, 'qa-autopilot', 'artifacts', 'parallel-20261023', 'dock-acceptance-r2');
 const MODEL_PROFILE_ID = process.env.R2_DOCK_MODEL_PROFILE || 'minimax';

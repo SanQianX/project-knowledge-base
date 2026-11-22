@@ -5,11 +5,11 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { StorageLayout } = require('../_site/lib/storage-layout');
-const { ProjectRegistryStore } = require('../_site/lib/project-registry-store');
-const { ProjectStore } = require('../_site/lib/project-store');
-const { ProjectLifecycleService } = require('../_site/lib/project-lifecycle-service');
-const { CommitReconciler } = require('../_site/lib/commit-reconciler');
+const { StorageLayout } = require('../src/server/storage-layout');
+const { ProjectRegistryStore } = require('../src/projects/project-registry-store');
+const { ProjectStore } = require('../src/projects/project-store');
+const { ProjectLifecycleService } = require('../src/projects/project-lifecycle-service');
+const { CommitReconciler } = require('../src/automation/commit-reconciler');
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), `kb-tracking-start-${process.pid}-`));
 const layout = new StorageLayout({ dataDir: path.join(temp, 'data') });

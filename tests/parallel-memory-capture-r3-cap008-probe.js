@@ -45,8 +45,8 @@ const assert = require('node:assert/strict');
 const { execFileSync, spawnSync } = require('node:child_process');
 
 const { startCapHarness, ROOT, resolveTempRoot } = require('./helpers/parallel-memory-capture-r3-cap-shell');
-const { BridgeAdapter } = require(path.join(ROOT, '_site', 'lib', 'bridge-adapter'));
-const { parseManagedMarker } = require(path.join(ROOT, '_site', 'lib', 'hook-manager'));
+const { BridgeAdapter } = require(path.join(ROOT, 'src', 'conversations', 'bridge-adapter'));
+const { parseManagedMarker } = require(path.join(ROOT, 'src', 'automation', 'hook-manager'));
 
 const EVIDENCE = process.env.PK_TEST_EVIDENCE_DIR ? path.resolve(process.env.PK_TEST_EVIDENCE_DIR) : null;
 const CLIENT = 'claude';

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const http = require('node:http');
 const { once } = require('node:events');
 const { WebSocket } = require('ws');
-const { attachLiveGateway } = require('../_site/lib/live-gateway');
+const { attachLiveGateway } = require('../src/server/live-gateway');
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 (async () => {
   let active = 0, total = 0;

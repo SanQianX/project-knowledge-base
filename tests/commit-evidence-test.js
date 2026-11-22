@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { CommitScanner, TrustedGitReader, EMPTY_TREE_SHA, sha256 } = require('../_site/lib/scanner');
+const { CommitScanner, TrustedGitReader, EMPTY_TREE_SHA, sha256 } = require('../src/projects/scanner');
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), `kb-commit-evidence-${process.pid}-`));
 const repo = path.join(temp, 'repo');

@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('node:assert/strict');
-const { ModuleBridge } = require('../_site/lib/module-bridge');
+const { ModuleBridge } = require('../src/module_bridge/module-bridge');
 
 (async () => {
   const bridge = new ModuleBridge({ engineUrl: 'http://127.0.0.1:1', settingsStore: { read: () => ({ knowledge: { rootPath: 'D:/test-knowledge' }, brain: { id: 'brain-default', name: 'test', domains: [] } }) } });

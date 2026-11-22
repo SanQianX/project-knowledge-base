@@ -18,7 +18,7 @@ async function waitForServer() {
 }
 
 (async () => {
-  const source = `${fs.readFileSync(path.join(ROOT, '_site', 'server.js'), 'utf8')}\n${fs.readFileSync(path.join(ROOT, '_site', 'lib', 'server-app.js'), 'utf8')}`;
+  const source = `${fs.readFileSync(path.join(ROOT, 'src', 'server.js'), 'utf8')}\n${fs.readFileSync(path.join(ROOT, 'src', 'server', 'server-app.js'), 'utf8')}`;
   for (const removedSymbol of ['automation/simulate', 'automation/init', 'hook-install', 'hook-uninstall', 'dispatchProjectInit', 'DEFAULT_INIT_PROMPT_TEMPLATE', 'renderProjectInitPrompt', '/api/raw']) {
     assert(!source.includes(removedSymbol), `removed production symbol remains: ${removedSymbol}`);
   }

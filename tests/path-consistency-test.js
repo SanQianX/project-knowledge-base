@@ -3,15 +3,15 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { StorageLayout } = require('../_site/lib/storage-layout');
-const { SettingsStore } = require('../_site/lib/settings-store');
-const { ProjectRegistryStore } = require('../_site/lib/project-registry-store');
-const { ProjectStore } = require('../_site/lib/project-store');
-const { ProjectLifecycleService } = require('../_site/lib/project-lifecycle-service');
-const { KnowledgeToolRuntime } = require('../_site/lib/knowledge-tool-runtime');
-const { CommitReconciler } = require('../_site/lib/commit-reconciler');
-const { handlePostCommitEvent } = require('../_site/lib/post-commit-automation');
-const hookManager = require('../_site/lib/hook-manager');
+const { StorageLayout } = require('../src/server/storage-layout');
+const { SettingsStore } = require('../src/projects/settings-store');
+const { ProjectRegistryStore } = require('../src/projects/project-registry-store');
+const { ProjectStore } = require('../src/projects/project-store');
+const { ProjectLifecycleService } = require('../src/projects/project-lifecycle-service');
+const { KnowledgeToolRuntime } = require('../src/tools/knowledge-tool-runtime');
+const { CommitReconciler } = require('../src/automation/commit-reconciler');
+const { handlePostCommitEvent } = require('../src/automation/post-commit-automation');
+const hookManager = require('../src/automation/hook-manager');
 const { callTool } = require('../bin/project-knowledge-mcp');
 const { spawnServer } = require('./helpers/spawn-server');
 
@@ -80,7 +80,7 @@ async function waitForServer() {
     await projectStore.updateConfig('project-stable', { displayName: 'After rename' });
     assert.strictEqual(projectStore.readConfig('project-stable').projectId, 'project-stable');
 
-    const lifecycle = new ProjectLifecycleService({ layout, settingsStore, registryStore, projectStore, hookManager, triggerScriptPath: path.join(ROOT, '_site', 'scripts', 'hook-trigger.js') });
+    const lifecycle = new ProjectLifecycleService({ layout, settingsStore, registryStore, projectStore, hookManager, triggerScriptPath: path.join(ROOT, 'src', 'scripts', 'hook-trigger.js') });
     const imported = await lifecycle.importProject({ localPath: newRepo, displayName: 'New root project' });
     assert(layout.isPathInside(rootB, imported.config.knowledgePath, { realpath: true }));
     assert(!layout.isPathInside(rootA, imported.config.knowledgePath, { realpath: true }));

@@ -8,13 +8,13 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { migrateManagedHooks } = require('../_site/lib/server-app');
-const hookManager = require('../_site/lib/hook-manager');
+const { migrateManagedHooks } = require('../src/server/server-app');
+const hookManager = require('../src/automation/hook-manager');
 
 const ROOT = require("./paths").ROOT;
 const TEMP = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-hook-reloc-'));
 const repo = path.join(TEMP, '代码 仓库');
-const TRIGGER = path.join(ROOT, '_site', 'scripts', 'hook-trigger.js');
+const TRIGGER = path.join(ROOT, 'src', 'scripts', 'hook-trigger.js');
 
 function git(args) {
   const result = spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8', windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });

@@ -4,9 +4,9 @@ const {
   IntegrationManager,
   SUPPORTED_CLIENTS,
   normalizeClient,
-} = require('../_site/lib/integration-installer');
-const { Logger } = require('../_site/lib/structured-logger');
-const { createId } = require('../_site/lib/contracts');
+} = require('../src/integrations/integration-installer');
+const { Logger } = require('../src/common/structured-logger');
+const { createId } = require('../src/common/contracts');
 
 function printHelp() {
   console.log(`project-knowledge-integrations

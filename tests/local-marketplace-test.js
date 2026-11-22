@@ -1,7 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 const path = require('node:path');
-const { IntegrationManager } = require('../_site/lib/integration-installer');
+const { IntegrationManager } = require('../src/integrations/integration-installer');
 const commands = [];
 const root = require("./paths").ROOT;
 const manager = new IntegrationManager({ rootDir: root, commandResolver: name => name, runner: (cmd, args) => {

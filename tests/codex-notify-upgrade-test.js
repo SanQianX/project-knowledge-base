@@ -5,12 +5,12 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { IntegrationManager } = require('../_site/lib/integration-installer');
-const { planNotify, writeNotify } = require('../_site/lib/codex-notify-config');
+const { IntegrationManager } = require('../src/integrations/integration-installer');
+const { planNotify, writeNotify } = require('../src/conversations/codex-notify-config');
 
 const ROOT = require("./paths").ROOT;
 const TEMP = fs.mkdtempSync(path.join(os.tmpdir(), `pk-codex-notify-upgrade-${process.pid}-`));
-const CURRENT_FANOUT = path.join(ROOT, '_site', 'scripts', 'codex-notify-fanout.cjs');
+const CURRENT_FANOUT = path.join(ROOT, 'src', 'scripts', 'codex-notify-fanout.cjs');
 
 function encode(command) {
   return Buffer.from(JSON.stringify(command)).toString('base64');
@@ -30,7 +30,7 @@ function desktopCommand(name, previous, exists) {
 
 function oldFanout(name, previous, bridge, scoped = false) {
   const packagePath = scoped ? ['@sanqianx', 'project-knowledge'] : ['project-knowledge'];
-  const file = path.join(TEMP, name, 'npm', 'node_modules', ...packagePath, '_site', 'scripts', 'codex-notify-fanout.cjs');
+  const file = path.join(TEMP, name, 'npm', 'node_modules', ...packagePath, 'src', 'scripts', 'codex-notify-fanout.cjs');
   return ['node', file, ...(previous ? ['--next-base64', encode(previous)] : []), '--bridge-base64', encode(bridge)];
 }
 

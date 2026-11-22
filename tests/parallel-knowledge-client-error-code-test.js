@@ -45,8 +45,8 @@ const path = require('node:path');
 const http = require('node:http');
 const fixture = require('./helpers/parallel-knowledge-fixture');
 fixture.isolateProcess();
-const { StorageLayout } = require('../_site/lib/storage-layout');
-const { EngineKnowledgeClient } = require('../_site/lib/engine-knowledge-client');
+const { StorageLayout } = require('../src/server/storage-layout');
+const { EngineKnowledgeClient } = require('../src/module_bridge/engine-knowledge-client');
 
 // --only=patched is accepted as an explicit alias of the default run. No
 // other mode exists here: the historical --only=head mode was moved to the

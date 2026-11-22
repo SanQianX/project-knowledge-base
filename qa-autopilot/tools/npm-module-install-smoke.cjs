@@ -36,13 +36,13 @@ async function main() {
   for (const module of Object.values(manifest.modules)) {
     if (!resolve.resolve(module.installName + '/package.json').startsWith(installRoot + path.sep)) throw Error('Module resolved outside the isolated install');
   }
-  const modules = resolve('./_site/scripts/verify-product-runtime.js').verifyProductRuntime(core);
+  const modules = resolve('./src/scripts/verify-product-runtime.js').verifyProductRuntime(core);
   if (fs.existsSync(path.join(core, '_modules/knowledge-engine'))) throw Error('Engine source is still bundled in the shell');
   const urls = {};
   for (const key of ['terminalUrl', 'vectorHubUrl', 'eventBridgeUrl', 'engineUrl']) urls[key] = 'http://127.0.0.1:' + await freePort();
   const errors = [];
   const logger = { info() {}, warn(event, message) { errors.push({ event, message }); }, error(event, message) { errors.push({ event, message }); } };
-  const { ModuleBridge } = resolve('./_site/lib/module-bridge.js');
+  const { ModuleBridge } = resolve('./src/module_bridge/module-bridge.js');
   const result = { status: 'PASS', installRoot, modules: Object.fromEntries(Object.entries(modules).map(([key, value]) => [key, value.version])), cycles: [] };
   const kind = { terminal: 'terminal', 'vector-hub': 'vectorHub', 'event-bridge': 'eventBridge', 'knowledge-engine': 'engine' };
   for (let cycle = 0; cycle < 2; cycle++) {

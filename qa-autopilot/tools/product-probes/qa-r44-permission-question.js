@@ -62,17 +62,17 @@ const R44_LANE = 'P-WB-PERMISSION-QUESTION-R44';
 // canonical lane may depend on; every other file of the closure must be
 // tracked by git.
 const PROPOSAL_FILES = [
-  '_site/_test/helpers/qa-r44-env.js',
-  '_site/_test/helpers/qa-r44-ui.js',
-  '_site/_test/helpers/qa-r44-report.js',
-  '_site/_test/qa-r44-permission-question.js',
+  tests/helpers/qa-r44-env.js',
+  tests/helpers/qa-r44-ui.js',
+  tests/helpers/qa-r44-report.js',
+  tests/qa-r44-permission-question.js',
   'qa-autopilot/tools/product-probes/qa-r44-permission-question.js',
   'qa-autopilot/tools/product-probes/qa-r44-report-regression.js',
 ];
 
 // The harness the scenario used before R44C. It is an UNTRACKED historical
 // tool; the canonical lane must not depend on it any more.
-const RETIRED_HARNESS = '_site/_test/helpers/parallel-workbench-runtime-harness.js';
+const RETIRED_HARNESS = tests/helpers/parallel-workbench-runtime-harness.js';
 
 // The API the scenario uses from the shared helpers. The check proves that
 // the tracked harness still provides it.
@@ -113,7 +113,7 @@ const R44C_EVIDENCE_DIR = path.join(REPO_ROOT, 'qa-autopilot', 'artifacts', 'par
 // write into it.
 const FROZEN_EVIDENCE_DIRS = [R44_EVIDENCE_DIR, R44C_EVIDENCE_DIR];
 const SCENARIO_PATH = path.join(REPO_ROOT, '_site', '_test', 'qa-r44-permission-question.js');
-const REPORT_BUILDER_PATH = path.join(REPO_ROOT, '_site', '_test', 'helpers', 'qa-r44-report.js');
+const REPORT_BUILDER_PATH = path.join(REPO_ROOT, 'tests', 'helpers', 'qa-r44-report.js');
 
 const sha256File = file => {
   try { return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'); } catch { return null; }
@@ -288,7 +288,7 @@ function runCheck(repoRoot) {
   });
 
   // 4. the helper the harness spawns at runtime is tracked too.
-  const runtimeSpawned = '_site/_test/helpers/parallel-workbench-host.js';
+  const runtimeSpawned = tests/helpers/parallel-workbench-host.js';
   const spawnedTracked = tracked.names ? tracked.names.has(runtimeSpawned) : null;
   record('R44C.d-the-runtime-spawned-host-helper-is-tracked', spawnedTracked === true ? 'PASS' : (spawnedTracked === null ? 'UNKNOWN' : 'FAIL'), {
     path: runtimeSpawned,
@@ -302,9 +302,9 @@ function runCheck(repoRoot) {
   let api = null;
   let loadError = null;
   try {
-    const harness = require(path.join(repoRoot, '_site', '_test', 'helpers', 'parallel-workbench-integration-5025-runtime-harness'));
-    const envLib = require(path.join(repoRoot, '_site', '_test', 'helpers', 'qa-r44-env'));
-    const ui = require(path.join(repoRoot, '_site', '_test', 'helpers', 'qa-r44-ui'));
+    const harness = require(path.join(repoRoot, 'tests', 'helpers', 'parallel-workbench-integration-5025-runtime-harness'));
+    const envLib = require(path.join(repoRoot, 'tests', 'helpers', 'qa-r44-env'));
+    const ui = require(path.join(repoRoot, 'tests', 'helpers', 'qa-r44-ui'));
     const missingHarness = HARNESS_API.filter(name => typeof harness[name] === 'undefined');
     const missingEnv = ENV_API.filter(name => typeof envLib[name] === 'undefined');
     const missingUi = UI_API.filter(name => typeof ui[name] === 'undefined');

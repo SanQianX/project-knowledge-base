@@ -50,48 +50,48 @@ const { spawnSync, execFileSync } = require('node:child_process');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const EVIDENCE_DIR = path.join(REPO_ROOT, 'qa-autopilot', 'artifacts', 'parallel-20261023', 'workbench-integration-5025', 'evidence');
-const LAUNCHER = path.join(REPO_ROOT, '_site', '_test', 'helpers', 'parallel-workbench-integration-5025-launcher.js');
+const LAUNCHER = path.join(REPO_ROOT, 'tests', 'helpers', 'parallel-workbench-integration-5025-launcher.js');
 
 const HELPERS = [
-  '_site/_test/helpers/parallel-workbench-integration-5025-fixture.js',
-  '_site/_test/helpers/parallel-workbench-integration-5025-launcher.js',
-  '_site/_test/helpers/parallel-workbench-integration-5025-host.js',
-  '_site/_test/helpers/parallel-workbench-integration-5025-harness.js',
-  '_site/_test/helpers/parallel-workbench-integration-5025-runtime-harness.js',
+  tests/helpers/parallel-workbench-integration-5025-fixture.js',
+  tests/helpers/parallel-workbench-integration-5025-launcher.js',
+  tests/helpers/parallel-workbench-integration-5025-host.js',
+  tests/helpers/parallel-workbench-integration-5025-harness.js',
+  tests/helpers/parallel-workbench-integration-5025-runtime-harness.js',
 ];
 
 const ENTRIES = [
   {
     name: 'env',
-    file: '_site/_test/parallel-workbench-integration-5025-env-check.js',
+    file: tests/parallel-workbench-integration-5025-env-check.js',
     caseId: 'I5025-ENV',
     paid: false,
     description: 'FREE offline env self-check — launcher gates, full driver isolation in a real child, identity carry-through, runner whitelist, pure-fragment + 50-anchor validation (no browser, no model, no network)',
   },
   {
     name: 'drafts',
-    file: '_site/_test/parallel-workbench-integration-5025-drafts-probe.js',
+    file: tests/parallel-workbench-integration-5025-drafts-probe.js',
     caseId: 'WB-005',
     paid: false,
     description: 'draft & attachment isolation — real browser, real UI, fictional profile, ZERO model requests (the canonical retest of the accepted R5 probe)',
   },
   {
     name: 'model',
-    file: '_site/_test/parallel-workbench-integration-5025-model-probe.js',
+    file: tests/parallel-workbench-integration-5025-model-probe.js',
     caseId: 'WB-003',
     paid: true,
     description: 'real MiniMax positive acceptance — API-driven, exactly ONE paid turn, real network to the provider, real profile behind the read-only in-memory facade (needs PK_WB_ALLOW_PAID_TURNS=1 + explicit PK_WB_REAL_PROFILE_DIR)',
   },
   {
     name: 'ordering',
-    file: '_site/_test/parallel-workbench-integration-5025-ordering-probe.js',
+    file: tests/parallel-workbench-integration-5025-ordering-probe.js',
     caseId: 'WB-004',
     paid: true,
     description: 'consecutive-answer ordering with stale-frame replay — real browser, TWO paid turns, real network to the provider, real profile (same authorization)',
   },
   {
     name: 'abort',
-    file: '_site/_test/parallel-workbench-integration-5025-abort-probe.js',
+    file: tests/parallel-workbench-integration-5025-abort-probe.js',
     caseId: 'WB-008',
     paid: true,
     description: 'abort isolation of two concurrent real sessions — real browser, TWO paid turns, real network to the provider, real profile (same authorization)',
@@ -204,14 +204,14 @@ function checkSuite() {
 // discovery so a direct probe launch and a runner launch behave identically.
 function runnerDiscovery() {
   const captured = {};
-  const chrome = spawnSync(process.execPath, ['-e', `console.log(require(${JSON.stringify(path.join(REPO_ROOT, '_site', '_test', 'helpers', 'find-chrome'))}).findChromeDetailed().path || '')`], { encoding: 'utf8', windowsHide: true, timeout: 60000 });
+  const chrome = spawnSync(process.execPath, ['-e', `console.log(require(${JSON.stringify(path.join(REPO_ROOT, 'tests', 'helpers', 'find-chrome'))}).findChromeDetailed().path || '')`], { encoding: 'utf8', windowsHide: true, timeout: 60000 });
   if (chrome.status === 0) {
     const found = String(chrome.stdout || '').trim();
     if (found) captured.chrome = found;
   }
   const probe = spawnSync(process.execPath, ['-e', `
-    const fixture = require(${JSON.stringify(path.join(REPO_ROOT, '_site', '_test', 'helpers', 'parallel-workbench-integration-5025-fixture.js'))});
-    const sourceMap = require(${JSON.stringify(path.join(REPO_ROOT, '_site', '_test', 'helpers', 'parallel-workbench-source-map.js'))});
+    const fixture = require(${JSON.stringify(path.join(REPO_ROOT, 'tests', 'helpers', 'parallel-workbench-integration-5025-fixture.js'))});
+    const sourceMap = require(${JSON.stringify(path.join(REPO_ROOT, 'tests', 'helpers', 'parallel-workbench-source-map.js'))});
     console.log(JSON.stringify({ moduleRoot: fixture.resolveHostModuleRoot(), installedProductPackage: sourceMap.resolveInstalledProductPackage() }));
   `], { encoding: 'utf8', windowsHide: true, timeout: 60000 });
   if (probe.status === 0) {

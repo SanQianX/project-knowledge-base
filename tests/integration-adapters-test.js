@@ -8,7 +8,7 @@ const {
   IntegrationManager,
   removeOpenCodeMcpConfig,
   removeOpenCodeInstructionConfig,
-} = require('../_site/lib/integration-installer');
+} = require('../src/integrations/integration-installer');
 
 const ROOT = require("./paths").ROOT;
 const TEMP = fs.mkdtempSync(path.join(os.tmpdir(), `project-knowledge-integrations-${process.pid}-`));

@@ -1,7 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const { ModuleBridge } = require('../_site/lib/module-bridge');
+const { ModuleBridge } = require('../src/module_bridge/module-bridge');
 (async () => {
   const upstream = http.createServer((req, res) => {
     const timer = setTimeout(() => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"ok":true}'); }, 75);

@@ -4,7 +4,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const root = require("./paths").ROOT;
-for (const retired of ['_modules/knowledge-engine', 'vendor-manifest.json', '_site/scripts/vendor-modules.js']) {
+for (const retired of ['_modules/knowledge-engine', 'vendor-manifest.json', 'src/scripts/vendor-modules.js']) {
   assert(!fs.existsSync(path.join(root, retired)), `engine must remain an npm dependency; remove the retired source copy: ${retired}`);
 }
 const npmCli = process.env.npm_execpath

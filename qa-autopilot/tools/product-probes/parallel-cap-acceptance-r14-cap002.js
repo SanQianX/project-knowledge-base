@@ -27,7 +27,7 @@ const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
 
 const PKB_ROOT = path.resolve(__dirname, '..', '..', '..');
-const { startCapHarness } = require(path.join(PKB_ROOT, '_site', '_test', 'helpers', 'parallel-memory-capture-r3-cap-shell'));
+const { startCapHarness } = require(path.join(PKB_ROOT, 'tests', 'helpers', 'parallel-memory-capture-r3-cap-shell'));
 
 const ARTIFACTS = path.join(PKB_ROOT, 'qa-autopilot', 'artifacts', 'parallel-20261106', 'cap-acceptance-r14');
 const CLIENT = 'claude';

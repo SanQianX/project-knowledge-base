@@ -5,7 +5,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const ROOT = require("./paths").ROOT;
-const SCRIPT = path.join(ROOT, '_site', 'scripts', 'sync-release-version.js');
+const SCRIPT = path.join(ROOT, 'src', 'scripts', 'sync-release-version.js');
 const TEMP = fs.mkdtempSync(path.join(os.tmpdir(), `project-knowledge-release-version-${process.pid}-`));
 const FILES = [
   'package.json',
@@ -99,7 +99,7 @@ try {
   ]);
   const scripts = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).scripts;
   assert.strictEqual(scripts.preversion, 'npm run release:verify');
-  assert.strictEqual(scripts.version, 'node _site/scripts/sync-release-version.js --stage --web-only');
+  assert.strictEqual(scripts.version, 'node src/scripts/sync-release-version.js --stage --web-only');
   assert.strictEqual(scripts.postversion, 'npm run release:verify');
   const desktopBytes = FILES.filter(file => file.startsWith('desktop/')).map(file => fs.readFileSync(path.join(TEMP, file)));
   value.version = '9.8.8-rc.1'; fs.writeFileSync(rootPackage, JSON.stringify(value, null, 2) + '\n');

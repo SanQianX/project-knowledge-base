@@ -3,9 +3,9 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const automationConfig = require('../_site/lib/automation-config');
-const automation = require('../_site/lib/post-commit-automation');
-const { REQUIREMENT_UNAVAILABLE, renderCommitPrompt } = require('../_site/lib/commit-prompt');
+const automationConfig = require('../src/automation/automation-config');
+const automation = require('../src/automation/post-commit-automation');
+const { REQUIREMENT_UNAVAILABLE, renderCommitPrompt } = require('../src/automation/commit-prompt');
 
 (() => {
   const normalized = automationConfig.normalizeAutomationConfig({
@@ -81,7 +81,7 @@ const { REQUIREMENT_UNAVAILABLE, renderCommitPrompt } = require('../_site/lib/co
   assert(legacy.prompt.includes('Legacy ' + evidence.commitSha), 'legacy Hook prompt override should still render');
   assert(legacy.prompt.includes(REQUIREMENT_UNAVAILABLE) && legacy.prompt.includes(evidence.patch), 'mandatory evidence sections must be appended to incomplete legacy templates');
 
-  const source = fs.readFileSync(path.join(__dirname, '..', '_site', 'lib', 'post-commit-automation.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'automation', 'post-commit-automation.js'), 'utf8');
   assert(!/dispatchProjectInit|renderProjectInitPrompt|project-init|startup-recovery/.test(source), 'automation source must not retain init or a third trigger name');
   console.log('post-commit-automation-test PASS');
 })();

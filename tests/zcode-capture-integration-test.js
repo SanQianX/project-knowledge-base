@@ -4,11 +4,11 @@ const os = require('os');
 const path = require('path');
 const http = require('http');
 const { spawnSync } = require('child_process');
-const { IntegrationManager, normalizeClient, SUPPORTED_CLIENTS } = require('../_site/lib/integration-installer');
-const { createRuntime, createRequestHandler } = require('../_site/lib/server-app');
-const { BridgeAdapter } = require('../_site/lib/bridge-adapter');
-const { Logger, LogRepository } = require('../_site/lib/structured-logger');
-const { StorageLayout } = require('../_site/lib/storage-layout');
+const { IntegrationManager, normalizeClient, SUPPORTED_CLIENTS } = require('../src/integrations/integration-installer');
+const { createRuntime, createRequestHandler } = require('../src/server/server-app');
+const { BridgeAdapter } = require('../src/conversations/bridge-adapter');
+const { Logger, LogRepository } = require('../src/common/structured-logger');
+const { StorageLayout } = require('../src/server/storage-layout');
 const { runCli } = require('../bin/project-knowledge-integrations');
 
 (async () => {

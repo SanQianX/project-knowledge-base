@@ -5,10 +5,10 @@ const http = require('http');
 const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
-const { writeEndpoint } = require('../_site/lib/runtime-endpoint');
+const { writeEndpoint } = require('../src/common/runtime-endpoint');
 
 const ROOT = require("./paths").ROOT;
-const TRIGGER = path.join(ROOT, '_site', 'scripts', 'hook-trigger.js');
+const TRIGGER = path.join(ROOT, 'src', 'scripts', 'hook-trigger.js');
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), `kb-hook-runtime-${process.pid}-`));
 const repo = fs.mkdtempSync(path.join(os.tmpdir(), `kb-hook-runtime-repo-${process.pid}-`));
 

@@ -1,5 +1,5 @@
 const assert = require('assert');
-const contracts = require('../_site/lib/contracts');
+const contracts = require('../src/common/contracts');
 
 assert.deepStrictEqual(contracts.TRIGGERS, ['git-hook']);
 assert.deepStrictEqual(contracts.LOG_LEVELS, ['trace', 'debug', 'info', 'warn', 'error', 'fatal']);

@@ -57,8 +57,8 @@ async function main() {
     // ---- 4. APPEARANCE SKIN live check (real settings API) -------------------
     const dataDir = path.join(B, 'skin-data');
     fs.mkdirSync(dataDir, { recursive: true });
-    const { spawnServer } = require(path.join(PKB_ROOT, '_site', '_test', 'helpers', 'spawn-server'));
-    const freePort = require(path.join(PKB_ROOT, '_site', '_test', 'helpers', 'free-port'));
+    const { spawnServer } = require(path.join(PKB_ROOT, 'tests', 'helpers', 'spawn-server'));
+    const freePort = require(path.join(PKB_ROOT, 'tests', 'helpers', 'free-port'));
     const port = await freePort();
     const server = spawnServer({ root: PKB_ROOT, port, dataDir, tag: 'r21-skin', analysisOwner: 'engine', extraEnv: { KB_TERMINAL_URL: 'http://127.0.0.1:9', KB_MODULES_AUTOSTART: '0', KB_MODULES_REGISTER: '0' } });
     const http = require('http');

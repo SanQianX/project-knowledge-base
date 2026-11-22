@@ -18,7 +18,7 @@ Repository: `SanQianX/project-knowledge-base`
 6. Offline Commit 不分析，也不能在下一次在线 Hook 被补分析。
 7. Bridge 可以在启动时同步 Conversation / Commit Boundary 事实，但不能触发 Knowledge Analysis；确保离线 B/C Conversation 不污染在线 D。
 8. 按 Plan 中的 Commit 顺序执行，每阶段测试通过后再 Commit。
-9. 运行 focused tests + `node _site/_test/run-all-tests.js`。
+9. 运行 focused tests + `node tests/run-all-tests.js`。
 10. 不 push，不 reset 用户修改，不做与 P0 无关的重构。
 
 最终报告必须给出：

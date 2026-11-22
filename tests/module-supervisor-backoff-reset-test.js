@@ -8,7 +8,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const assert = require('node:assert/strict');
-const { ModuleBridge } = require('../_site/lib/module-bridge');
+const { ModuleBridge } = require('../src/module_bridge/module-bridge');
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 

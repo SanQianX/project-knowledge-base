@@ -4,15 +4,17 @@ const path = require('path');
 
 const ROOT = require("./paths").ROOT;
 const read = relative => fs.readFileSync(path.join(ROOT, relative), 'utf8');
-const serverEntry = read('_site/server.js');
-const server = read('_site/lib/server-app.js');
-const automation = read('_site/lib/post-commit-automation.js');
-const reconciler = read('_site/lib/commit-reconciler.js');
-const contracts = read('_site/lib/contracts.js');
-const logger = read('_site/lib/structured-logger.js');
+const serverEntry = read('src/server.js');
+const server = read('src/server/server-app.js');
+const automation = read('src/automation/post-commit-automation.js');
+const reconciler = read('src/automation/commit-reconciler.js');
+const contracts = read('src/common/contracts.js');
+const logger = read('src/common/structured-logger.js');
 const ui = read('ui/index.html');
 
-assert(serverEntry.includes("require('./lib/server-app')"), 'server entry should remain thin');
+// 入口薄壳断言跟随域布局：server 域承接 server-app。/ The thin-entry
+// assertion follows the domain layout: the server domain hosts server-app.
+assert(serverEntry.includes("require('./server/server-app')"), 'server entry should remain thin');
 for (const removed of ['/automation/simulate', '/automation/init', '/hook-install', '/hook-uninstall', '/api/raw', "'Access-Control-Allow-Origin': '*'"]) {
   assert(!server.includes(removed), `legacy server capability must be absent: ${removed}`);
 }

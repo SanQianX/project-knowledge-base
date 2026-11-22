@@ -44,7 +44,7 @@ const laneTmp = lane.laneTmp;
 
 const { spawnServer } = require('./helpers/spawn-server');
 const freePort = require('./helpers/free-port');
-const { SettingsStore } = require('../_site/lib/settings-store');
+const { SettingsStore } = require('../src/projects/settings-store');
 const { createLoggingAcceptanceFixture } = require('./helpers/parallel-logging-acceptance-fixture');
 
 const ROOT = require("./paths").ROOT;
@@ -289,7 +289,7 @@ async function main() {
     evidence.debugOwnStartupRecords = ownStartupRecords;
     let posixControlSocket = 'named-pipe (win32)';
     try {
-      const { controlPath } = require('../_site/lib/runtime-control');
+      const { controlPath } = require('../src/common/runtime-control');
       if (process.platform !== 'win32') posixControlSocket = `${controlPath(fixture.dataDir).length} chars (POSIX budget 103)`;
     } catch {}
     console.error(`R2 normalhook FAIL: ${error.message}`);

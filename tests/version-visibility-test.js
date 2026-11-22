@@ -9,7 +9,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert');
-const { coreVersionSnapshot } = require('../_site/lib/public-version-info');
+const { coreVersionSnapshot } = require('../src/server/public-version-info');
 const {
   REPO_ROOT, createIsolationLayout, removeTree, startRootServer, stopRootServer, sanitizedEnv, applyIsolationEnv,
   startVersionBrokenUiServer,

@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { selectedDirectoryFromOutput } = require('../_site/lib/folder-picker-output');
+const { selectedDirectoryFromOutput } = require('../src/common/folder-picker-output');
 
 const banner = '������µĿ�ƽ̨ PowerShell https://aka.ms/pscore6';
 assert.equal(selectedDirectoryFromOutput(banner, { exists: () => false }), '',

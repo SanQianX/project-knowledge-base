@@ -18,8 +18,8 @@ const http = require('node:http');
 const vm = require('node:vm');
 
 const ROOT = require("./paths").ROOT;
-const { ModuleBridge } = require('../_site/lib/module-bridge');
-const { connectEngine } = require('../_site/lib/engine-connection');
+const { ModuleBridge } = require('../src/module_bridge/module-bridge');
+const { connectEngine } = require('../src/module_bridge/engine-connection');
 
 const TEMP_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'glm-ui-refresh-current-'));
 

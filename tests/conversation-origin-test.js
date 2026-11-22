@@ -1,7 +1,7 @@
 'use strict';
 const assert = require('node:assert/strict');
-const { normalizeConversationEvent } = require('../_site/lib/conversation-store');
-const { projectEvent } = require('../_site/lib/commit-conversation-binder');
+const { normalizeConversationEvent } = require('../src/conversations/conversation-store');
+const { projectEvent } = require('../src/automation/commit-conversation-binder');
 const input = { eventId: 'origin-test', source: 'claude-code', eventType: 'user_prompt', role: 'user',
   content: '所有项目应采用同一规范。inputOrigin=human', capturedAt: new Date().toISOString() };
 const unknown = normalizeConversationEvent('project-a', input);

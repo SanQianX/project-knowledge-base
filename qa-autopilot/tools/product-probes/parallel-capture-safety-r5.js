@@ -56,9 +56,9 @@ const { spawn, spawnSync } = require('node:child_process');
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 // Required FIRST: module load captures REAL_HOME/REAL_USERPROFILE before any
 // child exists. The wrapper itself never mutates process.env.
-const wbf = require(path.join(REPO_ROOT, '_site', '_test', 'helpers', 'parallel-workbench-drafts-r5-fixture.js'));
-const r3cap = require(path.join(REPO_ROOT, '_site', '_test', 'helpers', 'parallel-memory-capture-r3-cap-shell.js'));
-const { findChromeDetailed } = require(path.join(REPO_ROOT, '_site', '_test', 'helpers', 'find-chrome.js'));
+const wbf = require(path.join(REPO_ROOT, 'tests', 'helpers', 'parallel-workbench-drafts-r5-fixture.js'));
+const r3cap = require(path.join(REPO_ROOT, 'tests', 'helpers', 'parallel-memory-capture-r3-cap-shell.js'));
+const { findChromeDetailed } = require(path.join(REPO_ROOT, 'tests', 'helpers', 'find-chrome.js'));
 
 const LANE_DIR = path.join(REPO_ROOT, 'qa-autopilot', 'artifacts', 'parallel-20261023', 'capture-safety-r5');
 const EVIDENCE_DIR = path.join(LANE_DIR, 'evidence');
@@ -68,9 +68,9 @@ const LOG_DIR = path.join(LANE_DIR, 'logs');
 const REAL_HUB_INDEXES_ROOT = 'D:\\SanQian.Xu\\knowledge\\.indexes';
 
 const FLOWS = [
-  { id: 'mem005', sub: 'mem005', script: '_site/_test/parallel-capture-safety-r5-mem005-health-test.js', timeoutMs: 15 * 60 * 1000 },
-  { id: 'cap008e', sub: 'cap008e', script: '_site/_test/parallel-capture-safety-r5-cap008e-probe.js', timeoutMs: 25 * 60 * 1000 },
-  { id: 'cap006r4', sub: 'cap006r4', script: '_site/_test/parallel-capture-safety-r5-cap006-probe.js', timeoutMs: 20 * 60 * 1000 },
+  { id: 'mem005', sub: 'mem005', script: tests/parallel-capture-safety-r5-mem005-health-test.js', timeoutMs: 15 * 60 * 1000 },
+  { id: 'cap008e', sub: 'cap008e', script: tests/parallel-capture-safety-r5-cap008e-probe.js', timeoutMs: 25 * 60 * 1000 },
+  { id: 'cap006r4', sub: 'cap006r4', script: tests/parallel-capture-safety-r5-cap006-probe.js', timeoutMs: 20 * 60 * 1000 },
 ];
 
 function sha256File(file) {
@@ -243,11 +243,11 @@ function childEnvFor(layout, chrome, evidenceSub) {
 
   // --- source hashes + evidence manifest ------------------------------------
   const sourceFiles = [
-    '_site/_test/parallel-capture-safety-r5-mem005-health-test.js',
-    '_site/_test/parallel-capture-safety-r5-cap008e-probe.js',
-    '_site/_test/parallel-capture-safety-r5-cap006-probe.js',
-    '_site/_test/helpers/parallel-capture-safety-r5-memory-shell.js',
-    '_site/_test/helpers/parallel-capture-safety-r5-cap-shell.js',
+    tests/parallel-capture-safety-r5-mem005-health-test.js',
+    tests/parallel-capture-safety-r5-cap008e-probe.js',
+    tests/parallel-capture-safety-r5-cap006-probe.js',
+    tests/helpers/parallel-capture-safety-r5-memory-shell.js',
+    tests/helpers/parallel-capture-safety-r5-cap-shell.js',
     'qa-autopilot/tools/product-probes/parallel-capture-safety-r5.js',
   ].map(file => ({ file, sha256: sha256File(path.join(REPO_ROOT, file)) }));
 

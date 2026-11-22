@@ -24,10 +24,10 @@ const {
   readHookStatus,
   parseManagedMarker,
   HOOK_MARKER,
-} = require('../_site/lib/hook-manager');
+} = require('../src/automation/hook-manager');
 
 const ROOT = require("./paths").ROOT;
-const TRIGGER = path.join(ROOT, '_site', 'scripts', 'hook-trigger.js');
+const TRIGGER = path.join(ROOT, 'src', 'scripts', 'hook-trigger.js');
 
 function git(repo, args) {
   const result = spawnSync('git', ['-C', repo, ...args], {

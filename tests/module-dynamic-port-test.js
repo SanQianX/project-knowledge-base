@@ -1,8 +1,8 @@
 'use strict';
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const { resolveModuleUrl } = require('../_site/lib/module-port-resolver');
-const { ModuleBridge } = require('../_site/lib/module-bridge');
+const { resolveModuleUrl } = require('../src/server/module-port-resolver');
+const { ModuleBridge } = require('../src/module_bridge/module-bridge');
 
 const countingProbe = outcome => {
   const seen = [];

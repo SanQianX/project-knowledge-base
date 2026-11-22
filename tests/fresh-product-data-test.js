@@ -2,9 +2,9 @@ const assert = require('assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { initializeProductData, DATA_SCHEMA } = require('../_site/lib/product-data');
-const { resolveDataDirPath } = require('../_site/lib/data-dir');
-const { connectEngine } = require('../_site/lib/engine-connection');
+const { initializeProductData, DATA_SCHEMA } = require('../src/server/product-data');
+const { resolveDataDirPath } = require('../src/common/data-dir');
+const { connectEngine } = require('../src/module_bridge/engine-connection');
 
 (async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-fresh-product-'));

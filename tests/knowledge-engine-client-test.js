@@ -5,14 +5,14 @@ const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
 const { spawn } = require('node:child_process');
-const { StorageLayout } = require('../_site/lib/storage-layout');
-const { SettingsStore } = require('../_site/lib/settings-store');
-const { ProjectRegistryStore } = require('../_site/lib/project-registry-store');
-const { ProjectStore } = require('../_site/lib/project-store');
-const { KnowledgeToolRuntime } = require('../_site/lib/knowledge-tool-runtime');
-const endpoint = require('../_site/lib/runtime-endpoint');
-const control = require('../_site/lib/runtime-control');
-const { EngineKnowledgeClient } = require('../_site/lib/engine-knowledge-client');
+const { StorageLayout } = require('../src/server/storage-layout');
+const { SettingsStore } = require('../src/projects/settings-store');
+const { ProjectRegistryStore } = require('../src/projects/project-registry-store');
+const { ProjectStore } = require('../src/projects/project-store');
+const { KnowledgeToolRuntime } = require('../src/tools/knowledge-tool-runtime');
+const endpoint = require('../src/common/runtime-endpoint');
+const control = require('../src/common/runtime-control');
+const { EngineKnowledgeClient } = require('../src/module_bridge/engine-knowledge-client');
 
 // A unit test must be decided by its own fixture, never by the developer
 // shell. Ambient module URLs (a shell exporting KB_KNOWLEDGE_ENGINE_URL at

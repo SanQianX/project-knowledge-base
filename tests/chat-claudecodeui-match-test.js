@@ -16,8 +16,8 @@ const path = require('path');
 const ROOT = require("./paths").ROOT;
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-claude-runner-v2-'));
 process.env.KB_DATA_DIR = path.join(temp, 'data');
-require('../_site/lib/data-dir')._resetCache();
-const runner = require('../_site/lib/claude-cli-runner');
+require('../src/common/data-dir')._resetCache();
+const runner = require('../src/integrations/claude-cli-runner');
 
 (async () => {
   const projectPath = path.join(temp, 'repo');
@@ -37,7 +37,7 @@ const runner = require('../_site/lib/claude-cli-runner');
     });
     assert(started.sessionId);
 
-    const source = fs.readFileSync(path.join(ROOT, '_site', 'lib', 'claude-cli-runner.js'), 'utf8');
+    const source = fs.readFileSync(path.join(ROOT, 'src', 'integrations', 'claude-cli-runner.js'), 'utf8');
     assert(/normalizePermissionMode\(opts\.permissionMode \|\| session\.permissionMode \|\| 'default'\)/.test(source));
     assert(/type === 'claude\/usage' && ev\.usage/.test(source));
     assert(/input_tokens/.test(source) && /output_tokens/.test(source) && /cache_creation_input_tokens/.test(source));
@@ -78,7 +78,7 @@ const runner = require('../_site/lib/claude-cli-runner');
     assert(runner.isTransientClaudeError(new Error('429 too many requests')));
     assert(!runner.isTransientClaudeError(new Error('model does not exist')));
 
-    const server = fs.readFileSync(path.join(ROOT, '_site', 'lib', 'server-app.js'), 'utf8');
+    const server = fs.readFileSync(path.join(ROOT, 'src', 'server', 'server-app.js'), 'utf8');
     assert(server.includes('body.permissionMode'));
 
     const html = fs.readFileSync(path.join(ROOT, 'ui', 'index.html'), 'utf8');

@@ -30,7 +30,7 @@ const http = require('http');
 const { spawn, spawnSync } = require('child_process');
 
 const PKB_ROOT = path.resolve(__dirname, '..', '..', '..');
-const HELPERS = path.join(PKB_ROOT, '_site', '_test', 'helpers');
+const HELPERS = path.join(PKB_ROOT, 'tests', 'helpers');
 const fixture = require(path.join(HELPERS, 'parallel-dock-isolation-r3-fixture.js'));
 const { findChromeDetailed } = require(path.join(HELPERS, 'find-chrome.js'));
 

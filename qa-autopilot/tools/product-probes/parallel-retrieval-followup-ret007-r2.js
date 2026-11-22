@@ -53,16 +53,16 @@ const path = require('node:path');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 
-const shell = require(path.join(__dirname, '..', '..', '..', '_site', '_test', 'helpers', 'parallel-retrieval-followup-r2-shell'));
+const shell = require(path.join(__dirname, '..', '..', '..', 'tests', 'helpers', 'parallel-retrieval-followup-r2-shell'));
 const chain = shell.chain;
 // Isolate before any product module is loaded.
 chain.isolateProcess();
 
-const { LocalEmbeddingService } = require(path.join(chain.REPO_ROOT, '_site', 'lib', 'embedding-service'));
-const { EMBEDDING_DIMENSIONS } = require(path.join(chain.REPO_ROOT, '_site', 'lib', 'knowledge-schema'));
+const { LocalEmbeddingService } = require(path.join(chain.REPO_ROOT, 'src', 'knowledge', 'embedding-service'));
+const { EMBEDDING_DIMENSIONS } = require(path.join(chain.REPO_ROOT, 'src', 'knowledge', 'knowledge-schema'));
 const { createEngineServer } = require(path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [path.join(chain.REPO_ROOT)] })), 'src', 'server'));
 const { BridgeClient } = require(path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [path.join(chain.REPO_ROOT)] })), 'src', 'bridge-client'));
-const { installHook } = require(path.join(chain.REPO_ROOT, '_site', 'lib', 'hook-manager'));
+const { installHook } = require(path.join(chain.REPO_ROOT, 'src', 'automation', 'hook-manager'));
 
 const PROJECT_ID = 'ret007-r2-demo';
 const CONTROL_PROJECT_ID = 'ret007-r2-control';
@@ -360,7 +360,7 @@ function closeWorkspace(repoPath, { token, commitSha, resetTo }) {
     const hook = installHook({
       repoPath: repo.repoPath,
       projectId: PROJECT_ID,
-      triggerScriptPath: path.join(chain.REPO_ROOT, '_site', 'scripts', 'hook-trigger.js'),
+      triggerScriptPath: path.join(chain.REPO_ROOT, 'src', 'scripts', 'hook-trigger.js'),
       nodeExecutable: process.execPath,
       dataDir,
       bridgeHomeDir: bridgeHome,
@@ -528,7 +528,7 @@ function closeWorkspace(repoPath, { token, commitSha, resetTo }) {
     const layout = shell.createIsolationLayout('parallel-retrieval-followup-ret007-r2');
     const hostPort = await shell.freePort();
     const hostBase = `http://127.0.0.1:${hostPort}`;
-    hostChild = shell.spawnNode([path.join(chain.REPO_ROOT, '_site', '_test', 'helpers', 'parallel-retrieval-followup-r2-wb-host.js')], shell.hostEnv(layout, {
+    hostChild = shell.spawnNode([path.join(chain.REPO_ROOT, 'tests', 'helpers', 'parallel-retrieval-followup-r2-wb-host.js')], shell.hostEnv(layout, {
       PK_WB_MODULE_ROOT: moduleRoot,
       PK_WB_HOST_PORT: String(hostPort),
       PK_WB_HOST_DATA_DIR: layout.dataDir,

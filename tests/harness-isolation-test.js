@@ -12,8 +12,8 @@ const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
 const { spawn } = require('node:child_process');
-const { StorageLayout } = require('../_site/lib/storage-layout');
-const { EngineKnowledgeClient } = require('../_site/lib/engine-knowledge-client');
+const { StorageLayout } = require('../src/server/storage-layout');
+const { EngineKnowledgeClient } = require('../src/module_bridge/engine-knowledge-client');
 
 const MODULE_URL_VARS = ['KB_KNOWLEDGE_ENGINE_URL', 'KB_VECTORHUB_URL', 'KB_TERMINAL_URL', 'KB_EVENTBRIDGE_URL'];
 const REPO = require("./paths").ROOT;
@@ -58,8 +58,8 @@ function run(file, args, options, timeoutMs) {
     //    identity guard refuses the foreign binding out loud.
     const leakProbe = path.join(root, 'leak-probe.js');
     fs.writeFileSync(leakProbe, `'use strict';
-const { StorageLayout } = require(${JSON.stringify(path.resolve(__dirname, '../_site/lib/storage-layout'))});
-const { EngineKnowledgeClient } = require(${JSON.stringify(path.resolve(__dirname, '../_site/lib/engine-knowledge-client'))});
+const { StorageLayout } = require(${JSON.stringify(path.resolve(__dirname, '../src/server/storage-layout'))});
+const { EngineKnowledgeClient } = require(${JSON.stringify(path.resolve(__dirname, '../src/module_bridge/engine-knowledge-client'))});
 (async () => {
   const layout = new StorageLayout({ dataDir: process.env.KB_DATA_DIR });
   const client = new EngineKnowledgeClient({ layout });

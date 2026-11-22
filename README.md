@@ -306,17 +306,17 @@ operation ID without a stack. There is no raw-file route.
 ## Repository layout
 
 ```text
-_site/server.js                       # thin executable entry
-_site/lib/server-app.js               # HTTP/runtime composition
-_site/lib/storage-layout.js           # canonical internal paths
-_site/lib/project-*-store.js          # v2 registry/config/state stores
-_site/lib/project-lifecycle-service.js
-_site/lib/commit-reconciler.js
-_site/lib/knowledge-promotion.js
-_site/lib/index-service.js
-_site/lib/structured-logger.js
-_site/lib/knowledge-tool-runtime.js
-_site/scripts/hook-trigger.js
+src/server.js                       # thin executable entry
+src/server/server-app.js            # HTTP/runtime composition
+src/server/storage-layout.js        # canonical internal paths
+src/projects/project-store.js, project-registry-store.js
+src/projects/project-lifecycle-service.js
+src/automation/commit-reconciler.js
+src/knowledge/knowledge-promotion.js
+src/knowledge/index-service.js
+src/common/structured-logger.js
+src/tools/knowledge-tool-runtime.js
+src/scripts/hook-trigger.js
 ui/index.html                         # unified production web UI
 ui/product.js, ui/product.css          # shell navigation and state projection
 node_modules/@sanqianx/ai-coding-knowledge-engine/ # pinned npm runtime (not tracked)

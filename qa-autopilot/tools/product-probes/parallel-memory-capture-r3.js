@@ -156,14 +156,14 @@ const CASE_CLAIMS = {
     },
     files: {
       laneOwned: [
-        '_site/_test/parallel-memory-capture-r3-*.js',
-        '_site/_test/helpers/parallel-memory-capture-r3-*.js',
+        tests/parallel-memory-capture-r3-*.js',
+        tests/helpers/parallel-memory-capture-r3-*.js',
         'qa-autopilot/tools/product-probes/parallel-memory-capture-r3.js',
         'qa-autopilot/artifacts/parallel-20261023/memory-capture-r3/**',
       ],
       frozenReadOnly: [
-        '_site/_test/parallel-memory-*-test.js 上一批 8 文件',
-        '_site/_test/helpers/parallel-memory-shell.js',
+        tests/parallel-memory-*-test.js 上一批 8 文件',
+        tests/helpers/parallel-memory-shell.js',
         '_site/lib/**（产品源码）',
         'qa-autopilot/config/product-case-assertions.json（Leader 所有，本线未回写）',
       ],

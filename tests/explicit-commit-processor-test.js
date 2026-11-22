@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { CommitReconciler } = require('../_site/lib/commit-reconciler');
+const { CommitReconciler } = require('../src/automation/commit-reconciler');
 
 const sha = suffix => `${'a'.repeat(39)}${suffix}`;
 const calls = [];

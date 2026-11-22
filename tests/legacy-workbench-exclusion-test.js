@@ -9,11 +9,11 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { StorageLayout } = require('../_site/lib/storage-layout');
-const { ProjectStore } = require('../_site/lib/project-store');
-const { ConversationStore } = require('../_site/lib/conversation-store');
-const { CommitConversationBinder } = require('../_site/lib/commit-conversation-binder');
-const { computeConversationExclusions, readDevelopmentEvents } = require('../_site/lib/conversation-exclusions');
+const { StorageLayout } = require('../src/server/storage-layout');
+const { ProjectStore } = require('../src/projects/project-store');
+const { ConversationStore } = require('../src/conversations/conversation-store');
+const { CommitConversationBinder } = require('../src/automation/commit-conversation-binder');
+const { computeConversationExclusions, readDevelopmentEvents } = require('../src/conversations/conversation-exclusions');
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), `kb-legacy-exclusion-${process.pid}-`));
 const layout = new StorageLayout({ dataDir: path.join(temp, 'data') });

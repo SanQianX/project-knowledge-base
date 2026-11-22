@@ -43,7 +43,7 @@ if (!process.env.KB_CHROME_PATH) {
   ];
   process.env.KB_CHROME_PATH = chromeCandidates.find(candidate => candidate && fs.existsSync(candidate)) || '';
 }
-const { startCapHarness } = require(path.join(PKB_ROOT, '_site', '_test', 'helpers', 'parallel-capture-safety-r5-cap-shell'));
+const { startCapHarness } = require(path.join(PKB_ROOT, 'tests', 'helpers', 'parallel-capture-safety-r5-cap-shell'));
 
 const ARTIFACTS = path.join(PKB_ROOT, 'qa-autopilot', 'artifacts', 'parallel-20261106', 'engine-acceptance-r10');
 

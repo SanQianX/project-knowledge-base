@@ -32,15 +32,15 @@ const path = require('node:path');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 
-const shell = require(path.join(__dirname, '..', '..', '..', '_site', '_test', 'helpers', 'parallel-retrieval-followup-shell'));
+const shell = require(path.join(__dirname, '..', '..', '..', 'tests', 'helpers', 'parallel-retrieval-followup-shell'));
 // Isolate before any product module is loaded.
 shell.isolateProcess();
 
-const { LocalEmbeddingService } = require(path.join(shell.REPO_ROOT, '_site', 'lib', 'embedding-service'));
-const { EMBEDDING_DIMENSIONS } = require(path.join(shell.REPO_ROOT, '_site', 'lib', 'knowledge-schema'));
+const { LocalEmbeddingService } = require(path.join(shell.REPO_ROOT, 'src', 'knowledge', 'embedding-service'));
+const { EMBEDDING_DIMENSIONS } = require(path.join(shell.REPO_ROOT, 'src', 'knowledge', 'knowledge-schema'));
 const { createEngineServer } = require(path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [path.join(shell.REPO_ROOT)] })), 'src', 'server'));
 const { BridgeClient } = require(path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [path.join(shell.REPO_ROOT)] })), 'src', 'bridge-client'));
-const { installHook } = require(path.join(shell.REPO_ROOT, '_site', 'lib', 'hook-manager'));
+const { installHook } = require(path.join(shell.REPO_ROOT, 'src', 'automation', 'hook-manager'));
 
 const PROJECT_ID = 'ret007-demo';
 // The offline model cache lives outside the repository and outside the real
@@ -178,7 +178,7 @@ async function waitForRun(base, projectId, commitSha, timeoutMs) {
     const hook = installHook({
       repoPath: repo.repoPath,
       projectId: PROJECT_ID,
-      triggerScriptPath: path.join(shell.REPO_ROOT, '_site', 'scripts', 'hook-trigger.js'),
+      triggerScriptPath: path.join(shell.REPO_ROOT, 'src', 'scripts', 'hook-trigger.js'),
       nodeExecutable: process.execPath,
       dataDir,
       bridgeHomeDir: bridgeHome,
@@ -332,7 +332,7 @@ async function waitForRun(base, projectId, commitSha, timeoutMs) {
     while (commitSha.startsWith(controlQuery.slice(0, 7))) controlQuery = crypto.randomBytes(4).toString('hex');
     const nextSessionOut = path.join(shell.LANE_DIR, 'evidence', 'ret007-next-session.json');
     const child = shell.spawnNode(
-      [path.join(shell.REPO_ROOT, '_site', '_test', 'helpers', 'parallel-retrieval-followup-next-session.js'),
+      [path.join(shell.REPO_ROOT, 'tests', 'helpers', 'parallel-retrieval-followup-next-session.js'),
         '--engine-url', engineUrl, '--project-id', PROJECT_ID,
         '--context-query', contextQuery, '--ask-query', askQuery, '--control-query', controlQuery,
         '--session-id', 'ret007-next-session', '--out', nextSessionOut],

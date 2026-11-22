@@ -15,7 +15,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { deepEqual } = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
-const { IntegrationManager } = require('../_site/lib/integration-installer');
+const { IntegrationManager } = require('../src/integrations/integration-installer');
 
 const ROOT = require("./paths").ROOT;
 const PLUGIN_ROOT = path.join(ROOT, 'plugins', 'project-knowledge');

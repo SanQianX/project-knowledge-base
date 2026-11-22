@@ -13,7 +13,7 @@
 //   4. otherwise AI_PROFILE_REQUIRED
 
 const assert = require('assert');
-const { resolveEffectiveAiProfile, isUsable, profileById } = require('../_site/lib/ai-profile-resolver');
+const { resolveEffectiveAiProfile, isUsable, profileById } = require('../src/integrations/ai-profile-resolver');
 
 const PROFILE_A = { id: 'profile-a', name: 'A', enabled: true, vendor: 'anthropic', model: 'm' };
 const PROFILE_B = { id: 'profile-b', name: 'B', enabled: true, vendor: 'anthropic', model: 'm' };

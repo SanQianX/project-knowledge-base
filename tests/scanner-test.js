@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { CommitScanner, scanProject } = require('../_site/lib/scanner');
+const { CommitScanner, scanProject } = require('../src/projects/scanner');
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), `kb-scanner-${process.pid}-`));
 

@@ -6,8 +6,8 @@
 // Case step (qa-autopilot/config/test-cases.json SYS-003): 已有embedding凭据后
 // 留空保存，再读取mask元数据。 Expected: 留空不覆盖; 响应、日志不泄露secret.
 //
-// Real product bytes under test: the ROOT server (_site/lib/server-app.js +
-// _site/lib/module-bridge.js proxy at the lane's source HEAD), spawned via the
+// Real product bytes under test: the ROOT server (src/server/server-app.js +
+// src/module_bridge/module-bridge.js proxy at the lane's source HEAD), spawned via the
 // shared spawn-server helper on an ephemeral port with fully isolated data
 // dirs, its terminal leg pointed at an OWN FAKE terminal service through
 // KB_TERMINAL_URL (the dispatch's sanctioned 假服务 pattern).
@@ -115,8 +115,8 @@ async function main() {
     secretMarker: SECRET.replace(/[a-zA-Z0-9]/g, (c, i) => (i < 8 ? c : '*')),
     isolation: { laneTmp: lane.laneTmp, evidenceRoot: lane.evidenceRoot, env: lane.envIsolationResolved },
     identity: {
-      serverAppSha256: sha256(path.join(ROOT, '_site', 'lib', 'server-app.js')),
-      moduleBridgeSha256: sha256(path.join(ROOT, '_site', 'lib', 'module-bridge.js')),
+      serverAppSha256: sha256(path.join(ROOT, 'src', 'server', 'server-app.js')),
+      moduleBridgeSha256: sha256(path.join(ROOT, 'src', 'module_bridge', 'module-bridge.js')),
       uiProductSha256: sha256(path.join(ROOT, 'ui', 'product.js')),
     },
     responses: [], fakeTerminal: null,

@@ -7,9 +7,9 @@ const {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } = require('@modelcontextprotocol/sdk/types.js');
-const { KnowledgeToolRuntime } = require('../_site/lib/knowledge-tool-runtime');
-const { WorkflowToolRuntime } = require('../_site/lib/workflow-tool-runtime');
-const { serializeErrorEnvelope, createId } = require('../_site/lib/contracts');
+const { KnowledgeToolRuntime } = require('../src/tools/knowledge-tool-runtime');
+const { WorkflowToolRuntime } = require('../src/tools/workflow-tool-runtime');
+const { serializeErrorEnvelope, createId } = require('../src/common/contracts');
 
 const SERVER_NAME = 'project-knowledge';
 const SCOPE = { type: 'string', enum: ['project', 'domain', 'brain'], description: 'Knowledge range: current project (default), its domain, or its brain.' };

@@ -34,13 +34,13 @@ const fs = require('node:fs');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 
-const shell = require(path.join(__dirname, '..', '..', '..', '_site', '_test', 'helpers', 'parallel-retrieval-followup-shell'));
+const shell = require(path.join(__dirname, '..', '..', '..', 'tests', 'helpers', 'parallel-retrieval-followup-shell'));
 // Isolate before any product module is loaded.
 shell.isolateProcess();
 
-const corpusDefinitions = require(path.join(shell.REPO_ROOT, '_site', '_test', 'helpers', 'parallel-retrieval-followup-corpus'));
-const { LocalEmbeddingService } = require(path.join(shell.REPO_ROOT, '_site', 'lib', 'embedding-service'));
-const { EMBEDDING_DIMENSIONS } = require(path.join(shell.REPO_ROOT, '_site', 'lib', 'knowledge-schema'));
+const corpusDefinitions = require(path.join(shell.REPO_ROOT, 'tests', 'helpers', 'parallel-retrieval-followup-corpus'));
+const { LocalEmbeddingService } = require(path.join(shell.REPO_ROOT, 'src', 'knowledge', 'embedding-service'));
+const { EMBEDDING_DIMENSIONS } = require(path.join(shell.REPO_ROOT, 'src', 'knowledge', 'knowledge-schema'));
 
 // The offline model cache lives outside the repository and outside the real
 // HOME; the lane temp root (PK_TEST_TEMP_ROOT / TEMP) is its parent.

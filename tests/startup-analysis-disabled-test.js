@@ -3,9 +3,9 @@ const fs = require('fs');
 const path = require('path');
 
 const root = require("./paths").ROOT;
-const server = fs.readFileSync(path.join(root, '_site', 'lib', 'server-app.js'), 'utf8');
-const contracts = require('../_site/lib/contracts');
-const automation = require('../_site/lib/post-commit-automation');
+const server = fs.readFileSync(path.join(root, 'src', 'server', 'server-app.js'), 'utf8');
+const contracts = require('../src/common/contracts');
+const automation = require('../src/automation/post-commit-automation');
 
 assert.deepEqual(contracts.TRIGGERS, ['git-hook']);
 assert.equal(/reconcileProjectCommits\(projectId, 'startup'/.test(server), false);

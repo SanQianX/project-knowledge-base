@@ -189,7 +189,7 @@ function applyIsolationEnv(layout) {
   Object.assign(process.env, env);
 }
 
-// The product server under test: real _site/server.js, fully isolated, with
+// The product server under test: real src/server.js, fully isolated, with
 // every module address explicitly held on this run's own free ports (so the
 // process can never reach for the live defaults 5760/8787/8790/5790).
 async function startRootServer(layout, options = {}) {
@@ -203,7 +203,7 @@ async function startRootServer(layout, options = {}) {
     KB_EVENTBRIDGE_URL: `http://127.0.0.1:${eventBridgePort}`,
     KB_KNOWLEDGE_ENGINE_URL: `http://127.0.0.1:${enginePort}`,
   });
-  const runner = spawnNode([path.join(REPO_ROOT, '_site', 'server.js')], env);
+  const runner = spawnNode([path.join(REPO_ROOT, 'src', 'server.js')], env);
   const base = `http://127.0.0.1:${port}`;
   await waitForHttp(`${base}/api/system/version`);
   return { layout, port, base, runner, modulePorts: { terminalPort, vectorHubPort, eventBridgePort, enginePort } };

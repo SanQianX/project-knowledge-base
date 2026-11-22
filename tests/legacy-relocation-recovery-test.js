@@ -8,12 +8,12 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { StorageLayout } = require('../_site/lib/storage-layout');
-const { ProjectRegistryStore } = require('../_site/lib/project-registry-store');
-const { ProjectStore } = require('../_site/lib/project-store');
-const { CommitReconciler, SNAPSHOT_SCHEMA_V1 } = require('../_site/lib/commit-reconciler');
-const { KnowledgePromotionService, MANIFEST_SCHEMA, hashBuffer } = require('../_site/lib/knowledge-promotion');
-const AtomicFile = require('../_site/lib/atomic-file');
+const { StorageLayout } = require('../src/server/storage-layout');
+const { ProjectRegistryStore } = require('../src/projects/project-registry-store');
+const { ProjectStore } = require('../src/projects/project-store');
+const { CommitReconciler, SNAPSHOT_SCHEMA_V1 } = require('../src/automation/commit-reconciler');
+const { KnowledgePromotionService, MANIFEST_SCHEMA, hashBuffer } = require('../src/knowledge/knowledge-promotion');
+const AtomicFile = require('../src/common/atomic-file');
 
 const git = (cwd, args) => execFileSync('git', args, { cwd, windowsHide: true, encoding: 'utf8' }).trim();
 

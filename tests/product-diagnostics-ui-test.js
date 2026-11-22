@@ -11,8 +11,8 @@ const { spawnServer } = require('./helpers/spawn-server');
 const { findChrome } = require('./helpers/find-chrome');
 const { launchCdpBrowser, waitFor } = require('./helpers/cdp-browser');
 const { createLoggingUiFixture } = require('./helpers/logging-ui-fixture');
-const { Logger } = require('../_site/lib/structured-logger');
-const { StorageLayout } = require('../_site/lib/storage-layout');
+const { Logger } = require('../src/common/structured-logger');
+const { StorageLayout } = require('../src/server/storage-layout');
 const ROOT = require("./paths").ROOT;
 
 async function main() {

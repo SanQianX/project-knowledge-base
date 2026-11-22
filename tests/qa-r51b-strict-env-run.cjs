@@ -57,7 +57,7 @@ const DRIVERS = {
 };
 const HELPER = path.join(ROOT, 'tests', 'helpers', 'qa-r51-env.cjs');
 const OFFICIAL26 = '77daaa7c386c565c32b1476ecaec4cb991b62394';
-const PRODUCT_SURFACES = ['bin/project-knowledge.js', '_site/lib', '_site/scripts', 'ui/product.js'];
+const PRODUCT_SURFACES = ['bin/project-knowledge.js', 'src/common', 'src/scripts', 'ui/product.js'];
 const CHILD_TIMEOUT_MS = { bootstrap: 120000, sys001: 300000, sys005: 300000 };
 // Metadata-only env proof set (names/presence/resolved paths, never values).
 const PROOF_VARS = [

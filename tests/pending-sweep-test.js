@@ -1,5 +1,5 @@
 const assert = require('assert');
-const automation = require('../_site/lib/post-commit-automation');
+const automation = require('../src/automation/post-commit-automation');
 
 // Pending repository scans are not a recovery mechanism. A Hook event is the
 // only authority that can request analysis.

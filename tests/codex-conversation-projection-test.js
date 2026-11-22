@@ -10,7 +10,7 @@ const path = require('path');
 const {
   computeConversationExclusions,
   projectCodexTurns,
-} = require('../_site/lib/conversation-exclusions');
+} = require('../src/conversations/conversation-exclusions');
 
 const projectId = 'project-codex-projection';
 const sessionId = 'codex-session';

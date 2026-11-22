@@ -4,7 +4,7 @@
 //       → CLAUDE_CONTEXT_WINDOW env
 //         → 200000 fallback
 
-const { lookupContextWindow, resolveContextWindow } = require('../_site/lib/model-context-windows');
+const { lookupContextWindow, resolveContextWindow } = require('../src/integrations/model-context-windows');
 
 function assert(cond, msg) { if (!cond) throw new Error(msg); }
 

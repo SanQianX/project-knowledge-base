@@ -6,7 +6,7 @@
 // R3 declared the Codex notify sub-item BLOCKED because the codex CLI "resolves
 // the developer's real profile directory regardless of HOME/USERPROFILE". That
 // experiment never set CODEX_HOME — and the product's own codexHookProbe
-// (_site/lib/integration-installer.js) explicitly passes
+// (src/integrations/integration-installer.js) explicitly passes
 // CODEX_HOME: this.env.CODEX_HOME || dirname(codexConfigFile), so the claimed
 // un-isolatability was never the environment the product actually gives the
 // CLI. This case settles it with real evidence, both directions:
@@ -51,7 +51,7 @@ const EVIDENCE = process.env.PK_TEST_EVIDENCE_DIR ? path.resolve(process.env.PK_
 const CLIENT = 'codex';
 const MARKER = 'CAP006R4-ISOLATION-PROBE';
 const RADAR = ['node', 'C:/DevTask Radar/connectors/codex/notify-hook.js'];
-const FANOUT = path.join(ROOT, '_site', 'scripts', 'codex-notify-fanout.cjs');
+const FANOUT = path.join(ROOT, 'src', 'scripts', 'codex-notify-fanout.cjs');
 // The live Codex desktop rewrites its electron state at arbitrary moments; the
 // R4 cap008e probe proved these writes external. They stay carved out here and
 // must stay marker-free.

@@ -10,12 +10,12 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { StorageLayout } = require('../../_site/lib/storage-layout');
-const { SettingsStore } = require('../../_site/lib/settings-store');
-const { ProjectRegistryStore } = require('../../_site/lib/project-registry-store');
-const { ProjectStore } = require('../../_site/lib/project-store');
-const { Logger } = require('../../_site/lib/structured-logger');
-const { controlPath } = require('../../_site/lib/runtime-control');
+const { StorageLayout } = require('../../src/server/storage-layout');
+const { SettingsStore } = require('../../src/projects/settings-store');
+const { ProjectRegistryStore } = require('../../src/projects/project-registry-store');
+const { ProjectStore } = require('../../src/projects/project-store');
+const { Logger } = require('../../src/common/structured-logger');
+const { controlPath } = require('../../src/common/runtime-control');
 const { makeRepo } = require('../fixtures/make-git-repos');
 
 // The product's runtime-control listens on a filesystem unix socket at
@@ -41,7 +41,7 @@ function assertPosixSocketBudget(dataDir) {
 async function createLoggingAcceptanceFixture(options = {}) {
   const caseId = options.caseId || 'case';
   const dataDir = assertPosixSocketBudget(fs.mkdtempSync(path.join(require('node:os').tmpdir(), `pk-la-${caseId}-`)));
-  if (options.freshProduct !== false) require('../../_site/lib/product-data').initializeProductData(dataDir);
+  if (options.freshProduct !== false) require('../../src/server/product-data').initializeProductData(dataDir);
   const knowledgeRoot = path.join(dataDir, 'knowledge-root');
   fs.mkdirSync(knowledgeRoot, { recursive: true });
   const layout = new StorageLayout({ dataDir });

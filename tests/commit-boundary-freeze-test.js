@@ -9,11 +9,11 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execSync } = require('child_process');
-const { StorageLayout } = require('../_site/lib/storage-layout');
-const { ProjectRegistryStore } = require('../_site/lib/project-registry-store');
-const { ProjectStore } = require('../_site/lib/project-store');
-const { ConversationStore } = require('../_site/lib/conversation-store');
-const { CommitConversationBinder } = require('../_site/lib/commit-conversation-binder');
+const { StorageLayout } = require('../src/server/storage-layout');
+const { ProjectRegistryStore } = require('../src/projects/project-registry-store');
+const { ProjectStore } = require('../src/projects/project-store');
+const { ConversationStore } = require('../src/conversations/conversation-store');
+const { CommitConversationBinder } = require('../src/automation/commit-conversation-binder');
 const bridgeModule = require('@sanqianx/ai-coding-event-bridge-console/src/bridge');
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), `kb-boundary-freeze-${process.pid}-`));

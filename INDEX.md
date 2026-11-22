@@ -7,12 +7,12 @@ knowledge is Markdown; LanceDB is one internal, rebuildable derived index.
 
 | Area | Files |
 | --- | --- |
-| Local server | `_site/server.js`, `_site/lib/server-app.js` |
+| Local server | `src/server.js`, `src/server/server-app.js` |
 | Browser UI | `ui/index.html` |
 | CLI | `bin/project-knowledge.js`, `bin/project-knowledge-kb.js` |
 | MCP | `bin/project-knowledge-mcp.js` |
-| Git Hook notifier | `_site/scripts/hook-trigger.js` |
-| Core services | `_site/lib/` |
+| Git Hook notifier | `src/scripts/hook-trigger.js` |
+| Core services | `src/` (domain-organized: common, server, projects, knowledge, automation, conversations, integrations, module_bridge, tools) |
 | Windows desktop | `desktop/` |
 | Tests | `tests/`, `desktop/test/` |
 

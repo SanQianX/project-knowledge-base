@@ -11,7 +11,7 @@ const path = require('node:path');
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const TEST = path.join(REPO_ROOT, '_site', '_test', 'version-visibility-test.js');
 const PROBE = path.join(REPO_ROOT, '_site', '_test', 'version-visibility-browser-probe.js');
-const FIXTURE = path.join(REPO_ROOT, '_site', '_test', 'helpers', 'version-visibility-fixture.js');
+const FIXTURE = path.join(REPO_ROOT, 'tests', 'helpers', 'version-visibility-fixture.js');
 
 function runNode(file, label) {
   const result = spawnSync(process.execPath, [file], { stdio: 'inherit', windowsHide: true });

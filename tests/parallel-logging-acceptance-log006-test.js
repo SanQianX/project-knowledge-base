@@ -36,7 +36,7 @@ const { createObservationProxy } = require('./helpers/parallel-logging-acceptanc
 // The logger names its day files by LOCAL day; the disk assertions must use
 // the same clock, not the UTC day (a UTC+8 machine runs 00:00-08:00 on the
 // previous UTC date).
-const { localDay } = require('../_site/lib/structured-logger');
+const { localDay } = require('../src/common/structured-logger');
 
 const ROOT = require("./paths").ROOT;
 const ARTIFACTS = resolveEvidenceDir(path.resolve(ROOT, 'qa-autopilot/artifacts/parallel-20261023/logging-acceptance-r1/evidence/log006'));

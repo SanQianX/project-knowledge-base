@@ -6,8 +6,8 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { IntegrationManager } = require(process.env.PK_TEST_INTEGRATION_ROOT
-  ? path.join(process.env.PK_TEST_INTEGRATION_ROOT, '_site/lib/integration-installer') : '../_site/lib/integration-installer');
-const { bridgeBinding, planCaptureHooks, repairCaptureHooks } = require('../_site/lib/capture-hook-config');
+  ? path.join(process.env.PK_TEST_INTEGRATION_ROOT, 'src/integrations/integration-installer') : '../src/integrations/integration-installer');
+const { bridgeBinding, planCaptureHooks, repairCaptureHooks } = require('../src/automation/capture-hook-config');
 const bridge = require('@sanqianx/ai-coding-event-bridge-console/src/bridge');
 const ROOT = require("./paths").ROOT;
 const TEMP = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-capture-dedup-'));

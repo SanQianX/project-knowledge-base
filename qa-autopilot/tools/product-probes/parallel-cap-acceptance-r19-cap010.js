@@ -37,11 +37,11 @@ const assert = require('node:assert/strict');
 const { spawn, spawnSync } = require('node:child_process');
 
 const PKB_ROOT = path.resolve(__dirname, '..', '..', '..');
-const r5shell = require(path.join(PKB_ROOT, '_site', '_test', 'helpers', 'parallel-capture-safety-r5-cap-shell'));
-const r3fixture = require(path.join(PKB_ROOT, '_site', '_test', 'helpers', 'parallel-dock-isolation-r3-fixture'));
-const { createUpstreamProxy } = require(path.join(PKB_ROOT, '_site', '_test', 'helpers', 'module-fixture'));
-const { spawnServer } = require(path.join(PKB_ROOT, '_site', '_test', 'helpers', 'spawn-server'));
-const freePort = require(path.join(PKB_ROOT, '_site', '_test', 'helpers', 'free-port'));
+const r5shell = require(path.join(PKB_ROOT, 'tests', 'helpers', 'parallel-capture-safety-r5-cap-shell'));
+const r3fixture = require(path.join(PKB_ROOT, 'tests', 'helpers', 'parallel-dock-isolation-r3-fixture'));
+const { createUpstreamProxy } = require(path.join(PKB_ROOT, 'tests', 'helpers', 'module-fixture'));
+const { spawnServer } = require(path.join(PKB_ROOT, 'tests', 'helpers', 'spawn-server'));
+const freePort = require(path.join(PKB_ROOT, 'tests', 'helpers', 'free-port'));
 
 const ARTIFACTS = path.join(PKB_ROOT, 'qa-autopilot', 'artifacts', 'parallel-20261106', 'cap-acceptance-r19');
 const CONSOLE_ENTRY = path.join(PKB_ROOT, 'node_modules', '@sanqianx', 'ai-coding-event-bridge-console', 'src', 'bin.js');

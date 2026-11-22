@@ -24,16 +24,16 @@
       "url": "https://github.com/SanQianX/project-knowledge-base/blob/c7d5b2bc86b7e51fe6e322999294bb497af1808c/ui/product.js"
     },
     {
-      "path": "_site/server.js",
+      "path": "src/server.js",
       "gitBlobSHA": "613cf5908e027f22d12ec157248719e31b0c575e",
       "readScope": "FULL",
-      "url": "https://github.com/SanQianX/project-knowledge-base/blob/c7d5b2bc86b7e51fe6e322999294bb497af1808c/_site/server.js"
+      "url": "https://github.com/SanQianX/project-knowledge-base/blob/c7d5b2bc86b7e51fe6e322999294bb497af1808c/src/server.js"
     },
     {
-      "path": "_site/lib/server-app.js",
+      "path": "src/server/server-app.js",
       "gitBlobSHA": "a01e7cf88bab8e6e7b31d6cd057af04055303c76",
       "readScope": "EXCERPT_1_180",
-      "url": "https://github.com/SanQianX/project-knowledge-base/blob/c7d5b2bc86b7e51fe6e322999294bb497af1808c/_site/lib/server-app.js"
+      "url": "https://github.com/SanQianX/project-knowledge-base/blob/c7d5b2bc86b7e51fe6e322999294bb497af1808c/src/server/server-app.js"
     },
     {
       "path": "_site/_test/run-all-tests.js",

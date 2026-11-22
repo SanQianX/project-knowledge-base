@@ -5,7 +5,7 @@ const path = require('node:path');
 const os = require('node:os');
 const net = require('node:net');
 const { spawn } = require('node:child_process');
-const endpoint = require('../_site/lib/runtime-endpoint');
+const endpoint = require('../src/common/runtime-endpoint');
 
 const packageRoot = process.env.KB_LAUNCHER_TEST_PACKAGE || require("./paths").ROOT;
 const bin = path.join(packageRoot, 'bin/project-knowledge.js');

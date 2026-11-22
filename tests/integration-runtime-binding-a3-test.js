@@ -17,12 +17,12 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { deepEqual } = require('node:assert/strict');
-const { IntegrationManager } = require('../_site/lib/integration-installer');
-const { ModuleBridge } = require('../_site/lib/module-bridge');
+const { IntegrationManager } = require('../src/integrations/integration-installer');
+const { ModuleBridge } = require('../src/module_bridge/module-bridge');
 
 const ROOT = require("./paths").ROOT;
 const LAUNCHER = path.join(ROOT, 'plugins', 'project-knowledge', 'scripts', 'mcp-launcher.cjs');
-const INSTALLER = path.join(ROOT, '_site', 'lib', 'integration-installer.js');
+const INSTALLER = path.join(ROOT, 'src', 'integrations', 'integration-installer.js');
 const RUNTIME_SCHEMA = 'project-knowledge/integration-runtime/v1';
 const ERROR_SCHEMA = 'project-knowledge/mcp-launcher-error/v1';
 const PKG = '@sanqianx/project-knowledge';

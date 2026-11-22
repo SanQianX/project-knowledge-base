@@ -39,7 +39,7 @@
 // constraint, not cosmetics. Chrome places its SingletonSocket under TMPDIR
 // (<root>/com.google.Chrome.<rand>/SingletonSocket) and the product's
 // runtime-control channel lives at <dataDir>/runtime-control.sock
-// (_site/lib/runtime-control.js) — both are UNIX domain sockets bound by the
+// (src/common/runtime-control.js) — both are UNIX domain sockets bound by the
 // 108-byte sun_path limit. The descriptive R7 component names
 // (pk-nav-r7-<pid>-<rand>/<full-tag>-<rand>) blew that budget on GH runners
 // (CI 40011886791: a 120-char SingletonSocket aborted Chrome with SIGABRT

@@ -9,11 +9,11 @@ const ROOT = path.resolve(__dirname, '..');
 
 module.exports = {
   ROOT,
-  // 产品源码根（Phase 3 起为 src/）。/ Product source root (src/ from Phase 3 on).
-  SRC: path.join(ROOT, '_site'),
-  LIB: path.join(ROOT, '_site', 'lib'),
-  SERVER_ENTRY: path.join(ROOT, '_site', 'lib', 'server-app.js'),
-  SCRIPTS: path.join(ROOT, '_site', 'scripts'),
+  // 产品源码根，按域组织。/ Product source root, organized by domain.
+  SRC: path.join(ROOT, 'src'),
+  DOMAIN: domain => path.join(ROOT, 'src', domain),
+  SERVER_ENTRY: path.join(ROOT, 'src', 'server', 'server-app.js'),
+  SCRIPTS: path.join(ROOT, 'src', 'scripts'),
   // 浏览器静态资产（Phase 4 起为 resources/ui）。/ Served static assets.
   UI: path.join(ROOT, 'ui'),
   BIN: path.join(ROOT, 'bin'),

@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { canonicalRelativePath, validateMarkdown } = require('../_site/lib/knowledge-promotion');
+const { canonicalRelativePath, validateMarkdown } = require('../src/knowledge/knowledge-promotion');
 
 assert.strictEqual(canonicalRelativePath('modules/core.md'), 'modules/core.md');
 for (const invalid of ['../outside.md', '/absolute.md', 'modules/00-index.md', 'module.txt', 'CON.md', 'modules/file.md:stream']) {

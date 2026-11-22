@@ -3,7 +3,7 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const automation = require('../_site/lib/post-commit-automation');
+const automation = require('../src/automation/post-commit-automation');
 
 (() => {
   assert.strictEqual(fs.existsSync(path.join(__dirname, '..', 'lib', 'automation-queue.js')), false, 'legacy in-memory automation queue must be deleted');

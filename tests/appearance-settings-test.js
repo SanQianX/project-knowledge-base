@@ -17,8 +17,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnServer } = require('./helpers/spawn-server');
-const { StorageLayout } = require('../_site/lib/storage-layout');
-const { SettingsStore, defaultAppearance, defaultSettings, validateAppearance } = require('../_site/lib/settings-store');
+const { StorageLayout } = require('../src/server/storage-layout');
+const { SettingsStore, defaultAppearance, defaultSettings, validateAppearance } = require('../src/projects/settings-store');
 
 const ROOT = require("./paths").ROOT;
 const PORT = 8600 + (process.pid % 300);

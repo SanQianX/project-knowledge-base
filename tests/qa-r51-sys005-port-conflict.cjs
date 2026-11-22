@@ -7,8 +7,8 @@
 //
 // Real product bytes under test (read-only):
 //   * bin/project-knowledge.js start --fg (real CLI port selection),
-//   * _site/lib/server-app.js listen + runtime-endpoint claim,
-//   * _site/scripts/hook-trigger.js endpoint resolution + delivery.
+//   * src/server/server-app.js listen + runtime-endpoint claim,
+//   * src/scripts/hook-trigger.js endpoint resolution + delivery.
 //
 // OWN conflict model (never the installed default 5757): the CLI's implicit
 // base port is KB_SITE_PORT=P, a verified-free HIGH port that our OWN blocker
@@ -92,7 +92,7 @@ function waitExit(child, timeoutMs) {
 
 async function main() {
   if (!RUN) {
-    for (const rel of ['bin/project-knowledge.js', '_site/lib/server-app.js', '_site/lib/runtime-endpoint.js', '_site/scripts/hook-trigger.js']) {
+    for (const rel of ['bin/project-knowledge.js', 'src/server/server-app.js', 'src/common/runtime-endpoint.js', 'src/scripts/hook-trigger.js']) {
       assert.ok(fs.existsSync(path.join(ROOT, rel)), `missing ${rel}`);
     }
     console.log('QA-R51 SYS005 CHECK OK (no port bound, no service started)');
@@ -102,7 +102,7 @@ async function main() {
   const lane = installLaneEnv({ caseId: 'sys005' });
   const EVIDENCE = path.join(lane.evidenceRoot, CASE_DIR);
   fs.mkdirSync(EVIDENCE, { recursive: true });
-  const endpointLib = require(path.join(ROOT, '_site', 'lib', 'runtime-endpoint.js'));
+  const endpointLib = require(path.join(ROOT, 'src', 'common', 'runtime-endpoint.js'));
   const evidence = {
     caseId: 'SYS-005', lane: 'P-LIFECYCLE-NEGATIVE-R51', mode: 'REAL_CLI_REAL_HOOK_OWN_BLOCKER',
     startedAt: new Date().toISOString(),
@@ -212,11 +212,11 @@ async function main() {
     evidence.projectRegistration = { knowledgeRoot, brainId, importStatus: imported.status, importBodyHead: imported.raw };
     assert.ok(imported.status >= 200 && imported.status < 300, `project import failed (${imported.status}): ${imported.raw}`);
 
-    const hookCmd = [path.join(ROOT, '_site', 'scripts', 'hook-trigger.js'), '--project-id', 'r51-sys005-probe', '--repo-root', repo, '--data-dir', dataA, '--host', '127.0.0.1', '--port', String(D)];
+    const hookCmd = [path.join(ROOT, 'src', 'scripts', 'hook-trigger.js'), '--project-id', 'r51-sys005-probe', '--repo-root', repo, '--data-dir', dataA, '--host', '127.0.0.1', '--port', String(D)];
     const hookStarted = Date.now();
     const hook = spawnSync(process.execPath, hookCmd, { cwd: ROOT, encoding: 'utf8', windowsHide: true, env: { ...process.env }, timeout: 60000 });
     const hookMs = Date.now() - hookStarted;
-    record(`node _site/scripts/hook-trigger.js --project-id r51-sys005-probe --repo-root <own repo> --data-dir <own dataA> --host 127.0.0.1 --port ${D} (dead fallback port)`, hook.status, hook.stdout, hook.stderr);
+    record(`node src/scripts/hook-trigger.js --project-id r51-sys005-probe --repo-root <own repo> --data-dir <own dataA> --host 127.0.0.1 --port ${D} (dead fallback port)`, hook.status, hook.stdout, hook.stderr);
     assert.equal(hook.status, 0, `hook-trigger exited ${hook.status}: ${hook.stderr}`);
     assert.deepEqual(blockerA.state.httpRequests, [], 'hook must not touch the conflicted port');
 

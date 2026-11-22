@@ -22,8 +22,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const PKB_ROOT = path.resolve(__dirname, '..', '..', '..');
-const UI = require(path.join(PKB_ROOT, '_site', '_test', 'helpers', 'parallel-dock-isolation-r3-ui.js'));
-const { createDockIsolationEnv } = require(path.join(PKB_ROOT, '_site', '_test', 'helpers', 'parallel-dock-isolation-r3-env.js'));
+const UI = require(path.join(PKB_ROOT, 'tests', 'helpers', 'parallel-dock-isolation-r3-ui.js'));
+const { createDockIsolationEnv } = require(path.join(PKB_ROOT, 'tests', 'helpers', 'parallel-dock-isolation-r3-env.js'));
 
 const ARTIFACTS = process.env.PK_R18_ARTIFACTS || path.join(PKB_ROOT, 'qa-autopilot', 'artifacts', 'parallel-20261106', 'wb-acceptance-r18');
 const MODEL_PROFILE_ID = process.env.R18_MODEL_PROFILE || 'minimax';

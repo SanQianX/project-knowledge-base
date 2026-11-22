@@ -29,8 +29,8 @@ const assert = require('node:assert/strict');
 const { installLoggingTestEnv, resolveEvidenceDir } = require('./helpers/parallel-logging-integration-5025-env');
 const lane = installLoggingTestEnv({ caseId: 'LINUX-CI-R7-LOG007-DAY', prefix: 'lcr7day' });
 
-const { Logger, LogRepository, localDay } = require('../_site/lib/structured-logger');
-const { StorageLayout } = require('../_site/lib/storage-layout');
+const { Logger, LogRepository, localDay } = require('../src/common/structured-logger');
+const { StorageLayout } = require('../src/server/storage-layout');
 
 const ROOT = require("./paths").ROOT;
 const ARTIFACTS = resolveEvidenceDir(path.resolve(ROOT, 'qa-autopilot/artifacts/parallel-20261023/linux-ci-closeout-r7/evidence/log007-day'));

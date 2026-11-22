@@ -9,10 +9,10 @@ const {
   uninstallHook,
   readHookStatus,
   parseManagedMarker,
-} = require('../_site/lib/hook-manager');
+} = require('../src/automation/hook-manager');
 
 const ROOT = require("./paths").ROOT;
-const TRIGGER = path.join(ROOT, '_site', 'scripts', 'hook-trigger.js');
+const TRIGGER = path.join(ROOT, 'src', 'scripts', 'hook-trigger.js');
 
 function git(repo, args) {
   const result = spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8', windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });

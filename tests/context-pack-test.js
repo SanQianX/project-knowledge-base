@@ -9,16 +9,16 @@ const freePort = require('./helpers/free-port');
 const { makeRepo, git } = require('./fixtures/make-git-repos');
 
 const ROOT = require("./paths").ROOT;
-const SERVER = path.join(ROOT, '_site', 'server.js');
+const SERVER = path.join(ROOT, 'src', 'server.js');
 // Pre-create a temp data dir and seed it BEFORE requiring any lib modules
 // that capture getDataDir() at module load. Both the test process and
 // the spawned server will use this dir.
 const DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), `kb-data-context-pack-${process.pid}-`));
 process.env.KB_DATA_DIR = DATA_DIR;
-require('../_site/lib/data-dir')._resetCache();
+require('../src/common/data-dir')._resetCache();
 try { fs.copyFileSync(path.join(ROOT, 'claude-prompts.json'), path.join(DATA_DIR, 'claude-prompts.json')); } catch {}
 
-const { buildContextPack, isSafePath, PACKAGE_CONFIG_FILES } = require('../_site/lib/context-pack-builder');
+const { buildContextPack, isSafePath, PACKAGE_CONFIG_FILES } = require('../src/knowledge/context-pack-builder');
 let PROJECTS_JSON = path.join(DATA_DIR, 'projects.json');
 let PORT, BASE_URL;
 const TEMP_SLUG = 'task-006-temp';

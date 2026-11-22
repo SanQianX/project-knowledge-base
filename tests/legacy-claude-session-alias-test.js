@@ -12,9 +12,9 @@ const knowledgePath = path.join(dataDir, 'knowledge', legacySlug);
 const metadataPath = path.join(dataDir, 'projects', projectId);
 const now = new Date().toISOString();
 process.env.KB_DATA_DIR = dataDir;
-require('../_site/lib/data-dir')._resetCache();
+require('../src/common/data-dir')._resetCache();
 
-const { defaultProjectConfig, defaultProjectState } = require('../_site/lib/project-store');
+const { defaultProjectConfig, defaultProjectState } = require('../src/projects/project-store');
 
 function writeRecord(root, record) {
   fs.mkdirSync(root, { recursive: true });
@@ -81,7 +81,7 @@ try {
     events: [{ type: 'claude/result', result: 'current duplicate' }],
   });
 
-  const runner = require('../_site/lib/claude-cli-runner');
+  const runner = require('../src/integrations/claude-cli-runner');
   const listed = runner.listSessions({ projectSlug: projectId });
   assert.strictEqual(listed.length, 2);
   const legacy = listed.find(session => session.sessionId === 'sess-legacy-only');

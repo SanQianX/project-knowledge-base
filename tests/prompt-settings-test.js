@@ -13,10 +13,10 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { StorageLayout } = require('../_site/lib/storage-layout');
-const { SettingsStore, defaultSettings } = require('../_site/lib/settings-store');
-const { renderCommitPrompt } = require('../_site/lib/commit-prompt');
-const { normalizeAutomationConfig, DEFAULT_COMMIT_PROMPT_TEMPLATE } = require('../_site/lib/automation-config');
+const { StorageLayout } = require('../src/server/storage-layout');
+const { SettingsStore, defaultSettings } = require('../src/projects/settings-store');
+const { renderCommitPrompt } = require('../src/automation/commit-prompt');
+const { normalizeAutomationConfig, DEFAULT_COMMIT_PROMPT_TEMPLATE } = require('../src/automation/automation-config');
 
 (async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-prompt-settings-'));

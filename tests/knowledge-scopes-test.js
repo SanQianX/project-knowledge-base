@@ -2,11 +2,11 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { StorageLayout } = require('../_site/lib/storage-layout');
-const { SettingsStore } = require('../_site/lib/settings-store');
-const { ProjectRegistryStore } = require('../_site/lib/project-registry-store');
-const { ProjectStore } = require('../_site/lib/project-store');
-const { KnowledgeToolRuntime } = require('../_site/lib/knowledge-tool-runtime');
+const { StorageLayout } = require('../src/server/storage-layout');
+const { SettingsStore } = require('../src/projects/settings-store');
+const { ProjectRegistryStore } = require('../src/projects/project-registry-store');
+const { ProjectStore } = require('../src/projects/project-store');
+const { KnowledgeToolRuntime } = require('../src/tools/knowledge-tool-runtime');
 
 (async () => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'knowledge-scopes-v2-'));

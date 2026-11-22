@@ -2,7 +2,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { regenerateIndexes } = require('../_site/lib/index-builder');
+const { regenerateIndexes } = require('../src/knowledge/index-builder');
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'index-builder-test-'));
 

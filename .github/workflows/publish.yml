@@ -209,9 +209,9 @@ jobs:
         # tarball). Skipped scripts cannot alter the packed bytes.
         run: npm ci --ignore-scripts
       - name: Verify the reviewed version lockstep
-        run: node _site/scripts/sync-release-version.js --check --web-only
+        run: node src/scripts/sync-release-version.js --check --web-only
       - name: Verify all four pinned npm runtimes
-        run: node _site/scripts/verify-module-runtime.js
+        run: node src/scripts/verify-module-runtime.js
       - name: Build the reviewed candidate and write its receipt
         env:
           TARGET_PACKAGE: ${{ inputs.package }}

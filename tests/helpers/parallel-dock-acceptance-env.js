@@ -3,7 +3,7 @@
 // Lane-exclusive helper for batch P-DOCK-ACCEPTANCE-01 (DOCK-001/002/003).
 // Boots the REAL product page against REAL module processes with full
 // isolation:
-//   - product shell: _site/lib/server-app.js via helpers/spawn-server.js
+//   - product shell: src/server/server-app.js via helpers/spawn-server.js
 //     (isolated KB_DATA_DIR / KB_KNOWLEDGE_DATA_DIR / bridge home)
 //   - terminal module: the pinned claude-ai-workbench package from this
 //     repo's node_modules, spawned here on an exclusive port with its own

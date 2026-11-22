@@ -3,7 +3,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const runtime = require('../_site/lib/runtime-endpoint');
+const runtime = require('../src/common/runtime-endpoint');
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);

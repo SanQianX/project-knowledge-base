@@ -3,9 +3,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { IntegrationManager } = require('../_site/lib/integration-installer');
-const { IntegrationStatusScan } = require('../_site/lib/integration-status-scan');
-const { summarizeClient } = require('../_site/lib/integration-intent');
+const { IntegrationManager } = require('../src/integrations/integration-installer');
+const { IntegrationStatusScan } = require('../src/integrations/integration-status-scan');
+const { summarizeClient } = require('../src/integrations/integration-intent');
 
 async function testClaudeInventory() {
   const rootDir = require("./paths").ROOT;

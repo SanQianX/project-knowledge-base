@@ -2,11 +2,11 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { StorageLayout } = require('../_site/lib/storage-layout');
-const { SettingsStore } = require('../_site/lib/settings-store');
-const { ProjectRegistryStore } = require('../_site/lib/project-registry-store');
-const { KnowledgeDatabase } = require('../_site/lib/knowledge-db');
-const { EMBEDDING_DIMENSIONS } = require('../_site/lib/knowledge-schema');
+const { StorageLayout } = require('../src/server/storage-layout');
+const { SettingsStore } = require('../src/projects/settings-store');
+const { ProjectRegistryStore } = require('../src/projects/project-registry-store');
+const { KnowledgeDatabase } = require('../src/knowledge/knowledge-db');
+const { EMBEDDING_DIMENSIONS } = require('../src/knowledge/knowledge-schema');
 const { spawnServer } = require('./helpers/spawn-server');
 
 const ROOT = require("./paths").ROOT;

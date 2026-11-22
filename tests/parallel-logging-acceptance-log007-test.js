@@ -34,7 +34,7 @@ const { createObservationProxy } = require('./helpers/parallel-logging-acceptanc
 // (LogRepository.matches recomputes localDay(record.ts)). The day probes are
 // anchored to the record ts the server itself echoes — never to a second
 // clock — so day boundaries and machine zones cannot desynchronize them.
-const { localDay } = require('../_site/lib/structured-logger');
+const { localDay } = require('../src/common/structured-logger');
 
 const ROOT = require("./paths").ROOT;
 const ARTIFACTS = resolveEvidenceDir(path.resolve(ROOT, 'qa-autopilot/artifacts/parallel-20261023/logging-acceptance-r1/evidence/log007'));
@@ -174,7 +174,7 @@ async function main() {
     const readmeHash = sha256(readmePath);
     const readmeLines = fs.readFileSync(readmePath, 'utf8').split('\n');
     const claimLines = readmeLines.slice(170, 181).map((text, offset) => ({ line: offset + 171, text: text.trim() })).filter(entry => entry.text);
-    const loggerSource = fs.readFileSync(path.join(ROOT, '_site', 'lib', 'structured-logger.js'), 'utf8');
+    const loggerSource = fs.readFileSync(path.join(ROOT, 'src', 'common', 'structured-logger.js'), 'utf8');
     const productSourceHash = sha256(path.join(ROOT, 'ui', 'product.js'));
     evidence.phases.readmeVsReality = {
       readmeSha256: readmeHash,

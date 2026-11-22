@@ -2,7 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const root = process.env.KB_LAUNCHER_TEST_PACKAGE || require("../paths").ROOT;
-const { IntegrationManager } = require(path.join(root, '_site/lib/integration-installer'));
+const { IntegrationManager } = require(path.join(root, 'src/integrations/integration-installer'));
 IntegrationManager.prototype.statusAll = async function () {
   fs.writeFileSync(process.env.KB_STARTUP_INTEGRATION_MARKER, String(process.pid));
   // Models a synchronous native CLI probe, without running or repairing any

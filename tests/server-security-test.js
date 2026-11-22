@@ -3,7 +3,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnServer } = require('./helpers/spawn-server');
-const { createRequestHandler } = require('../_site/lib/server-app');
+const { createRequestHandler } = require('../src/server/server-app');
 
 const ROOT = require("./paths").ROOT;
 const PORT = 7832;

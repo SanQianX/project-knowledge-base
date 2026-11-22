@@ -144,10 +144,10 @@ const CASE_CLAIMS = {
   try { for (const name of fs.readdirSync(devEvidenceDir)) devEvidenceFiles.push(path.join(devEvidenceDir, name)); } catch {}
 
   const sourceFiles = [
-    '_site/_test/parallel-memory-capture-r4-mem005-health-test.js',
-    '_site/_test/parallel-memory-capture-r4-cap008e-probe.js',
-    '_site/_test/parallel-memory-capture-r4-cap006-probe.js',
-    '_site/_test/helpers/parallel-memory-capture-r4-cap-shell.js',
+    tests/parallel-memory-capture-r4-mem005-health-test.js',
+    tests/parallel-memory-capture-r4-cap008e-probe.js',
+    tests/parallel-memory-capture-r4-cap006-probe.js',
+    tests/helpers/parallel-memory-capture-r4-cap-shell.js',
     'qa-autopilot/tools/product-probes/parallel-memory-capture-r4.js',
   ].map(file => ({ file, sha256: sha256File(path.join(REPO_ROOT, file)) }));
 
@@ -168,15 +168,15 @@ const CASE_CLAIMS = {
     },
     files: {
       laneOwned: [
-        '_site/_test/parallel-memory-capture-r4-*.js',
-        '_site/_test/helpers/parallel-memory-capture-r4-*.js',
+        tests/parallel-memory-capture-r4-*.js',
+        tests/helpers/parallel-memory-capture-r4-*.js',
         'qa-autopilot/tools/product-probes/parallel-memory-capture-r4.js',
         'qa-autopilot/artifacts/parallel-20261023/memory-capture-r4/**',
         'qa-autopilot/artifacts/parallel-20261023/memory/capture-r4/**（开发过程证据）',
       ],
       frozenReadOnly: [
-        '_site/_test/parallel-memory-capture-r3-*.js 与 helpers/parallel-memory-capture-r3-cap-shell.js（R3 历史）',
-        '_site/_test/helpers/{module-fixture,cdp-browser,spawn-server,...}.js（共享 helper）',
+        tests/parallel-memory-capture-r3-*.js 与 helpers/parallel-memory-capture-r3-cap-shell.js（R3 历史）',
+        tests/helpers/{module-fixture,cdp-browser,spawn-server,...}.js（共享 helper）',
         '_site/lib/**（产品源码）',
         'qa-autopilot/config/product-case-assertions.json（Leader 所有，本线未回写）',
       ],

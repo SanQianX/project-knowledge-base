@@ -13,7 +13,7 @@ const assert = require('node:assert/strict');
 const http = require('node:http');
 const { Readable } = require('node:stream');
 const { EventEmitter } = require('node:events');
-const { ModuleBridge } = require('../_site/lib/module-bridge');
+const { ModuleBridge } = require('../src/module_bridge/module-bridge');
 
 function workflowInstalled() {
   try { require.resolve('@sanqianx/ai-coding-workflow/src/bin.js'); return true; } catch { return false; }

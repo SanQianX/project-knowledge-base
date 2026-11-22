@@ -7,7 +7,7 @@ const { spawn, spawnSync } = require('child_process');
 
 const ROOT = require("./paths").ROOT;
 const TEMP = fs.mkdtempSync(path.join(os.tmpdir(), `pk-codex-fanout-${process.pid}-`));
-const fanout = path.join(ROOT, '_site', 'scripts', 'codex-notify-fanout.cjs');
+const fanout = path.join(ROOT, 'src', 'scripts', 'codex-notify-fanout.cjs');
 const receiver = path.join(TEMP, 'receiver.cjs');
 
 // Completion protocol: receivers stage the JSON beside the target and publish

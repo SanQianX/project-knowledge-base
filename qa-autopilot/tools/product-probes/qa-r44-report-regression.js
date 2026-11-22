@@ -36,7 +36,7 @@ function findRepoRoot(start) {
 
 const REPO_ROOT = findRepoRoot(__dirname);
 const ENTRY = path.join(REPO_ROOT, 'qa-autopilot', 'tools', 'product-probes', 'qa-r44-permission-question.js');
-const BUILDER_PATH = path.join(REPO_ROOT, '_site', '_test', 'helpers', 'qa-r44-report.js');
+const BUILDER_PATH = path.join(REPO_ROOT, 'tests', 'helpers', 'qa-r44-report.js');
 const SCENARIO_PATH = path.join(REPO_ROOT, '_site', '_test', 'qa-r44-permission-question.js');
 const FROZEN_DIRS = [
   path.join(REPO_ROOT, 'qa-autopilot', 'artifacts', 'parallel-20261023', 'wb-permission-question-r44'),

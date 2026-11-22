@@ -3,8 +3,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnServer } = require('./helpers/spawn-server');
-const { StorageLayout } = require('../_site/lib/storage-layout');
-const { LogRepository } = require('../_site/lib/structured-logger');
+const { StorageLayout } = require('../src/server/storage-layout');
+const { LogRepository } = require('../src/common/structured-logger');
 
 const ROOT = require("./paths").ROOT;
 const PORT = 7950 + (process.pid % 300);

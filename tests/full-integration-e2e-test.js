@@ -5,10 +5,10 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { spawnServer } = require('./helpers/spawn-server');
 const freePort = require('./helpers/free-port');
-const { StorageLayout } = require('../_site/lib/storage-layout');
-const { ProjectRegistryStore } = require('../_site/lib/project-registry-store');
-const { ProjectStore } = require('../_site/lib/project-store');
-const { RequirementRecorder } = require('../_site/lib/requirement-recorder');
+const { StorageLayout } = require('../src/server/storage-layout');
+const { ProjectRegistryStore } = require('../src/projects/project-registry-store');
+const { ProjectStore } = require('../src/projects/project-store');
+const { RequirementRecorder } = require('../src/tools/requirement-recorder');
 
 const ROOT = require("./paths").ROOT;
 let PORT, BASE_URL;

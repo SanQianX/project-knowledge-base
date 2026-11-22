@@ -1,6 +1,6 @@
 // tests/helpers/spawn-server.js
 //
-// Test helper: spawn _site/server.js with an isolated KB_DATA_DIR so each
+// Test helper: spawn src/server.js with an isolated KB_DATA_DIR so each
 // regression test runs against a fresh, empty user-data location. Without
 // this, server.js would default to ~/.project-knowledge/ and tests would
 // pollute (or read from) the real user data.
@@ -20,8 +20,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
-const runtimeControl = require('../../_site/lib/runtime-control');
-const runtimeEndpoint = require('../../_site/lib/runtime-endpoint');
+const runtimeControl = require('../../src/common/runtime-control');
+const runtimeEndpoint = require('../../src/common/runtime-endpoint');
 
 function defaultDataDir(tag) {
   return fs.mkdtempSync(path.join(os.tmpdir(), `kb-data-${tag || 'test'}-${process.pid}-`));
@@ -40,7 +40,7 @@ function spawnServer({ root, port, host = '127.0.0.1', dataDir, extraEnv = {}, t
   // Legacy behavior tests characterize the retired writer in isolation. The
   // production entry point still defaults to engine ownership; product tests
   // explicitly request it and run the real module services.
-  const entry = path.join(root, '_site', 'lib', 'server-app.js');
+  const entry = path.join(root, 'src', 'server', 'server-app.js');
   // CI 40075242420 (normalhook, linux24): a startup rejection used to vanish —
   // exit 1 with empty stdout/stderr — because this catch swallowed the reason.
   // The failure path below prints the child's stderr tail, so emit one bounded

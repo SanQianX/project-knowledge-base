@@ -12,7 +12,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { IntegrationManager } = require('../_site/lib/integration-installer');
+const { IntegrationManager } = require('../src/integrations/integration-installer');
 
 const TEMP_BASE = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-marketplace-scoped-path-'));
 const TEST_HOME = path.join(TEMP_BASE, 'home');
