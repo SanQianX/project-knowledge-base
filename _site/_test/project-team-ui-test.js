@@ -35,14 +35,10 @@ async function createTeamViaSettings(harness, projectId, group) {
   // a separate waitFor+click races a redraw that swaps the node out.
   await harness.waitFor(() => harness.run(`(selector => { const node = document.querySelector(selector); if (!node || node.disabled || !node.getClientRects().length) return false; node.click(); return true; })(${JSON.stringify(createTeam)})`), 'create-team entry clickable');
   // P4a workbench: the workbench opens on the tasks view; the empty-team
-  // init card lives on the settings view.
-  try {
-    await harness.waitFor(() => inFrame(doc => Boolean(doc?.querySelector('#navSettings'))), 'workbench navigation');
-  } catch (error) {
-    const dump = await inFrame(doc => doc ? (document.getElementById('workflowFrame').src + ' ||| ' + doc.body.innerHTML.slice(0, 300)) : 'NO DOC').catch?.(() => 'EVAL-ERR') || await inFrame(doc => doc ? document.getElementById('workflowFrame').src + ' ||| ' + doc.body.innerHTML.slice(0, 300) : 'NO DOC');
-    console.error('DIAG nav:', dump);
-    throw error;
-  }
+  // init card lives on the settings view. Wait for the app's startup probe to
+  // settle FIRST — clicking inside a frame that is about to be reloaded lands
+  // in the dying document and the fresh one boots back to the tasks view.
+  await harness.waitFor(() => inFrame(doc => doc && doc.querySelector('#serviceText') && !doc.querySelector('#serviceText').textContent.includes('正在连接')), 'workbench settled');
   await click('#navSettings');
   try {
     await harness.waitFor(() => inFrame(doc => Boolean(doc?.querySelector('#createTeam'))), 'empty team init card');
