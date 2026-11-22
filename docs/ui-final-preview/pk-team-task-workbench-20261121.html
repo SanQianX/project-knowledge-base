@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>AI 团队 · 任务工作台预览</title>
+  <style>
+    :root {
+      color-scheme: light; --canvas:#f4f6fa; --surface:#fff; --soft:#f6f8fb; --text:#172537; --dim:#516176;
+      --muted:#66768a; --line:#dce3eb; --accent:#225dc9; --accent-soft:#eaf1ff; --tint-line:#c8d8fa;
+      --green:#176649; --green-bg:#e4f4ec; --orange:#89500d; --orange-bg:#fff1d9; --red:#a53937; --red-bg:#ffedeb;
+      --violet:#6547a4; --violet-bg:#f0eafa; --shadow:0 3px 14px rgba(30,55,85,.045);
+      --mono:"IBM Plex Mono",Consolas,"Microsoft YaHei UI",monospace;
+      font-family:Inter,"Segoe UI","Microsoft YaHei UI","Microsoft YaHei",system-ui,sans-serif;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--canvas);color:var(--text);font-size:1rem;line-height:1.55}
+    button,input,select,textarea{font:inherit;color:inherit} button,select{cursor:pointer}
+    button{border:0;background:none} a{color:var(--accent)} h1,h2,h3,h4,p{margin:0} h1,h2,h3,h4{line-height:1.35}
+    [hidden]{display:none!important} :focus-visible{outline:3px solid #699cff;outline-offset:3px} ::selection{background:#ccddff;color:#18243a}
+    .shell{max-width:1496px;margin:0 auto;padding:0 clamp(18px,4vw,64px)}
+    header{background:var(--surface);border-bottom:1px solid var(--line)}
+    .top{display:flex;align-items:stretch;min-height:64px;gap:clamp(16px,3vw,48px)}
+    .brand,.nav,.inline,.row,.actions,.card-head,.titleline,.meta,.copybar{display:flex;align-items:center}
+    .brand{gap:11px;white-space:nowrap;font-size:1.06rem;font-weight:740;letter-spacing:.01em}
+    .brand small{font-size:.85rem;color:var(--dim);border-left:1px solid var(--line);padding-left:12px;font-weight:500}
+    .logo{display:grid;grid-template:repeat(2,8px)/repeat(2,8px);gap:3px;width:32px;height:32px;place-content:center;background:#225dc9;border-radius:9px}
+    .logo i{display:block;background:#fff;border-radius:2px}.logo i:nth-child(2){background:#9cc1ff}.logo i:nth-child(3){background:#c2d8ff}
+    .nav{align-self:stretch;gap:22px}.nav button{align-self:stretch;border-bottom:3px solid transparent;padding:3px 2px 0;color:var(--dim);font-size:.95rem;font-weight:620}
+    .nav button[aria-current=page]{color:var(--accent);border-color:var(--accent)}
+    .preview-mark{align-self:center;margin-left:auto;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:3px 11px;font-size:.8rem;white-space:nowrap}
+    .page-head{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:30px 0 22px}
+    h1{font-size:clamp(1.55rem,2.6vw,2rem);letter-spacing:-.035em}.page-head p{color:var(--dim);margin-top:5px;font-size:.95rem}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:8px 14px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-size:.9rem;font-weight:620;line-height:1.45}
+    .btn:hover,.task-btn:hover,.link:hover{color:var(--accent);background:var(--accent-soft)}
+    .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}.btn.primary:hover{filter:brightness(.92)}
+    .chat-icon{width:16px;height:13px;border:1.7px solid currentColor;border-radius:4px;position:relative;margin-right:1px}.chat-icon:after{content:"";position:absolute;bottom:-3px;left:2px;width:4px;height:4px;border-left:1.7px solid currentColor;transform:skew(-23deg)}
+    .board{display:grid;grid-template-columns:minmax(220px,260px) minmax(0,1fr);gap:20px;align-items:start;margin-bottom:36px}
+    .card{background:var(--surface);border:1px solid var(--line);border-radius:13px;box-shadow:var(--shadow);min-width:0}
+    .queue{overflow:hidden}.queue-head{display:flex;align-items:center;justify-content:space-between;padding:18px 17px 11px}
+    .queue-head h2,.box h3{font-size:1.02rem}.tally,.small,.stamp{font-size:.82rem;color:var(--muted)}
+    .search{display:flex;gap:10px;align-items:center;margin:0 14px 13px;padding:7px 10px;border:1px solid var(--line);border-radius:7px;background:var(--soft)}
+    .glass{width:13px;height:13px;border:1.6px solid var(--muted);border-radius:50%;position:relative;flex:0 0 13px}.glass:after{content:"";position:absolute;width:5px;height:1.6px;background:var(--muted);bottom:-2px;right:-3px;transform:rotate(45deg)}
+    .search input{border:0;background:none;outline:0;min-width:0;width:100%;font-size:.88rem}.search:focus-within{outline:2px solid var(--accent)}
+    .task-list{border-top:1px solid var(--line)}.task-btn{display:block;text-align:left;width:100%;padding:15px 16px 14px 18px;border-left:3px solid transparent;border-bottom:1px solid var(--line)}
+    .task-btn:last-child{border-bottom:0}.task-btn[aria-current=true]{background:var(--accent-soft);border-left-color:var(--accent)}
+    .task-btn strong{display:block;font-size:.95rem;line-height:1.5}.task-btn .row{gap:6px;margin-top:7px;justify-content:space-between}
+    .task-btn .small{font-size:.8rem}.badge{display:inline-flex;align-items:center;gap:5px;border-radius:5px;padding:2px 7px;font-size:.8rem;font-weight:620;white-space:nowrap;line-height:1.55;background:var(--soft);color:var(--dim)}
+    .badge.good,.mark.good,.ava.good{background:var(--green-bg);color:var(--green)}.badge.work,.mark.work,.ava.work{background:var(--accent-soft);color:var(--accent)}
+    .badge.warn,.mark.warn{background:var(--orange-bg);color:var(--orange)}.badge.block,.mark.block{background:var(--red-bg);color:var(--red)}
+    .ava.violet{background:var(--violet-bg);color:var(--violet)}
+    .detail{overflow:hidden}.detail-top{padding:22px 25px 17px}
+    .project-line{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--dim);font-size:.86rem;margin-bottom:8px;flex-wrap:wrap}
+    .demo-select{display:inline-flex;gap:6px;align-items:center;color:var(--muted);font-size:.82rem}.demo-select select{font-size:inherit}
+    select{padding:5px 22px 5px 9px;border:1px solid var(--line);background:var(--surface);border-radius:6px}
+    .titleline{gap:12px;flex-wrap:wrap}.titleline h2{font-size:clamp(1.25rem,2vw,1.6rem);letter-spacing:-.025em}
+    .meta{flex-wrap:wrap;gap:6px 14px;font-size:.84rem;color:var(--dim);margin-top:6px}.mono,code{font-family:var(--mono);overflow-wrap:anywhere}
+    code{font-size:.9em;background:var(--soft);padding:1px 4px;border-radius:4px}.meta button,.link{font-weight:600;color:var(--accent);font-size:.86rem;padding:3px 4px;border-radius:4px}
+    .action-banner{display:flex;align-items:flex-start;gap:12px;background:var(--accent-soft);border:1px solid var(--tint-line);border-radius:9px;margin-top:17px;padding:12px 14px}
+    .action-symbol{flex-shrink:0;display:grid;place-items:center;color:var(--accent);background:var(--surface);width:30px;height:30px;border-radius:8px;font-weight:bold}
+    .action-banner strong{display:block;font-size:.98rem}.action-banner p{margin-top:2px;font-size:.89rem;color:var(--dim)}.action-banner.block{border-color:#e3bebd;background:var(--red-bg)}.action-banner.good{border-color:#bedbcf;background:var(--green-bg)}
+    .subnav{display:flex;gap:22px;padding:0 25px;border-bottom:1px solid var(--line);overflow:auto}
+    .subnav button{white-space:nowrap;color:var(--dim);padding:10px 0 11px;border-bottom:2px solid transparent;font-size:.93rem;font-weight:650}
+    .subnav button[aria-current=page]{border-color:var(--accent);color:var(--accent)}.count{display:inline-block;background:var(--soft);padding:0 5px;border-radius:4px;margin-left:4px;font:500 .76rem/1.6 var(--mono);color:var(--dim)}
+    .content{padding:21px 25px 24px}.cols{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(205px,.85fr);gap:20px;align-items:start}
+    .card-head{justify-content:space-between;gap:10px;margin-bottom:11px}.card-head h3,.content>h3{font-size:1.04rem}.step{display:grid;grid-template-columns:26px minmax(0,1fr);gap:10px;position:relative;padding:0 0 18px}
+    .step:not(:last-child):before{content:"";position:absolute;left:12px;top:25px;bottom:1px;width:1px;background:var(--line)}.step:last-child{padding-bottom:0}
+    .mark{z-index:1;display:grid;place-items:center;width:25px;height:25px;font-size:.92rem;font-weight:bold;border-radius:50%;background:var(--soft);color:var(--muted);border:1px solid var(--line)}
+    .step .row,.box .row{justify-content:space-between;gap:8px}.step h4{font-size:.95rem}.step p,.box p{font-size:.88rem;color:var(--dim);margin-top:4px}
+    .box{background:var(--soft);border:1px solid var(--line);border-radius:9px;padding:14px 15px}.box+.box{margin-top:13px}
+    .person{display:flex;gap:9px;align-items:center;margin-top:12px;min-width:0}.ava{height:30px;width:30px;flex:0 0 30px;border-radius:8px;display:grid;place-items:center;font:700 .84rem var(--mono)}
+    .person b{font-size:.9rem}.person small{display:block;font-size:.79rem;color:var(--muted)}.people details{width:100%}
+    .focus-finding{margin-top:17px;border:1px solid var(--line);border-radius:8px;padding:10px 12px}.focus-finding>p{margin-top:4px;color:var(--dim);font-size:.9rem}
+    .focus-finding .row{gap:9px;justify-content:space-between}.focus-finding strong{font-size:.9rem}
+    .paper{border:1px solid var(--line);border-radius:9px;padding:13px 15px;background:var(--surface);margin-top:10px}
+    .paper h4{font-size:.98rem}.paper p{font-size:.91rem;color:var(--dim);margin:6px 0 0}
+    .paper .row{justify-content:space-between;gap:12px;align-items:flex-start}.paper .stamp{margin-top:7px}
+    .paper details,.box details{border-top:1px solid var(--line);margin-top:11px;padding-top:8px}summary{cursor:pointer;color:var(--accent);font-size:.86rem;font-weight:620}
+    .facts{display:grid;grid-template-columns:minmax(85px,auto) minmax(0,1fr);gap:5px 14px;font-size:.87rem;margin:9px 0 0}
+    .facts dt{color:var(--muted)}.facts dd{margin:0;overflow-wrap:anywhere}.empty{padding:14px;color:var(--dim);font-size:.92rem}
+    .mobile-list{display:none}.settings{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(280px,.8fr);gap:20px;padding-bottom:32px}
+    .settings .card{padding:21px 23px}.settings h2{font-size:1.12rem}.settings p,.settings label{font-size:.91rem;color:var(--dim)}
+    .settings .project-pick,.field{display:block;margin-top:13px}.project-pick select,.field select{display:block;margin-top:4px;max-width:100%;width:100%;padding:7px}
+    .field select:disabled{opacity:.65;cursor:default}.toggle{display:flex;align-items:center;gap:8px;margin-top:14px}.toggle input{width:16px;height:16px;accent-color:var(--accent)}
+    .actions{justify-content:space-between;gap:12px;margin-top:16px;flex-wrap:wrap}.rule{height:1px;background:var(--line);margin:17px 0}
+    dialog{margin:auto;width:min(540px,calc(100% - 28px));border:1px solid var(--line);border-radius:14px;padding:23px;background:var(--surface);color:var(--text);box-shadow:0 12px 44px #15284d33}dialog::backdrop{background:#10203966}
+    dialog .card-head{margin-bottom:8px}dialog h2{font-size:1.2rem}dialog p{color:var(--dim);font-size:.92rem}
+    textarea{display:block;width:100%;min-height:115px;border:1px solid var(--line);border-radius:8px;margin:12px 0;padding:10px;background:var(--soft);resize:vertical;font-size:.93rem}
+    .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);padding:9px 16px;background:#20324b;color:white;border-radius:8px;box-shadow:var(--shadow);z-index:3;font-size:.9rem;max-width:92vw}
+    @media(min-width:1450px){.detail-top{padding:25px 30px 19px}.subnav{padding:0 30px}.content{padding:24px 30px}.step{padding-bottom:23px}}
+    @media(max-width:1050px){.brand small{display:none}.board{grid-template-columns:218px minmax(0,1fr);gap:14px}.cols{grid-template-columns:minmax(0,1fr)}.people{display:flex;flex-wrap:wrap;gap:10px 20px}.people h3{width:100%}.people .person{margin:0}.detail-top,.content{padding:17px}.subnav{padding:0 17px}}
+    @media(max-width:740px){.shell{padding:0 14px}.top{min-height:55px;gap:16px}.nav{gap:12px}.nav button{font-size:.86rem}.brand{gap:6px;font-size:1rem}.logo{width:27px;height:27px}.preview-mark{font-size:.72rem;padding:2px 6px}.page-head{padding:18px 0 13px;gap:8px}.page-head p{font-size:.83rem}.page-head .btn{font-size:.83rem;padding:7px 9px;flex-shrink:0}.board,.settings{display:block}.settings .card+.card{margin-top:12px}.queue{display:none}.board[data-list=yes] .queue{display:block}.board[data-list=yes] .detail{display:none}.mobile-list{display:inline-flex;margin-bottom:9px}.subnav{gap:14px}.subnav button{font-size:.87rem}.titleline{gap:8px}.detail-top,.content{padding:14px}.settings .card{padding:16px}.stamp{font-size:.78rem}}
+    @media(max-width:460px){.nav{gap:8px}.top{gap:12px}.preview-mark{max-width:5.8em;line-height:1.25;text-align:center;white-space:normal}.chat-icon{display:none}.page-head p{max-width:17em}.demo-select{gap:3px}.subnav{padding:0 12px;gap:12px}.content .row{flex-wrap:wrap}.facts{grid-template-columns:76px minmax(0,1fr)}}
+    @media(prefers-color-scheme:dark){:root{color-scheme:dark;--canvas:#111821;--surface:#192333;--soft:#202c3d;--text:#e6edf7;--dim:#bdc9d9;--muted:#a2b1c5;--line:#344357;--accent:#8bb3ff;--accent-soft:#233957;--tint-line:#3c5781;--green:#9bd6b9;--green-bg:#203f35;--orange:#f0c585;--orange-bg:#473721;--red:#f2b1ab;--red-bg:#482c32;--violet:#d3b8f5;--violet-bg:#3a3052}.btn.primary{background:#315faa;border-color:#4471bd}.action-banner.block,.action-banner.good{border-color:var(--line)}}
+  </style>
+</head>
+<body>
+  <header><div class="shell top">
+    <div class="brand"><span class="logo" aria-hidden="true"><i></i><i></i><i></i><i></i></span>AI 团队 <small>项目知识库</small></div>
+    <nav class="nav" aria-label="主导航"><button id="navTasks" aria-current="page">任务</button><button id="navSettings">团队设置</button></nav>
+    <span class="preview-mark">交互预览 · 示例数据</span>
+  </div></header>
+  <main class="shell">
+    <div class="page-head"><div><h1 id="heading">任务工作台</h1><p id="subtitle">在 Codex 对话里发起，凭任务号查看分工和交付结果。</p></div><button id="start" class="btn primary"><span class="chat-icon" aria-hidden="true"></span>在对话中发起</button></div>
+    <div class="board" id="board" data-list="no">
+      <aside class="card queue" aria-label="任务列表"><div class="queue-head"><h2>任务列表</h2><span id="listCount" class="tally"></span></div>
+        <label class="search"><span class="glass" aria-hidden="true"></span><input id="search" type="search" placeholder="搜索标题或任务号" aria-label="搜索任务"></label><div class="task-list" id="taskList"></div>
+      </aside>
+      <article class="card detail" aria-label="任务详情" id="detail"></article>
+    </div>
+    <div id="settings" class="settings" hidden></div>
+  </main>
+  <dialog id="promptDialog" aria-labelledby="dialogTitle"><div class="card-head"><h2 id="dialogTitle"></h2><button id="closeDialog" class="btn">关闭</button></div><p id="dialogIntro"></p><textarea id="promptText" aria-label="可复制的对话提示词"></textarea><div class="actions"><span class="small">在 Codex 对话中发送后生效。</span><button id="copyPrompt" class="btn primary">复制提示词</button></div></dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <script>
+    'use strict';
+    const byId = id => document.getElementById(id);
+    const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+    const samples = {
+      refund: {id:'task_demo_refund',title:'修正退款手续费的金额边界',project:'支付服务',config:'pay'},
+      export: {id:'task_demo_export',title:'为订单导出增加日期筛选',project:'数据工具',config:'data'},
+      help: {id:'task_demo_help',title:'更新 CLI 的启动帮助',project:'支付服务',config:'pay'}
+    };
+    const settings = {
+      pay:{name:'支付服务',enabled:true,leader:'GLM 规划成员',developer:'Codex 开发成员',regression:true,reviewer:'Codex 审查成员'},
+      data:{name:'数据工具',enabled:true,leader:'GLM 规划成员',developer:'Codex 开发成员',regression:false,reviewer:'Codex 审查成员'}
+    };
+    const state = {view:'tasks',selected:'refund',phase:'rework',tab:'plan',project:'pay',list:false};
+    const phases = {
+      implement:{label:'开发中',tone:'work',symbol:'›',headline:'Codex 开发成员正在修正计费逻辑',next:'Leader 已拆成 3 项。当前成员按第一项的复现结果改代码，随后交给独立 Reviewer。',progress:'1 / 3 项已完成',accept:'0/2'},
+      rework:{label:'整改中',tone:'warn',symbol:'↻',headline:'Codex 开发成员正在整改',next:'独立 Reviewer 发现 100 元整被多收费。意见已送回原开发执行，下一步复查新快照。',progress:'1 / 3 项已完成',accept:'1/2'},
+      done:{label:'已交付',tone:'good',symbol:'✓',headline:'已按新快照交付',next:'3 个工作项已完成。独立 Reviewer 复查通过，服务端核对了本轮的两条验收证据。',progress:'3 / 3 项已完成',accept:'2/2'},
+      blocked:{label:'已阻塞',tone:'block',symbol:'!',headline:'需要你给开发成员绑定可写工作区',next:'Leader 已完成拆解。数据工具的 Codex 成员缺少已授权的仓库工作区，任务已暂停派发。',progress:'0 / 2 项已完成',accept:'0/2'},
+      simple:{label:'已交付',tone:'good',symbol:'✓',headline:'原 Codex 对话已完成变更',next:'普通任务按项目策略执行静态检查。Leader 调用 0 次，独立开发会话 0 次。',progress:'1 / 1 项已完成',accept:'1/1'}
+    };
+    function phaseKey(key=state.selected){return key==='refund'?state.phase:key==='export'?'blocked':'simple'}
+    function badge(label,tone=''){return '<span class="badge '+tone+'">'+esc(label)+'</span>'}
+    function factList(rows){return '<dl class="facts">'+rows.map(([name,value])=>'<dt>'+esc(name)+'</dt><dd>'+esc(value)+'</dd>').join('')+'</dl>'}
+    function showToast(message){const el=byId('toast');el.textContent=message;el.hidden=false;clearTimeout(showToast.timer);showToast.timer=setTimeout(()=>{el.hidden=true},2300)}
+    function promptFor(kind){
+      if(kind==='start')return '用 pk-team 为这个复杂需求创建任务，给我 taskId，然后按项目团队配置直接执行。\n\n需求：<你的实际需求>';
+      return '用 pk-team 接续任务 '+samples[state.selected].id+'，读取当前工作项、最新审查和待整改项，直接从下一步继续。';
+    }
+    function openPrompt(kind){
+      const start=kind==='start';
+      byId('dialogTitle').textContent=start?'在 Codex 中发起任务':'在 Codex 中接续任务';
+      byId('dialogIntro').textContent=start?'将最后一行换成实际需求。会话会返回任务号，并按该项目的团队配置执行。':'这是一条带示例编号的接续提示词。正式使用时换成实际任务号。';
+      byId('promptText').value=promptFor(kind);
+      byId('promptDialog').showModal();
+    }
+    async function copyValue(value,kind){
+      try{if(!navigator.clipboard)throw new Error('unavailable');await navigator.clipboard.writeText(value);showToast('已复制提示词')}
+      catch{if(!byId('promptDialog').open)openPrompt(kind);const field=byId('promptText');field.focus();field.select();showToast('提示词已选中，可用 Ctrl+C 或系统复制')}
+    }
+    function renderList(){
+      const query=byId('search').value.trim().toLowerCase();
+      const items=Object.entries(samples).filter(([,s])=>(s.title+' '+s.id+' '+s.project).toLowerCase().includes(query));
+      byId('listCount').textContent=items.length+' 项';
+      byId('taskList').innerHTML=items.map(([key,s])=>{const p=phases[phaseKey(key)];return '<button class="task-btn" data-task="'+key+'" aria-current="'+(state.selected===key)+'"><strong>'+esc(s.title)+'</strong><span class="row"><span class="small">'+esc(s.project)+'</span>'+badge(p.label,p.tone)+'</span></button>'}).join('')||'<p class="empty">没有匹配的任务。</p>';
+    }
+    function person(initial,role,model,tone){return '<div class="person"><span aria-hidden="true" class="ava '+tone+'">'+initial+'</span><div><b>'+esc(role)+'</b><small>'+esc(model)+'</small></div></div>'}
+    function people(key){
+      const simple=key==='simple';
+      const runs=simple?[['执行来源','当前原生 Codex 对话'],['额外执行','Leader 0 次，开发 Worker 0 次']]:
+        [['规划执行','plan_demo_01 · GLM 规划成员'],['实现执行',key==='blocked'?'等待工作区，尚未启动':'dev_demo_02 · Codex 开发成员'],...(key==='blocked'?[]:[['回归执行',key==='done'?'dev_demo_03 · 已验证 3 组用例':'dev_demo_01 · 已完成复现']]),['审查执行',['blocked','implement'].includes(key)?'尚未启动':key==='done'?'rev_demo_02 · 已通过':'rev_demo_01 · 返回意见']];
+      return '<aside class="box people"><h3>本次执行成员</h3>'+(simple?person('D','当前 Codex 对话','原会话执行','work'):
+        person('L','GLM 规划成员','Leader · glm-5.3','violet')+
+        person('D','Codex 开发成员',key==='blocked'?'开发 · 等待工作区':'开发 · 独立 Codex 会话','work')+
+        (key==='blocked'?'':person('T','Codex 回归成员','开发 · 负责复现与回归','work'))+
+        person('R','Codex 审查成员',['implement','blocked'].includes(key)?'Reviewer · 尚未执行':'Reviewer · 已核实 gpt-6.2-sol','good'))+'<details><summary>查看执行记录</summary>'+factList(runs)+'</details></aside>';
+    }
+    function step(title,who,status,tone,text,mark){
+      return '<div class="step"><span class="mark '+tone+'" aria-hidden="true">'+mark+'</span><div><div class="row"><h4>'+esc(title)+'</h4>'+badge(status,tone)+'</div><p>'+esc(who)+' · '+esc(text)+'</p></div></div>';
+    }
+    function renderPlan(key){
+      let steps='',brief='';
+      if(key==='simple'){steps=step('更新启动帮助并执行检查','当前 Codex 对话','已完成','good','cli/help.js 已更新，ESLint 返回 0。','✓');brief='普通任务 · 按原会话执行'}
+      else if(key==='blocked'){steps=step('增加按日期筛选的导出查询','Codex 开发成员','等待配置','block','缺少已授权工作区，开发会话尚未启动。','!')+step('验证日期边界和空结果','Codex 开发成员','等待前项','','依赖导出查询。','·');brief='GLM 规划成员 · 2 个工作项'}
+      else{
+        const done=key==='done';
+        steps=step('复现退款边界错误','Codex 回归成员','已完成','good','已记录 99、100、101 元三组输入。','✓')+
+          step('修正手续费判定','Codex 开发成员',done?'已完成':key==='rework'?'整改中':'执行中',done?'good':key==='rework'?'warn':'work',done?'最新快照中，100 元整的手续费为 0。':key==='rework'?'已收到第一轮意见，正在修正 100 元整的分支。':'依赖已满足，独立开发会话已开始修改。',done?'✓':'›')+
+          step('补齐三组金额的回归用例','Codex 回归成员',done?'已完成':'等待前项',done?'good':'',done?'三个用例已实跑，结果已附到工作项。':'依赖手续费修正，完成后触发整体验收。',done?'✓':'·');
+        brief='GLM 规划成员 · 计划版本 1';
+      }
+      let focus='';
+      if(key==='rework'||key==='done')focus='<div class="focus-finding"><div class="row"><strong>'+(key==='done'?'已解决的意见':'最近的审查意见')+'</strong><button class="link" data-tab="review">查看审查</button></div><p><code>refund.js:2</code> 订单金额等于 100 元时应免收手续费。</p></div>';
+      if(key==='blocked')focus='<div class="focus-finding"><div class="row"><strong>需要项目配置</strong><button class="link" data-settings>查看团队设置</button></div><p>绑定工作区后，用同一任务号接续。</p></div>';
+      return '<div class="cols"><section><div class="card-head"><h3>工作项</h3><span class="small">'+phases[key].progress+'</span></div><p class="small" style="margin:-4px 0 13px">'+brief+'</p>'+steps+focus+'</section>'+people(key)+'</div>';
+    }
+    function paper(title,tag,tone,body,facts,detailLabel='查看执行详情'){
+      return '<section class="paper"><div class="row"><h4>'+esc(title)+'</h4>'+badge(tag,tone)+'</div><p>'+esc(body)+'</p>'+(facts?'<details><summary>'+esc(detailLabel)+'</summary>'+factList(facts)+'</details>':'')+'</section>';
+    }
+    function renderReview(key){
+      if(key==='simple')return '<h3>代码审查</h3>'+paper('本任务只要求程序检查','按策略跳过','','该普通任务的验收合同只包含 ESLint。可在验收证据中查看结果。');
+      if(key==='implement'||key==='blocked')return '<h3>代码审查</h3>'+paper('尚无模型审查结果','未运行','','独立 Reviewer 将在改动就绪后审查对应快照。当前没有可归属到本任务的审查作业。');
+      const done=key==='done';
+      const finding=paper('100 元整被收取了手续费',done?'历史 · 已解决':'待整改',done?'':'warn','refund.js:2 · 实际收取 2 元，验收要求为 0 元。修正条件后回归 99、100、101 元三个输入。',[['发现者','Codex 审查成员 · gpt-6.2-sol（身份已核实）'],['作业 / 快照','rvj_demo_01 / snap_demo_a1'],['接收者','Codex 开发成员 · dev_demo_02'],['归属任务',samples.refund.id],['时间','21:14 · 同一任务内已回传']],'查看意见来源与去向');
+      return '<h3>'+(done?'最新复查':'本轮意见')+'</h3>'+(done?paper('第二轮复查通过','已核实','good','Reviewer 在新快照上确认边界判断已修正。此前的意见保留在下方。',[['执行者','独立 Codex Reviewer · gpt-6.2-sol'],['作业 / 快照','rvj_demo_02 / snap_demo_b2'],['时间','21:27 · 当前有效']])+'<h3 style="margin-top:18px">历史意见</h3>':'')+finding;
+    }
+    function renderEvidence(key){
+      const simple=key==='simple',done=key==='done',lint=done||simple||key==='rework';
+      const snapshot=simple?'snap_demo_help':done?'snap_demo_b2':'snap_demo_a1';
+      let html='<div class="card-head"><h3>验收依据</h3><span class="small">'+phases[key].accept+' 项满足</span></div>';
+      html+=paper('修改范围通过静态检查',lint?'已满足':'待验证',lint?'good':'',lint?'ESLint 已检查本轮快照，退出码 0，解析完整，没有发现违规。':'工作项尚未提交到程序检查。',lint?[['工具 / 版本','ESLint · 9.39.4'],['命令摘要',simple?'eslint cli/help.js':'eslint refund.js'],['退出 / 完整性','0 / 完整'],['快照 / 验收版本',snapshot+' / 1'],['收据 / 时效',simple?'rcpt_demo_help · 当前有效':done?'rcpt_demo_b2 · 当前有效':'rcpt_demo_a1 · 当前有效']]:null,'查看程序收据');
+      if(!simple)html+=paper(key==='blocked'?'独立复核导出日期边界':'独立复核退款金额边界',done?'已满足':key==='rework'?'未通过':'待验证',done?'good':key==='rework'?'warn':'',done?'第二轮独立审查确认 100 元整免手续费。改动和证据属于同一快照。':key==='rework'?'第一轮 Reviewer 发现 100 元整仍多收费。此项需要整改后的新快照复查。':'需等待开发完成和独立 Reviewer 执行。',done||key==='rework'?[['实际模型','gpt-6.2-sol · 身份已核实'],['执行 / 作业',done?'rev_demo_02 / rvj_demo_02':'rev_demo_01 / rvj_demo_01'],['快照 / 验收版本',snapshot+' / 1'],['判定',done?'通过 · 当前有效':'发现问题 · 当前待整改']]:null,'查看模型收据');
+      if(done)html+=paper('上一轮快照的证据','历史 · 已失效','','第一轮静态检查通过，模型提出一条意见。当前交付只引用第二轮的新快照。',[['上轮快照','snap_demo_a1'],['程序 / 模型','rcpt_demo_a1 / rev_demo_01'],['替代快照','snap_demo_b2']],'查看上轮引用');
+      return html;
+    }
+    function renderDetail(){
+      const key=phaseKey(),p=phases[key],s=samples[state.selected];
+      const select=state.selected==='refund'?'<label class="demo-select">示例阶段<select id="phaseChoice" aria-label="切换示例阶段">'+[['implement','开发中'],['rework','整改中'],['done','已交付']].map(([v,n])=>'<option value="'+v+'" '+(state.phase===v?'selected':'')+'>'+n+'</option>').join('')+'</select></label>':'';
+      const tabs=[['plan','执行计划',''],['review','代码审查',key==='rework'?'1':''],['evidence','验收证据',p.accept]];
+      byId('detail').innerHTML='<div class="detail-top"><button class="link mobile-list" data-list>任务列表</button><div class="project-line"><span>'+esc(s.project)+' / '+(key==='simple'?'普通任务':'团队执行')+'</span>'+select+'</div><div class="titleline"><h2>'+esc(s.title)+'</h2>'+badge(p.label,p.tone)+'</div><div class="meta"><span class="mono">'+s.id+'</span><button data-resume>复制接续提示词</button></div><div class="action-banner '+p.tone+'"><span class="action-symbol" aria-hidden="true">'+p.symbol+'</span><div><strong>'+p.headline+'</strong><p>'+p.next+'</p></div></div></div><nav class="subnav" aria-label="任务详情">'+tabs.map(([v,n,c])=>'<button data-tab="'+v+'" '+(state.tab===v?'aria-current="page"':'')+'>'+n+(c?'<span class="count">'+c+'</span>':'')+'</button>').join('')+'</nav><div class="content">'+(state.tab==='plan'?renderPlan(key):state.tab==='review'?renderReview(key):renderEvidence(key))+'</div>';
+    }
+    function opt(values,selected){return values.map(v=>'<option '+(v===selected?'selected':'')+'>'+esc(v)+'</option>').join('')}
+    function renderSettings(){
+      const cfg=settings[state.project],blocked=state.project==='data';
+      const projects=Object.entries(settings).map(([id,project])=>
+        '<option value="'+id+'" '+(id===state.project?'selected':'')+'>'+esc(project.name)+'</option>').join('');
+      byId('settings').innerHTML='<section class="card"><h2>项目团队</h2>'+
+        '<label class="project-pick">项目<select id="projectPick">'+projects+'</select></label><div class="rule"></div>'+
+        '<label class="toggle"><input id="autoMode" type="checkbox" '+(cfg.enabled?'checked':'')+'>允许从对话发起团队自动执行</label>'+
+        '<label class="field">Leader · 拆解和分派<select id="leaderPick">'+opt(['GLM 规划成员','Codex 规划成员'],cfg.leader)+'</select></label>'+
+        '<label class="field">开发成员 · 在授权工作区写代码<select id="devPick">'+opt(['Codex 开发成员','Codex 维护成员'],cfg.developer)+'</select></label>'+
+        '<label class="toggle"><input id="regressionPick" type="checkbox" '+(cfg.regression?'checked':'')+'>允许 Leader 把复现和测试分派给 Codex 回归成员</label>'+
+        '<label class="field">Reviewer · 独立执行<select id="reviewPick">'+opt(['Codex 审查成员','Codex 复核成员'],cfg.reviewer)+'</select></label>'+
+        '<div class="actions"><span class="small">预览修改仅在本页有效，用于下次发起。</span><button id="save" class="btn primary">保存示例配置</button></div></section>'+
+      '<section class="card"><div class="card-head"><h2>接入诊断</h2>'+badge('示例')+'</div><p>项目配置与最近实跑分别显示。</p>'+
+      paper('Leader 的 Workbench 会话','有执行记录','good','最近一次规划实际使用 glm-5.3。',[['配置选择',cfg.leader],['已观察到的执行','plan_demo_01 · 20:58'],['来源','Workbench 会话结果']])+
+      paper('Codex 开发工作区',blocked?'缺少绑定':'已验证',blocked?'block':'good',blocked?'数据工具尚未绑定可写仓库。请在 Workbench 授权项目工作区后接续原任务。':'已在项目工作区观察到 Codex 的开发执行。',[['配置选择',cfg.developer],['实际记录',blocked?'无可归属的开发执行':'dev_demo_02 · 21:15']])+
+      paper('独立 Reviewer',blocked?'尚未实跑':'有审查收据',blocked?'':'good',blocked?'已选择成员，尚无本项目实跑收据。':'最近收据包含已核实的 gpt-6.2-sol 身份。',[['配置选择',cfg.reviewer],['实际记录',blocked?'无':'rev_demo_01 · 21:14']])+
+      paper('Codex 对话与程序工具','调用记录','','按各自来源查看客户端绑定、真实工具结果与事件采集状态。',[['pk-team / MCP',blocked?'收到 start · task_demo_export':'收到 review_result · task_demo_refund'],['最近程序收据',blocked?'尚无本项目收据':'ESLint 9.39.4 · 退出 0 · rcpt_demo_a1'],['Event Bridge',blocked?'未配置 · 无采集记录':'已采集原生会话事件 · 21:14']],'查看工具来源')+'</section>';
+    }
+    function render(){
+      const taskView=state.view==='tasks';
+      byId('board').hidden=!taskView;byId('settings').hidden=taskView;byId('start').hidden=!taskView;
+      byId('heading').textContent=taskView?'任务工作台':'团队设置';
+      byId('subtitle').textContent=taskView?'在 Codex 对话里发起，凭任务号查看分工和交付结果。':'按项目指定执行成员，并查看各自最近一次实际运行。';
+      ['navTasks','navSettings'].forEach((id,i)=>{if(taskView===(i===0))byId(id).setAttribute('aria-current','page');else byId(id).removeAttribute('aria-current')});
+      byId('board').dataset.list=state.list?'yes':'no';
+      if(taskView){renderList();renderDetail()}else renderSettings();
+    }
+    byId('navTasks').onclick=()=>{state.view='tasks';if(matchMedia('(max-width:740px)').matches)state.list=true;render()};
+    byId('navSettings').onclick=()=>{state.view='settings';state.project=samples[state.selected].config;render()};
+    byId('start').onclick=()=>openPrompt('start');byId('closeDialog').onclick=()=>byId('promptDialog').close();byId('copyPrompt').onclick=()=>copyValue(byId('promptText').value);
+    byId('search').addEventListener('input',renderList);
+    byId('taskList').addEventListener('click',e=>{const b=e.target.closest('[data-task]');if(!b)return;state.selected=b.dataset.task;state.tab='plan';state.list=false;render()});
+    byId('detail').addEventListener('click',e=>{
+      const b=e.target.closest('button');if(!b)return;
+      if(b.dataset.tab){state.tab=b.dataset.tab;renderDetail();byId('detail').querySelector('.subnav [aria-current="page"]').focus({preventScroll:true})}
+      else if(b.hasAttribute('data-resume'))copyValue(promptFor('resume'),'resume');
+      else if(b.hasAttribute('data-settings')){state.view='settings';state.project=samples[state.selected].config;render()}
+      else if(b.hasAttribute('data-list')){state.list=true;render();byId('search').focus()}
+    });
+    byId('detail').addEventListener('change',e=>{if(e.target.id==='phaseChoice'){state.phase=e.target.value;render();byId('phaseChoice').focus({preventScroll:true})}});
+    byId('settings').addEventListener('change',e=>{if(e.target.id==='projectPick'){state.project=e.target.value;renderSettings()}});
+    byId('settings').addEventListener('click',e=>{if(!e.target.closest('#save'))return;Object.assign(settings[state.project],{enabled:byId('autoMode').checked,leader:byId('leaderPick').value,developer:byId('devPick').value,regression:byId('regressionPick').checked,reviewer:byId('reviewPick').value});renderSettings();showToast('本页示例配置已保存')});
+    render();
+  </script>
+</body>
+</html>

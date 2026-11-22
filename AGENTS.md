@@ -7,3 +7,11 @@
 - Branch consolidation does not authorize publishing packages or changing release tags.
 
 The 2026-10-22 consolidation record is in `docs/repository-consolidation-20261022.md`.
+
+## Keep the user's knowledge base running
+
+- Development, testing, cleanup, and release verification must leave the user's everyday knowledge-base instance and its Workbench, Event Bridge, vector-hub, and knowledge-engine services running. Stopping, restarting, upgrading, or replacing that installation requires an explicit user request for that action; permission to develop, test, or publish is not permission to interrupt it.
+- Run test instances from a separate installation prefix with their own data, knowledge, module state, home/config directories, browser profile, and ports. Use synthetic fixtures; do not write test state into real project or knowledge data or attach test modules to the live services.
+- Test start/status/stop commands must explicitly select the test data directory. Never issue an unscoped `project-knowledge stop`, use the live instance's port to control it, or kill processes by a shared executable name such as `node.exe`.
+- Clean up only processes created by the current test whose ownership is verified. A port conflict is a reason to choose another test port or fail, never to stop its existing listener. Discover and protect the live instance's actual ports and process identities, including its modules, rather than relying only on default port numbers.
+- Do not install globally over the user's active installation during development or verification. Check the protected instance's health and process identities read-only before and after tests that exercise service lifecycles; if isolation cannot be established, leave it running and report the test as blocked.
