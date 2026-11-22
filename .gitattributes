@@ -1,7 +1,7 @@
 # Runtime manifests bind exact packaged bytes; Git must not rewrite newlines.
 # GitHub's Windows runners default to core.autocrlf=true, which would convert
 # these files to CRLF on checkout and break the sha256 content gate.
-/ui/** -text
+/resources/** -text
 /plugins/** -text
 # The QA delivery manifest also binds exact bytes across Windows and Linux.
 /qa-autopilot/** -text

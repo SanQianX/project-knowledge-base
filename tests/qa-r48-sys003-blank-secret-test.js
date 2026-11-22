@@ -117,7 +117,7 @@ async function main() {
     identity: {
       serverAppSha256: sha256(path.join(ROOT, 'src', 'server', 'server-app.js')),
       moduleBridgeSha256: sha256(path.join(ROOT, 'src', 'module_bridge', 'module-bridge.js')),
-      uiProductSha256: sha256(path.join(ROOT, 'ui', 'product.js')),
+      uiProductSha256: sha256(path.join(ROOT, 'resources', 'ui', 'product.js')),
     },
     responses: [], fakeTerminal: null,
   };

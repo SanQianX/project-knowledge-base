@@ -363,7 +363,7 @@ test('public API change blocks', () => assert.throws(() => g.validateChanges({},
 for (const version of ['1.2.3', 'latest', 'next', 'v1.2.3-rc.1', '1.2.3-rc.01', '1.2.3-beta.1'])
     test('reject nonfixed RC ' + version, () => assert.equal(r.isRC(version), false, 'QA-SPEC-REL-001 latest/next 之类不是固定 RC 版本，没有自动出口'));
 test('fixed RC accepts', () => assert.equal(r.isRC('5.0.25-rc.1'), true));
-const required = ['package.json', 'src/server.js', 'ui/index.html', 'ui/product.js', 'ui/live-client.js', 'module-runtime-manifest.json'];
+const required = ['package.json', 'src/server.js', 'resources/ui/index.html', 'resources/ui/product.js', 'resources/ui/live-client.js', 'module-runtime-manifest.json'];
 test('package runtime allowlist', () => assert.equal(r.validatePack(required), true));
 for (const f of ['qa-autopilot/plans/test.md', '.env', 'artifacts/trace.zip', 'credentials.json'])
     test('package leak ' + f, () => assert.throws(() => r.validatePack([...required, f]), { code: 'PACKAGE_LEAK' }, 'QA-SPEC-REL-003 制品清单包含 qa/state/.env 一类文件时拒绝打包'));

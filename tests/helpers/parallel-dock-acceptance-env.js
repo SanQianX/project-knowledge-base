@@ -275,7 +275,7 @@ async function createDockAcceptanceEnv({ tag = 'dock-acceptance' } = {}) {
     servedFiles: {
       'agent-terminal/app.js': { path: path.join(PKB_ROOT, 'node_modules', 'claude-ai-workbench', 'apps', 'agent-terminal', 'app.js') },
       'agent-terminal/right-workspace-dock.js': { path: path.join(PKB_ROOT, 'node_modules', 'claude-ai-workbench', 'apps', 'agent-terminal', 'right-workspace-dock.js') },
-      'ui/product.js': { path: path.join(PKB_ROOT, 'ui', 'product.js') },
+      'resources/ui/product.js': { path: path.join(PKB_ROOT, 'ui', 'product.js') },
     },
   });
 

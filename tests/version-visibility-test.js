@@ -60,7 +60,7 @@ async function main() {
 
     for (const asset of ['version-info.js', 'version-info.css']) {
       const served = Buffer.from(await (await fetch(`${server.base}/${asset}`)).arrayBuffer());
-      const disk = fs.readFileSync(path.join(REPO_ROOT, 'ui', asset));
+      const disk = fs.readFileSync(path.join(REPO_ROOT, 'resources', 'ui', asset));
       assert.strictEqual(sha256(served), sha256(disk), `served ${asset} must be byte-identical to ui/`);
     }
     const favicon = await fetch(`${server.base}/favicon.svg`);

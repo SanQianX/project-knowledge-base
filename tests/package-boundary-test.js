@@ -32,16 +32,16 @@ for (const candidate of forbidden) {
   assert(!files.some(file => candidate.endsWith('/') ? file.startsWith(candidate) : file === candidate), `local review artifact leaked into npm package: ${candidate}`);
 }
 assert(files.includes('docs/README.zh-CN.md'));
-assert(files.includes('ui/index.html'));
-assert(files.includes('ui/knowledge-panel.html'), 'K1 knowledge panel page must ship in the npm package');
+assert(files.includes('resources/ui/index.html'));
+assert(files.includes('resources/ui/knowledge-panel.html'), 'K1 knowledge panel page must ship in the npm package');
 
 // Every local asset referenced by the packaged HTML must be present in the
 // tarball. This is deliberately derived from index.html so adding a future
 // script, stylesheet, or icon cannot silently produce a broken npm install.
-const html = fs.readFileSync(path.join(root, 'ui', 'index.html'), 'utf8');
+const html = fs.readFileSync(path.join(root, 'resources', 'ui', 'index.html'), 'utf8');
 const referencedAssets = [...html.matchAll(/<(?:script|link)\b[^>]*(?:src|href)="(\/[^"?#]+)(?:[?#][^"]*)?"/gi)]
-  .map(match => `ui/${match[1].replace(/^\//, '')}`);
-assert(referencedAssets.length > 0, 'ui/index.html must reference packaged assets');
+  .map(match => `resources/ui/${match[1].replace(/^\//, '')}`);
+assert(referencedAssets.length > 0, 'resources/ui/index.html must reference packaged assets');
 for (const asset of referencedAssets) {
   assert(files.includes(asset), `HTML references an asset missing from the npm package: ${asset}`);
 }

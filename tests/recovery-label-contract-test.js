@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = require("./paths").ROOT;
-const app = fs.readFileSync(path.join(ROOT, 'ui', 'product.js'), 'utf8');
+const app = fs.readFileSync(path.join(ROOT, 'resources', 'ui', 'product.js'), 'utf8');
 
 const match = app.match(/const recoveryLabel = (run => \{[\s\S]*?\n  \});/);
 assert(match, 'product.js must still define recoveryLabel');

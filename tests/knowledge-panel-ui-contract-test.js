@@ -7,10 +7,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const root = require("./paths").ROOT;
-const html = fs.readFileSync(path.join(root, 'ui/index.html'), 'utf8');
-const script = fs.readFileSync(path.join(root, 'ui/product.js'), 'utf8');
-const css = fs.readFileSync(path.join(root, 'ui/product.css'), 'utf8');
-const panelPath = path.join(root, 'ui/knowledge-panel.html');
+const html = fs.readFileSync(path.join(root, 'resources/ui/index.html'), 'utf8');
+const script = fs.readFileSync(path.join(root, 'resources/ui/product.js'), 'utf8');
+const css = fs.readFileSync(path.join(root, 'resources/ui/product.css'), 'utf8');
+const panelPath = path.join(root, 'resources/ui/knowledge-panel.html');
 const panelHtml = fs.readFileSync(panelPath, 'utf8');
 
 /* ===================== panel page source contract ===================== */

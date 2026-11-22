@@ -305,6 +305,9 @@ operation ID without a stack. There is no raw-file route.
 
 ## Repository layout
 
+Domain boundaries, top-level exceptions (plugins/desktop/qa-autopilot) and the
+2026-11 migration record are documented in [docs/repository-layout.md](docs/repository-layout.md).
+
 ```text
 src/server.js                       # thin executable entry
 src/server/server-app.js            # HTTP/runtime composition
@@ -317,8 +320,8 @@ src/knowledge/index-service.js
 src/common/structured-logger.js
 src/tools/knowledge-tool-runtime.js
 src/scripts/hook-trigger.js
-ui/index.html                         # unified production web UI
-ui/product.js, ui/product.css          # shell navigation and state projection
+resources/ui/index.html                # unified production web UI
+resources/ui/product.js, product.css   # shell navigation and state projection
 node_modules/@sanqianx/ai-coding-knowledge-engine/ # pinned npm runtime (not tracked)
 bin/project-knowledge*.js             # CLI and MCP entry points
 desktop/                              # Windows Electron package

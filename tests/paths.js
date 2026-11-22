@@ -14,8 +14,8 @@ module.exports = {
   DOMAIN: domain => path.join(ROOT, 'src', domain),
   SERVER_ENTRY: path.join(ROOT, 'src', 'server', 'server-app.js'),
   SCRIPTS: path.join(ROOT, 'src', 'scripts'),
-  // 浏览器静态资产（Phase 4 起为 resources/ui）。/ Served static assets.
-  UI: path.join(ROOT, 'ui'),
+  // 浏览器静态资产。/ Served static assets.
+  UI: path.join(ROOT, 'resources', 'ui'),
   BIN: path.join(ROOT, 'bin'),
   PLUGINS: path.join(ROOT, 'plugins'),
   FIXTURES: path.join(__dirname, 'fixtures'),

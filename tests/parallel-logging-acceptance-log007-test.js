@@ -175,7 +175,7 @@ async function main() {
     const readmeLines = fs.readFileSync(readmePath, 'utf8').split('\n');
     const claimLines = readmeLines.slice(170, 181).map((text, offset) => ({ line: offset + 171, text: text.trim() })).filter(entry => entry.text);
     const loggerSource = fs.readFileSync(path.join(ROOT, 'src', 'common', 'structured-logger.js'), 'utf8');
-    const productSourceHash = sha256(path.join(ROOT, 'ui', 'product.js'));
+    const productSourceHash = sha256(path.join(ROOT, 'resources', 'ui', 'product.js'));
     evidence.phases.readmeVsReality = {
       readmeSha256: readmeHash,
       uiProductSha256: productSourceHash,

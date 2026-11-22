@@ -3,8 +3,8 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = require("./paths").ROOT;
-const html = fs.readFileSync(path.join(ROOT, 'ui', 'index.html'), 'utf8');
-const app = fs.readFileSync(path.join(ROOT, 'ui', 'product.js'), 'utf8');
+const html = fs.readFileSync(path.join(ROOT, 'resources', 'ui', 'index.html'), 'utf8');
+const app = fs.readFileSync(path.join(ROOT, 'resources', 'ui', 'product.js'), 'utf8');
 const server = fs.readFileSync(path.join(ROOT, 'src', 'server', 'server-app.js'), 'utf8');
 
 assert.strictEqual((html.match(/class="app"/g) || []).length, 1, 'production UI must have one full product shell');

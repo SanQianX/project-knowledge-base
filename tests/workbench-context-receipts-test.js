@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const source = fs.readFileSync(path.join(__dirname, '../ui/product.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../resources/ui/product.js'), 'utf8');
 const code = source.slice(source.indexOf('  function frameContext('), source.indexOf('  function setView('));
 const messages = [], frame = { ready: false }, state = { epoch: 1, scope: 'project' };
 const project = { projectId: 'a', workspacePath: '/workspace', modules: { terminal: { projectId: 'context-a' } } };

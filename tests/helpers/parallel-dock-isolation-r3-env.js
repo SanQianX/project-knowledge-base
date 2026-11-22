@@ -275,7 +275,7 @@ async function createDockIsolationEnv({ tag = 'dock-isolation-r3', handoff } = {
       'agent-terminal/right-dock-panel-registry.js': { path: path.join(MODULE_APP_ROOT, 'right-dock-panel-registry.js') },
       'agent-terminal/panel-host-proof.html': { path: path.join(MODULE_APP_ROOT, 'panel-host-proof.html') },
       'agent-terminal/panel-proof-content.html': { path: path.join(MODULE_APP_ROOT, 'panel-proof-content.html') },
-      'ui/product.js': { path: path.join(PKB_ROOT, 'ui', 'product.js') },
+      'resources/ui/product.js': { path: path.join(PKB_ROOT, 'resources', 'ui', 'product.js') },
     },
   });
 

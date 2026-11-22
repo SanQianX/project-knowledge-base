@@ -53,5 +53,5 @@ export default [
     files: TEST_DIRS.map(p => p),
     rules: { 'no-await-in-loop': 'off', 'max-lines-per-function': ['warn', { max: 400, skipBlankLines: true, skipComments: true }] },
   },
-  { files: ['ui/**/*.js'], languageOptions: { sourceType: 'script', ecmaVersion: 2024, globals: { window: 'readonly', document: 'readonly', localStorage: 'readonly', navigator: 'readonly', fetch: 'readonly', EventSource: 'readonly', location: 'readonly', history: 'readonly', HTMLElement: 'readonly', dialog: 'readonly' } } },
+  { files: ['resources/ui/**/*.js'], languageOptions: { sourceType: 'script', ecmaVersion: 2024, globals: { window: 'readonly', document: 'readonly', localStorage: 'readonly', navigator: 'readonly', fetch: 'readonly', EventSource: 'readonly', location: 'readonly', history: 'readonly', HTMLElement: 'readonly', dialog: 'readonly' } } },
 ];

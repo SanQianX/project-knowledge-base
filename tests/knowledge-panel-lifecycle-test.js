@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const source = fs.readFileSync(path.join(__dirname, '../ui/product.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../resources/ui/product.js'), 'utf8');
 const lifecycle = source.slice(source.indexOf('  function knowledgePanelFailed('), source.indexOf('  function panelRequest('))
   + source.slice(source.indexOf('  async function resetKnowledgePanel('), source.indexOf('  function setView('));
 const settle = async () => { for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve)); };

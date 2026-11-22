@@ -31,7 +31,7 @@ function installedFileBytes(pkg, relative, bytes) {
 }
 function productFiles(directory) {
   const previous = JSON.parse(fs.readFileSync(path.join(directory, 'module-runtime-manifest.json'), 'utf8'));
-  const files = new Set(['ui/index.html', 'ui/knowledge-panel.html', 'ui/product.js', 'ui/live-client.js', 'ui/product.css', 'ui/favicon.svg', ...Object.keys(previous.productFiles || {})]);
+  const files = new Set(['resources/ui/index.html', 'resources/ui/knowledge-panel.html', 'resources/ui/product.js', 'resources/ui/live-client.js', 'resources/ui/product.css', 'resources/ui/favicon.svg', ...Object.keys(previous.productFiles || {})]);
   return Object.fromEntries([...files].map(file => {
     if (!safeRelative(file)) throw new Error('Unsafe product asset path');
     const target = path.join(directory, file);

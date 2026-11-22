@@ -219,7 +219,7 @@ async function stopRootServer(server) {
 // version GET — the tooltip must then say 版本未知 instead of inventing one.
 async function startVersionBrokenUiServer(layout, options = {}) {
   const port = options.port || await freePort();
-  const uiRoot = path.join(REPO_ROOT, 'ui');
+  const uiRoot = path.join(REPO_ROOT, 'resources', 'ui');
   const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml' };
   const http = require('node:http');
   const server = http.createServer((req, res) => {

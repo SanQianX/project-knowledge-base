@@ -69,8 +69,8 @@ function buildAndInstallPackage() {
   let engineProxy;
   try {
     const packagedRoot = buildAndInstallPackage();
-    for (const file of ['index.html', 'knowledge-panel.html', 'product.js', 'product.css']) assert(fs.existsSync(path.join(packagedRoot, 'ui', file)), `packed UI must include ${file}`);
-    for (const file of ['app.js', 'app.css', 'i18n.js']) assert(!fs.existsSync(path.join(packagedRoot, 'ui', file)), `obsolete shell resource must not be shipped: ${file}`);
+    for (const file of ['index.html', 'knowledge-panel.html', 'product.js', 'product.css']) assert(fs.existsSync(path.join(packagedRoot, 'resources', 'ui', file)), `packed UI must include ${file}`);
+    for (const file of ['app.js', 'app.css', 'i18n.js']) assert(!fs.existsSync(path.join(packagedRoot, 'resources', 'ui', file)), `obsolete shell resource must not be shipped: ${file}`);
 
     // The five-page home renders its empty-project state only after the
     // engine overview answered, so the packaged instance gets the real

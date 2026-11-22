@@ -3,7 +3,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 const {productFiles}=require('../src/scripts/pack-module-candidates');
 const root=fs.mkdtempSync(path.join(os.tmpdir(),'kb-candidate-assets-'));
 try{
-  const files=['ui/index.html','ui/knowledge-panel.html','ui/product.js','ui/live-client.js','ui/product.css','ui/favicon.svg','plugins/project-knowledge/scripts/context-hook.cjs'];
+  const files=['resources/ui/index.html','resources/ui/knowledge-panel.html','resources/ui/product.js','resources/ui/live-client.js','resources/ui/product.css','resources/ui/favicon.svg','plugins/project-knowledge/scripts/context-hook.cjs'];
   for(const file of files){fs.mkdirSync(path.dirname(path.join(root,file)),{recursive:true});fs.writeFileSync(path.join(root,file),file+' changed');}
   fs.writeFileSync(path.join(root,'module-runtime-manifest.json'),JSON.stringify({productFiles:{[files.at(-1)]:'old-hash'}}));
   const result=productFiles(root);

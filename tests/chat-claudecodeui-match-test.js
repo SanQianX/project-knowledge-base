@@ -81,8 +81,8 @@ const runner = require('../src/integrations/claude-cli-runner');
     const server = fs.readFileSync(path.join(ROOT, 'src', 'server', 'server-app.js'), 'utf8');
     assert(server.includes('body.permissionMode'));
 
-    const html = fs.readFileSync(path.join(ROOT, 'ui', 'index.html'), 'utf8');
-    const app = fs.readFileSync(path.join(ROOT, 'ui', 'product.js'), 'utf8');
+    const html = fs.readFileSync(path.join(ROOT, 'resources', 'ui', 'index.html'), 'utf8');
+    const app = fs.readFileSync(path.join(ROOT, 'resources', 'ui', 'product.js'), 'utf8');
     // T2: 内嵌终端取代旧 workbench 聊天面板 —— 壳经 kb:* 协议与会话/事件交互。
     // work 不再是导航页，但 workbench 帧保留为隐藏服务挂载。
     assert(html.includes('id="view-work"') && html.includes('id="workFrame"'));

@@ -3,9 +3,9 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = require("./paths").ROOT;
-const ui = fs.readFileSync(path.join(ROOT, 'ui', 'index.html'), 'utf8');
-const app = fs.readFileSync(path.join(ROOT, 'ui', 'product.js'), 'utf8');
-const css = fs.readFileSync(path.join(ROOT, 'ui', 'product.css'), 'utf8');
+const ui = fs.readFileSync(path.join(ROOT, 'resources', 'ui', 'index.html'), 'utf8');
+const app = fs.readFileSync(path.join(ROOT, 'resources', 'ui', 'product.js'), 'utf8');
+const css = fs.readFileSync(path.join(ROOT, 'resources', 'ui', 'product.css'), 'utf8');
 const preload = fs.readFileSync(path.join(ROOT, 'desktop', 'preload.cjs'), 'utf8');
 const main = fs.readFileSync(path.join(ROOT, 'desktop', 'main.cjs'), 'utf8');
 const runtime = require(path.join(ROOT, 'desktop', 'lib', 'backend-runtime.cjs'));

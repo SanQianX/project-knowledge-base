@@ -47,7 +47,7 @@ const {
 } = require('../common/contracts');
 
 const DEFAULT_PORT = 5757;
-const UI_ROOT = path.resolve(__dirname, '..', '..', 'ui');
+const UI_ROOT = path.resolve(__dirname, '..', '..', 'resources', 'ui');
 const TRIGGER_SCRIPT_PATH = path.resolve(__dirname, '..', 'scripts', 'hook-trigger.js');
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
 const CONTENT_TYPES = Object.freeze({

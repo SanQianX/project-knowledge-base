@@ -157,7 +157,7 @@ async function sectionA() {
     if (target.includes('/api/engine/snapshot')) return jsonOk({ projects: [], runs: [], events: [], memories: [] });
     return jsonOk({ ok: true });
   };
-  const currentSource = fs.readFileSync(path.join(ROOT, 'ui', 'product.js'), 'utf8');
+  const currentSource = fs.readFileSync(path.join(ROOT, 'resources', 'ui', 'product.js'), 'utf8');
   const readCurrent = await runScenario(currentSource, hungFetch);
   console.log('  current systemTitle after 2.5s with a hanging projects read: ' + JSON.stringify(readCurrent('systemTitle')));
   await gate('A', 'A2 current: health region renders while the projects read hangs', async () => {

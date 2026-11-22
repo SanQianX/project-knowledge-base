@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const ui = path.resolve(__dirname, '../ui');
+const ui = path.resolve(__dirname, '../resources/ui');
 const html = fs.readFileSync(path.join(ui, 'index.html'), 'utf8');
 const css = fs.readFileSync(path.join(ui, 'product.css'), 'utf8');
 const mark = fs.readFileSync(path.join(ui, 'favicon.svg'), 'utf8');

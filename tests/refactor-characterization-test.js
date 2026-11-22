@@ -10,7 +10,7 @@ const automation = read('src/automation/post-commit-automation.js');
 const reconciler = read('src/automation/commit-reconciler.js');
 const contracts = read('src/common/contracts.js');
 const logger = read('src/common/structured-logger.js');
-const ui = read('ui/index.html');
+const ui = read('resources/ui/index.html');
 
 // 入口薄壳断言跟随域布局：server 域承接 server-app。/ The thin-entry
 // assertion follows the domain layout: the server domain hosts server-app.

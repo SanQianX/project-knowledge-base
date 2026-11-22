@@ -27,9 +27,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const root = require("./paths").ROOT;
-const html = fs.readFileSync(path.join(root, 'ui/index.html'), 'utf8');
-const script = fs.readFileSync(path.join(root, 'ui/product.js'), 'utf8');
-const css = fs.readFileSync(path.join(root, 'ui/product.css'), 'utf8');
+const html = fs.readFileSync(path.join(root, 'resources/ui/index.html'), 'utf8');
+const script = fs.readFileSync(path.join(root, 'resources/ui/product.js'), 'utf8');
+const css = fs.readFileSync(path.join(root, 'resources/ui/product.css'), 'utf8');
 // Six-page navigation contract (2026-11 adds AI 团队): exactly one nav button
 // per primary view, in the fixed order home/team/memory/projects/search/
 // activity. The original purpose survives: diagnostics and module consoles

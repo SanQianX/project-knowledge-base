@@ -1,12 +1,12 @@
 {
   "schema": "project-knowledge/module-content/v1",
   "productFiles": {
-    "ui/index.html": "55cbc1c20b5f88c7c21b50bc1b68d52ce3c94280f001567513e304d33c6933e1",
-    "ui/knowledge-panel.html": "dfd85f15759472252d797853263e9da0054b251c56bb9ccdc8a75e6301334ca8",
-    "ui/product.js": "9cce79f47830318a69f14dab742e205b9c330638384cea778097e6da2ad2d8db",
-    "ui/live-client.js": "0d81fa894c629bb839e1931fc3c5ebad4d831aae8232d6ce8c0f542e9e3559e8",
-    "ui/product.css": "d1503958137a30368de24d7d03d662ccd0a15e15a45966cde4cd1bc19f991b06",
-    "ui/favicon.svg": "c48be946b224112ebb0238b44263f7a61bda31e531afa895c2e9801c0ff24f32",
+    "resources/ui/index.html": "55cbc1c20b5f88c7c21b50bc1b68d52ce3c94280f001567513e304d33c6933e1",
+    "resources/ui/knowledge-panel.html": "dfd85f15759472252d797853263e9da0054b251c56bb9ccdc8a75e6301334ca8",
+    "resources/ui/product.js": "9cce79f47830318a69f14dab742e205b9c330638384cea778097e6da2ad2d8db",
+    "resources/ui/live-client.js": "0d81fa894c629bb839e1931fc3c5ebad4d831aae8232d6ce8c0f542e9e3559e8",
+    "resources/ui/product.css": "d1503958137a30368de24d7d03d662ccd0a15e15a45966cde4cd1bc19f991b06",
+    "resources/ui/favicon.svg": "c48be946b224112ebb0238b44263f7a61bda31e531afa895c2e9801c0ff24f32",
     "plugins/project-knowledge/hooks/claude.json": "d61510327e3e1facbb4c645228e9f50cad05a88b33d80c4c22e5ba9f8b9f5359",
     "plugins/project-knowledge/hooks/codex.json": "216e03c07295606ef6ebb2c4f669ad0d790b5e7c4f3f34600488033db75e4239",
     "plugins/project-knowledge/scripts/context-hook.cjs": "90d3fd7dcf965a17fdb1f6a88b80da25b943b06bd5030a8eb2fbc2ea39b174fa",
@@ -14,8 +14,8 @@
     "plugins/project-knowledge/.claude-plugin/plugin.json": "64deb28eee920a823fe32400508769715345ae21af4eaf0a7e140ebd1247819b",
     "plugins/project-knowledge/.codex-plugin/plugin.json": "b93f77efce00a3e8ed6a0dc958dd94dce6409c9e02f76a8d2e148ad310a96ae2",
     "plugins/project-knowledge/.mcp.json": "335f074aec8aeed95b294d98640152091f56075b98f2faa369cffa176933a1af",
-    "ui/version-info.js": "01a82217b031de54b80d6c7974da9c70888c4c90a046bd4248a808f7989ddce7",
-    "ui/version-info.css": "209fad8e42b661f72d2aba3280e1ca47768b5cefb776fe5459538d34fbad120f"
+    "resources/ui/version-info.js": "01a82217b031de54b80d6c7974da9c70888c4c90a046bd4248a808f7989ddce7",
+    "resources/ui/version-info.css": "209fad8e42b661f72d2aba3280e1ca47768b5cefb776fe5459538d34fbad120f"
   },
   "modules": {
     "terminal": {
