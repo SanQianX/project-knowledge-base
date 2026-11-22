@@ -43,9 +43,7 @@
 //     N 随引擎版本由 2000 变为 8000（MEMORY_TEXT_LIMIT），断言语义不变。
 //   * 旧 UI 的默认作用域=当前项目；新表单默认=组合记忆。MEM-001 的「项目
 //     作用域存储」语义保持：在表单里显式选择 适用范围=项目 +
-//     适用目标=当前项目（#memoryForm select[name="scopeType"] 与
-//     [data-role="scope-target"] select[name="scopeTarget"]），存储的
-//     scopeType/scopeId 另用 engineApi GET /api/memories 复核。
+//     选择已应用到当前项目的组合，存储结果透过引擎 API 复核。
 //   * 「导入项目已列出」等待：旧首页项目面板（homeContent 含项目名）已删除，
 //     等价为顶栏 #projectSelect 选项里出现项目名（同一 registry projection）。
 //   * 其余引擎断言（POST 200、confirmed/manual/evidence null、磁盘记忆文件
@@ -90,6 +88,7 @@ async function main() {
     const { projectId } = await harness.importProject(repo, '记忆甲');
 
     // The shell has to know the project before it can bind a project scope.
+    const group = await harness.addGroup('记忆甲约定', [projectId]);
     await harness.requestRegistryRefresh();
     // The new home page no longer lists projects; the registry projection is
     // surfaced by the topbar project selector instead.
@@ -164,11 +163,11 @@ async function main() {
     assert.equal(postsAfter, postsBefore, 'the shell must not send a request for a blank body');
 
     // The backend refuses the same blank body on its own.
-    const backendBlank = await harness.productApi('POST', '/api/engine/memories', { text: '   ', scopeType: 'global', scopeId: 'brain-default', brainId: 'brain-default' });
+    const backendBlank = await harness.productApi('POST', '/api/engine/memories', { text: '   ', brainId: 'brain-default' });
     assert.equal(backendBlank.status, 400, `the engine refuses a blank body: ${JSON.stringify(backendBlank.body)}`);
     assert.equal(backendBlank.body.error, 'INVALID_ARGUMENT', 'the engine reports an invalid argument');
     assert.match(String(backendBlank.body.message), /记忆内容必须为 1–8000 个字符。/, 'the engine names the length rule (MEMORY_TEXT_LIMIT is 8000 in the current engine)');
-    const backendBlankEngine = await harness.engineApi('POST', '/api/memories', { text: '   ', scopeType: 'global', scopeId: 'brain-default', brainId: 'brain-default' });
+    const backendBlankEngine = await harness.engineApi('POST', '/api/memories', { text: '   ', brainId: 'brain-default' });
     assert.equal(backendBlankEngine.status, 400, `the engine behind the proxy refuses it too: ${JSON.stringify(backendBlankEngine.body)}`);
 
     const afterBlank = await harness.productMemories();
@@ -195,18 +194,8 @@ async function main() {
     const body = await harness.run("document.getElementById('memoryForm').elements.text.value");
     assert.equal(body, MEMORY_TEXT, 'the real body reached the textarea');
 
-    // The old UI defaulted a manual add to the active project's scope; the new
-    // form defaults to a group memory, so the project-scope semantics are
-    // chosen explicitly through the real selects.
-    await harness.selectOption('#memoryForm select[name="scopeType"]', 'project');
-    await harness.waitFor(
-      () => harness.run("document.querySelector('#memoryForm [data-role=\"scope-target\"]').hidden === false"),
-      'the project scope target select is shown',
-      10000,
-    );
-    const targetOptions = await harness.run("Array.from(document.querySelector('#memoryForm [data-role=\"scope-target\"] select[name=\"scopeTarget\"]').options).map(o => o.value)");
-    assert.ok(targetOptions.includes(projectId), `the project scope offers ${projectId}: ${JSON.stringify(targetOptions)}`);
-    await harness.selectOption('#memoryForm [data-role="scope-target"] select[name="scopeTarget"]', projectId);
+    assert.equal(await harness.run("document.querySelector('#memoryForm select[name=scopeType]')"), null);
+    await harness.selectOption('#memoryForm select[name="groupId"]', group.id);
 
     const postsBeforeSave = harness.network.find(entry => entry.method === 'POST' && entry.url.includes('/api/engine/memories')).length;
     await harness.nativeClick('#appDialogActions button.primary');
@@ -227,15 +216,15 @@ async function main() {
     assert.equal(created.evidence, null, 'a manual memory invents no evidence');
     assert.equal(created.text, MEMORY_TEXT, 'the saved text is the text that was typed');
     assert.equal(created.title, MEMORY_TITLE, 'the saved title is the title that was typed');
-    assert.equal(created.scopeType, 'project', 'the chosen scope of the manual memory is the project');
-    assert.equal(created.scopeId, projectId, 'the scope target is the active project');
+    assert.equal(created.scopeType, 'group');
+    assert.deepEqual(created.groups.map(item => item.id), [group.id]);
     assert.ok(created.id, 'the memory has an id');
 
     // The engine's own record confirms the stored scope pair.
     const engineRecord = (await harness.engineApi('GET', '/api/memories')).body.memories.find(memory => memory.id === created.id);
     assert.ok(engineRecord, 'the engine really stored the memory');
-    assert.equal(engineRecord.scopeType, 'project', 'the engine stores the project scope type');
-    assert.equal(engineRecord.scopeId, projectId, 'the engine stores the active project as the scope target');
+    assert.equal(engineRecord.scopeType, 'group');
+    assert.deepEqual(engineRecord.groups.map(item => item.id), [group.id]);
     assert.equal(engineRecord.status, 'confirmed', 'the engine stores the memory as confirmed');
 
     // The memory is listed in the real UI (the 记忆库 tab lists confirmed
@@ -249,7 +238,7 @@ async function main() {
 
     // The memory file really holds the memory.
     const brainScope = harness.brainScopePath();
-    const memoryFile = path.join(brainScope, 'memories', 'projects', `${projectId}.md`);
+    const memoryFile = path.join(brainScope, 'memories', 'groups', `${group.id}.md`);
     assert.ok(fs.existsSync(memoryFile), `the memory file exists: ${memoryFile}`);
     const fileText = fs.readFileSync(memoryFile, 'utf8');
     assert.ok(fileText.includes(created.id), 'the memory file names the memory');
@@ -274,8 +263,8 @@ async function main() {
     assert.ok(kept, 'the memory survives the reload');
     assert.equal(kept.status, 'confirmed', 'the memory is still confirmed after the reload');
     assert.equal(kept.text, MEMORY_TEXT, 'the memory text survives the reload');
-    assert.equal(kept.scopeType, 'project', 'the scope survives the reload');
-    assert.equal(kept.scopeId, projectId, 'the scope target survives the reload');
+    assert.equal(kept.scopeType, 'group');
+    assert.deepEqual(kept.groups.map(item => item.id), [group.id]);
     assert.equal(kept.syncStatus, 'ready', 'the memory file is in sync');
 
     evidence.push({
@@ -294,7 +283,7 @@ async function main() {
       fs.writeFileSync(path.join(harness.evidence, 'mem001-manual.json'), `${JSON.stringify(evidence, null, 2)}\n`, 'utf8');
     }
 
-    console.log(`parallel-memory-manual-test PASS (MEM-001 confirmed with an explicit project scope + survives a real reload; MEM-002 refused by native required and by the shell without a request, and by the engine with 400)`);
+    console.log(`parallel-memory-manual-test PASS (MEM-001 confirmed with a project-bound combination + survives a real reload; MEM-002 refused by native required and by the shell without a request, and by the engine with 400)`);
   } finally {
     await harness.cleanup();
   }

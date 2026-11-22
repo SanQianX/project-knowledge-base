@@ -168,8 +168,8 @@ async function main() {
 
     // 1. Two real candidates through the real pipeline: A will be ignored,
     //    B stays candidate and is the healthy-page contrast.
-    const producedA = await harness.produceCandidate({ repo, projectId, text: TEXT_A, scopeType: 'global', file: 'src/r4-candidate-a.js' });
-    const producedB = await harness.produceCandidate({ repo, projectId, text: TEXT_B, scopeType: 'global', file: 'src/r4-candidate-b.js' });
+    const producedA = await harness.produceCandidate({ repo, projectId, text: TEXT_A, file: 'src/r4-candidate-a.js' });
+    const producedB = await harness.produceCandidate({ repo, projectId, text: TEXT_B, file: 'src/r4-candidate-b.js' });
     assert.equal(producedA.capture.accepted, 1, `run A admitted one candidate: ${JSON.stringify(producedA.capture)}`);
     assert.equal(producedB.capture.accepted, 1, `run B admitted one candidate: ${JSON.stringify(producedB.capture)}`);
     const memories = await harness.productMemories();

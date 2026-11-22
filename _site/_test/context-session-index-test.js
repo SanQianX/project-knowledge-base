@@ -159,8 +159,8 @@ async function main() {
     fs.writeFileSync(path.join(knowledgeC, 'modules', 'rpc.md'), '# RpcTransportSDK lane 轮转规则\n\n恢复导出配置的九步流程与并发调度。KB-INDEX-SECRET-D\n');
     fs.writeFileSync(path.join(knowledgeC, 'changes', 'extrapolation.md'), '# 外推算法九步流程\n\n外推算法按九步执行并记录证据。KB-INDEX-SECRET-E\n');
 
-    // 1. The first turn injects the index once: statement block, no body text.
-    const first = await context('开始设计记忆系统的注入机制', 'sess-main');
+    // 问候只需首轮索引。 / A greeting needs only the opening index.
+    const first = await context('你好', 'sess-main');
     assert.equal(first.status, 'ready'); assert.equal(first.injectionKind, 'index');
     assert.equal(first.rankingVersion, 'project-knowledge/ranking-v3');
     assert.ok(first.facts.some(item => item.entryId === 'modules/context.md' && item.role === '本项目事实'), 'the index lists the memory-system module');
@@ -170,7 +170,7 @@ async function main() {
     assert.ok(first.prompt.length <= 3000, `index stays compact, got ${first.prompt.length}`);
     assert.ok(first.sessionIndexedCount >= 2, 'the session registry counts its titles');
     for (const secret of ['KB-INDEX-SECRET-A', 'KB-INDEX-SECRET-B', 'KB-INDEX-SECRET-C', 'KB-INDEX-SECRET-D', 'KB-INDEX-SECRET-E']) {
-      assert.ok(!first.prompt.includes(secret), 'no knowledge body ever enters the injection layer');
+      assert.ok(!first.prompt.includes(secret), 'a greeting does not recall excerpts');
     }
 
     // 2. A later turn without changes or strong matches is fully silent. With
@@ -189,20 +189,30 @@ async function main() {
     const decoyTurn = await context(decoyQuery, 'sess-main');
     assert.equal(decoyTurn.prompt, '', 'a boundary-bigram collision never becomes a breadcrumb');
 
-    // 4. A real word match earns a one-line breadcrumb, then cools down.
+    // 强命中只显示一次，兼容已发布的标题提示。 / A strong hit is sent once, including on released title-only engines.
     const strongQuery = '记忆注入机制是怎么设计的';
     const crumb = await context(strongQuery, 'sess-main');
-    assert.equal(crumb.injectionKind, 'breadcrumb');
-    assert.ok(crumb.facts.some(item => item.entryId === 'modules/context.md'), 'the breadcrumb points at the matching entry');
+    assert.ok(['evidence', 'breadcrumb'].includes(crumb.injectionKind));
+    assert.ok(crumb.facts.some(item => item.entryId === 'modules/context.md'), 'the response points at the matching entry');
     assert.ok(!crumb.facts.some(item => String(item.entryId).includes('rpc') || String(item.entryId).includes('extrapolation')), 'the decoys never appear');
-    assert.ok(crumb.prompt.includes('modules/context.md')); assert.ok(!crumb.prompt.includes('KB-INDEX-SECRET-B'));
+    assert.ok(crumb.prompt.includes('modules/context.md'));
+    const hasEvidence = crumb.injectionKind === 'evidence';
+    assert.equal(crumb.prompt.includes('KB-INDEX-SECRET-B'), hasEvidence);
+    if (hasEvidence) {
+      const firstTask = await context(strongQuery, 'sess-first-task');
+      assert.equal(firstTask.injectionKind, 'index');
+      assert.ok(firstTask.facts.some(item => item.entryId === 'modules/context.md' && item.text?.includes('KB-INDEX-SECRET-B')));
+    }
     assert.ok(!crumb.prompt.includes('当前生效的已确认记忆只来自'), 'deltas never repeat the statement block');
     assert.equal((await context(strongQuery, 'sess-main')).prompt, '', 'the same entry is on cooldown');
 
     // 5. A memory added mid-session is re-sent in full exactly once.
     const brainScope = (await engineApi('GET', '/api/snapshot?summary=1&limit=1')).body.sharedScopes.find(scope => scope.kind === 'brain');
     assert.ok(brainScope, 'the brain scope exists');
-    const created = await engineApi('POST', '/api/memories', { text: '本仓库必须保持中文提交信息', scopeType: 'project', scopeId: projectA, brainId: brainScope.brainId });
+    const group = (await engineApi('POST', '/api/memory-groups', { name: '提交约定' })).body.group;
+    assert.ok(group);
+    assert.equal((await engineApi('POST', `/api/memory-groups/${group.id}/project-bindings`, { addProjectIds: [projectA] })).status, 200);
+    const created = await engineApi('POST', '/api/memories', { text: '本仓库必须保持中文提交信息', groupId: group.id, brainId: brainScope.brainId });
     assert.equal(created.status, 200, JSON.stringify(created.body));
     const memoryId = created.body.memory.id;
     const memoryTurn = await context('继续做别的', 'sess-main');
@@ -227,7 +237,7 @@ async function main() {
       const result = await context(query, 'sess-30');
       cumulative += (result.prompt || '').length;
       assert.ok((result.prompt || '').length <= 8000, 'the hard contract never breaks');
-      assert.ok(!(result.prompt || '').includes('KB-INDEX-SECRET-'), 'no turn ever leaks a body');
+      assert.doesNotMatch(result.prompt || '', /KB-INDEX-SECRET-[DE]/, 'unrelated entries stay outside the prompt');
     }
     assert.ok(cumulative <= 10240, `30 turns inject at most 10KB in total, got ${cumulative}`);
 

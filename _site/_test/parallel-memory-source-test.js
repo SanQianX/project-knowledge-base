@@ -11,7 +11,7 @@
 //     问题，断言仍是「视图真正激活」）。
 //   * 候选箱 tab：[data-memory-tab="candidate"] 选择器不变；tab 栏由
 //     #memoryContent 动态渲染且仅引擎可达时出现，先等 tab 渲染再点击。
-//   * 候选箱空态文案仍含「候选箱为空。」断言不变。
+//   * 候选箱空态文案为「这个范围内没有待确认的记忆。」。
 //   * 首页边界文案：「没有待确认记忆。」→「没有待确认的记忆。」（新 UI
 //     措辞微调），语义（智脑不会自动把项目行为当作偏好）不变。
 //   * 冻结来源：本例四个候选全部被引擎来源门拒绝，没有可审核对象，UI 侧
@@ -89,7 +89,7 @@ async function main() {
       document: `# 冻结证据\n\n${DELEGATED_TEXT}\n`,
       inputOrigin: 'agent-delegation',
       eventContent: `委派任务：${DELEGATED_TEXT}`,
-      candidate: event => harness.memoryCandidate({ text: DELEGATED_TEXT, event, scopeType: 'global' }),
+      candidate: event => harness.memoryCandidate({ text: DELEGATED_TEXT, event }),
     });
     assert.equal(delegated.capture.accepted, 0, 'a delegated task order is not admitted');
     assert.deepEqual(delegated.capture.rejected.map(entry => entry.code), ['SOURCE_NOT_HUMAN'], 'the gate names the non-human source');
@@ -101,7 +101,7 @@ async function main() {
       document: `# 冻结证据\n\n${UNKNOWN_TEXT}\n`,
       inputOrigin: 'unknown',
       eventContent: `无法确认来源的输入：${UNKNOWN_TEXT}`,
-      candidate: event => harness.memoryCandidate({ text: UNKNOWN_TEXT, event, scopeType: 'global' }),
+      candidate: event => harness.memoryCandidate({ text: UNKNOWN_TEXT, event }),
     });
     assert.equal(unknown.capture.accepted, 0, 'an unverifiable source is not admitted');
     assert.deepEqual(unknown.capture.rejected.map(entry => entry.code), ['SOURCE_NOT_HUMAN'], 'the gate names the non-human source');
@@ -115,7 +115,6 @@ async function main() {
       candidate: () => ({
         text: UNSOURCED_TEXT,
         quote: UNSOURCED_TEXT,
-        scopeType: 'global',
         eligibility: { durable: true, crossProject: true, reason: '人工明确表达的长期偏好', scopeReason: '适用于所有领域与项目' },
       }),
     });
@@ -131,7 +130,6 @@ async function main() {
       candidate: () => ({
         text: MISSING_EVENT_TEXT,
         quote: MISSING_EVENT_TEXT,
-        scopeType: 'global',
         sourceEventId: 'event-does-not-exist',
         sourceHash: 'sha256:0000000000000000000000000000000000000000000000000000000000000000',
         eligibility: { durable: true, crossProject: true, reason: '人工明确表达的长期偏好', scopeReason: '适用于所有领域与项目' },
@@ -193,7 +191,7 @@ async function main() {
     await harness.nativeClick('#memoryContent [data-memory-tab="candidate"]');
     try {
       await harness.waitFor(
-        () => harness.run("document.getElementById('memoryContent').textContent.includes('候选箱为空。')"),
+        () => harness.run("document.getElementById('memoryContent').textContent.includes('这个范围内没有待确认的记忆。')"),
         'the candidate box is really empty once the engine answered again',
         20000,
       );
@@ -202,7 +200,7 @@ async function main() {
       throw error;
     }
     const candidateBox = await harness.run("document.getElementById('memoryContent').textContent");
-    assert.match(candidateBox, /候选箱为空。/, `the candidate box is really empty: ${candidateBox}`);
+    assert.match(candidateBox, /这个范围内没有待确认的记忆。/, `the candidate box is really empty: ${candidateBox}`);
     assert.ok(!candidateBox.includes(DELEGATED_TEXT), 'the delegated order is not listed');
     assert.ok(!candidateBox.includes(UNSOURCED_TEXT), 'the unsourced preference is not listed');
     if (harness.evidence) await harness.browser.screenshot(path.join(harness.evidence, 'mem008-candidate-empty.png'));

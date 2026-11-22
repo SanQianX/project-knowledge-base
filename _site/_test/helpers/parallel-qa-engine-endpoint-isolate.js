@@ -45,7 +45,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
-const PROTECTED_PORTS = new Set([5757, 5760, 5789, 5790, 8787, 8790]);
+const PROTECTED_PORTS = new Set([5757, 5760, 5789, 5790, 5810, 8787, 8790]);
 
 // Captured at module load, before any isolation rebuilds the environment.
 const LIVE_HOME = process.env.USERPROFILE || process.env.HOME || os.homedir();

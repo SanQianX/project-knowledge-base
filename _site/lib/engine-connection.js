@@ -23,8 +23,8 @@ async function connectEngineOnce(runtime) {
     httpStatus = health.status;
     if (!health.ok) throw new Error('ENGINE_UNAVAILABLE');
     const engine = await health.json();
-    // Schema 4 (0.2.x) and 5 (0.3.x, agent-member plane) are both supported by this shell; anything else is a genuine mismatch. Hardcoding ===4 used to mislabel engine 0.3.x as 'legacy'.
-    if (engine.name !== 'knowledge-engine' || ![4, 5].includes(engine.dataSchemaVersion)) throw new Error('ENGINE_VERSION_MISMATCH');
+    // 允许现有注册协议和组合记忆架构。 / Accept the supported registration protocols and combination-memory schema.
+    if (engine.name !== 'knowledge-engine' || ![4, 5, 6].includes(engine.dataSchemaVersion)) throw new Error('ENGINE_VERSION_MISMATCH');
     step = 'runtime-authentication';
     const auth = await bridge._fetch(`${bridge.engineUrl}/api/runtime-auth`, { headers });
     httpStatus = auth.status;

@@ -22,7 +22,7 @@ async function boundedJson(response) {
 function log(dataDir, event, input) {
   // Only metadata: never log the prompt, context body, headers or CLI environment.
   const projectId = /^project-[A-Za-z0-9._-]+$/.test(input.projectId || '') ? input.projectId : '';
-  const record = { schema: 'log/v2', id: `log-${crypto.randomUUID()}`, ts: new Date().toISOString(), level: input.code ? 'warn' : 'info', component: 'agent-context', event, message: input.code ? '开发前知识读取未完成，已提示后继续。' : '知识上下文已输出给客户端；模型实际送达需原生运行证据。', projectId, operationId: input.requestId, phase: 'context', context: { client: input.client, code: input.code || null, status: input.status, injectionKind: input.injectionKind || null, sessionIndexedCount: input.sessionIndexedCount ?? null, factCount: input.factCount, memoryCount: input.memoryCount, durationMs: input.durationMs } };
+  const record = { schema: 'log/v2', id: `log-${crypto.randomUUID()}`, ts: new Date().toISOString(), level: input.code ? 'warn' : 'info', component: 'agent-context', event, message: input.code ? '开发前知识读取未完成，已提示后继续。' : '知识上下文已输出给客户端；模型实际送达需原生运行证据。', projectId, operationId: input.requestId, phase: 'context', context: { client: input.client, code: input.code || null, status: input.status, injectionKind: input.injectionKind || null, sessionIndexedCount: input.sessionIndexedCount ?? null, factCount: input.factCount, evidenceCount: input.evidenceCount, memoryCount: input.memoryCount, durationMs: input.durationMs } };
   try { const directory = path.join(dataDir, 'logs', projectId ? 'projects' : 'system', ...(projectId ? [projectId] : [])); fs.mkdirSync(directory, { recursive: true }); const now = new Date(), date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`; fs.appendFileSync(path.join(directory, `${date}.jsonl`), JSON.stringify(record) + '\n', { encoding: 'utf8', mode: 0o600 }); } catch { /* Diagnostic disk failures must not block the IDE. */ }
 }
 
@@ -57,8 +57,8 @@ async function run(payload, { env = process.env, argv = process.argv.slice(2), f
     // messages and never enter the model context.
     const notice = [result.status === 'file-fallback' ? '知识向量检索暂不可用，本次使用当前文件事实。' : '', result.memoryStatus === 'pending' ? '部分已确认记忆文件待同步，本次未注入失效内容。' : ''].filter(Boolean).join(' ');
     const output = { ...(notice ? { systemMessage: notice } : {}), ...(result.prompt ? { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: result.prompt } } : {}) };
-    const injectionKind = /^(index|memory-delta|breadcrumb|refresh)$/.test(result.injectionKind || '') ? result.injectionKind : null;
-    Object.defineProperty(output, 'receipt', { value: { dataDir, requestId, client, projectId: result.projectId, status: result.status, injectionKind, sessionIndexedCount: Number.isInteger(result.sessionIndexedCount) ? result.sessionIndexedCount : null, factCount: result.facts.length, memoryCount: result.memories.length, durationMs: Date.now() - started } });
+    const injectionKind = /^(index|memory-delta|breadcrumb|evidence|refresh)$/.test(result.injectionKind || '') ? result.injectionKind : null;
+    Object.defineProperty(output, 'receipt', { value: { dataDir, requestId, client, projectId: result.projectId, status: result.status, injectionKind, sessionIndexedCount: Number.isInteger(result.sessionIndexedCount) ? result.sessionIndexedCount : null, factCount: result.facts.length, evidenceCount: result.facts.filter(fact => typeof fact?.text === 'string' && fact.text).length, memoryCount: result.memories.length, durationMs: Date.now() - started } });
     return output;
   } catch (error) {
     const code = controller.signal.aborted ? 'CONTEXT_TIMEOUT' : /^[A-Z][A-Z0-9_]{0,79}$/.test(error.message || '') ? error.message : 'CONTEXT_UNAVAILABLE';

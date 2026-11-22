@@ -29,7 +29,7 @@
 //   * 添加表单：#memoryDialog/#memoryText/#memoryScope/#confirmMemory →
 //     #appDialog 内 #memoryForm：标题 input[name="title"]（新契约必填）与
 //     正文 textarea[name="text"] 都用 CDP Input.insertText（真实粘贴路径），
-//     适用范围 select[name="scopeType"]=global，提交 =
+//     加入组合 select[name="groupId"]，提交 =
 //     #appDialogActions button.primary（type=submit 关联 #memoryForm）。
 //   * 记忆卡片：[data-memory-card=<id>] → .memory-item（以
 //     [data-action="memory-detail"][data-id=<id>] 定位）。旧卡片的
@@ -40,12 +40,12 @@
 //     「未同步内容不注入」语义仍由引擎注入门（/api/context）断言证明。
 //   * 恢复后的「已确认」卡片文案在新 UI 不存在；等价断言 = 恢复的记忆重新
 //     出现在「记忆库」tab（[data-memory-tab="library"]，旧 confirmed tab，
-//     仅列出 status=confirmed 的记忆）、卡片带「全局记忆」作用域行且无
+//     仅列出 status=confirmed 的记忆）、卡片带组合名称且无
 //     pending 徽标。
 //   * 导入项目已列出的等待：旧首页项目面板（homeContent 含项目名）已删除，
 //     等价为顶栏 #projectSelect 选项里出现项目名（同一 registry projection）。
 //   * 引擎/数据断言（POST 200、created.status=confirmed、syncStatus=pending、
-//     syncError、注入门、confirmed.md 物化与恢复）保持不变；本测试使用真实
+//     syncError、注入门、the group Markdown 物化与恢复）保持不变；本测试使用真实
 //     引擎（dataSchemaVersion 由引擎自身报告，当前为 4），无需同步任何桩。
 
 const fs = require('node:fs');
@@ -94,6 +94,7 @@ async function main() {
   try {
     const repo = makeRepo(harness.fixture, 'memsync-repo', { 'README.md': '# 同步甲\n' });
     const { projectId } = await harness.importProject(repo, '同步甲');
+    const group = await harness.addGroup('同步组合', [projectId]);
     await harness.requestRegistryRefresh();
     // The new home page no longer lists projects (领域/项目面板已删除)；the
     // registry projection is surfaced by the topbar project selector instead.
@@ -113,12 +114,11 @@ async function main() {
     // Break the real write path: the confirmed memory file path becomes a
     // directory, so the engine cannot write the memory file.
     const brainScope = harness.brainScopePath();
-    const memoryFile = path.join(brainScope, 'memories', 'confirmed.md');
-    fs.rmSync(memoryFile, { recursive: true, force: true });
+    const memoryFile = path.join(brainScope, 'memories', 'groups', group.id + '.md');
     fs.mkdirSync(memoryFile, { recursive: true });
     assert.ok(fs.lstatSync(memoryFile).isDirectory(), 'the confirmed memory file path really is occupied by a directory');
 
-    // Add the memory through the real UI as a global memory: the new-memory
+    // Add the memory through the real UI with the project-bound combination: the new-memory
     // dialog (#appDialog > #memoryForm) with title + multiline body, scope
     // global, submitted by the primary (type=submit) action button.
     await harness.nativeClick('#memoryContent [data-action="new-memory"]');
@@ -131,7 +131,7 @@ async function main() {
     await harness.browser.send('Input.insertText', { text: MEMORY_TITLE });
     await harness.nativeClick('#memoryForm textarea[name="text"]');
     await harness.browser.send('Input.insertText', { text: MEMORY_TEXT });
-    await harness.selectOption('#memoryForm select[name="scopeType"]', 'global');
+    await harness.selectOption('#memoryForm select[name="groupId"]', group.id);
     const postsBefore = harness.network.find(entry => entry.method === 'POST' && entry.url.includes('/api/engine/memories')).length;
     await harness.nativeClick('#appDialogActions button.primary');
     await harness.waitFor(
@@ -239,7 +239,7 @@ async function main() {
     const recoveredCard = await memoryCardText(harness, created.id);
     assert.ok(recoveredCard, 'the recovered memory has a card');
     assert.ok(!recoveredCard.includes('写入待恢复'), `the card no longer shows the pending write: ${recoveredCard}`);
-    assert.match(recoveredCard, /全局记忆/, 'the card is a live library card with its global scope (the 记忆库 tab only lists confirmed memories)');
+    assert.match(recoveredCard, /同步组合/, 'the recovered card shows its combination');
     if (harness.evidence) await harness.browser.screenshot(path.join(harness.evidence, 'mem006-recovered.png'));
 
     evidence.push({
