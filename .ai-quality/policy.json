@@ -16,7 +16,7 @@
     },
     "knip": {
       "status": "pending-entry-inventory",
-      "note": "需要先建立入口清单（bin/main/exports/scripts、_site/server.js、动态模块入口、插件 hooks、浏览器 script 引用、MCP 启动器、runtime manifest）；四个固定 npm 模块为受保护运行依赖，不可自动判为可删除"
+      "note": "需要先建立入口清单（bin/main/exports/scripts、src/server.js、动态模块入口、插件 hooks、浏览器 script 引用、MCP 启动器、runtime manifest）；四个固定 npm 模块为受保护运行依赖，不可自动判为可删除"
     },
     "jscpd": { "status": "not-enabled", "note": "按真实重复问题启用（主计划 §9.2：不同时堆满所有工具）" },
     "dependency-cruiser": { "status": "not-enabled", "note": "模块边界规则待定后启用" }
