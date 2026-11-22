@@ -11,7 +11,8 @@
 //     问题，断言仍是「视图真正激活」）。
 //   * 候选箱 tab：[data-memory-tab="candidate"] 选择器不变；tab 栏由
 //     #memoryContent 动态渲染且仅引擎可达时出现，先等 tab 渲染再点击。
-//   * 候选箱空态文案仍含「候选箱为空。」断言不变。
+//   * 候选箱空态文案：「候选箱为空。」→「这个范围内没有待确认的记忆。」
+//     （按项目过滤后的新措辞），空态语义不变。
 //   * 首页边界文案：「没有待确认记忆。」→「没有待确认的记忆。」（新 UI
 //     措辞微调），语义（智脑不会自动把项目行为当作偏好）不变。
 //   * 冻结来源：本例四个候选全部被引擎来源门拒绝，没有可审核对象，UI 侧
@@ -193,7 +194,7 @@ async function main() {
     await harness.nativeClick('#memoryContent [data-memory-tab="candidate"]');
     try {
       await harness.waitFor(
-        () => harness.run("document.getElementById('memoryContent').textContent.includes('候选箱为空。')"),
+        () => harness.run("document.getElementById('memoryContent').textContent.includes('这个范围内没有待确认的记忆。')"),
         'the candidate box is really empty once the engine answered again',
         20000,
       );
@@ -202,7 +203,7 @@ async function main() {
       throw error;
     }
     const candidateBox = await harness.run("document.getElementById('memoryContent').textContent");
-    assert.match(candidateBox, /候选箱为空。/, `the candidate box is really empty: ${candidateBox}`);
+    assert.match(candidateBox, /这个范围内没有待确认的记忆。/, `the candidate box is really empty for this scope: ${candidateBox}`);
     assert.ok(!candidateBox.includes(DELEGATED_TEXT), 'the delegated order is not listed');
     assert.ok(!candidateBox.includes(UNSOURCED_TEXT), 'the unsourced preference is not listed');
     if (harness.evidence) await harness.browser.screenshot(path.join(harness.evidence, 'mem008-candidate-empty.png'));

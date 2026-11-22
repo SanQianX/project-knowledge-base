@@ -231,7 +231,8 @@ async function main() {
     );
     const patch = harness.network.find(entry => entry.method === 'PATCH' && entry.url.includes(`/api/engine/memories/${stored.id}`)).pop();
     assert.ok(patch, 'the shell really patched the candidate');
-    assert.deepEqual(patch.body, { status: 'confirmed' }, 'the confirmation only changes the status');
+    // 确认请求同时把记忆归入其组合作用域。 / The confirmation also re-scopes the memory to its group.
+    assert.deepEqual(patch.body, { status: 'confirmed', scopeType: 'group' }, 'the confirmation changes the status and re-scopes to the group');
     assert.equal(patch.status, 200, `the confirmation answers 200: ${JSON.stringify(patch.body)}`);
     const patchBody = await harness.network.body(patch);
     assert.ok(patchBody && patchBody.memory, `the confirmation answers with the memory: ${JSON.stringify(patchBody)}`);
@@ -240,10 +241,12 @@ async function main() {
     const confirmToast = await harness.run("document.getElementById('toast').textContent");
     assert.match(String(confirmToast), /已确认/, `the toast reports the confirmation: ${confirmToast}`);
 
+    // 确认先落入未归组合，未加入任何组合前不注入。 / The confirmation lands
+    // ungrouped first and stays out of injection until attached to a group.
     const afterConfirm = await harness.injectedMemories(projectId);
     assert.ok(
-      afterConfirm.some(entry => entry.memoryId === stored.id),
-      `the confirmed memory is injected: ${JSON.stringify(afterConfirm)}`,
+      !afterConfirm.some(entry => entry.memoryId === stored.id),
+      `an ungrouped confirmation stays out of injection: ${JSON.stringify(afterConfirm)}`,
     );
 
     // The confirmed memory is listed in the library tab (旧 confirmed tab) of
