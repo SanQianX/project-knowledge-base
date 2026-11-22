@@ -6,9 +6,9 @@ const { must, readJSON, atomicJSON, ownedRun, setRunStatus, isolatedEnv, runLogg
 const { snapshot, assertRepo } = require('../lib/git.cjs');
 async function child(cfg, run, evidence) {
     const assert = require('node:assert/strict');
-    const { spawnServer } = require(path.join(cfg.repoRoot, '_site/_test/helpers/spawn-server.js'));
-    const { findChrome } = require(path.join(cfg.repoRoot, '_site/_test/helpers/find-chrome.js'));
-    const { launchCdpBrowser, waitFor } = require(path.join(cfg.repoRoot, '_site/_test/helpers/cdp-browser.js'));
+    const { spawnServer } = require(path.join(cfg.repoRoot, 'tests/helpers/spawn-server.js'));
+    const { findChrome } = require(path.join(cfg.repoRoot, 'tests/helpers/find-chrome.js'));
+    const { launchCdpBrowser, waitFor } = require(path.join(cfg.repoRoot, 'tests/helpers/cdp-browser.js'));
     const offline = http.createServer((req, res) => { res.writeHead(503, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: false, error: { code: 'QA_OFFLINE', message: 'Intentional isolated module fixture' } })); });
     await new Promise(resolve => offline.listen(0, '127.0.0.1', resolve));
     const offlineUrl = 'http://127.0.0.1:' + offline.address().port;

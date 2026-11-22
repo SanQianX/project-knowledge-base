@@ -3,11 +3,11 @@
 // Six dimensions; thresholds are calibrated warning lines, correctness rules
 // are blocking errors. Generated test artifacts (qa-autopilot shadow copies)
 // stay out of the metric per the quality policy (.ai-quality/policy.json).
-const TEST_DIRS = ['_site/_test/**', 'qa-autopilot/**'];
+const TEST_DIRS = ['tests/**', 'qa-autopilot/**'];
 export default [
   {
     ignores: [
-      'node_modules/**', '.local-test-data/**', 'Microsoft/**',
+      'node_modules/**', 'fixtures/**', 'Microsoft/**',
       'desktop/**', '**/node_modules/**',
       'qa-autopilot/artifacts/**', 'qa-autopilot/.runtime/**',
     ],

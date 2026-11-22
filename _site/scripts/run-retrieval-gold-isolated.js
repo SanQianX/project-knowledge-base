@@ -40,10 +40,10 @@ const postJson = (baseUrl, route, body, timeoutMs) => new Promise((resolve, reje
   request.on('error', reject);
   request.end(payload);
 });
-const { applyDriverIsolation } = require('../_test/helpers/parallel-qa-engine-endpoint-isolate');
-const { guardedCreateEngineServer } = require('../_test/helpers/parallel-qa-engine-endpoint-guard');
-const { createUpstreamProxy, createModuleFixture } = require('../_test/helpers/module-fixture');
-const freePort = require('../_test/helpers/free-port');
+const { applyDriverIsolation } = require('../../tests/helpers/parallel-qa-engine-endpoint-isolate');
+const { guardedCreateEngineServer } = require('../../tests/helpers/parallel-qa-engine-endpoint-guard');
+const { createUpstreamProxy, createModuleFixture } = require('../../tests/helpers/module-fixture');
+const freePort = require('../../tests/helpers/free-port');
 const { verify } = require('./verify-retrieval-gold');
 
 const ROOT = path.resolve(__dirname, '../..');
@@ -175,7 +175,7 @@ async function main() {
     // Rate-limited incremental imports can leave a file tracked but not fully
     // embedded. Every gold target must answer a probe built from its own
     // distinctive text before the cases run; re-import until they all do.
-    const queries = JSON.parse(fs.readFileSync(path.join(ROOT, '_site/_test/fixtures/retrieval-gold-queries.json'), 'utf8'));
+    const queries = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests/fixtures/retrieval-gold-queries.json'), 'utf8'));
     const targets = queries.filter(q => q.entry).map(q => ({ id: q.id, project: q.project, entry: q.entry }));
     const needle = file => fs.readFileSync(file, 'utf8').split(/\r?\n/).map(line => line.trim()).filter(line => line.length >= 12 && !line.startsWith('#')).sort((a, b) => b.length - a.length)[0];
     const probeTarget = async target => {

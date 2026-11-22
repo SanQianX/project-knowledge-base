@@ -118,12 +118,12 @@ function makeContract(task, cfg) {
     const list = Array.isArray(cov.implementedBy) ? cov.implementedBy : [cov.implementedBy];
     for (const raw of list) {
       if (typeof raw !== 'string' || !raw.endsWith('.js')) continue;
-      impl.add((raw.includes('/') ? raw : '_site/_test/' + raw).split(path.sep).join('/'));
+      impl.add((raw.includes('/') ? raw : 'tests/' + raw).split(path.sep).join('/'));
     }
   }
   // 尚未覆盖的规格：允许新建一个同模块的测试文件
   // 新测试文件名用首个规格 ID，避免中文模块名被清空后互相冲突。
-  const newFile = '_site/_test/t07b-' + String(task.specIds[0] || task.id).toLowerCase().replace(/[^a-z0-9-]/g, '-') + '-coverage-test.js';
+  const newFile = 'tests/t07b-' + String(task.specIds[0] || task.id).toLowerCase().replace(/[^a-z0-9-]/g, '-') + '-coverage-test.js';
   for (const f of impl) allowed.push(f);
   allowed.push(newFile);
   const markerPrefix = 'QA-SPEC-';
@@ -216,7 +216,7 @@ async function verify(cfg, task, dispatchInfo) {
   const missing = markers.filter(m => !evidence.markerHits[m]);
   if (missing.length) { evidence.reason = 'MARKER_MISSING'; evidence.missingMarkers = missing; return evidence; }
   // 跑产品自己的测试文件，确认没有回归
-  const testFiles = contract.allowedFiles.filter(f => f.startsWith('_site/_test/') && f.endsWith('-test.js'));
+  const testFiles = contract.allowedFiles.filter(f => f.startsWith('tests/') && f.endsWith('-test.js'));
   for (const f of testFiles) {
     const r = await runLogged(cfg.tools.node, [path.join(cfg.repoRoot, f)], { cwd: cfg.repoRoot, env: isolatedEnv(path.join(dispatchInfo.run, 'verify-' + path.basename(f))), logDir: path.join(EVIDENCE, task.id, 'verify'), timeoutMs: cfg.limits?.perTestTimeoutMs || 300000 });
     evidence.suite = evidence.suite || {};

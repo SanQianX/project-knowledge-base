@@ -1,0 +1,88 @@
+// Run: node tests/hook-runtime-endpoint-test.js
+
+const fs = require('fs');
+const http = require('http');
+const os = require('os');
+const path = require('path');
+const { spawn, spawnSync } = require('child_process');
+const { writeEndpoint } = require('../_site/lib/runtime-endpoint');
+
+const ROOT = require("./paths").ROOT;
+const TRIGGER = path.join(ROOT, '_site', 'scripts', 'hook-trigger.js');
+const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), `kb-hook-runtime-${process.pid}-`));
+const repo = fs.mkdtempSync(path.join(os.tmpdir(), `kb-hook-runtime-repo-${process.pid}-`));
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+function git(args) {
+  return spawnSync('git', ['-C', repo, ...args], { encoding: 'utf-8', windowsHide: true });
+}
+
+(async () => {
+  git(['init']);
+  fs.writeFileSync(path.join(repo, 'README.md'), '# runtime endpoint\n', 'utf-8');
+  git(['config', 'user.email', 'runtime@example.test']);
+  git(['config', 'user.name', 'Runtime Test']);
+  git(['add', 'README.md']);
+  git(['commit', '-m', 'test']);
+
+  let received = null;
+  const server = http.createServer((req, res) => {
+    let body = '';
+    req.setEncoding('utf-8');
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      received = { method: req.method, url: req.url, body: JSON.parse(body) };
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('{}');
+    });
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const port = server.address().port;
+  writeEndpoint(dataDir, { pid: process.pid, host: '127.0.0.1', port, mode: 'desktop' });
+  const bridgeJournal = path.join(dataDir, 'bridge-journal.jsonl');
+  const bridgeModule = path.join(dataDir, 'bridge-fixture.cjs');
+  fs.writeFileSync(bridgeModule, `const fs = require('fs');\nmodule.exports = {\n  appendCommitBoundary(input) {\n    fs.appendFileSync(process.env.BRIDGE_TEST_JOURNAL, JSON.stringify(input) + '\\n');\n    return { sequence: 17, bridgeCursorAtCommit: 17, openTurnIdsAtCommit: ['turn-runtime'] };\n  }\n};\n`);
+
+  const child = spawn(process.execPath, [
+    TRIGGER,
+    '--project-id', 'project-runtime',
+    '--repo-root', repo,
+    '--host', '127.0.0.1',
+    '--port', '1',
+  ], {
+    cwd: ROOT,
+    windowsHide: true,
+    stdio: 'pipe',
+    env: { ...process.env, KB_DATA_DIR: dataDir, AI_CODING_EVENT_BRIDGE_MODULE: bridgeModule, BRIDGE_TEST_JOURNAL: bridgeJournal },
+  });
+  const exitCode = await new Promise(resolve => child.once('exit', resolve));
+  assert(exitCode === 0, `hook trigger should exit 0, got ${exitCode}`);
+  assert(received, 'hook trigger should use the live runtime endpoint instead of fallback port 1');
+  assert(received.method === 'POST' && received.url === '/api/hooks/post-commit', 'unexpected hook request');
+  assert(received.body.schema === 'hook-event/v2', 'hook request should use the v2 event schema');
+  assert(received.body.projectId === 'project-runtime', 'hook request should contain the stable project id');
+  assert(path.resolve(received.body.repoRoot) === path.resolve(repo), 'hook request should contain the runtime repo root');
+  assert(received.body.head, 'hook request should contain the current head');
+  assert(received.body.branch, 'hook request should contain the current branch');
+  assert(received.body.operationId && received.body.operationId.startsWith('op-'), 'Hook boundary operation id should propagate to notification');
+  assert(received.body.boundary && received.body.boundary.status === 'captured', 'Hook must append the Bridge boundary before notifying the server');
+  assert(received.body.boundary.boundary.bridgeCursorAtCommit === 17, 'Hook must forward the atomic Bridge cursor receipt');
+  const durableBoundary = JSON.parse(fs.readFileSync(bridgeJournal, 'utf8').trim());
+  assert(durableBoundary.commitSha === received.body.head, 'durable Bridge boundary and Hook payload must reference the same commit');
+
+  await new Promise(resolve => server.close(resolve));
+  fs.rmSync(dataDir, { recursive: true, force: true });
+  fs.rmSync(repo, { recursive: true, force: true });
+  console.log('hook-runtime-endpoint-test PASS');
+})().catch(error => {
+  console.error(error && error.stack || error);
+  fs.rmSync(dataDir, { recursive: true, force: true });
+  fs.rmSync(repo, { recursive: true, force: true });
+  process.exit(1);
+});

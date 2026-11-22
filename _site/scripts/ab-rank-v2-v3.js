@@ -14,8 +14,8 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const http = require('node:http');
 const { spawn } = require('node:child_process');
-const { applyDriverIsolation } = require('../_test/helpers/parallel-qa-engine-endpoint-isolate');
-const freePort = require('../_test/helpers/free-port');
+const { applyDriverIsolation } = require('../../tests/helpers/parallel-qa-engine-endpoint-isolate');
+const freePort = require('../../tests/helpers/free-port');
 
 const ROOT = path.resolve(__dirname, '../..');
 const CORPUS = {
@@ -111,7 +111,7 @@ async function main() {
       }
       console.log('imported', name);
     }
-    const gold = JSON.parse(fs.readFileSync(path.join(ROOT, '_site/_test/fixtures/retrieval-gold-queries.json'), 'utf8'));
+    const gold = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests/fixtures/retrieval-gold-queries.json'), 'utf8'));
     const projectOf = q => names[q.project];
     for (const q of gold.filter(x => ['semantic', 'isolation'].includes(x.kind))) {
       const item = { id: q.id, kind: q.kind, query: q.query, expect: q.entry || null, empty: q.empty === true, engines: {} };

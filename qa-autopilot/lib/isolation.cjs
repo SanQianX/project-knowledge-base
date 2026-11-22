@@ -442,7 +442,7 @@ function preflightSuite(repoRoot, files, cfg) {
     const blocking = [];
     const exceptionsApplied = [];
     for (const file of files) {
-        const full = path.join(repoRoot, '_site', '_test', file);
+        const full = path.join(repoRoot, 'tests', file);
         let text = '';
         try { text = fs.readFileSync(full, 'utf8'); } catch { continue; }
         const sha256 = fileHash(full);

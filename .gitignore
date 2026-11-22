@@ -13,17 +13,19 @@ desktop/out/
 desktop/.core-package/
 .venv/
 .agent-state/
-.local-test-data/
+# 本地测试数据目录（规范：fixtures/ 默认忽略，仅根级；tests/fixtures 为版本化样例）。
+# Local test-data root, ignored by convention; tests/fixtures holds versioned samples.
+/fixtures/
 
 # Test artifacts and dev logs (regenerated on demand; do not push)
-_site/_test/ui-screenshots/
-_site/_test/screenshots/
-_site/_test/ui-test-report.json
-_site/_test/TEST-REPORT.md
-_site/_test/fixtures/*
-!_site/_test/fixtures/make-git-repos.js
-!_site/_test/fixtures/fake-browser-exit.js
-!_site/_test/fixtures/fake-browser-hang.js
+tests/ui-screenshots/
+tests/screenshots/
+tests/ui-test-report.json
+tests/TEST-REPORT.md
+tests/fixtures/*
+!tests/fixtures/make-git-repos.js
+!tests/fixtures/fake-browser-exit.js
+!tests/fixtures/fake-browser-hang.js
 .hook-trigger-errors.log
 .jobs-log.json
 .jobs-archive/

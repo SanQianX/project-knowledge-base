@@ -121,7 +121,7 @@ async function verify({ url, projects, fixtureRoot, queries, reportPath, basePat
 
 if (require.main === module) {
   const env = JSON.parse(fs.readFileSync(path.resolve(process.argv[2]), 'utf8'));
-  const queries = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../_test/fixtures/retrieval-gold-queries.json'), 'utf8'));
+  const queries = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../tests/fixtures/retrieval-gold-queries.json'), 'utf8'));
   verify({ ...env, queries, reportPath: path.resolve(process.argv[3]) }).then(report => { console.log(JSON.stringify(report.metrics)); process.exitCode = report.passed ? 0 : 1; }).catch(error => { console.error(error.message); process.exitCode = 1; });
 }
 module.exports = { verify };

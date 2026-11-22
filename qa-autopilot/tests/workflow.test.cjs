@@ -124,15 +124,15 @@ test('performance percentiles known values', () => { assert.equal(quantile(Array
 test('performance requires approved baseline', () => assert.throws(() => compare({}, {}, {})));
 test('performance threshold meaningful', () => { const b = { environmentId: 'env', scenario: 'a', fixtureHash: 'f', summary: { p95Ms: 100 } }, n = { ...b, summary: { p95Ms: 130, count: 100, errors: 0 } }; assert.equal(compare(n, b, { approved: true, environmentId: 'env', maxP95RegressionPercent: 10, maxErrorRate: 0 }).status, 'FAIL'); });
 test('test discovery empty does not pass', () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-discovery-')); try {
-    fs.mkdirSync(path.join(d, '_site/_test'), { recursive: true });
+    fs.mkdirSync(path.join(d, 'tests'), { recursive: true });
     assert.throws(() => selectTests(d, 'all', {}));
 }
 finally {
     fs.rmSync(d, { recursive: true, force: true });
 } });
 test('missing named test blocks', () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'qa-discovery-')); try {
-    fs.mkdirSync(path.join(d, '_site/_test'), { recursive: true });
-    fs.writeFileSync(path.join(d, '_site/_test/a-test.js'), '');
+    fs.mkdirSync(path.join(d, 'tests'), { recursive: true });
+    fs.writeFileSync(path.join(d, 'tests/a-test.js'), '');
     assert.throws(() => selectTests(d, 'suite', { suite: ['b-test.js'] }));
 }
 finally {

@@ -60,7 +60,7 @@ function collectResults() {
 
 function build() {
   const cases = readJSON(CASES).cases;
-  const coverage = fs.existsSync(COVERAGE) ? readJSON(COVERAGE) : { note: '覆盖关系登记：specId -> 实施该规格的测试文件（相对 _site/_test/）', specs: {} };
+  const coverage = fs.existsSync(COVERAGE) ? readJSON(COVERAGE) : { note: '覆盖关系登记：specId -> 实施该规格的测试文件（相对 tests/）', specs: {} };
   const results = collectResults();
   const rows = [];
   for (const c of cases) {

@@ -47,7 +47,7 @@ function selfAttestation(cfg, contract) {
         head: snap.head, fingerprint: snap.fingerprint, contractHash: hash(JSON.stringify(contract)) };
 }
 /**
- * 真实 runner 夹具：临时裸仓远端 + 独立 clone + _site/_test 冒烟用例 + suites 配置，
+ * 真实 runner 夹具：临时裸仓远端 + 独立 clone + tests 冒烟用例 + suites 配置，
  * 以及只回答 /api/runtime/identity 与 /api/health 的回环桩（身份字段与受保护配置
  * 完全一致，pid 为本测试进程，因此身份门禁可真实通过而不触碰任何真实实例）。
  */
@@ -55,8 +55,8 @@ async function makeRunnerFixture() {
     const fx = makeFixture();
     // 冒烟用例必须属于基准提交：否则它会以未跟踪文件进入 changedFiles，
     // 被待测补丁模式的 allowlist 检查拒绝（这本身也是该门禁的正确行为）。
-    fs.mkdirSync(path.join(fx.source, '_site', '_test'), { recursive: true });
-    fs.writeFileSync(path.join(fx.source, '_site', '_test', 'sanity-test.js'), "'use strict';\nconsole.log('fixture sanity');\n");
+    fs.mkdirSync(path.join(fx.source, 'tests'), { recursive: true });
+    fs.writeFileSync(path.join(fx.source, 'tests', 'sanity-test.js'), "'use strict';\nconsole.log('fixture sanity');\n");
     fx.raw(['add', '-A'], fx.source);
     fx.raw(['commit', '-qm', 'fixture smoke test'], fx.source);
     fx.raw(['push', '-q', 'origin', 'main'], fx.source);

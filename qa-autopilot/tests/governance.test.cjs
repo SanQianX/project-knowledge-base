@@ -499,9 +499,9 @@ test('a changed desktop project count is reported', () => {
 test('preflight flags a test file that hardcodes the protected port', () => {
     const repo = tempDir('preflight');
     try {
-        fs.mkdirSync(path.join(repo, '_site', '_test'), { recursive: true });
-        fs.writeFileSync(path.join(repo, '_site', '_test', 'safe-test.js'), 'const port = 45311;');
-        fs.writeFileSync(path.join(repo, '_site', '_test', 'risky-test.js'), 'const port = 5757;');
+        fs.mkdirSync(path.join(repo, 'tests'), { recursive: true });
+        fs.writeFileSync(path.join(repo, 'tests', 'safe-test.js'), 'const port = 45311;');
+        fs.writeFileSync(path.join(repo, 'tests', 'risky-test.js'), 'const port = 5757;');
         const ok = iso.preflightSuite(repo, ['safe-test.js'], PROTECTED_CFG);
         assert.equal(ok.ok, true);
         const bad = iso.preflightSuite(repo, ['risky-test.js'], PROTECTED_CFG);
@@ -514,8 +514,8 @@ test('preflight flags a test file that hardcodes the protected port', () => {
 test('preflight flags a test file that names the real data directory', () => {
     const repo = tempDir('preflight-path');
     try {
-        fs.mkdirSync(path.join(repo, '_site', '_test'), { recursive: true });
-        fs.writeFileSync(path.join(repo, '_site', '_test', 'leaky-test.js'), "const dir = 'C:\\\\Users\\\\SanQian\\\\.project-knowledge-v5';");
+        fs.mkdirSync(path.join(repo, 'tests'), { recursive: true });
+        fs.writeFileSync(path.join(repo, 'tests', 'leaky-test.js'), "const dir = 'C:\\\\Users\\\\SanQian\\\\.project-knowledge-v5';");
         const bad = iso.preflightSuite(repo, ['leaky-test.js'], PROTECTED_CFG);
         assert.equal(bad.ok, false);
         assert.ok(bad.findings.some(f => f.kind === 'PROTECTED_PATH_LITERAL'));
@@ -654,10 +654,10 @@ test('an identity change between snapshots is reported', () => {
 test('a named exception releases a reviewed static unit test', () => {
     const repo = tempDir('preflight-exception');
     try {
-        fs.mkdirSync(path.join(repo, '_site', '_test'), { recursive: true });
+        fs.mkdirSync(path.join(repo, 'tests'), { recursive: true });
         const file = 'reviewed-unit-test.js';
-        fs.writeFileSync(path.join(repo, '_site', '_test', file), 'const port = 5757;');
-        const sha256 = iso.fileHash(path.join(repo, '_site', '_test', file));
+        fs.writeFileSync(path.join(repo, 'tests', file), 'const port = 5757;');
+        const sha256 = iso.fileHash(path.join(repo, 'tests', file));
         const cfg = {
             protected: PROTECTED_CFG.protected,
             preflightExceptions: [{ file, sha256, reason: 'reviewed static unit test', approvedBy: 'leader' }]
@@ -673,11 +673,11 @@ test('a named exception releases a reviewed static unit test', () => {
 test('an exception does not survive a change of the source file', () => {
     const repo = tempDir('preflight-stale');
     try {
-        fs.mkdirSync(path.join(repo, '_site', '_test'), { recursive: true });
+        fs.mkdirSync(path.join(repo, 'tests'), { recursive: true });
         const file = 'reviewed-unit-test.js';
-        fs.writeFileSync(path.join(repo, '_site', '_test', file), 'const port = 5757;');
-        const stale = iso.fileHash(path.join(repo, '_site', '_test', file));
-        fs.writeFileSync(path.join(repo, '_site', '_test', file), 'const port = 5757; const extra = 1;');
+        fs.writeFileSync(path.join(repo, 'tests', file), 'const port = 5757;');
+        const stale = iso.fileHash(path.join(repo, 'tests', file));
+        fs.writeFileSync(path.join(repo, 'tests', file), 'const port = 5757; const extra = 1;');
         const cfg = {
             protected: PROTECTED_CFG.protected,
             preflightExceptions: [{ file, sha256: stale, reason: 'reviewed static unit test' }]
@@ -692,10 +692,10 @@ test('an exception does not survive a change of the source file', () => {
 test('an exception never releases a protected path literal', () => {
     const repo = tempDir('preflight-path-exception');
     try {
-        fs.mkdirSync(path.join(repo, '_site', '_test'), { recursive: true });
+        fs.mkdirSync(path.join(repo, 'tests'), { recursive: true });
         const file = 'reviewed-unit-test.js';
-        fs.writeFileSync(path.join(repo, '_site', '_test', file), "const dir = 'C:\\Users\\SanQian\\.project-knowledge-v5';");
-        const sha256 = iso.fileHash(path.join(repo, '_site', '_test', file));
+        fs.writeFileSync(path.join(repo, 'tests', file), "const dir = 'C:\\Users\\SanQian\\.project-knowledge-v5';");
+        const sha256 = iso.fileHash(path.join(repo, 'tests', file));
         const cfg = {
             protected: PROTECTED_CFG.protected,
             preflightExceptions: [{ file, sha256, reason: 'reviewed static unit test' }]
@@ -710,10 +710,10 @@ test('an exception never releases a protected path literal', () => {
 test('an exception without a review reason is ignored', () => {
     const repo = tempDir('preflight-noreason');
     try {
-        fs.mkdirSync(path.join(repo, '_site', '_test'), { recursive: true });
+        fs.mkdirSync(path.join(repo, 'tests'), { recursive: true });
         const file = 'reviewed-unit-test.js';
-        fs.writeFileSync(path.join(repo, '_site', '_test', file), 'const port = 5757;');
-        const sha256 = iso.fileHash(path.join(repo, '_site', '_test', file));
+        fs.writeFileSync(path.join(repo, 'tests', file), 'const port = 5757;');
+        const sha256 = iso.fileHash(path.join(repo, 'tests', file));
         const cfg = { protected: PROTECTED_CFG.protected, preflightExceptions: [{ file, sha256 }] };
         const out = iso.preflightSuite(repo, [file], cfg);
         assert.equal(out.ok, false);

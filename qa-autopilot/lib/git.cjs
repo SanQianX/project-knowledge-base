@@ -98,7 +98,9 @@ function validateChanges(cfg, contract, files) {
     for (const f of files) {
         must(contract.allowedFiles.includes(f), 'OUT_OF_SCOPE', 'File not in task contract: ' + f);
         must(!/(^|\/)(\.git|node_modules|state|artifacts|\.runtime|\.env)(\/|$)|(?:^|\/)(?:ai-profiles|settings|credentials)\.json$/i.test(f), 'SENSITIVE_PATH', 'Sensitive/generated path in commit: ' + f);
-        const protectedFile = /^\.github\//.test(f) || /^_site\/_test\//.test(f) || /^qa-autopilot\/(?:lib|scripts|tools|config|tests|baselines)\//.test(f) || /(?:^|\/)package(?:-lock)?\.json$|manifest\.json$|hook|promotion|migration|storage/i.test(f);
+        // 双形态保护：新 tests/ 布局与旧 _site/_test 布局（历史 worktree）都算受保护文件。
+        // Both shapes count as protected: the new tests/ layout and the legacy _site/_test one.
+        const protectedFile = /^\.github\//.test(f) || /^(?:_site\/_test|tests)\//.test(f) || /^qa-autopilot\/(?:lib|scripts|tools|config|tests|baselines)\//.test(f) || /(?:^|\/)package(?:-lock)?\.json$|manifest\.json$|hook|promotion|migration|storage/i.test(f);
         if (protectedFile)
             must(Array.isArray(contract.approvedProtectedFiles) && contract.approvedProtectedFiles.includes(f) && contract.approvalReceipt, 'PROTECTED_FILE', 'Protected-file change needs controller-approved review: ' + f, 20);
     }

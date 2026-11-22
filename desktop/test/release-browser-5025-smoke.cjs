@@ -17,7 +17,7 @@
 // official-next-download): the tool never contacts any registry/provider; the
 // only network requests it makes are to the 127.0.0.1 services it spawned.
 // Reuses read-only: release-preflight-5025-{env,core-tarball,local-modules}.cjs
-// and the audited _site/_test/helpers/{cdp-browser,find-chrome}.js.
+// and the audited tests/helpers/{cdp-browser,find-chrome}.js.
 
 const fs = require('node:fs');
 const net = require('node:net');
@@ -28,8 +28,8 @@ const envLib = require('./release-preflight-5025-env.cjs');
 const coreTarballLib = require('./release-preflight-5025-core-tarball.cjs');
 const localModules = require('./release-preflight-5025-local-modules.cjs');
 const quotaPins = require('./release-browser-5025-quota-pins.cjs');
-const { launchCdpBrowser } = require('../../_site/_test/helpers/cdp-browser');
-const { findChromeDetailed } = require('../../_site/_test/helpers/find-chrome');
+const { launchCdpBrowser } = require('../../tests/helpers/cdp-browser');
+const { findChromeDetailed } = require('../../tests/helpers/find-chrome');
 
 const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 const PROTECTED_PORTS = [5757, 5760, 8787, 8790];
@@ -264,7 +264,7 @@ async function main() {
     toolHashes[t] = sha256(fs.readFileSync(path.join(__dirname, t)));
   }
   for (const h of ['cdp-browser.js', 'find-chrome.js']) {
-    toolHashes[h] = sha256(fs.readFileSync(path.join(__dirname, '..', '..', '_site', '_test', 'helpers', h)));
+    toolHashes[h] = sha256(fs.readFileSync(path.join(__dirname, '..', '..', 'tests', 'helpers', h)));
   }
   const cacheCorePkg = path.join(ownedCache, '@sanqianx', 'project-knowledge', 'package.json');
   const staleCacheCoreVersion = JSON.parse(fs.readFileSync(cacheCorePkg, 'utf8')).version;

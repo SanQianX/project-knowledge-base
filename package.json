@@ -5,10 +5,10 @@
   "main": "_site/server.js",
   "scripts": {
     "start": "node _site/server.js",
-    "test": "node _site/_test/run-all-tests.js",
+    "test": "node tests/run-all-tests.js",
     "release:sync": "node _site/scripts/sync-release-version.js --web-only",
     "runtime:verify": "node _site/scripts/verify-module-runtime.js --working-tree",
-    "release:verify": "node _site/scripts/sync-release-version.js --check --web-only && node _site/scripts/verify-module-runtime.js && node _site/scripts/verify-product-runtime.js && node _site/_test/integration-adapters-test.js",
+    "release:verify": "node _site/scripts/sync-release-version.js --check --web-only && node _site/scripts/verify-module-runtime.js && node _site/scripts/verify-product-runtime.js && node tests/integration-adapters-test.js",
     "preversion": "npm run release:verify",
     "version": "node _site/scripts/sync-release-version.js --stage --web-only",
     "postversion": "npm run release:verify"
@@ -35,9 +35,6 @@
     "_site/lib/",
     "module-runtime-manifest.json",
     "_site/scripts/",
-    "_site/_test/*.js",
-    "_site/_test/helpers/",
-    "_site/_test/fixtures/",
     "_site/start.bat",
     "_site/stop.bat",
     "claude-prompts.json",

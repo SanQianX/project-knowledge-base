@@ -14,7 +14,7 @@ knowledge is Markdown; LanceDB is one internal, rebuildable derived index.
 | Git Hook notifier | `_site/scripts/hook-trigger.js` |
 | Core services | `_site/lib/` |
 | Windows desktop | `desktop/` |
-| Tests | `_site/_test/`, `desktop/test/` |
+| Tests | `tests/`, `desktop/test/` |
 
 ## Runtime data
 

@@ -357,7 +357,7 @@ test('origin exact ownership', () => { assert.equal(g.allowedOrigin('git@github.
 test('ref parsing rejects malformed SHA', () => assert.throws(() => g.parseRemoteRefs('wrong refs/heads/main')));
 const ct = { bugId: 'QA-001', allowedFiles: ['ui/product.js'], summary: 'test' };
 test('out of scope change blocks', () => assert.throws(() => g.validateChanges({}, ct, ['ui/product.css']), { code: 'OUT_OF_SCOPE' }));
-test('native assertion changes need review', () => assert.throws(() => g.validateChanges({}, { ...ct, allowedFiles: ['_site/_test/test-test.js'] }, ['_site/_test/test-test.js']), { code: 'PROTECTED_FILE' }));
+test('native assertion changes need review', () => assert.throws(() => g.validateChanges({}, { ...ct, allowedFiles: ['tests/test-test.js'] }, ['tests/test-test.js']), { code: 'PROTECTED_FILE' }));
 test('no empty successful change', () => assert.throws(() => g.validateChanges({}, ct, []), { code: 'DIFF_SIZE' }));
 test('public API change blocks', () => assert.throws(() => g.validateChanges({}, { ...ct, publicApiChange: true }, ['ui/product.js']), { code: 'DESIGN_CHANGE' }));
 for (const version of ['1.2.3', 'latest', 'next', 'v1.2.3-rc.1', '1.2.3-rc.01', '1.2.3-beta.1'])

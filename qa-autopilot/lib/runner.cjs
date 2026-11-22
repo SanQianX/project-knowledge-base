@@ -6,7 +6,7 @@ const { must, hash, readJSON, atomicJSON, ownedRun, setRunStatus, isolatedEnv, r
 const { snapshot, assertRepo, assertPatchUnderTest } = require('./git.cjs');
 const { productEnv, assertEnvIsolated, allocatePort, snapshotProtected, diffProtected, classifyDrift, preflightSuite, assertRuntimeIdentity } = require('./isolation.cjs');
 function selectTests(repo, suite, config) {
-    const root = path.join(repo, '_site', '_test');
+    const root = path.join(repo, 'tests');
     const available = fs.readdirSync(root).filter(f => f.endsWith('-test.js')).sort();
     must(available.length > 0, 'NO_TESTS', 'Canonical test discovery returned no files.');
     if (suite === 'all')
@@ -19,7 +19,7 @@ function selectTests(repo, suite, config) {
 }
 /**
  * 隔离环境会重写 LOCALAPPDATA，机器级浏览器的安装位置因此不可见。
- * 产品自带的 _site/_test/helpers/find-chrome.js 已把 KB_CHROME_PATH 作为首选候选，
+ * 产品自带的 tests/helpers/find-chrome.js 已把 KB_CHROME_PATH 作为首选候选，
  * 这里只把经审阅的浏览器路径透传下去；不改动产品代码，也不放宽 profile 隔离
  * （CDP helper 始终用新建 profile 目录，真实用户 profile 不被读写）。
  */
@@ -119,7 +119,7 @@ async function runSuite(cfg, suite, contract, options = {}) {
             }
             const childDir = path.join(run, path.basename(file, '.js'));
             fs.mkdirSync(childDir);
-            const testFile = path.join(cfg.repoRoot, '_site/_test', file);
+            const testFile = path.join(cfg.repoRoot, 'tests', file);
             const env = needsBrowser(testFile)
                 ? browserCapableEnv(cfg, childDir, { KB_SITE_PORT: port, KB_DEAD_MODULE_PORT: deadModulePort })
                 : isolatedChildEnv(cfg, childDir, { KB_SITE_PORT: port, KB_DEAD_MODULE_PORT: deadModulePort });

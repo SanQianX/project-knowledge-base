@@ -326,7 +326,7 @@ const gitOf = (repo, a) => execFileSync('git', ['-C', repo, ...a], { encoding: '
     });
     const nonInteractiveOk = r.code === 0 && !r.timedOut;
     // 需要交互桌面的：真实浏览器套件（Chrome 需交互式桌面会话）
-    const needsDesktop = ['_site/_test/product-import-ui-test.js', '_site/_test/product-progress-status-test.js', '_site/_test/product-diagnostics-ui-test.js', '_site/_test/agent-capture-ui-test.js', '_site/_test/agent-capture-mcp-ui-test.js', '_site/_test/packaged-ui-smoke-test.js'];
+    const needsDesktop = ['tests/product-import-ui-test.js', 'tests/product-progress-status-test.js', 'tests/product-diagnostics-ui-test.js', 'tests/agent-capture-ui-test.js', 'tests/agent-capture-mcp-ui-test.js', 'tests/packaged-ui-smoke-test.js'];
     const okH = nonInteractiveOk;
     record('H', '锁屏后非交互测试仍可执行；交互式测试已单独标注', 'REAL', okH,
       okH ? `非交互套件实跑通过（exit=${r.code}）；当前会话锁定=${locked}；标注为需交互桌面的浏览器用例 ${needsDesktop.length} 个` : `非交互套件失败 exit=${r.code}`,

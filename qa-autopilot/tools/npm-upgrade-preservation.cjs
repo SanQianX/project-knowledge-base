@@ -6,7 +6,7 @@ const crypto = require('node:crypto');
 const assert = require('node:assert/strict');
 const { spawn, spawnSync } = require('node:child_process');
 const envLib = require('../../desktop/test/release-preflight-5025-env.cjs');
-const freePort = require('../../_site/_test/helpers/free-port');
+const freePort = require('../../tests/helpers/free-port');
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
