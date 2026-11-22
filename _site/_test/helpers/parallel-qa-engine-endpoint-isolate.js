@@ -194,6 +194,8 @@ function applyDriverIsolation({ prefix = 'pk-qa-engine-endpoint', captureChrome 
 
   const parsed = path.parse(layout.home);
   const envMap = {
+    // Chromium 使用 locale 编码下载文件名。 / Chromium uses the locale for download filenames.
+    ...(process.platform === 'linux' ? { LANG: 'C.UTF-8' } : {}),
     HOME: layout.home,
     USERPROFILE: layout.home,
     HOMEDRIVE: parsed.root,

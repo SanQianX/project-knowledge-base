@@ -151,9 +151,12 @@ async function main() {
     await harness.nativeClick(`[data-action="project-detail"][data-id="${projectIdA}"]`);
     await harness.waitFor(() => harness.run("Boolean(document.querySelector('[data-action=export-memories]:not([disabled])'))"), 'the effective memory page enables its export control');
     await harness.nativeClick('[data-action="export-memories"]:not([disabled])');
-    const exportedPath = path.join(downloadDir, '项目甲-MEMORY.md');
-    await harness.waitFor(() => fs.existsSync(exportedPath), 'the browser downloads the complete project Markdown');
-    const exported = fs.readFileSync(exportedPath, 'utf8');
+    const download = await harness.waitFor(
+      () => fs.readdirSync(downloadDir).find(name => name.endsWith('-MEMORY.md')),
+      'the browser downloads the complete project Markdown',
+    );
+    const exported = fs.readFileSync(path.join(downloadDir, download), 'utf8');
+    assert.match(exported, /^# 项目甲 · 生效记忆/);
     assert.ok(exported.includes(MULTILINE_BODY), 'the download keeps the multiline memory intact');
     assert.doesNotMatch(exported, /独立的操作清单/, 'pending candidates are absent from the export');
 
