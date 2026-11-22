@@ -45,11 +45,7 @@ async function verify({ url, projects, fixtureRoot, queries, reportPath, basePat
       const documentHit = rows.slice(0, recallAt).some(row => row.entry_id === q.entry);
       const documentRank = q.entry ? rows.findIndex(row => row.entry_id === q.entry) + 1 : null;
       if (q.kind === 'breadcrumb') {
-        // The session-injection gate: same engine, same corpus, real channels.
-        // Positive cases assert BEHAVIOUR (a strong query earns one-line
-        // pointers with no body text, and an immediate repeat cools down);
-        // which specific entry tops the ranking is the search gate's job, not
-        // this one. Negative cases must stay completely silent.
+        // 已发布引擎返回标题，新版返回有界摘录。 / Released engines return titles; newer engines return bounded excerpts.
         const sessionId = `gold-${q.id}`;
         const contextCall = async query => {
           // scope: 'project' keeps the injection gate on the same corpus the
@@ -62,24 +58,25 @@ async function verify({ url, projects, fixtureRoot, queries, reportPath, basePat
           if (!response.ok || result.ok !== true) throw new Error(`context failed with HTTP ${response.status}`);
           return result;
         };
-        await contextCall(q.query);
+        await contextCall('你好');
         const turn = await contextCall(q.query);
         const entries = (turn.facts || []).map(item => item.entryId);
         item.injectionKind = turn.injectionKind || null; item.injectedEntries = entries;
-        const bodyLeak = (turn.facts || []).some(item => typeof item.text === 'string' && item.text.length > 0);
+        const excerpts = (turn.facts || []).filter(item => typeof item.text === 'string' && item.text.length > 0);
+        const boundedEvidence = turn.injectionKind === 'evidence' && excerpts.length === entries.length && excerpts.length > 0
+          && excerpts.length <= 2 && excerpts.every(entry => entry.text.length <= 400 && entry.contentHash);
         if (q.expect) {
-          item.passed = turn.injectionKind === 'breadcrumb' && entries.length > 0 && entries.length <= 3 && !bodyLeak;
-          // Cooldown is per ENTRY (10 turns): an immediate repeat may surface
-          // the next strong entries, but the ones just sent must not repeat.
+          item.passed = boundedEvidence || (turn.injectionKind === 'breadcrumb' && entries.length > 0 && entries.length <= 3 && excerpts.length === 0);
           const repeat = await contextCall(q.query);
-          const repeatEntries = (repeat.facts || []).map(entry => entry.entryId);
-          item.cooldownRespected = entries.every(entry => !repeatEntries.includes(entry));
+          const identity = entry => boundedEvidence ? JSON.stringify([entry.spaceId, entry.entryId, entry.contentHash]) : entry.entryId;
+          const repeated = new Set((repeat.facts || []).map(identity));
+          item.cooldownRespected = (turn.facts || []).every(entry => !repeated.has(identity(entry)));
           item.passed = item.passed && item.cooldownRespected;
           item.expectedEntryWithinInjected = entries.includes(q.expect);
         } else {
           item.passed = !turn.prompt && entries.length === 0 && !turn.injectionKind;
         }
-        item.bodyLeak = bodyLeak;
+        item.bodyLeak = excerpts.length > 0 && !boundedEvidence;
         report.cases.push(item); save();
         console.log(`${item.passed ? 'PASS' : 'FAIL'} ${q.id} ${q.kind}`);
         continue;

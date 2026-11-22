@@ -25,7 +25,7 @@
     overview: null, overviewError: null, overviewLoading: false, overviewEpoch: 0,
     groups: { items: [], total: 0, loading: false, epoch: 0 },
     memory: { tab: 'library', folder: 'all', q: '', items: [], total: 0, cursors: [null], page: 0, loading: false, epoch: 0 },
-    candidates: { items: [], total: 0, cursors: [null], page: 0, loading: false, epoch: 0 },
+    candidates: { items: [], total: 0, cursors: [null], page: 0, projectFilter: null, loading: false, epoch: 0 },
     projects: [], projectsPage: { q: '', domain: '', items: [], total: 0, cursors: [null], page: 0, loading: false, epoch: 0, detail: null },
     detailGroups: { detail: null, epoch: 0 },
     search: { q: '', draft: '', projectId: '', scope: 'brain', type: 'all', done: false, results: [], page: 0, loading: false, epoch: 0 },
@@ -244,6 +244,7 @@
   function selectProject(id) {
     if (id === state.projectId && activeProject()) return;
     state.projectId = id; state.epoch++;
+    if (state.candidates.projectFilter === null) { state.candidates.page = 0; state.candidates.cursors = [null]; }
     state.snapshot.runs = []; state.activityProject = null; state.activityBefore = null; state.runDetails = new Map();
     void refreshSnapshot();
     referenceEpoch++; $('referenceDialog').close();
@@ -378,7 +379,7 @@
           ${overview.totals?.recovering ? `<div class="recovery-banner">${overview.totals?.recovering} 项正在自动恢复，无需操作<button data-action="activity-recovering">查看</button></div>` : ''}
         </section>
         <section class="panel"><h2>待确认记忆 ${overview.totals?.candidates ? badge(overview.totals?.candidates, '') : ''}</h2>${candidateRows}
-          ${overview.totals?.candidates > candidates.length ? '<button data-go="memory">查看候选箱</button>' : ''}
+          ${overview.totals?.candidates > candidates.length ? '<button data-go="memory" data-memory-tab="candidate">查看候选箱</button>' : ''}
         </section>
       </div>
       ${teamSummaryCard()}
@@ -416,18 +417,38 @@
     finally { if (epoch === memory.epoch) memory.loading = false; }
     if (state.view === 'memory') renderMemories();
   }
+  const candidateProjectId = () => state.candidates.projectFilter ?? activeProject()?.projectId ?? '';
+  const candidateSourceProjectId = memory => memory.evidence?.projectId || (memory.scopeType === 'project' ? memory.scopeId : null);
+  async function projectCandidates(projectId) {
+    const params = new URLSearchParams({ status: 'candidate', sourceProjectId: projectId });
+    const result = await api('/api/engine/memories?' + params);
+    return result.memories.filter(memory => candidateSourceProjectId(memory) === projectId)
+      .sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')) || a.id.localeCompare(b.id));
+  }
   async function loadCandidates() {
     const candidates = state.candidates;
     const epoch = ++candidates.epoch;
     candidates.loading = true;
+    const projectId = candidateProjectId();
+    if (state.view === 'memory' && state.memory.tab === 'candidate') renderMemories();
     try {
-      const params = new URLSearchParams({ status: 'candidate', limit: '10' });
-      const cursor = candidates.cursors[candidates.page];
-      if (cursor) params.set('cursor', cursor);
-      const result = await api('/api/engine/memories?' + params);
-      if (epoch !== candidates.epoch) return;
-      candidates.items = result.memories; candidates.total = result.total;
-      if (result.nextCursor) candidates.cursors[candidates.page + 1] = result.nextCursor; else candidates.cursors.length = candidates.page + 1;
+      if (projectId) {
+        const items = await projectCandidates(projectId);
+        if (epoch !== candidates.epoch) return;
+        candidates.total = items.length;
+        candidates.page = Math.min(candidates.page, Math.max(0, Math.ceil(items.length / 10) - 1));
+        const start = candidates.page * 10;
+        candidates.items = items.slice(start, start + 10);
+        candidates.cursors = Array.from({ length: Math.ceil(items.length / 10) }, (_, page) => page * 10);
+      } else {
+        const params = new URLSearchParams({ status: 'candidate', limit: '10' });
+        const cursor = candidates.cursors[candidates.page];
+        if (cursor) params.set('cursor', cursor);
+        const result = await api('/api/engine/memories?' + params);
+        if (epoch !== candidates.epoch) return;
+        candidates.items = result.memories; candidates.total = result.total;
+        if (result.nextCursor) candidates.cursors[candidates.page + 1] = result.nextCursor; else candidates.cursors.length = candidates.page + 1;
+      }
     } catch (error) { if (epoch === candidates.epoch) toast('候选列表读取失败：' + error.message); }
     finally { if (epoch === candidates.epoch) candidates.loading = false; }
     if (state.view === 'memory') renderMemories();
@@ -446,9 +467,12 @@
     if (!state.engineAvailable) { $('memoryContent').innerHTML = '<div class="empty">知识引擎暂时不可用。未读取到的记忆不会显示为已确认。</div>'; return; }
     const memory = state.memory, candidates = state.candidates;
     if (memory.tab === 'candidate') {
+      const projectId = candidateProjectId();
+      const projectOptions = ['<option value="">全部项目</option>', ...state.projects.map(project => `<option value="${esc(project.projectId)}" ${project.projectId === projectId ? 'selected' : ''}>${esc(project.name)}</option>`)].join('');
       const rows = candidates.items.map(m => `<div class="row"><div><b>${esc(m.title)}</b><small>${esc(clamp2(m.text).slice(0, 140))}</small><small>${m.evidence ? `来源：${esc(projectName(m.evidence.projectId))} · ${esc(m.evidence.commitSha.slice(0, 8))}` : '来源：手动添加'}</small></div><button class="primary" data-action="review-candidate" data-id="${esc(m.id)}">审核</button></div>`).join('');
       $('memoryContent').innerHTML = `<div class="segmented" style="margin-bottom:20px"><button data-memory-tab="library">记忆库</button><button class="active" data-memory-tab="candidate">候选箱 ${candidates.total || ''}</button></div>
-        ${rows || '<div class="empty small-empty">候选箱为空。维护产物中的有据偏好会进入这里，等待你的确认。</div>'}
+        <label>按项目查看<select id="candidateProjectFilter">${projectOptions}</select></label>
+        ${candidates.loading ? '<p class="small-empty">正在读取候选…</p>' : rows || '<div class="empty small-empty">这个范围内没有待确认的记忆。</div>'}
         ${pagerUi('candidate', candidates.page, candidates.total, 10)}`;
       return;
     }
@@ -592,9 +616,42 @@
       <section class="panel" style="margin-top:20px"><div class="section-heading" style="margin-bottom:12px"><h2>使用的组合</h2><button data-action="project-groups" data-id="${esc(project.projectId)}">＋ 添加组合</button></div>
         <div class="group-tags">${detail.groups.map(g => groupTag(g, project.projectId)).join('') || '<small>尚未添加组合</small>'}</div></section>
       <section class="panel" style="margin-top:20px"><div class="section-heading"><h2>AI 团队</h2>${projectTeamControl(project.projectId)}</div></section>
-      <section class="panel" style="margin-top:20px"><h2>生效记忆 <small>${effective.total} 条 · 已按记忆去重</small></h2>
+      <section class="panel" style="margin-top:20px"><div class="section-heading"><h2>生效记忆 <small>${effective.total} 条 · 已按记忆去重</small></h2>
+        <button data-action="export-memories" data-id="${esc(project.projectId)}" ${effective.total ? '' : 'disabled'}>导出 Markdown</button></div>
         <div class="memory-list">${items}</div>
         ${pagerUi('effective', effective.page, effective.total, 10)}</section>`;
+  }
+  async function exportProjectMemories(projectId) {
+    const project = state.projectsPage.items.find(item => item.projectId === projectId);
+    if (!project) return;
+    const items = new Map(), cursors = new Set();
+    let cursor = null, total = null;
+    do {
+      const params = new URLSearchParams({ limit: '100' });
+      if (cursor) params.set('cursor', cursor);
+      const page = await api(`/api/engine/projects/${encodeURIComponent(projectId)}/effective-memories?${params}`);
+      total ??= page.total;
+      if (page.total !== total || (page.nextCursor && cursors.has(page.nextCursor))) throw new Error('生效记忆列表已变化，请重新导出。');
+      for (const memory of page.memories) items.set(memory.id, memory);
+      cursor = page.nextCursor;
+      if (cursor) cursors.add(cursor);
+    } while (cursor);
+    if (items.size !== total) throw new Error('生效记忆列表已变化，请重新导出。');
+    const memories = [...items.values()].filter(memory => memory.syncStatus === 'ready' && memory.targetAvailable
+      && (memory.scopeType === 'group' || memory.sources.some(source => source.kind === 'legacy-scope')));
+    if (!memories.length) return toast('当前没有已同步的生效记忆。');
+    const sections = memories.map(memory => {
+      const sources = memory.sources.map(source => source.kind === 'group' ? source.groupName : SCOPE_LABEL[source.scopeType]);
+      const provenance = memory.evidence ? [projectName(memory.evidence.projectId), memory.evidence.entryId, memory.evidence.commitSha].filter(Boolean).join(' / ') : '';
+      return `## ${memory.title}\n\n${memory.text}\n\n生效来源：${sources.join('、')}${provenance ? `\n\n依据：${provenance}` : ''}\n`;
+    });
+    const markdown = `# ${project.name.replace(/[\r\n]+/g, ' ')} · 生效记忆\n\n${sections.join('\n')}`;
+    const url = URL.createObjectURL(new Blob([markdown], { type: 'text/markdown;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${project.name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '-').trim() || 'project'}-MEMORY.md`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   // ============ 检索：真实引擎 API ============
   function renderSearch() {
@@ -1231,7 +1288,7 @@
           const body = { title, text };
           if (form.elements.scopeType && (memory.scopeType !== scopeType || scopeType !== 'group')) {
             body.scopeType = scopeType;
-            body.scopeId = scopeType === 'global' ? state.brain.id : form.elements.scopeTarget?.value;
+            body.scopeId = scopeType === 'global' || scopeType === 'group' ? state.brain.id : form.elements.scopeTarget?.value;
           }
           saved = await api(`/api/engine/memories/${encodeURIComponent(memory.id)}`, { method: 'PATCH', body });
         } else {
@@ -1247,37 +1304,85 @@
       } catch (error) { appDialogError(error.message); }
     });
   }
-  // ---- 候选审核 ----
-  function reviewCandidate(memory) {
-    const groupOptions = ['<option value="">暂不加入组合</option>', ...state.groups.items.map(g => `<option value="${esc(g.id)}">${esc(g.name)}</option>`)].join('');
+  function textTrigrams(text) {
+    const normalized = text.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+    return new Set(Array.from({ length: Math.max(0, normalized.length - 2) }, (_, i) => normalized.slice(i, i + 3)));
+  }
+  function nearbyCandidates(memory, candidates) {
+    const base = textTrigrams(memory.text);
+    return candidates.filter(candidate => candidate.id !== memory.id).map(candidate => {
+      const terms = textTrigrams(candidate.text);
+      let shared = 0;
+      for (const term of terms) if (base.has(term)) shared++;
+      return { candidate, similarity: shared ? 2 * shared / (base.size + terms.size) : 0 };
+    }).filter(item => item.similarity >= 0.5)
+      .sort((a, b) => b.similarity - a.similarity).slice(0, 3).map(item => item.candidate);
+  }
+  async function reviewCandidate(memory) {
+    const sourceProjectId = candidateSourceProjectId(memory);
+    const sourceGroups = sourceProjectId ? api(`/api/engine/projects/${encodeURIComponent(sourceProjectId)}/memory-groups`).catch(() => null) : null;
+    await loadGroups();
+    const bound = (await sourceGroups)?.groups || [];
+    const preferred = bound.length === 1 ? bound[0].id : '';
+    const groupOptions = ['<option value="">仅收录到记忆库（暂不生效）</option>', ...state.groups.items.map(group => `<option value="${esc(group.id)}" ${group.id === preferred ? 'selected' : ''}>${esc(group.name)}</option>`)].join('');
     appDialogOpen('审核候选记忆', `
       <form id="reviewForm">
         <h3>${esc(memory.title)}</h3>
         <p class="feedback" style="white-space:pre-wrap">${esc(memory.text)}</p>
         <p class="muted">${memory.evidence ? `来源：${esc(projectName(memory.evidence.projectId))} · commit ${esc(memory.evidence.commitSha.slice(0, 8))} · ${esc(memory.evidence.entryId)}` : '来源：手动添加'}</p>
         ${memory.evidence?.quote ? `<details class="agent-detail" style="margin:12px 0"><summary>查看原始依据（冻结原文）</summary><p class="feedback" style="white-space:pre-wrap">${esc(memory.evidence.quote)}</p></details>` : ''}
+        <details class="agent-detail" data-role="similar" hidden></details>
         <label>确认后加入组合<select name="groupId">${groupOptions}</select></label>
-        <p class="muted" data-role="impact">确认后保留在记忆库；加入组合并应用到项目后生效。</p>
+        <p class="muted" data-role="impact"></p>
       </form>`, [
       { label: '忽略', class: 'danger', run: async () => { await api(`/api/engine/memories/${encodeURIComponent(memory.id)}`, { method: 'PATCH', body: { status: 'ignored' } }); appDialogClose(); toast('已忽略候选。'); await Promise.all([loadCandidates(), loadOverview(true)]); } },
       { label: '取消', run: appDialogClose },
       { label: '确认收录', class: 'primary', form: 'reviewForm' },
     ]);
     const form = $('reviewForm');
-    form.elements.groupId.addEventListener('change', () => {
-      const group = groupById(form.elements.groupId.value);
-      $('appDialogBody').querySelector('[data-role="impact"]').textContent = group ? `加入后，使用「${group.name}」的 ${group.boundProjectCount} 个项目后续新任务会读到它。` : '确认后保留在记忆库；加入组合并应用到项目后生效。';
-    });
+    const dialogIsOpen = () => form.isConnected && $('appDialog').open;
+    const updateImpact = async () => {
+      const groupId = form.elements.groupId.value;
+      const group = groupById(groupId);
+      const impact = form.querySelector('[data-role="impact"]');
+      impact.textContent = group
+        ? `加入「${group.name}」后生效于 ${group.boundProjectCount} 个项目。`
+        : '确认后保存在记忆库中，应用到项目的组合才会让它生效。';
+      if (!group?.boundProjectCount) return;
+      const result = await api(`/api/engine/memory-groups/${encodeURIComponent(groupId)}`).catch(() => null);
+      if (!dialogIsOpen() || form.elements.groupId.value !== groupId || !result?.group?.boundProjectIds) return;
+      const names = result.group.boundProjectIds.slice(0, 5).map(projectName).join('、');
+      impact.textContent = `加入「${group.name}」后生效于 ${names}${result.group.boundProjectIds.length > 5 ? '等 ' + result.group.boundProjectIds.length + ' 个项目' : ''}。`;
+    };
+    form.elements.groupId.addEventListener('change', updateImpact);
+    void updateImpact();
+    if (sourceProjectId) void projectCandidates(sourceProjectId).then(candidates => {
+      if (!dialogIsOpen()) return;
+      const related = nearbyCandidates(memory, candidates);
+      if (!related.length) return;
+      const details = form.querySelector('[data-role="similar"]');
+      details.innerHTML = `<summary>可能重复的候选（${related.length}）</summary>${related.map(item => `<p class="feedback" style="white-space:pre-wrap"><b>${esc(item.title)}</b><br>${esc(item.text)}</p>`).join('')}`;
+      details.hidden = false;
+    }).catch(() => {});
+    let confirmed = false;
+    let saving = false;
     form.addEventListener('submit', async event => {
       event.preventDefault();
+      if (saving) return;
+      saving = true;
       try {
-        await api(`/api/engine/memories/${encodeURIComponent(memory.id)}`, { method: 'PATCH', body: { status: 'confirmed' } });
+        if (!confirmed) {
+          // 先存为未归组合，加入失败时也不会在旧范围生效。 / Save unbound first so a failed attach cannot activate the old scope.
+          await api(`/api/engine/memories/${encodeURIComponent(memory.id)}`, { method: 'PATCH', body: { status: 'confirmed', scopeType: 'group' } });
+          confirmed = true;
+        }
         const groupId = form.elements.groupId.value;
         if (groupId) await api(`/api/engine/memory-groups/${encodeURIComponent(groupId)}/members`, { method: 'POST', body: { addMemoryIds: [memory.id] } });
         appDialogClose();
         toast(groupId ? `已确认并加入「${groupById(groupId)?.name}」。` : '已确认，保留在记忆库中。');
         await Promise.all([loadCandidates(), loadGroups(), loadMemoryPage(), loadOverview(true)]);
-      } catch (error) { appDialogError(error.message); }
+      } catch (error) { appDialogError(confirmed ? '记忆已收录，加入组合失败。可以选择组合后重试。' + error.message : error.message); }
+      finally { saving = false; }
     });
   }
   // ---- 记忆详情 ----
@@ -1567,10 +1672,11 @@
       if (button.dataset.action === 'group-projects') await groupProjectsDialog(groupById(button.dataset.id));
       if (button.dataset.action === 'open-group') { setView('memory'); state.memory.tab = 'library'; state.memory.folder = button.dataset.id; state.memory.q = ''; state.memory.page = 0; state.memory.cursors = [null]; await loadMemoryPage(); }
       if (button.dataset.action === 'new-memory') memoryEditor();
+      if (button.dataset.action === 'export-memories') await exportProjectMemories(button.dataset.id);
       if (button.dataset.action === 'memory-edit') memoryEditor(memoryById(button.dataset.id));
       if (button.dataset.action === 'memory-detail') { const memory = memoryById(button.dataset.id); if (memory) memoryDetail(memory); else toast('列表已刷新，请重试。'); }
       if (button.dataset.action === 'memory-groups') { const memory = memoryById(button.dataset.id); if (memory) await memoryGroupsDialog(memory); }
-      if (button.dataset.action === 'review-candidate') { const memory = state.candidates.items.find(m => m.id === button.dataset.id) || state.overview?.candidatesPreview?.find(m => m.id === button.dataset.id); if (memory) reviewCandidate(memory); else { await loadCandidates(); const fresh = state.candidates.items.find(m => m.id === button.dataset.id); if (fresh) reviewCandidate(fresh); else toast('候选不存在或已处理。'); } }
+      if (button.dataset.action === 'review-candidate') { const memory = state.candidates.items.find(m => m.id === button.dataset.id) || state.overview?.candidatesPreview?.find(m => m.id === button.dataset.id); if (memory) await reviewCandidate(memory); else { await loadCandidates(); const fresh = state.candidates.items.find(m => m.id === button.dataset.id); if (fresh) await reviewCandidate(fresh); else toast('候选不存在或已处理。'); } }
       if (button.dataset.action === 'memory-evidence') { const memory = memoryById(button.dataset.id); if (memory?.evidence) await openReference({ ...memory.evidence, readFile: false, text: memory.evidence.quote, title: '记忆来源依据（冻结原文）' }); }
       if (button.dataset.action === 'memory-delete') { const memory = memoryById(button.dataset.id); if (memory) confirmDialog('删除这条记忆？', `「${memory.title}」将从所有组合中移除。其他小记忆保留。`, '删除', async () => {
         await api(`/api/engine/memories/${encodeURIComponent(memory.id)}`, { method: 'DELETE' });
@@ -1605,6 +1711,12 @@
   });
   document.addEventListener('change', async event => {
     if (event.target.id === 'projectDomainFilter') { state.projectsPage.domain = event.target.value; state.projectsPage.page = 0; state.projectsPage.cursors = [null]; await loadProjectsPage(); }
+    if (event.target.id === 'candidateProjectFilter') {
+      state.candidates.projectFilter = event.target.value;
+      state.candidates.page = 0;
+      state.candidates.cursors = [null];
+      await loadCandidates();
+    }
   });
   // 拖放：组合 → 项目行 = 应用；标签 → 拖回条 = 解除（键盘等价操作见各按钮/对话框）
   let drag = null;

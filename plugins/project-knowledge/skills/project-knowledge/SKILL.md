@@ -9,14 +9,13 @@ Use Project Knowledge as a read-only source of durable project context. Automati
 
 ## Automatic session injection (read this first)
 
-Clients with the UserPromptSubmit hook receive knowledge automatically, once per session:
+Clients with the UserPromptSubmit hook can receive confirmed memories and project knowledge automatically.
 
-- The first message of a session injects one compact block: applicable confirmed memories in full, plus a **title-only index** of knowledge entries (with their entry ids). Body text is never auto-injected.
-- When a later message strongly matches an indexed entry, a one-line breadcrumb `- 相关知识：title (entryId)` points back at it; the same entry cools down for several turns.
-- Edited or newly confirmed memories are re-sent in full exactly once; removed memories get a one-line notice.
-- Everything else is silent by design - silence means "nothing new", not "no knowledge".
+- The first message supplies applicable confirmed memories and a bounded catalog of knowledge titles and entry IDs.
+- Concrete questions on any turn can supply up to two strongly matched excerpts with their sources. Clearly referential short follow-ups can use the preceding topic. A repeated excerpt from the same revision is suppressed even if another excerpt from that entry can still be shown.
+- Changed or newly applicable confirmed memories are sent again. Removed memories get a one-line notice. Published engines with the earlier session-index policy may supply title-only hints.
 
-Therefore: when a task touches an indexed entry, read its body with `project_knowledge_get` instead of assuming the index line is the whole story, and do not re-ask for knowledge that is already in the session index above.
+Use `project_knowledge_search` when a task needs evidence that the hook did not supply. Read the full entry with `project_knowledge_get` when its title or excerpt leaves a detail unresolved. Check the current source before relying on historical knowledge.
 
 ## Workflow
 

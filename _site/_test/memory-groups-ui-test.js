@@ -134,7 +134,28 @@ async function main() {
     await harness.nativeClick('#appDialogActions button.primary');
     await harness.waitFor(() => harness.run("document.getElementById('appDialog').open === false"), 'the review dialog closes');
     const confirmed = (await harness.engineApi('GET', `/api/memories?status=confirmed&groupId=${group.id}&limit=10`)).body;
-    assert.ok(confirmed.memories.some(m => m.text.includes('可点击的预览')), 'the confirmed candidate joined the group');
+    assert.ok(confirmed.memories.some(m => m.text.includes('可点击的预览') && m.scopeType === 'group'), 'the confirmed candidate activates through its group');
+
+    await harness.produceCandidate({ repo: repoB, projectId: projectIdB, text: '验收包必须包含独立的操作清单。', scopeType: 'global' });
+    await harness.nativeClick('nav [data-view="memory"]');
+    await harness.nativeClick('[data-memory-tab="candidate"]');
+    await harness.selectOption('#candidateProjectFilter', projectIdB);
+    await harness.waitFor(() => harness.run("document.getElementById('memoryContent').textContent.includes('独立的操作清单')"), 'the candidate filter selects by source project even for a legacy global candidate');
+    await harness.selectOption('#candidateProjectFilter', projectIdA);
+    await harness.waitFor(() => harness.run("!document.getElementById('memoryContent').textContent.includes('独立的操作清单')"), 'another project does not show this candidate');
+
+    const downloadDir = path.join(harness.fixture, 'downloads');
+    fs.mkdirSync(downloadDir);
+    await harness.browser.send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: downloadDir });
+    await harness.nativeClick('nav [data-view="projects"]');
+    await harness.nativeClick(`[data-action="project-detail"][data-id="${projectIdA}"]`);
+    await harness.waitFor(() => harness.run("Boolean(document.querySelector('[data-action=export-memories]:not([disabled])'))"), 'the effective memory page enables its export control');
+    await harness.nativeClick('[data-action="export-memories"]:not([disabled])');
+    const exportedPath = path.join(downloadDir, '项目甲-MEMORY.md');
+    await harness.waitFor(() => fs.existsSync(exportedPath), 'the browser downloads the complete project Markdown');
+    const exported = fs.readFileSync(exportedPath, 'utf8');
+    assert.ok(exported.includes(MULTILINE_BODY), 'the download keeps the multiline memory intact');
+    assert.doesNotMatch(exported, /独立的操作清单/, 'pending candidates are absent from the export');
 
     // ---------- 8. 首页组合入口 ----------
     await harness.nativeClick('nav [data-view="home"]');

@@ -44,6 +44,12 @@ async function main() {
     assert.equal(indexed.receipt.injectionKind, 'index'); assert.equal(indexed.receipt.sessionIndexedCount, 7);
     await writeOutput(indexed, { write: (text, callback) => callback() });
     assert.ok(fs.readFileSync(path.join(logDir, fs.readdirSync(logDir)[0]), 'utf8').includes('"injectionKind":"index"'), 'the receipt log carries the injection kind');
+    const evidence = await run(payload, { env, fetchImpl: engineResponse({ status: 'ready', injectionKind: 'evidence', prompt: '<knowledge_context>source excerpt 37</knowledge_context>', facts: [{ text: 'source excerpt 37' }], memories: [], references: [{}] }) });
+    assert.match(evidence.hookSpecificOutput.additionalContext, /source excerpt 37/);
+    assert.equal(evidence.receipt.injectionKind, 'evidence'); assert.equal(evidence.receipt.evidenceCount, 1);
+    await writeOutput(evidence, { write: (text, callback) => callback() });
+    const evidenceLog = fs.readFileSync(path.join(logDir, fs.readdirSync(logDir)[0]), 'utf8');
+    assert.match(evidenceLog, /"evidenceCount":1/); assert.doesNotMatch(evidenceLog, /source excerpt 37/);
     const oversized = await run(payload, { env, fetchImpl: engineResponse({ status: 'ready', prompt: 'x'.repeat(8001), facts: [], memories: [], references: [] }) });
     assert.match(oversized.systemMessage, /CONTEXT_INVALID_RESPONSE/);
     calls.length = 0;
