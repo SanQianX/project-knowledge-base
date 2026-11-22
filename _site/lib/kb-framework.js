@@ -11,19 +11,6 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function readTemplate(name) {
-  const file = path.resolve(__dirname, '..', '..', 'templates', name);
-  if (!fs.existsSync(file)) return null;
-  return fs.readFileSync(file, 'utf-8');
-}
-
-function renderTemplate(name, vars, fallback) {
-  const tpl = readTemplate(name) || fallback;
-  return String(tpl || '').replace(/__([A-Z_][A-Z0-9_]*)__/g, (_, key) => (
-    key in vars ? String(vars[key]) : `__${key}__`
-  ));
-}
-
 function frontmatter(fields) {
   const lines = ['---'];
   for (const [key, value] of Object.entries(fields)) {
@@ -33,13 +20,6 @@ function frontmatter(fields) {
   }
   lines.push('---', '');
   return lines.join('\n');
-}
-
-function ensureFile(file, content, created, base) {
-  if (fs.existsSync(file)) return;
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, content, 'utf-8');
-  if (created) created.push(path.relative(base, file).replace(/\\/g, '/'));
 }
 
 function initProjectDirs(slug, kbPath) {

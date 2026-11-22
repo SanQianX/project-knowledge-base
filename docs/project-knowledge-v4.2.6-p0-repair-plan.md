@@ -545,7 +545,7 @@ Codex 应先调查真实机器，而不是直接套用猜想。
 输出一个红acted report，例如：
 
 ```text
-artifacts/p0-data-incident-report.json
+docs/incident-reports/p0-data-incident-report-20260824.json
 ```
 
 报告可以写到源码工作区或临时目录。

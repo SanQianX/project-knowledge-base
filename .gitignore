@@ -9,15 +9,6 @@ Thumbs.db
 __pycache__/
 *.pyc
 dist/
-# 4.3.0 shipped without a vector-hub runtime: the global dist/ rule above
-# silently kept _modules/vectorhub/dist out of git, so the CI publish packed
-# a package that could never spawn the module. Vendored runtimes are package
-# content, not build output — re-include them.
-!_modules/vectorhub/dist/
-# The event-bridge console resolves its core dependency from a vendored
-# node_modules nested inside _modules — same rule as above: vendored runtimes
-# are package content, not build output.
-!_modules/event-bridge/packages/console/node_modules/
 desktop/out/
 desktop/.core-package/
 .venv/
@@ -39,7 +30,6 @@ _site/_test/fixtures/*
 
 # Runtime state (regenerated on each run; do not push)
 logs/
-_site/_ai/
 knowledge-store.json
 logging.json
 projects.json

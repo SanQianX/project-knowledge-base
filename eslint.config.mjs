@@ -7,8 +7,8 @@ const TEST_DIRS = ['_site/_test/**', 'qa-autopilot/**'];
 export default [
   {
     ignores: [
-      'node_modules/**', '.local-test-data/**', 'artifacts/**', 'Microsoft/**',
-      'desktop/**', '_modules/**', '**/node_modules/**',
+      'node_modules/**', '.local-test-data/**', 'Microsoft/**',
+      'desktop/**', '**/node_modules/**',
       'qa-autopilot/artifacts/**', 'qa-autopilot/.runtime/**',
     ],
   },
