@@ -85,6 +85,17 @@
   }
   function on(id, event, callback) { $(id).addEventListener(event, e => Promise.resolve(callback(e)).catch(error => toast(error.message))); }
   function post(key, message) { const frame = frames[key]; if (frame.ready) $(frame.id).contentWindow.postMessage(message, location.origin); }
+  function postTheme(key) {
+    if (!frames[key].ready) return;
+    const root = document.documentElement;
+    const message = { type: 'kb:theme', theme: root.dataset.theme };
+    if (key === 'workflow') {
+      const style = getComputedStyle(root);
+      const tokens = ['page', 'surface', 'surface2', 'line', 'text', 'muted', 'accent', 'accent-soft', 'good', 'bad', 'bad-soft'];
+      message.palette = Object.fromEntries(tokens.map(token => [token, style.getPropertyValue('--' + token).trim()]));
+    }
+    post(key, message);
+  }
   function initializeFrame(key) { const frame = frames[key]; if (!frame.initialized) { $(frame.id).src = frame.url; frame.initialized = true; } }
   function frameVisible(key) { return key === 'engine' ? $('engineDialog').open : key === 'eventBridge' && state.view === 'activity' && state.activityTab === 'sessions'; }
   function frameContext(key) {
@@ -96,7 +107,7 @@
     const signature = JSON.stringify([state.epoch, ref || '', document.documentElement.dataset.theme, frameVisible(key)]);
     if (frame.contextSignature === signature) return;
     frame.contextSignature = signature;
-    post(key, { type: 'kb:theme', theme: document.documentElement.dataset.theme });
+    postTheme(key);
     post(key, { type: 'kb:select-project', project: ref || '', projectId: project?.projectId || '', requestId: frame.requestId });
     post(key, { type: 'kb:visibility', visible: frameVisible(key) });
   }
@@ -1742,7 +1753,7 @@
     }
   });
   on('projectSelect', 'change', e => selectProject(e.target.value));
-  on('themeToggle', 'click', () => { document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('kb.theme', document.documentElement.dataset.theme); applyAppearance(); Object.keys(frames).forEach(key => post(key, { type: 'kb:theme', theme: document.documentElement.dataset.theme })); void pushKnowledgeToPanel(); });
+  on('themeToggle', 'click', () => { document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('kb.theme', document.documentElement.dataset.theme); applyAppearance(); Object.keys(frames).filter(key => key !== 'workflow').forEach(postTheme); void pushKnowledgeToPanel(); });
   const appearanceTokens = ['page','surface','surface2','surface3','line','text','muted','faint','nav','accent','accent-soft','good','bad','bad-soft'];
   const appearanceDefaults = {
     pure: {
@@ -1775,6 +1786,7 @@
     const theme = root.dataset.theme === 'dark' ? 'dark' : 'light';
     for (const token of appearanceTokens) root.style.removeProperty(`--${token}`);
     for (const [token, value] of Object.entries(appearance.overrides[theme] || {})) if (appearanceTokens.includes(token)) root.style.setProperty(`--${token}`, value);
+    postTheme('workflow');
   }
   function syncAppearanceControls() {
     if (!$('skinPreset')) return;
