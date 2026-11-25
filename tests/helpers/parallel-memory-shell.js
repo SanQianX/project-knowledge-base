@@ -23,19 +23,19 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const { spawnServer } = require('../helpers/spawn-server');
-const { findChrome } = require('../helpers/find-chrome');
-const { launchCdpBrowser, waitFor } = require('../helpers/cdp-browser');
-const { attachNetworkCapture } = require('../helpers/cdp-network-capture');
-const { createModuleFixture, createUpstreamProxy } = require('../helpers/module-fixture');
-const freePort = require('../helpers/free-port');
+const { spawnServer } = require('./spawn-server');
+const { findChrome } = require('./find-chrome');
+const { launchCdpBrowser, waitFor } = require('./cdp-browser');
+const { attachNetworkCapture } = require('./cdp-network-capture');
+const { createModuleFixture, createUpstreamProxy } = require('./module-fixture');
+const freePort = require('./free-port');
 const { createMemoryStandinAnalyzer } = require('./parallel-memory-analyzer');
 const { createEventBridgeStandin } = require('./parallel-memory-event-bridge');
 const { applyDriverIsolation } = require('./parallel-qa-engine-endpoint-isolate');
 const { guardedCreateEngineServer, createEngineVectorStandin } = require('./parallel-qa-engine-endpoint-guard');
 
 const ROOT = require("../paths").ROOT;
-const LIVE_PORTS = new Set([5757, 5790, 8787, 8790]);
+const LIVE_PORTS = new Set([5757, 5760, 5790, 5810, 8787, 8790]);
 
 function git(cwd, args) {
   const result = spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8', windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });
@@ -361,6 +361,15 @@ async function startHarness({ tag, evidenceDir, viewport = { width: 1600, height
     return snapshot.body.memories || [];
   };
 
+  const addGroup = async (name, projectIds) => {
+    const created = await engineApi('POST', '/api/memory-groups', { name });
+    assert.equal(created.status, 200, JSON.stringify(created.body));
+    const { group } = created.body;
+    const binding = await engineApi('POST', `/api/memory-groups/${group.id}/project-bindings`, { addProjectIds: projectIds });
+    assert.equal(binding.status, 200, JSON.stringify(binding.body));
+    return group;
+  };
+
   /** The memories the engine would inject into a task for one project. */
   const injectedMemories = async projectId => {
     const context = await engineApi('POST', '/api/context', { projectId, query: '长期记忆', task: 'memory-lane' });
@@ -373,17 +382,16 @@ async function startHarness({ tag, evidenceDir, viewport = { width: 1600, height
    * quotes the real human event, the quote contains the memory text, and it
    * declares why the text is a durable, cross-project owner preference.
    */
-  const memoryCandidate = ({ text, event, scopeType = 'global' }) => ({
+  const memoryCandidate = ({ text, event }) => ({
     text,
     quote: text,
-    scopeType,
     sourceEventId: event.eventId,
     sourceHash: event.contentHash,
     eligibility: {
       durable: true,
       crossProject: true,
       reason: '人工明确表达的长期偏好',
-      scopeReason: scopeType === 'global' ? '适用于所有领域与项目' : '适用于指定领域',
+      scopeReason: '跨项目可复用的约定',
     },
   });
 
@@ -392,7 +400,7 @@ async function startHarness({ tag, evidenceDir, viewport = { width: 1600, height
    * conversation event bound to it, the stand-in analyzer's manifest and the
    * engine's own promotion and capture.
    */
-  const produceCandidate = async ({ repo, projectId, text, scopeType = 'global', inputOrigin = 'human', file = 'src/candidate.js' }) => {
+  const produceCandidate = async ({ repo, projectId, text, inputOrigin = 'human', file = 'src/candidate.js' }) => {
     const head = commitFile(repo, file, `// ${text}\n`, 'candidate commit');
     const event = await ingestUserEvent({
       projectId,
@@ -401,7 +409,7 @@ async function startHarness({ tag, evidenceDir, viewport = { width: 1600, height
       inputOrigin,
     });
     plan.document = `# 冻结证据\n\n${text}\n`;
-    plan.memoryCandidates = [memoryCandidate({ text, event, scopeType })];
+    plan.memoryCandidates = [memoryCandidate({ text, event })];
     const run = await triggerRun(projectId, head);
     return { run, event, commitSha: head, capture: run.memoryCapture };
   };
@@ -473,7 +481,7 @@ async function startHarness({ tag, evidenceDir, viewport = { width: 1600, height
     nativeClick, pressKey, pressTab, pressEnter, typeText,
     importProject, addDomain, ingestUserEvent, triggerRun,
     brainScopePath, domainScopePath, productMemories, injectedMemories,
-    memoryCandidate, produceCandidate,
+    addGroup, memoryCandidate, produceCandidate,
     cleanup,
   };
 }

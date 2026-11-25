@@ -164,18 +164,18 @@ async function scenarioOriginExclusion(lane, evidence, commands) {
 
     // ---- C01: the open item is blocked explicitly, the implementation is intact ----
     const injected = await callJson(engineUrl, '/api/memories', {
-      text: '注入来源证据的记忆', scopeType: 'global', evidence: { projectId: PROJECT_ID, commitSha: sha },
+      text: '注入来源证据的记忆', evidence: { projectId: PROJECT_ID, commitSha: sha },
     });
     assert.equal(injected.status, 400, `evidence injection must be refused (status ${injected.status})`);
     assert.equal(injected.body?.error, 'INVALID_ARGUMENT', `unexpected error code ${injected.body?.error}`);
-    assert.match(String(injected.body?.message || ''), /不能指定来源证据/, 'the refusal states the C01 rule explicitly');
+    assert.match(String(injected.body?.message || ''), /只支持填写标题、记忆内容、所属智脑和组合/, 'the refusal states the C01 rule explicitly');
 
     // A manual memory (explicit user confirmation) still stores no evidence.
     const brainScope = await callJson(engineUrl, '/api/scopes', {
       scopes: [{ id: 'brain-default', kind: 'brain', brainId: 'brain-default', name: '默认智脑', knowledgePath: brainPath }],
     }, { headers: { authorization: 'Bearer eng012-lane-token' } });
     assert.equal(brainScope.status, 200, `brain scope binding failed: ${JSON.stringify(brainScope.body)}`);
-    const manual = await callJson(engineUrl, '/api/memories', { text: MANUAL_TEXT, scopeType: 'global' });
+    const manual = await callJson(engineUrl, '/api/memories', { text: MANUAL_TEXT });
     assert.equal(manual.status, 200, `manual memory creation failed: ${JSON.stringify(manual.body)}`);
     assert.equal(manual.body?.memory?.sourceType, 'manual');
     assert.equal(manual.body?.memory?.evidence, null, 'a manual record stores no evidence');
@@ -334,7 +334,7 @@ async function main() {
       'expected1 维护/委派不能自动成为人类长期偏好': 'PASS',
       'expected2 C01未定项不得自动删除实现': 'PASS',
       originExclusion: 'the frozen commit conversation snapshot carries both origins; the engine rejected the delegated candidate with SOURCE_NOT_HUMAN and kept the human one as a plain candidate - nothing was confirmed automatically',
-      c01Block: 'POST /api/memories with an injected source-evidence field is refused with INVALID_ARGUMENT ("不能指定来源证据"); a manual memory is stored with evidence null and sourceType manual, so the MEM-008 implementation was not deleted',
+      c01Block: 'POST /api/memories with an injected source-evidence field is refused with INVALID_ARGUMENT (only editable memory fields are accepted); a manual memory is stored with evidence null and sourceType manual, so the MEM-008 implementation was not deleted',
       noImplementationDeletion: 'a manifest that tries to delete an implementation file is refused by the promotion path (PATH_OUTSIDE_ROOT); the run fails, no knowledge operation is applied and the implementation files stay byte-identical',
       analyzerStandin: 'deterministic stand-in that deliberately emits both the human and the delegated candidate - NO real model output covered',
       vectorService: 'real vector-hub server, deterministic test embeddings - paid embedding API NOT covered',

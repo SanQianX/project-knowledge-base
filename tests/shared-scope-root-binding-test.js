@@ -38,11 +38,12 @@ const { guardedCreateEngineServer, createEngineVectorStandin, createEngineBridge
     const brain = scopes.find(scope => scope.kind === 'brain');
     const domain = scopes.find(scope => scope.kind === 'domain');
     engine.store.addProject({ projectId: 'project-test', repoPath: path.join(root, 'code'), knowledgePath: path.join(root, 'project-knowledge'), domainId: domain.id });
-    engine.store.state.memories.push({ id: 'memory-test', brainId: brain.id, status: 'candidate', text: '保持目录绑定稳定', evidence: { projectId: 'project-test', commitSha: 'a'.repeat(40), entryId: 'README.md' } });
-    engine.store.save();
-    await engine.coordinator.memories.update('memory-test', { status: 'confirmed' });
+    const group = await engine.coordinator.memoryGroups.create({ name: '共享目录绑定测试', brainId: brain.id });
+    await engine.coordinator.memoryGroups.setProjectBindings(group.id, { addProjectIds: ['project-test'] });
+    const memory = await engine.coordinator.memories.create({ text: '保持目录绑定稳定', brainId: brain.id, groupId: group.id });
+    const entryId = engine.coordinator.memories.entryFor(memory, engine.store.getProject('project-test'));
     fs.writeFileSync(path.join(domain.knowledgePath, 'README.md'), '# 领域经验\n\n领域知识不能随根目录设置隐式移动。\n');
-    const memoryFile = engine.coordinator.memories.file(brain);
+    const memoryFile = engine.coordinator.memories.file(brain, entryId);
     const before = fs.readFileSync(memoryFile);
     await settings.updatePatch({ knowledge: { rootPath: newRoot } });
     assert.equal((await bridge.syncEngineConfiguration()).scopes, true, 'changing index root must not invalidate shared memory wiring');
@@ -59,8 +60,8 @@ const { guardedCreateEngineServer, createEngineVectorStandin, createEngineBridge
     bridge.engineUrl = await start();
     assert.equal((await bridge.syncEngineConfiguration()).scopes, true);
     assert.deepEqual(fs.readFileSync(memoryFile), before);
-    const memory = await engine.coordinator.retrieval.get({ projectId: 'project-test', spaceId: 'brain:brain-default', entryId: 'memories/confirmed.md' });
-    assert.ok(memory.chunks.some(chunk => chunk.chunk_text.includes('保持目录绑定稳定')));
+    const found = await engine.coordinator.retrieval.get({ projectId: 'project-test', spaceId: 'brain:brain-default', entryId });
+    assert.ok(found.chunks.some(chunk => chunk.chunk_text.includes('保持目录绑定稳定')));
     const shared = await engine.coordinator.retrieval.get({ projectId: 'project-test', spaceId: 'domain:domain-tools', entryId: 'README.md' });
     assert.ok(shared.chunks.some(chunk => chunk.chunk_text.includes('不能随根目录设置隐式移动')));
     await engine.close(); engine = null;

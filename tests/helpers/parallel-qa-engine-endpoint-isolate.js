@@ -45,7 +45,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const REPO_ROOT = require("../paths").ROOT;
-const PROTECTED_PORTS = new Set([5757, 5760, 5789, 5790, 8787, 8790]);
+const PROTECTED_PORTS = new Set([5757, 5760, 5789, 5790, 5810, 8787, 8790]);
 
 // Captured at module load, before any isolation rebuilds the environment.
 const LIVE_HOME = process.env.USERPROFILE || process.env.HOME || os.homedir();
@@ -194,6 +194,8 @@ function applyDriverIsolation({ prefix = 'pk-qa-engine-endpoint', captureChrome 
 
   const parsed = path.parse(layout.home);
   const envMap = {
+    // Chromium 使用 locale 编码下载文件名。 / Chromium uses the locale for download filenames.
+    ...(process.platform === 'linux' ? { LANG: 'C.UTF-8' } : {}),
     HOME: layout.home,
     USERPROFILE: layout.home,
     HOMEDRIVE: parsed.root,

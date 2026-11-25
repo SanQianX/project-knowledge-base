@@ -18,7 +18,7 @@ async function until(read, predicate, label) {
 }
 
 async function main() {
-  const options = cliOptions();
+  const options = cliOptions({ test: true });
   let fakeTime;
   const fixture = await createAiTeamUiFixture({
     ...options, maintenance: true, emptyTeam: false,

@@ -51,7 +51,7 @@ async function main() {
     await harness.browser.send('Input.insertText', { text: '开发时保护日常服务' });
     await harness.nativeClick('#memoryForm textarea[name=text]');
     await harness.browser.send('Input.insertText', { text: MULTILINE_BODY });
-    // 默认 scopeType=group；选择加入「通用约定」
+    assert.equal(await harness.run("Boolean(document.querySelector('#memoryForm [name=scopeType], #memoryForm [name=scopeTarget]'))"), false);
     await harness.run("(() => { const sel = document.getElementById('memoryForm').elements.groupId; sel.value = [...sel.options].find(o => o.text.includes('通用约定'))?.value || ''; return sel.value !== ''; })()");
     await harness.nativeClick('#appDialogActions button.primary');
     await harness.waitFor(() => harness.run("document.getElementById('appDialog').open === false"), 'the memory editor closes');
@@ -124,7 +124,7 @@ async function main() {
     await harness.waitFor(() => harness.run("[...document.querySelectorAll('.memory-folders button')].some(b => b.textContent.includes('通用约定')) && [...document.querySelectorAll('.memory-item')].some(el => el.textContent.includes('开发时保护日常服务'))"), 'the group and its memory survive a reload');
 
     // ---------- 7. 候选审核：确认并加入组合 ----------
-    await harness.produceCandidate({ repo: repoA, projectId: projectIdA, text: '界面变更先给可点击的预览，确认流程后再实施。', scopeType: 'global' });
+    await harness.produceCandidate({ repo: repoA, projectId: projectIdA, text: '界面变更先给可点击的预览，确认流程后再实施。' });
     await harness.nativeClick('nav [data-view="home"]');
     await harness.waitFor(() => harness.run("document.getElementById('homeContent').textContent.includes('待确认记忆') && document.getElementById('homeCount') !== null"), 'the home overview renders');
     await harness.waitFor(() => harness.run("document.body.textContent.includes('界面变更先给可点击的预览')"), 'the candidate preview shows on home');
@@ -136,11 +136,11 @@ async function main() {
     const confirmed = (await harness.engineApi('GET', `/api/memories?status=confirmed&groupId=${group.id}&limit=10`)).body;
     assert.ok(confirmed.memories.some(m => m.text.includes('可点击的预览') && m.scopeType === 'group'), 'the confirmed candidate activates through its group');
 
-    await harness.produceCandidate({ repo: repoB, projectId: projectIdB, text: '验收包必须包含独立的操作清单。', scopeType: 'global' });
+    await harness.produceCandidate({ repo: repoB, projectId: projectIdB, text: '验收包必须包含独立的操作清单。' });
     await harness.nativeClick('nav [data-view="memory"]');
     await harness.nativeClick('[data-memory-tab="candidate"]');
     await harness.selectOption('#candidateProjectFilter', projectIdB);
-    await harness.waitFor(() => harness.run("document.getElementById('memoryContent').textContent.includes('独立的操作清单')"), 'the candidate filter selects by source project even for a legacy global candidate');
+    await harness.waitFor(() => harness.run("document.getElementById('memoryContent').textContent.includes('独立的操作清单')"), 'the candidate filter selects by source project before it is assigned to a group');
     await harness.selectOption('#candidateProjectFilter', projectIdA);
     await harness.waitFor(() => harness.run("!document.getElementById('memoryContent').textContent.includes('独立的操作清单')"), 'another project does not show this candidate');
 
@@ -151,9 +151,12 @@ async function main() {
     await harness.nativeClick(`[data-action="project-detail"][data-id="${projectIdA}"]`);
     await harness.waitFor(() => harness.run("Boolean(document.querySelector('[data-action=export-memories]:not([disabled])'))"), 'the effective memory page enables its export control');
     await harness.nativeClick('[data-action="export-memories"]:not([disabled])');
-    const exportedPath = path.join(downloadDir, '项目甲-MEMORY.md');
-    await harness.waitFor(() => fs.existsSync(exportedPath), 'the browser downloads the complete project Markdown');
-    const exported = fs.readFileSync(exportedPath, 'utf8');
+    const download = await harness.waitFor(
+      () => fs.readdirSync(downloadDir).find(name => name.endsWith('-MEMORY.md')),
+      'the browser downloads the complete project Markdown',
+    );
+    const exported = fs.readFileSync(path.join(downloadDir, download), 'utf8');
+    assert.match(exported, /^# 项目甲 · 生效记忆/);
     assert.ok(exported.includes(MULTILINE_BODY), 'the download keeps the multiline memory intact');
     assert.doesNotMatch(exported, /独立的操作清单/, 'pending candidates are absent from the export');
 

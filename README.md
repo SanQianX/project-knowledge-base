@@ -192,6 +192,12 @@ local legacy read contract. Use `--scope domain` or `--scope brain` to broaden
 CLI searches; MCP accepts the equivalent `scope`. Shared-file reads accept
 `--space <spaceId>` (MCP: `space` or `spaceId`).
 
+## Long-term memory
+
+A confirmed memory is stored once in the engine state and can belong to several combinations. A combination applies to the projects you bind to it. Unassigned memories stay in the library. Review candidates with their original evidence before assigning them to a combination.
+
+Upgrading to 5.3 migrates old confirmed scopes into combinations for their existing projects. Existing combinations, memory IDs, bodies and candidate evidence are kept. The engine backs up its state before migration. Readable group Markdown is generated under the brain's shared knowledge directory at `memories/groups/<group-id>.md`. Export a project's effective memories as `MEMORY.md` from its detail page.
+
 ## Storage
 
 Version 5 is a fresh start, not a data upgrade. Stop the previous process,

@@ -138,7 +138,7 @@ async function main() {
     );
 
     // 1. A real candidate through the real pipeline.
-    const produced = await harness.produceCandidate({ repo, projectId, text: CANDIDATE_TEXT, scopeType: 'global' });
+    const produced = await harness.produceCandidate({ repo, projectId, text: CANDIDATE_TEXT });
     assert.equal(produced.capture.accepted, 1, `the real run admitted one candidate: ${JSON.stringify(produced.capture)}`);
     const candidate = (await harness.productMemories()).find(memory => memory.text === CANDIDATE_TEXT);
     assert.ok(candidate, 'the candidate really exists in the engine');

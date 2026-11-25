@@ -53,6 +53,12 @@ function workflowInstalled() {
   } else {
     assert.ok(specs.some(spec => spec.name === 'workflow'), 'an installed workflow runtime gets a supervised spec');
     assert.match(specs.find(spec => spec.name === 'workflow').command, /ai-coding-workflow.*serve/, 'the spec launches the workflow CLI');
+    // M0-C: the managed workflow module receives the Bridge URL so its
+    // independent consumer registers with a wake-up callback — exactly like
+    // the terminal/workbench/engine specs already do.
+    const workflowSpec = specs.find(spec => spec.name === 'workflow');
+    assert.equal(workflowSpec.env.KB_EVENT_BRIDGE_URL, bridge.eventBridgeUrl, 'the workflow spec carries KB_EVENT_BRIDGE_URL');
+    assert.equal(workflowSpec.env.KB_WORKFLOW_RUNTIME_TOKEN, bridge.runtimeToken, 'the workflow spec carries the runtime token');
   }
   for (const pinned of ['terminal', 'vector-hub', 'event-bridge', 'knowledge-engine']) {
     assert.ok(specs.some(spec => spec.name === pinned), `pinned module ${pinned} keeps its spec`);
@@ -97,6 +103,150 @@ function workflowInstalled() {
   await deadBridge.proxy(req, res, deadBridge._workflowApi('/api/workflow/team'));
   assert.equal(res.body.error, 'MODULE_UNREACHABLE');
   assert.equal(res.body.details.failureKind, 'NETWORK_ERROR');
+
+  // 6) M0-C trusted review forward: the shell resolves the registered project
+  //    through its own read-only resolver and attaches ITS runtime token plus
+  //    the canonical Git root; the caller's own token header is never
+  //    forwarded as module trust. Verified against a REAL workflow module
+  //    (installed pinned package, or KB_WORKFLOW_TEST_SOURCE candidate).
+  let upstreamWorkflow = null;
+  const path = require('node:path');
+  try {
+    const source = process.env.KB_WORKFLOW_TEST_SOURCE
+      ? path.resolve(process.env.KB_WORKFLOW_TEST_SOURCE)
+      : require.resolve('@sanqianx/ai-coding-workflow/src/server', { paths: [path.resolve(__dirname, '..')] });
+    upstreamWorkflow = require(source).createWorkflowServer;
+  } catch {
+    upstreamWorkflow = null;
+  }
+  if (!upstreamWorkflow) {
+    console.log('workflow-module-wiring-test: trusted-forward section skipped (no workflow module available)');
+  } else {
+    const fs = require('node:fs');
+    const os = require('node:os');
+    const childPath = require('node:path');
+    const { spawnSync } = require('node:child_process');
+    const moduleToken = 'module-runtime-token';
+    const upstream = upstreamWorkflow({ dataDir: fs.mkdtempSync(childPath.join(os.tmpdir(), 'wf-wiring-')), runtimeToken: moduleToken });
+    const bound = await upstream.listen(0);
+    await fetch(`${bound.host === '127.0.0.1' ? 'http://127.0.0.1' : `http://${bound.host}`}:${bound.port}/api/workflow/v1/team`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestId: 'wiring-seed' }) });
+    const repo = fs.mkdtempSync(childPath.join(os.tmpdir(), 'wf-wiring-repo-'));
+    const git = args => { const r = spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8' }); if (r.status !== 0) throw new Error(r.stderr); };
+    git(['init', '-q', '-b', 'main']); git(['config', 'user.email', 't@t']); git(['config', 'user.name', 't']);
+    fs.writeFileSync(childPath.join(repo, 'a.js'), 'export const a = 1;\n');
+    git(['add', '.']); git(['commit', '-qm', 'init']);
+    const seen = { authorization: null, runtimeToken: null, body: null };
+    const forwardingBridge = new ModuleBridge({
+      workflowUrl: `http://127.0.0.1:${bound.port}`,
+      runtimeToken: moduleToken,
+      workflowProjectResolver: input => ({ projectId: input.projectId || 'proj-wired', repoPath: repo }),
+    });
+    const shellProxy = http.createServer((req2, res2) => forwardingBridge.proxyWorkflow(req2, res2, req2.url.replace(/\?.*$/, ''), (req2.url.match(/\?.*$/) || [''])[0]));
+    await new Promise(resolve => shellProxy.listen(0, '127.0.0.1', resolve));
+    try {
+      // Create a task through the same proxy, then request its review.
+      const createdResponse = await fetch(`http://127.0.0.1:${shellProxy.address().port}/api/workflow/workflow-tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-KB-Runtime-Token': 'client-token-must-not-forward' },
+        body: JSON.stringify({ requestId: 'wiring-task', projectId: 'proj-wired', title: '受信转发' }),
+      });
+      const created = await createdResponse.json().catch(() => ({}));
+      assert.equal(createdResponse.status, 201, JSON.stringify(created));
+      // The creation itself carries no canonicalGitRoot (only reviews do), so
+      // the task stays unbound unless the review forwards the trusted root.
+      const reviewResponse = await fetch(`http://127.0.0.1:${shellProxy.address().port}/api/workflow/workflow-tasks/${created.task.taskId}/reviews`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-KB-Runtime-Token': 'client-token-must-not-forward' },
+        body: JSON.stringify({ requestId: 'wiring-review', projectId: 'proj-wired', repoPath: repo, tools: ['eslint'] }),
+      });
+      const reviewBody = await reviewResponse.json().catch(() => ({}));
+      assert.ok(reviewResponse.status === 202 || reviewResponse.status === 201, `review via the shell proxy answers ${reviewResponse.status}: ${JSON.stringify(reviewBody).slice(0, 200)}`);
+      if (reviewBody.reviewJobId) {
+        const job = await (await fetch(`http://127.0.0.1:${bound.port}/api/workflow/v1/review-jobs/${reviewBody.reviewJobId}`, { headers: { 'X-KB-Runtime-Token': moduleToken } })).json();
+        assert.equal(job.job.repoPath, fs.realpathSync(repo), 'the trusted forward bound the canonical root');
+        assert.equal(job.job.tools[0], 'eslint');
+        assert.equal(job.job.executionToken, undefined, 'the execution token never leaves the module');
+      } else {
+        // Old installed module: the POST answered with legacy receipts — the
+        // forward still resolved the project through the shell.
+        assert.ok(Array.isArray(reviewBody.receipts), 'the old module answers with receipts');
+      }
+    } finally {
+      shellProxy.closeAllConnections(); await new Promise(resolve => shellProxy.close(resolve));
+      await upstream.close();
+    }
+  }
+
+  // 7) P2b: team-mode creation is trusted-forwarded ONLY for registered projects.
+  {
+    const path = require('node:path');
+    const source = process.env.KB_WORKFLOW_TEST_SOURCE
+      ? path.resolve(process.env.KB_WORKFLOW_TEST_SOURCE)
+      : require.resolve('@sanqianx/ai-coding-workflow/src/server', { paths: [path.resolve(__dirname, '..')] });
+    let createServer = null;
+    try { createServer = require(source).createWorkflowServer; } catch { createServer = null; }
+    if (!createServer) {
+      console.log('workflow-module-wiring-test: P2b team-forward section skipped (no module)');
+    } else {
+      const fsx = require('node:fs');
+      const osx = require('node:os');
+      const { spawnSync } = require('node:child_process');
+      const moduleToken = 'p2b-module-token';
+      const upstream = createServer({ dataDir: fsx.mkdtempSync(path.join(osx.tmpdir(), 'p2b-wire-')), runtimeToken: moduleToken });
+      const bound = await upstream.listen(0);
+      const base = 'http://127.0.0.1:' + bound.port;
+      await fetch(base + '/api/workflow/v1/team', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestId: 'seed' }) });
+      const repo = fsx.mkdtempSync(path.join(osx.tmpdir(), 'p2b-wire-repo-'));
+      const git = a => { const r = spawnSync('git', ['-C', repo, ...a], { encoding: 'utf8' }); if (r.status !== 0) throw new Error(r.stderr); };
+      git(['init', '-q', '-b', 'main']); git(['config', 'user.email', 't@t']); git(['config', 'user.name', 't']);
+      fsx.writeFileSync(path.join(repo, 'a.js'), 'export const a = 1;' + String.fromCharCode(10));
+      git(['add', '.']); git(['commit', '-qm', 'i']);
+      // 注册受信根 + 开启 autoDispatch 的项目（受信 settings 写入）
+      const authHeaders = { 'Content-Type': 'application/json', 'X-KB-Runtime-Token': moduleToken };
+      await fetch(base + '/api/internal/project-roots', { method: 'POST', headers: authHeaders, body: JSON.stringify({ requestId: 'reg', projectId: 'proj-p2b', canonicalGitRoot: repo }) });
+      const members = (await (await fetch(base + '/api/workflow/v1/members')).json()).members;
+      await fetch(base + '/api/workflow/v1/projects/proj-p2b/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestId: 'cfg', enabled: true, autoDispatch: true, leaderMemberId: members[0].memberId, developerMemberIds: [members[0].memberId] }) });
+      const seenToken = { value: null };
+      const bridge = new ModuleBridge({
+        workflowUrl: base, runtimeToken: moduleToken,
+        workflowProjectResolver: input => ({ projectId: input.projectId === 'proj-p2b' ? 'proj-p2b' : null, repoPath: input.projectId === 'proj-p2b' ? repo : null }),
+      });
+      // 用最小 http 服务驱动 proxyWorkflow
+      const http = require('node:http');
+      const shell = http.createServer((rq, rs) => bridge.proxyWorkflow(rq, rs, rq.url.split('?')[0], ''));
+      await new Promise(r => shell.listen(0, '127.0.0.1', r));
+      try {
+        // 注册项目 + team → 受信（壳解析成功才带 token）→ 模块生效
+        const okRes = await fetch('http://127.0.0.1:' + shell.address().port + '/api/workflow/workflow-tasks', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requestId: 'team-ok', projectId: 'proj-p2b', title: '团队任务', executionMode: 'team' }),
+        });
+        const okJson = await okRes.json();
+        // Capability-branched: the installed pinned module predates team
+        // execution (its tasks have no executionMode) — only a module that
+        // UNDERSTANDS team mode may be asserted to arm it.
+        if (okJson.task && okJson.task.executionMode === 'team') {
+          assert.equal(okJson.task.planStatus, 'pending-plan', 'team armed with a pending plan');
+        } else {
+          const health = await (await fetch(base + '/api/health')).json();
+          assert.notEqual(health.capabilities && health.capabilities.teamExecution, true, 'a team-capable module must arm team mode through the trusted forward');
+          console.log('workflow-module-wiring-test: P2b team-arm skipped (legacy module without team execution)');
+        }
+        // 未注册项目 + team → 壳不带 token → 模块静默降级
+        const degradeRes = await fetch('http://127.0.0.1:' + shell.address().port + '/api/workflow/workflow-tasks', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requestId: 'team-no', projectId: 'unregistered', title: '伪造团队', executionMode: 'team' }),
+        });
+        const degradeJson = await degradeRes.json();
+        assert.notEqual(degradeJson.task && degradeJson.task.executionMode, 'team', 'unregistered project degrades to a plain task');
+        assert.notEqual(degradeJson.task && degradeJson.task.planStatus, 'pending-plan');
+      } finally {
+        shell.closeAllConnections(); await new Promise(r => shell.close(r));
+        await upstream.close();
+      }
+      console.log('workflow-module-wiring-test PASS (P2b: trusted team forward / unregistered degrade)');
+    }
+  }
 
   console.log('workflow-module-wiring-test PASS');
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -107,6 +107,7 @@ async function main() {
   try {
     const repo = makeRepo(harness.fixture, 'memcand-repo', { 'README.md': '# 候选甲\n' });
     const { projectId } = await harness.importProject(repo, '候选甲');
+    const group = await harness.addGroup('候选甲约定', [projectId]);
     await harness.requestRegistryRefresh();
     // The new home page no longer lists projects; the registry projection is
     // surfaced by the topbar project selector instead.
@@ -117,7 +118,7 @@ async function main() {
     );
 
     // ---------------------------------------------------------------- MEM-003
-    const produced = await harness.produceCandidate({ repo, projectId, text: CANDIDATE_TEXT, scopeType: 'global' });
+    const produced = await harness.produceCandidate({ repo, projectId, text: CANDIDATE_TEXT });
     assert.equal(produced.capture.accepted, 1, `the real run admitted one candidate: ${JSON.stringify(produced.capture)}`);
     assert.deepEqual(produced.capture.rejected, [], 'the real gate rejected nothing for a human source');
 
@@ -125,8 +126,8 @@ async function main() {
     assert.ok(stored, 'the candidate really exists in the engine');
     assert.equal(stored.status, 'candidate', 'the automatic memory is saved as a candidate');
     assert.notEqual(stored.sourceType, 'manual', 'an automatic candidate is not a manual memory');
-    assert.equal(stored.scopeType, 'global', 'a global candidate keeps the global scope');
-    assert.equal(stored.scopeId, stored.brainId, 'a global candidate targets the brain itself');
+    assert.equal(stored.scopeType, 'group');
+    assert.deepEqual(stored.groups, [], 'the candidate has no assignment');
     assert.equal(stored.evidence.projectId, projectId, 'the frozen source names the source project');
     assert.equal(stored.evidence.commitSha, produced.commitSha, 'the frozen source names the real commit');
     assert.ok(stored.evidence.entryId, 'the frozen source names the promoted entry');
@@ -223,6 +224,7 @@ async function main() {
       'the review dialog is open again',
       10000,
     );
+    await harness.selectOption('#reviewForm select[name=groupId]', group.id);
     await harness.nativeClick('#appDialogActions button.primary');
     await harness.waitFor(
       () => harness.run("document.getElementById('appDialog').open === false"),
@@ -231,8 +233,7 @@ async function main() {
     );
     const patch = harness.network.find(entry => entry.method === 'PATCH' && entry.url.includes(`/api/engine/memories/${stored.id}`)).pop();
     assert.ok(patch, 'the shell really patched the candidate');
-    // 确认请求同时把记忆归入其组合作用域。 / The confirmation also re-scopes the memory to its group.
-    assert.deepEqual(patch.body, { status: 'confirmed', scopeType: 'group' }, 'the confirmation changes the status and re-scopes to the group');
+    assert.deepEqual(patch.body, { status: 'confirmed', groupId: group.id }, 'the confirmation assigns the chosen combination');
     assert.equal(patch.status, 200, `the confirmation answers 200: ${JSON.stringify(patch.body)}`);
     const patchBody = await harness.network.body(patch);
     assert.ok(patchBody && patchBody.memory, `the confirmation answers with the memory: ${JSON.stringify(patchBody)}`);
@@ -241,12 +242,10 @@ async function main() {
     const confirmToast = await harness.run("document.getElementById('toast').textContent");
     assert.match(String(confirmToast), /已确认/, `the toast reports the confirmation: ${confirmToast}`);
 
-    // 确认先落入未归组合，未加入任何组合前不注入。 / The confirmation lands
-    // ungrouped first and stays out of injection until attached to a group.
     const afterConfirm = await harness.injectedMemories(projectId);
     assert.ok(
-      !afterConfirm.some(entry => entry.memoryId === stored.id),
-      `an ungrouped confirmation stays out of injection: ${JSON.stringify(afterConfirm)}`,
+      afterConfirm.some(entry => entry.memoryId === stored.id),
+      `the confirmed memory is injected: ${JSON.stringify(afterConfirm)}`,
     );
 
     // The confirmed memory is listed in the library tab (旧 confirmed tab) of
@@ -271,7 +270,7 @@ async function main() {
     });
 
     // ---------------------------------------------------------------- MEM-005
-    const second = await harness.produceCandidate({ repo, projectId, text: IGNORED_TEXT, scopeType: 'global', file: 'src/ignored.js' });
+    const second = await harness.produceCandidate({ repo, projectId, text: IGNORED_TEXT, file: 'src/ignored.js' });
     assert.equal(second.capture.accepted, 1, `the second real run admitted one candidate: ${JSON.stringify(second.capture)}`);
     const toIgnore = (await harness.productMemories()).find(memory => memory.text === IGNORED_TEXT);
     assert.ok(toIgnore, 'the second candidate really exists in the engine');

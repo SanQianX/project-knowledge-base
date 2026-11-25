@@ -514,7 +514,12 @@ function createRuntime(options = {}) {
     isProjectBusy: projectId => isProjectBusy(projectId, projectStore, activeTasks),
     bridgeAdapter,
   });
-  const moduleBridge = options.moduleBridge || new ModuleBridge({ registryStore, projectStore, settingsStore, logger, dataDir: dataPath });
+  const moduleBridge = options.moduleBridge || new ModuleBridge({
+    registryStore, projectStore, settingsStore, logger, dataDir: dataPath,
+    // M0-C: trusted review forwards resolve the registered project through
+    // the same read-only resolution the knowledge tools use.
+    workflowProjectResolver: input => knowledgeRuntime.resolveProject(input),
+  });
   return {
     analysisOwner: options.analysisOwner || 'legacy', ownership: { owner: options.analysisOwner || 'legacy', ready: false },
     rootDir, dataPath, layout, settingsStore, registryStore, projectStore, logger, logRepository,

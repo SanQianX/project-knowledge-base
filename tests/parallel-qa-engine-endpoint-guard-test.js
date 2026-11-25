@@ -92,7 +92,8 @@ const {
     assert.equal(negScope.index.error.details.upstreamCode, EGRESS_BLOCK_CODE);
 
     // S1/S2 chain: manual memory confirm → materialize → onMaterialized → import.
-    const negMemory = await negativeEngine.coordinator.memories.create({ text: '负向回归：确认流必须在 LIVE 8787 之前被拦截', brainId: 'brain-r5' });
+    const negGroup = await negativeEngine.coordinator.memoryGroups.create({ name: '负向测试组合', brainId: 'brain-r5' });
+    const negMemory = await negativeEngine.coordinator.memories.create({ text: '负向回归：确认流必须在 LIVE 8787 之前被拦截', brainId: 'brain-r5', groupId: negGroup.id });
     assert.equal(negMemory.status, 'confirmed');
     await waitFor(() => guard.blocked.filter(entry => entry.href === 'http://127.0.0.1:8787/api/import').length >= 2, 'confirm chain attempting LIVE import while blocked');
     // index() chain: run maintenance index → /api/sync at LIVE 8787.
@@ -143,7 +144,8 @@ const {
     // content then takes the GET /api/projects health path and skips import.
     const importsAfterConfigure = importCount();
     const healthGets = () => standin.records.filter(record => record.method === 'GET' && record.path === '/api/projects').length;
-    const posMemory = await positiveEngine.coordinator.memories.create({ text: '正向证明：确认流导入必须落到自有替身', brainId: 'brain-pos' });
+    const posGroup = await positiveEngine.coordinator.memoryGroups.create({ name: '正向测试组合', brainId: 'brain-pos' });
+    const posMemory = await positiveEngine.coordinator.memories.create({ text: '正向证明：确认流导入必须落到自有替身', brainId: 'brain-pos', groupId: posGroup.id });
     assert.equal(posMemory.status, 'confirmed');
     await waitFor(() => importCount() >= importsAfterConfigure + 1, 'confirm chain importing at the OWN stand-in');
     assert.equal(importCount(), importsAfterConfigure + 1, 'materialized memory must trigger exactly one real import at the stand-in');

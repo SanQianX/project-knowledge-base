@@ -39,7 +39,6 @@
   const projectName = id => state.projects.find(p => p.projectId === id)?.name || id;
   const time = value => value ? new Date(value).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
   const clamp2 = text => String(text || '').replace(/\n\s*\n/g, '\n');
-  const SCOPE_LABEL = { project: '项目记忆', domain: '领域记忆', global: '全局记忆', group: '组合记忆' };
   const recoveryLabel = run => {
     const recovery = run.recovery;
     if (['failed', 'index-pending'].includes(run.state)) {
@@ -400,13 +399,18 @@
   async function loadGroups() {
     const epoch = ++state.groups.epoch;
     state.groups.loading = true;
+    let groups = state.groups.items;
     try {
       const result = await api('/api/engine/memory-groups?limit=100');
-      if (epoch !== state.groups.epoch) return;
-      state.groups.items = result.groups; state.groups.total = result.total;
+      groups = result.groups;
+      if (epoch === state.groups.epoch) {
+        state.groups.items = groups;
+        state.groups.total = result.total;
+      }
     } catch (error) { if (epoch === state.groups.epoch) toast('组合列表读取失败：' + error.message); }
     finally { if (epoch === state.groups.epoch) state.groups.loading = false; }
-    if (state.view === 'memory') renderMemories();
+    if (epoch === state.groups.epoch && state.view === 'memory') renderMemories();
+    return groups;
   }
   const groupById = id => state.groups.items.find(g => g.id === id);
   async function loadMemoryPage() {
@@ -429,7 +433,7 @@
     if (state.view === 'memory') renderMemories();
   }
   const candidateProjectId = () => state.candidates.projectFilter ?? activeProject()?.projectId ?? '';
-  const candidateSourceProjectId = memory => memory.evidence?.projectId || (memory.scopeType === 'project' ? memory.scopeId : null);
+  const candidateSourceProjectId = memory => memory.evidence?.projectId || null;
   async function projectCandidates(projectId) {
     const params = new URLSearchParams({ status: 'candidate', sourceProjectId: projectId });
     const result = await api('/api/engine/memories?' + params);
@@ -465,7 +469,7 @@
     if (state.view === 'memory') renderMemories();
   }
   function memoryCard(m) {
-    const scopeText = m.scopeType === 'group' ? (m.groups?.length ? `组合：${m.groups.map(g => esc(g.name)).join('、')}` : '未归组合') : `${SCOPE_LABEL[m.scopeType] || ''} · ${m.scopeType === 'domain' ? esc(domainName(m.scopeId)) : m.scopeType === 'project' ? esc(projectName(m.scopeId)) : '所有项目'}`;
+    const scopeText = m.groups?.length ? `组合：${m.groups.map(g => esc(g.name)).join('、')}` : '未归组合';
     const statusBadge = m.targetAvailable === false ? badge('目标已失效，不会注入', 'issue') : m.syncStatus === 'pending' ? badge('写入待恢复', 'issue') : '';
     return `<article class="memory-item"><button class="reference" data-action="memory-detail" data-id="${esc(m.id)}"><b>${esc(m.title)}</b><small>${esc(clamp2(m.text).slice(0, 160))}</small><small>${scopeText}</small></button><div class="actions">${statusBadge}<button data-action="memory-edit" data-id="${esc(m.id)}">编辑</button><button data-action="memory-groups" data-id="${esc(m.id)}">组合归属</button>${m.sourceType !== 'manual' ? `<button data-action="memory-evidence" data-id="${esc(m.id)}">查看依据</button>` : ''}<button data-action="memory-delete" data-id="${esc(m.id)}">删除</button></div></article>`;
   }
@@ -619,7 +623,7 @@
     const project = state.projectsPage.items.find(p => p.projectId === detail.projectId);
     if (!project) { state.projectsPage.detail = null; return renderProjects(); }
     const effective = detail.effective;
-    const items = effective.items.map(m => `<article class="memory-item"><button class="reference" data-action="memory-detail" data-id="${esc(m.id)}"><b>${esc(m.title)}</b><small>${esc(clamp2(m.text).slice(0, 160))}</small><small>${(m.sources || []).map(s => s.kind === 'group' ? `组合：${esc(s.groupName)}` : `${SCOPE_LABEL[s.scopeType] || '作用域'}`).join(' · ')}</small></button></article>`).join('') || '<div class="empty small-empty">为项目添加组合后，在这里查看生效记忆。</div>';
+    const items = effective.items.map(m => `<article class="memory-item"><button class="reference" data-action="memory-detail" data-id="${esc(m.id)}"><b>${esc(m.title)}</b><small>${esc(clamp2(m.text).slice(0, 160))}</small><small>${(m.sources || []).map(s => esc(s.groupName)).join(' · ')}</small></button></article>`).join('') || '<div class="empty small-empty">为项目添加组合后，在这里查看生效记忆。</div>';
     $('projectsContent').innerHTML = `
       <div class="section-heading"><button class="link-button" data-action="project-list">‹ 返回项目列表</button><div class="actions"><button data-action="unbind">解绑并保留数据</button><button data-action="edit-project" data-id="${esc(project.projectId)}">项目设置</button></div></div>
       <h2>${esc(project.name)}</h2><p>${esc(domainName(project.domainId))}</p>
@@ -648,11 +652,10 @@
       if (cursor) cursors.add(cursor);
     } while (cursor);
     if (items.size !== total) throw new Error('生效记忆列表已变化，请重新导出。');
-    const memories = [...items.values()].filter(memory => memory.syncStatus === 'ready' && memory.targetAvailable
-      && (memory.scopeType === 'group' || memory.sources.some(source => source.kind === 'legacy-scope')));
+    const memories = [...items.values()].filter(memory => memory.syncStatus === 'ready' && memory.targetAvailable && memory.sources.some(source => source.kind === 'group'));
     if (!memories.length) return toast('当前没有已同步的生效记忆。');
     const sections = memories.map(memory => {
-      const sources = memory.sources.map(source => source.kind === 'group' ? source.groupName : SCOPE_LABEL[source.scopeType]);
+      const sources = memory.sources.map(source => source.groupName);
       const provenance = memory.evidence ? [projectName(memory.evidence.projectId), memory.evidence.entryId, memory.evidence.commitSha].filter(Boolean).join(' / ') : '';
       return `## ${memory.title}\n\n${memory.text}\n\n生效来源：${sources.join('、')}${provenance ? `\n\n依据：${provenance}` : ''}\n`;
     });
@@ -672,7 +675,7 @@
     let resultsHtml = '<div class="empty small-empty">输入关键词，查找已保存的项目知识和长期记忆。</div>';
     if (search.done) {
       const filtered = search.results.filter(r => search.type === 'all' || (search.type === 'memory') === Boolean(r.memoryId));
-      const pageRows = filtered.slice(search.page * 8, (search.page + 1) * 8).map((r, i) => `<article class="result-row"><button class="reference" data-action="search-detail" data-index="${search.page * 8 + i}"><b>${esc(r.title)}</b><small>${esc(clamp2(r.snippet || r.chunk_text || '').slice(0, 180))}</small></button><small>${r.memoryId ? `长期记忆${r.memoryScopeType && r.memoryScopeType !== 'group' ? ' · ' + (SCOPE_LABEL[r.memoryScopeType] || '') : ''}` : `${esc(projectName(r.scope_project_id || r.projectId))}${r.commitSha ? ` · commit ${esc(r.commitSha.slice(0, 8))}` : ''}`}</small></article>`).join('');
+      const pageRows = filtered.slice(search.page * 8, (search.page + 1) * 8).map((r, i) => `<article class="result-row"><button class="reference" data-action="search-detail" data-index="${search.page * 8 + i}"><b>${esc(r.title)}</b><small>${esc(clamp2(r.snippet || r.chunk_text || '').slice(0, 180))}</small></button><small>${r.memoryId ? '长期记忆' : `${esc(projectName(r.scope_project_id || r.projectId))}${r.commitSha ? ` · commit ${esc(r.commitSha.slice(0, 8))}` : ''}`}</small></article>`).join('');
       resultsHtml = `<p class="muted" style="margin:12px 0">${search.results.length} 条结果${filtered.length !== search.results.length ? `（当前筛选 ${filtered.length} 条）` : ''}</p>${pageRows || '<div class="empty small-empty">没有找到匹配内容，试试其他关键词。</div>'}${pagerUi('search', search.page, filtered.length, 8)}`;
     }
     $('searchContent').innerHTML = `
@@ -1255,58 +1258,31 @@
   function memoryById(id) {
     return state.memory.items.find(m => m.id === id) || state.candidates.items.find(m => m.id === id) || state.detailGroups.detail?.effective.items.find(m => m.id === id);
   }
-  // ---- 记忆编辑器（标题 + 多行正文 + 可选组合/作用域） ----
-  function memoryEditor(memory = null) {
-    const isLegacy = memory && memory.scopeType !== 'group';
-    const groupOptions = ['<option value="">暂不加入组合</option>', ...state.groups.items.map(g => `<option value="${esc(g.id)}" ${memory?.groups?.[0]?.id === g.id ? 'selected' : ''}>${esc(g.name)}</option>`)].join('');
-    const scopeOptions = isLegacy || !memory
-      ? `<label>适用范围<select name="scopeType"><option value="group" ${!isLegacy ? 'selected' : ''}>组合记忆：通过组合应用到项目</option><option value="global" ${memory?.scopeType === 'global' ? 'selected' : ''}>全局：所有领域与项目</option><option value="domain" ${memory?.scopeType === 'domain' ? 'selected' : ''}>领域：指定领域内的项目</option><option value="project" ${memory?.scopeType === 'project' ? 'selected' : ''}>项目：仅指定项目</option></select></label>
-         <label data-role="scope-target" hidden>适用目标<select name="scopeTarget"></select></label>`
-      : '';
+  async function memoryEditor(memory = null) {
+    const groups = memory ? state.groups.items : await loadGroups();
+    const groupOptions = ['<option value="">暂不加入组合</option>', ...groups.map(g => `<option value="${esc(g.id)}" ${memory?.groups?.[0]?.id === g.id ? 'selected' : ''}>${esc(g.name)}</option>`)].join('');
     appDialogOpen(memory ? '编辑记忆' : '添加记忆', `
       <form id="memoryForm">
         <label>标题<input name="title" maxlength="120" required value="${esc(memory?.title || '')}" placeholder="例如：开发时保护日常服务"></label>
         <label>内容<textarea name="text" required rows="8" placeholder="这是一条完整记忆，可以包含多个段落和列表。">${esc(memory?.text || '')}</textarea></label>
         ${memory ? '' : `<label>加入组合<select name="groupId">${groupOptions}</select></label>`}
-        ${scopeOptions}
-        <p class="muted">${memory?.scopeType === 'group' ? '这条记忆通过组合应用到项目；正文只有一份，被所有引用共享。' : '多段正文保存在同一条记忆中，不会按换行拆分。'}</p>
+        <p class="muted">记忆通过组合生效。各组合共享同一条正文。</p>
       </form>`, [
       { label: '取消', run: appDialogClose },
       { label: memory ? '保存' : '添加', class: 'primary', form: 'memoryForm' },
     ]);
     const form = $('memoryForm');
-    const scopeSelect = form.elements.scopeType;
-    const targetLabel = form.querySelector('[data-role="scope-target"]');
-    const fillTargets = type => {
-      const targets = type === 'domain' ? state.brain.domains.map(d => ({ id: d.id, name: d.name })) : type === 'project' ? state.projects.map(p => ({ id: p.projectId, name: p.name })) : [];
-      targetLabel.hidden = targets.length === 0;
-      form.elements.scopeTarget.innerHTML = targets.map(t => `<option value="${esc(t.id)}" ${memory?.scopeId === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('');
-    };
-    if (scopeSelect) {
-      fillTargets(scopeSelect.value);
-      scopeSelect.addEventListener('change', () => fillTargets(scopeSelect.value));
-    }
     form.addEventListener('submit', async event => {
       event.preventDefault();
       const title = form.elements.title.value.trim();
       const text = form.elements.text.value.trim();
       if (!title || !text) return appDialogError('请填写标题和记忆内容。');
-      const scopeType = form.elements.scopeType?.value || 'group';
-      if (scopeType !== 'group' && scopeType !== 'global' && !form.elements.scopeTarget?.value) return appDialogError('请选择适用目标。');
       try {
-        let saved;
         if (memory) {
-          const body = { title, text };
-          if (form.elements.scopeType && (memory.scopeType !== scopeType || scopeType !== 'group')) {
-            body.scopeType = scopeType;
-            body.scopeId = scopeType === 'global' || scopeType === 'group' ? state.brain.id : form.elements.scopeTarget?.value;
-          }
-          saved = await api(`/api/engine/memories/${encodeURIComponent(memory.id)}`, { method: 'PATCH', body });
+          await api(`/api/engine/memories/${encodeURIComponent(memory.id)}`, { method: 'PATCH', body: { title, text } });
         } else {
-          const body = { title, text, brainId: state.brain.id, scopeType, scopeId: scopeType === 'group' || scopeType === 'global' ? state.brain.id : form.elements.scopeTarget?.value };
-          saved = await api('/api/engine/memories', { method: 'POST', body });
-          const groupId = form.elements.groupId?.value;
-          if (groupId) await api(`/api/engine/memory-groups/${encodeURIComponent(groupId)}/members`, { method: 'POST', body: { addMemoryIds: [saved.memory.id] } });
+          const groupId = form.elements.groupId.value;
+          await api('/api/engine/memories', { method: 'POST', body: { title, text, brainId: state.brain.id, ...(groupId ? { groupId } : {}) } });
         }
         appDialogClose();
         toast(memory ? '记忆已保存，多行内容保持在同一条记忆中。' : '记忆已保存。');
@@ -1332,10 +1308,10 @@
   async function reviewCandidate(memory) {
     const sourceProjectId = candidateSourceProjectId(memory);
     const sourceGroups = sourceProjectId ? api(`/api/engine/projects/${encodeURIComponent(sourceProjectId)}/memory-groups`).catch(() => null) : null;
-    await loadGroups();
+    const groups = await loadGroups();
     const bound = (await sourceGroups)?.groups || [];
     const preferred = bound.length === 1 ? bound[0].id : '';
-    const groupOptions = ['<option value="">仅收录到记忆库（暂不生效）</option>', ...state.groups.items.map(group => `<option value="${esc(group.id)}" ${group.id === preferred ? 'selected' : ''}>${esc(group.name)}</option>`)].join('');
+    const groupOptions = ['<option value="">仅收录到记忆库（暂不生效）</option>', ...groups.map(group => `<option value="${esc(group.id)}" ${group.id === preferred ? 'selected' : ''}>${esc(group.name)}</option>`)].join('');
     appDialogOpen('审核候选记忆', `
       <form id="reviewForm">
         <h3>${esc(memory.title)}</h3>
@@ -1375,24 +1351,18 @@
       details.innerHTML = `<summary>可能重复的候选（${related.length}）</summary>${related.map(item => `<p class="feedback" style="white-space:pre-wrap"><b>${esc(item.title)}</b><br>${esc(item.text)}</p>`).join('')}`;
       details.hidden = false;
     }).catch(() => {});
-    let confirmed = false;
     let saving = false;
     form.addEventListener('submit', async event => {
       event.preventDefault();
       if (saving) return;
       saving = true;
       try {
-        if (!confirmed) {
-          // 先存为未归组合，加入失败时也不会在旧范围生效。 / Save unbound first so a failed attach cannot activate the old scope.
-          await api(`/api/engine/memories/${encodeURIComponent(memory.id)}`, { method: 'PATCH', body: { status: 'confirmed', scopeType: 'group' } });
-          confirmed = true;
-        }
         const groupId = form.elements.groupId.value;
-        if (groupId) await api(`/api/engine/memory-groups/${encodeURIComponent(groupId)}/members`, { method: 'POST', body: { addMemoryIds: [memory.id] } });
+        await api(`/api/engine/memories/${encodeURIComponent(memory.id)}`, { method: 'PATCH', body: { status: 'confirmed', ...(groupId ? { groupId } : {}) } });
         appDialogClose();
         toast(groupId ? `已确认并加入「${groupById(groupId)?.name}」。` : '已确认，保留在记忆库中。');
         await Promise.all([loadCandidates(), loadGroups(), loadMemoryPage(), loadOverview(true)]);
-      } catch (error) { appDialogError(confirmed ? '记忆已收录，加入组合失败。可以选择组合后重试。' + error.message : error.message); }
+      } catch (error) { appDialogError(error.message); }
       finally { saving = false; }
     });
   }
@@ -1402,7 +1372,7 @@
     appDialogOpen(memory.title, `
       <p class="muted">${memory.sourceType === 'manual' ? `手动添加 · ${time(memory.createdAt)}` : memory.evidence ? `${esc(projectName(memory.evidence.projectId))} · commit ${esc(memory.evidence.commitSha.slice(0, 8))} · ${time(memory.updatedAt)}` : time(memory.updatedAt)}</p>
       <p class="feedback" style="white-space:pre-wrap;max-height:40vh;overflow:auto">${esc(memory.text)}</p>
-      <p class="muted">所在组合：${groups.map(g => esc(g.name)).join('、') || '未归组合'}${memory.scopeType !== 'group' ? ` · 原作用域：${SCOPE_LABEL[memory.scopeType]}（${memory.scopeType === 'domain' ? esc(domainName(memory.scopeId)) : memory.scopeType === 'project' ? esc(projectName(memory.scopeId)) : '所有项目'}）` : ''}</p>`, [
+      <p class="muted">所在组合：${groups.map(g => esc(g.name)).join('、') || '未归组合'}</p>`, [
       { label: '关闭', run: appDialogClose },
       ...(memory.status === 'confirmed' ? [
         { label: '组合归属', run: () => memoryGroupsDialog(memory) },
@@ -1682,7 +1652,7 @@
       if (button.dataset.action === 'group-settings') groupEditor(groupById(button.dataset.id));
       if (button.dataset.action === 'group-projects') await groupProjectsDialog(groupById(button.dataset.id));
       if (button.dataset.action === 'open-group') { setView('memory'); state.memory.tab = 'library'; state.memory.folder = button.dataset.id; state.memory.q = ''; state.memory.page = 0; state.memory.cursors = [null]; await loadMemoryPage(); }
-      if (button.dataset.action === 'new-memory') memoryEditor();
+      if (button.dataset.action === 'new-memory') await memoryEditor();
       if (button.dataset.action === 'export-memories') await exportProjectMemories(button.dataset.id);
       if (button.dataset.action === 'memory-edit') memoryEditor(memoryById(button.dataset.id));
       if (button.dataset.action === 'memory-detail') { const memory = memoryById(button.dataset.id); if (memory) memoryDetail(memory); else toast('列表已刷新，请重试。'); }

@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const http = require('node:http');
+const os = require('node:os');
 const path = require('node:path');
 const { Module } = require('node:module');
 const { prepareMaintenanceFixture } = require('./single-repo-maintenance-fixture');
@@ -211,13 +212,14 @@ function argument(name) {
   return index < 0 ? '' : process.argv[index + 1] || '';
 }
 
-function cliOptions() {
-  const dataDir = argument('data');
-  const workflowRoot = argument('workflow-root');
+function cliOptions({ test = false, defaultMaintenance = false } = {}) {
+  const dataDir = argument('data') || (test ? path.join(fs.mkdtempSync(path.join(process.env.PK_TEST_TEMP_ROOT || os.tmpdir(), 'pk-ai-team-')), 'data') : '');
+  const workflowRoot = argument('workflow-root') || (test ? path.dirname(require.resolve('@sanqianx/ai-coding-workflow/package.json')) : '');
   if (!dataDir || !workflowRoot) throw new Error('Supply --data <new test directory> and --workflow-root <Workflow checkout>.');
   return {
     dataDir, workflowRoot, designFile: argument('design') || undefined,
-    emptyTeam: process.argv.includes('--empty-team'), maintenance: process.argv.includes('--maintenance'),
+    emptyTeam: process.argv.includes('--empty-team'),
+    maintenance: process.argv.includes('--maintenance') || (defaultMaintenance && !process.argv.includes('--without-maintenance')),
   };
 }
 

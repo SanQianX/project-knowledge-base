@@ -49,7 +49,6 @@ const candidate = over => ({
   sourceEventId: 'ev-human',
   sourceHash: sha(HUMAN_TEXT),
   eligibility: { durable: true, crossProject: true, reason: 'owner-stated long-term habit', scopeReason: 'applies across all projects' },
-  scopeType: 'global',
   ...over,
 });
 

@@ -11,7 +11,7 @@ Use Project Knowledge as a read-only source of durable project context. Automati
 
 Clients with the UserPromptSubmit hook can receive confirmed memories and project knowledge automatically.
 
-- The first message supplies applicable confirmed memories and a bounded catalog of knowledge titles and entry IDs.
+- The first message supplies applicable confirmed combination memories and a bounded catalog of knowledge titles and entry IDs.
 - Concrete questions on any turn can supply up to two strongly matched excerpts with their sources. Clearly referential short follow-ups can use the preceding topic. A repeated excerpt from the same revision is suppressed even if another excerpt from that entry can still be shown.
 - Changed or newly applicable confirmed memories are sent again. Removed memories get a one-line notice. Published engines with the earlier session-index policy may supply title-only hints.
 

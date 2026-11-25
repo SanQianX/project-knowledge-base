@@ -209,7 +209,10 @@ async function main() {
     // 5. A memory added mid-session is re-sent in full exactly once.
     const brainScope = (await engineApi('GET', '/api/snapshot?summary=1&limit=1')).body.sharedScopes.find(scope => scope.kind === 'brain');
     assert.ok(brainScope, 'the brain scope exists');
-    const created = await engineApi('POST', '/api/memories', { text: '本仓库必须保持中文提交信息', scopeType: 'project', scopeId: projectA, brainId: brainScope.brainId });
+    const group = (await engineApi('POST', '/api/memory-groups', { name: '提交约定' })).body.group;
+    assert.ok(group);
+    assert.equal((await engineApi('POST', `/api/memory-groups/${group.id}/project-bindings`, { addProjectIds: [projectA] })).status, 200);
+    const created = await engineApi('POST', '/api/memories', { text: '本仓库必须保持中文提交信息', groupId: group.id, brainId: brainScope.brainId });
     assert.equal(created.status, 200, JSON.stringify(created.body));
     const memoryId = created.body.memory.id;
     const memoryTurn = await context('继续做别的', 'sess-main');

@@ -7,7 +7,7 @@ const { launchCdpBrowser, waitFor } = require('./helpers/cdp-browser');
 const { findChrome } = require('./helpers/find-chrome');
 
 async function main() {
-  const options = cliOptions();
+  const options = cliOptions({ test: true, defaultMaintenance: true });
   // Keep Windows known-folder discovery intact for Chrome. The browser's
   // explicit user-data-dir still belongs to this fixture.
   const browserEnv = { ...process.env };
