@@ -58,3 +58,23 @@ html[data-skin=steel][data-theme=dark]{--page:#171a1f;--surface:#20252d;--surfac
 .status-group{background:var(--accent-soft)}
 @media(max-width:900px){.memory-layout{grid-template-columns:170px minmax(0,1fr)}.grid2{grid-template-columns:1fr}.result-row{grid-template-columns:1fr}.result-row>small{text-align:left;max-width:none}}
 @media(max-width:640px){.memory-layout{display:block}.memory-folders{margin-bottom:16px}.memory-folders hr{display:none}.project-name{min-width:130px}.dragbar{display:none}}
+
+@media (max-width: 800px) {
+  .app:has(#view-team.active) { grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); }
+  .app:has(#view-team.active) > .sidebar { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; border-right:0; border-bottom:1px solid var(--line); }
+  .app:has(#view-team.active) .sidebar .brand { min-width:0; padding:9px 12px; }
+  .app:has(#view-team.active) .sidebar .brain-label { display:none; }
+  .app:has(#view-team.active) .sidebar nav { grid-column:1/-1; display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:3px; padding:0 8px 7px; }
+  .app:has(#view-team.active) .sidebar nav button { min-width:0; justify-content:center; gap:4px; padding:6px; white-space:nowrap; }
+  .app:has(#view-team.active) .sidebar .system-button { grid-column:2; grid-row:1; margin:0 9px 0 0; padding:6px 8px; }
+  .app:has(#view-team.active) .system-button small { display:none; }
+  .app:has(#view-team.active) .topbar { height:57px; gap:8px; padding:0 12px; }
+  .app:has(#view-team.active) .topbar > div:first-child { flex:1; min-width:0; }
+  .app:has(#view-team.active) #breadcrumb { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .app:has(#view-team.active) .topbar .spacer { display:none; }
+  .app:has(#view-team.active) .topbar select { width:min(48%,220px); }
+}
+@media (max-width: 560px) {
+  .app:has(#view-team.active) .sidebar nav { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .app:has(#view-team.active) .sidebar .system-button b { max-width:12ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+}
