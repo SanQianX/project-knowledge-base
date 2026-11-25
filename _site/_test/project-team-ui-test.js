@@ -23,32 +23,28 @@ async function createTeamViaSettings(harness, projectId, group) {
     node.click();
     return true;
   }, selector), `control clickable: ${selector}`);
-  const change = (selector, value, eventType) => inFrame((doc, target, next, type) => {
-    const node = doc.querySelector(target);
-    node.value = next;
-    node.dispatchEvent(new Event(type, { bubbles: true }));
-  }, selector, value, eventType);
-
   await harness.nativeClick('nav [data-view="projects"]');
   const createTeam = `[data-project-team="${projectId}"] [data-go="team"]`;
   // Atomic wait-and-click: the project list re-renders after async loads, so
   // a separate waitFor+click races a redraw that swaps the node out.
   await harness.waitFor(() => harness.run(`(selector => { const node = document.querySelector(selector); if (!node || node.disabled || !node.getClientRects().length) return false; node.click(); return true; })(${JSON.stringify(createTeam)})`), 'create-team entry clickable');
   // P4a workbench: the workbench opens on the tasks view; the empty-team
-  // init card lives on the settings view. Wait for the app's startup probe to
+  // creation form lives on the settings view. Wait for the app's startup probe to
   // settle FIRST — clicking inside a frame that is about to be reloaded lands
   // in the dying document and the fresh one boots back to the tasks view.
   await harness.waitFor(() => inFrame(doc => doc && doc.querySelector('#serviceText') && !doc.querySelector('#serviceText').textContent.includes('正在连接')), 'workbench settled');
   await click('#navSettings');
-  try {
-    await harness.waitFor(() => inFrame(doc => Boolean(doc?.querySelector('#createTeam'))), 'empty team init card');
-  } catch (error) {
-    const dump = await inFrame(doc => doc ? doc.body.innerHTML.slice(0, 400) : 'NO IFRAME DOC');
-    console.error('DIAG settings body:', dump);
-    throw error;
-  }
-  await click('#createTeam');
+  await harness.waitFor(() => inFrame((doc, name) => {
+    const form = doc?.querySelector('#teamForm');
+    const submit = form?.querySelector('button[type="submit"]');
+    if (!submit || submit.disabled || !submit.getClientRects().length) return false;
+    form.elements.name.value = name;
+    submit.click();
+    return true;
+  }, teamName), 'submit the first-team form');
   await harness.waitFor(() => inFrame(doc => Boolean(doc?.querySelector('#addMember'))), 'member management after team creation');
+  const team = await harness.productApi('GET', workflowApi + '/team');
+  assert.equal(team.body.team.name, teamName, 'the form creates the named team');
 
   // Default roster: the module seeds developer + reviewer.
   let members = (await harness.productApi('GET', workflowApi + '/members')).body.members;

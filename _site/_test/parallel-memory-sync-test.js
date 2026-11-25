@@ -121,7 +121,16 @@ async function main() {
     // Add the memory through the real UI with the project-bound combination: the new-memory
     // dialog (#appDialog > #memoryForm) with title + multiline body, scope
     // global, submitted by the primary (type=submit) action button.
-    await harness.nativeClick('#memoryContent [data-action="new-memory"]');
+    // Initial live refreshes can redraw the toolbar between the coordinate
+    // probe and the CDP click. Find, hit-test and activate the same node.
+    await harness.waitFor(() => harness.run(`(() => {
+      const button = document.querySelector('#memoryContent [data-action="new-memory"]');
+      if (!button || button.disabled || !button.getClientRects().length) return false;
+      const rect = button.getBoundingClientRect();
+      if (!button.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2))) return false;
+      button.click();
+      return true;
+    })()`), 'the add memory control is actionable', 10000);
     await harness.waitFor(
       () => harness.run("document.getElementById('appDialog').open === true && document.getElementById('memoryForm') !== null"),
       'the add dialog with the memory form is open',
