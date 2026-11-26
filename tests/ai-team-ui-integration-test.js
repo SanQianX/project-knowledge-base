@@ -71,16 +71,16 @@ async function main() {
 
     await click('#addMember');
     await waitFor(() => has('#memberForm', '代码规范'), 'memory directory in member editor');
-    // 模型是下拉，不再是自由文本：只列知识库里已启用且凭据已配置的档案。
-    // The model is a dropdown, no longer free text: only the knowledge base's enabled profiles with configured credentials.
+    // 模型是下拉，不再是自由文本：按档案分组，列出每个已启用且凭据已配置的档案下的模型。
+    // The model is a dropdown, no longer free text: every model under the enabled profiles with configured credentials.
     assert.equal(await workflow('Boolean(doc.querySelector(\'#memberForm input[name="model"]\'))'), false);
     assert.deepEqual(
-      await workflow('[...doc.querySelectorAll(\'#memberForm select[name="profileId"] option\')].map(option => option.textContent)'),
-      ['不指定', '代码档案 · model-code', '文档档案 · model-docs'],
+      await workflow('[...doc.querySelectorAll(\'#memberForm select[name="model"] option\')].map(option => option.textContent)'),
+      ['不指定', '代码模型（model-code）', '代码模型专业版（model-code-pro）', 'model-code-air', 'model-docs'],
     );
     await field('memberForm', 'name', '验证维护成员');
     await field('memberForm', 'instructions', '先检查文档，再记录结果。');
-    await field('memberForm', 'profileId', 'profile-docs');
+    await field('memberForm', 'model', 'model-docs');
     await workflow('doc.querySelector(\'#memberForm input[value="group-docs"]\').checked = true');
     await shot('member.png');
     await click('#memberForm button[type="submit"]');
@@ -88,10 +88,10 @@ async function main() {
     const member = (await fixture.call('members')).members.find(item => item.name === '验证维护成员');
     assert.deepEqual(member.memoryGroupIds, ['group-docs']);
     assert.equal(member.instructions, '先检查文档，再记录结果。');
-    // 外壳按档案核对后，把档案的默认模型交给模块；停用的档案被拒绝，已保存的不受影响。
-    // The shell verifies the profile and hands the module its default model; a disabled profile is refused and leaves what is stored.
+    // 外壳核对模型属于所选档案后，把它原样交给模块；不可用的选择被拒绝，已保存的不受影响。
+    // The shell verifies the model belongs to the chosen profile and hands it to the module as chosen; an unusable choice is refused and leaves what is stored.
     assert.deepEqual([member.profileId, member.model], ['profile-docs', 'model-docs']);
-    assert.equal(await has('#memberList', '文档档案 · model-docs'), true, 'the roster names the model by its profile');
+    assert.equal(await has('#memberList', '文档档案 · model-docs'), true, 'the roster names the chosen model');
     await assert.rejects(fixture.call('members/' + member.memberId, {
       method: 'PATCH', body: { requestId: 'refuse-disabled-profile', profileId: 'profile-disabled' },
     }), /400/);

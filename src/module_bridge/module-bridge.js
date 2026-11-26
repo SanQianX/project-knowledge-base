@@ -299,9 +299,9 @@ class ModuleBridge {
     if (req.method === 'POST' && /^\/api\/workflow\/maintenance\/repos(?:\/update)?\/?$/.test(pathname)) {
       return this._proxyWorkflowMaintenanceRepoTrusted(req, res, pathname, search);
     }
-    // A member's model names a Workbench profile. The shell verifies the
-    // profile (enabled, credentials configured), injects its default model and
-    // attaches the token; the module trusts a model reference only with it.
+    // A member's model names a Workbench profile and one of the models it lists. The shell verifies
+    // both (enabled, credentials configured, model listed), and attaches the token; the module
+    // trusts a model reference only with it.
     if ((req.method === 'POST' && /^\/api\/workflow\/members\/?$/.test(pathname)) ||
         (req.method === 'PATCH' && /^\/api\/workflow\/members\/[^/]+\/?$/.test(pathname))) {
       return this._proxyWorkflowMemberTrusted(req, res, pathname, search);
@@ -358,6 +358,20 @@ class ModuleBridge {
     return { unavailable: false, profile: profile && profile.enabled && profile.credentialConfigured ? profile : null };
   }
 
+  // The model a member may use under a profile: one the profile lists, or its default when nothing was
+  // chosen (a profile that lists no models offers only its default). Anything else is refused.
+  _profileModel(profile, requested) {
+    const listed = Array.isArray(profile.models?.list) ? profile.models.list.map(item => item && item.id).filter(id => typeof id === 'string' && id) : [];
+    const allowed = listed.length ? listed : [profile.models?.default].filter(id => typeof id === 'string' && id);
+    const chosen = requested === undefined || requested === null || requested === '' ? allowed[0] : requested;
+    if (typeof chosen !== 'string' || !allowed.includes(chosen)) {
+      throw new DomainError('INVALID_ARGUMENT', allowed.length
+        ? '所选模型不在这个档案的模型列表里，请重新选择。'
+        : '所选档案没有可用的模型，请先在系统面板的『模型供应商管理』里为它添加模型。', { status: 400 });
+    }
+    return chosen;
+  }
+
   async _proxyWorkflowMemberTrusted(req, res, pathname, search) {
     const body = await this._readForwardedBody(req, '成员请求必须是合法 JSON。');
     // The browser names a profile; the model name and the driver are never its decision.
@@ -374,8 +388,10 @@ class ModuleBridge {
       const { unavailable, profile } = await this._usableProfile(body.profileId);
       if (unavailable) throw new DomainError('MODULE_UNREACHABLE', '暂时无法核对所选模型：工作台服务不可达，请恢复后重试。', { status: 503, retryable: true });
       if (!profile) throw new DomainError('INVALID_ARGUMENT', '所选模型不可用：它已停用、凭据未配置或已被删除，请重新选择。', { status: 400 });
+      // 模型须是这个档案列出的一个；没有指定时用档案的默认模型。页面说了不算，档案说了算。
+      // The model must be one the profile lists; without a choice the profile's default is used. The profile decides, never the page.
       forward.profileId = profile.id;
-      forward.model = profile.models?.default || null;
+      forward.model = this._profileModel(profile, body.model);
       trusted = true;
     }
     // A request that names no model is proxied as before, without the token.

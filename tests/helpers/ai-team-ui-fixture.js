@@ -19,9 +19,12 @@ const projects = [
 
 // A stand-in Workbench: only the profile list the shell reads to verify a
 // member's model. Same public shape as the real profile store (a flag for the
-// credential, never the credential itself), plus the unusable cases.
+// credential, never the credential itself): one profile holding several models,
+// one holding only a default, plus the unusable cases.
 const PROFILES = [
-  { id: 'profile-code', name: '代码档案', enabled: true, credentialConfigured: true, models: { default: 'model-code' } },
+  { id: 'profile-code', name: '代码档案', enabled: true, credentialConfigured: true, models: { default: 'model-code', list: [
+    { id: 'model-code', label: '代码模型' }, { id: 'model-code-pro', label: '代码模型专业版' }, { id: 'model-code-air', label: 'model-code-air' },
+  ] } },
   { id: 'profile-docs', name: '文档档案', enabled: true, credentialConfigured: true, models: { default: 'model-docs' } },
   { id: 'profile-disabled', name: '已停用档案', enabled: false, credentialConfigured: true, models: { default: 'model-disabled' } },
   { id: 'profile-no-key', name: '缺凭据档案', enabled: true, credentialConfigured: false, models: { default: 'model-no-key' } },

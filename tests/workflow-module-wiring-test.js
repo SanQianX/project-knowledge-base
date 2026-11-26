@@ -277,7 +277,7 @@ function workflowInstalled() {
       git(['add', '.']); git(['commit', '-qm', 'i']);
       // A stand-in Workbench: only the profile list the shell reads to verify a model.
       const profiles = [
-        { id: 'profile-ok', name: '可用档案', enabled: true, credentialConfigured: true, models: { default: 'model-ok' } },
+        { id: 'profile-ok', name: '可用档案', enabled: true, credentialConfigured: true, models: { default: 'model-ok', list: [{ id: 'model-ok' }, { id: 'model-ok-pro' }] } },
         { id: 'profile-disabled', name: '已停用', enabled: false, credentialConfigured: true, models: { default: 'model-disabled' } },
         { id: 'profile-no-key', name: '缺凭据', enabled: true, credentialConfigured: false, models: { default: 'model-no-key' } },
       ];
@@ -340,11 +340,11 @@ function workflowInstalled() {
         const malformed = await fetch(`http://127.0.0.1:${liveShell.address().port}/api/workflow/maintenance/repos`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{not json' });
         assert.equal(malformed.status, 400);
 
-        // Member models: the shell verifies the profile and injects its model; the page's own model and driver never count.
+        // Member models: the shell verifies the profile and one of its listed models; the page's own driver never counts.
         const drafts = await call(liveShell, 'team', { requestId: 'seed', name: '登记团队', members: [{ name: '草稿成员', role: 'reviewer', profileId: 'profile-ok', model: 'page-lie' }] });
         assert.equal(drafts.status, 201, json(drafts.body));
         assert.deepEqual([drafts.body.members[0].profileId, drafts.body.members[0].model], [null, null], 'only the member routes carry a verified model');
-        const created = await call(liveShell, 'members', { requestId: 'member-ok', name: '模型成员', role: 'reviewer', profileId: 'profile-ok', model: 'page-lie', driverId: 'page-driver' }, clientToken);
+        const created = await call(liveShell, 'members', { requestId: 'member-ok', name: '模型成员', role: 'reviewer', profileId: 'profile-ok', model: 'model-ok', driverId: 'page-driver' }, clientToken);
         assert.equal(created.status, 201, json(created.body));
         assert.deepEqual([created.body.member.profileId, created.body.member.model, created.body.member.driverId], ['profile-ok', 'model-ok', null]);
         const memberId = created.body.member.memberId;
@@ -358,6 +358,18 @@ function workflowInstalled() {
         assert.equal(blind.body.error.code, 'MODULE_UNREACHABLE');
         const current = (await call(liveShell, 'members/' + memberId)).body.member;
         assert.deepEqual([current.profileId, current.model], ['profile-ok', 'model-ok'], 'refusals leave the stored reference untouched');
+        // 模型须是这个档案列出的一个：页面自己编的、别的档案的，都不采信；只给档案就用它的默认模型。
+        // The model must be one this profile lists: one the page makes up, or another profile's, never counts; a profile alone means its default.
+        const pro = await patchMember(liveShell, { requestId: 'member-pro', profileId: 'profile-ok', model: 'model-ok-pro' });
+        assert.equal(pro.status, 200, json(pro.body));
+        assert.deepEqual([pro.body.member.profileId, pro.body.member.model], ['profile-ok', 'model-ok-pro'], 'a listed model is stored as chosen');
+        for (const model of ['page-lie', 'model-disabled']) {
+          const refused = await patchMember(liveShell, { requestId: 'refuse-model-' + model, profileId: 'profile-ok', model });
+          assert.equal(refused.status, 400, `${model} is not this profile's model and must be refused: ${json(refused.body)}`);
+        }
+        const defaulted = await patchMember(liveShell, { requestId: 'member-default', profileId: 'profile-ok' });
+        assert.equal(defaulted.status, 200, json(defaulted.body));
+        assert.deepEqual([defaulted.body.member.profileId, defaulted.body.member.model], ['profile-ok', 'model-ok'], 'a profile named without a model means its default');
         const cleared = await patchMember(liveShell, { requestId: 'member-clear', profileId: null });
         assert.equal(cleared.status, 200, json(cleared.body));
         assert.deepEqual([cleared.body.member.profileId, cleared.body.member.model], [null, null], 'choosing no model clears the reference');

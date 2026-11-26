@@ -106,27 +106,36 @@ async function main() {
     assert.equal(tool.kind, 'apply');
     assert.deepEqual(tool.phases.apply, fixture.registration.argv('format'), 'program and one-argument-per-line become the argument array');
 
-    // 成员的模型是下拉，选项是知识库里可用的档案；外壳核对后把模型名交给模块。
-    // A member's model is a dropdown of the knowledge base's usable profiles; the shell verifies it for the module.
+    // 成员的模型是下拉：按档案分组，列出每个模型；外壳核对后把选中的模型原样交给模块。
+    // A member's model is a dropdown: every model grouped under its profile; the shell verifies it and hands exactly that model to the module.
     await click('#navSettings');
     await waitFor(() => exists('#addMember'), 'team settings');
     await click('#addMember');
     await waitFor(() => has('#memberForm', '代码规范'), 'member editor');
-    assert.deepEqual(await optionsOf('#memberForm select[name=profileId]'), ['不指定', '代码档案 · model-code', '文档档案 · model-docs'], 'only enabled profiles with configured credentials are offered');
-    assert.equal(await has('#memberForm', '目前只保存所选的模型'), true, 'the dialog says the reference is stored, not launched');
+    assert.equal(await workflow('Boolean(doc.querySelector(\'#memberForm input[name="model"]\'))'), false, 'the model is not a free-text field');
+    assert.deepEqual(await optionsOf('#memberForm select[name="model"]'), ['不指定', '代码模型（model-code）', '代码模型专业版（model-code-pro）', 'model-code-air', 'model-docs'],
+      'every model of every usable profile is offered, and nothing else');
+    assert.deepEqual(await workflow('[...doc.querySelectorAll(\'#memberForm select[name="model"] optgroup\')].map(group => group.label)'), ['代码档案', '文档档案']);
+    assert.equal(await has('#memberForm', '保存的只是引用'), true, 'the dialog says the reference is stored, not launched');
     await field('memberForm', 'name', '页面登记成员');
     await field('memberForm', 'instructions', '按维护计划检查仓库。');
-    await field('memberForm', 'profileId', 'profile-code');
+    await field('memberForm', 'model', 'model-code-pro');
     await click('#memberForm button[type="submit"]');
     await waitFor(() => has('#memberList', '页面登记成员'), 'member saved through the shell');
     const member = (await fixture.call('members')).members.find(item => item.name === '页面登记成员');
-    assert.deepEqual([member.profileId, member.model], ['profile-code', 'model-code']);
-    assert.equal(await has('#memberList', '代码档案 · model-code'), true, 'the roster shows the model by its profile name');
-    for (const profileId of ['profile-disabled', 'profile-no-key', 'profile-unknown']) {
-      await assert.rejects(fixture.call('members/' + member.memberId, { method: 'PATCH', body: { requestId: 'refuse-' + profileId, profileId } }),
-        /400/, `${profileId} must be refused`);
+    assert.deepEqual([member.profileId, member.model], ['profile-code', 'model-code-pro'], 'the chosen model is stored, not the profile default');
+    assert.equal(await has('#memberList', '代码档案 · 代码模型专业版（model-code-pro）'), true, 'the roster shows the chosen model');
+    // 页面说了不算：不可用的档案、不在这个档案里的模型，都被外壳拒绝，已保存的不受影响。
+    // The profile decides, never the page: an unusable profile or a model outside it is refused by the shell, and what is stored stays.
+    for (const choice of [{ profileId: 'profile-disabled' }, { profileId: 'profile-no-key' }, { profileId: 'profile-unknown' },
+      { profileId: 'profile-code', model: 'not-in-the-list' }, { profileId: 'profile-code', model: 'model-docs' }]) {
+      await assert.rejects(fixture.call('members/' + member.memberId, { method: 'PATCH', body: { requestId: 'refuse-' + Object.values(choice).join('-'), ...choice } }),
+        /400/, JSON.stringify(choice) + ' must be refused');
     }
-    assert.equal((await fixture.call('members/' + member.memberId)).member.model, 'model-code', 'refusals leave the stored model untouched');
+    assert.equal((await fixture.call('members/' + member.memberId)).member.model, 'model-code-pro', 'refusals leave the stored model untouched');
+    // 只给档案、不指定模型：用档案的默认模型 / a profile without a model choice means its default
+    await fixture.call('members/' + member.memberId, { method: 'PATCH', body: { requestId: 'profile-only', profileId: 'profile-docs' } });
+    assert.deepEqual((({ profileId, model }) => [profileId, model])((await fixture.call('members/' + member.memberId)).member), ['profile-docs', 'model-docs']);
 
     // ③ 新建维护计划，运行一次：详情里是页面上登记的工具的真实输出。
     // ③ Create a plan and run it once: the detail shows the real output of the tool registered from the page.
