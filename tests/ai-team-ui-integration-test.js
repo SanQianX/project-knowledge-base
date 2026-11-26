@@ -35,7 +35,7 @@ async function main() {
     await page('document.querySelector(\'nav [data-view="team"]\').click()');
     if (options.emptyTeam) {
       assert.equal((await fixture.call('team')).status, 'empty');
-      await waitFor(() => has('#heading', '任务工作台'), 'AI team frame in a newly installed knowledge base');
+      await waitFor(() => has('#heading', '团队任务'), 'AI team frame in a newly installed knowledge base');
       await click('#navSettings');
       await waitFor(() => has('#teamForm', '创建团队'), 'first-team creation form');
       await shot('create-team.png');
@@ -71,8 +71,16 @@ async function main() {
 
     await click('#addMember');
     await waitFor(() => has('#memberForm', '代码规范'), 'memory directory in member editor');
+    // 模型是下拉，不再是自由文本：只列知识库里已启用且凭据已配置的档案。
+    // The model is a dropdown, no longer free text: only the knowledge base's enabled profiles with configured credentials.
+    assert.equal(await workflow('Boolean(doc.querySelector(\'#memberForm input[name="model"]\'))'), false);
+    assert.deepEqual(
+      await workflow('[...doc.querySelectorAll(\'#memberForm select[name="profileId"] option\')].map(option => option.textContent)'),
+      ['不指定', '代码档案 · model-code', '文档档案 · model-docs'],
+    );
     await field('memberForm', 'name', '验证维护成员');
     await field('memberForm', 'instructions', '先检查文档，再记录结果。');
+    await field('memberForm', 'profileId', 'profile-docs');
     await workflow('doc.querySelector(\'#memberForm input[value="group-docs"]\').checked = true');
     await shot('member.png');
     await click('#memberForm button[type="submit"]');
@@ -80,6 +88,14 @@ async function main() {
     const member = (await fixture.call('members')).members.find(item => item.name === '验证维护成员');
     assert.deepEqual(member.memoryGroupIds, ['group-docs']);
     assert.equal(member.instructions, '先检查文档，再记录结果。');
+    // 外壳按档案核对后，把档案的默认模型交给模块；停用的档案被拒绝，已保存的不受影响。
+    // The shell verifies the profile and hands the module its default model; a disabled profile is refused and leaves what is stored.
+    assert.deepEqual([member.profileId, member.model], ['profile-docs', 'model-docs']);
+    assert.equal(await has('#memberList', '文档档案 · model-docs'), true, 'the roster names the model by its profile');
+    await assert.rejects(fixture.call('members/' + member.memberId, {
+      method: 'PATCH', body: { requestId: 'refuse-disabled-profile', profileId: 'profile-disabled' },
+    }), /400/);
+    assert.equal((await fixture.call('members/' + member.memberId)).member.model, 'model-docs');
     await click('[data-edit-member="' + member.memberId + '"]');
     await field('memberForm', 'instructions', '按项目工具配置更新文档。');
     await click('#memberForm button[type="submit"]');
@@ -112,8 +128,14 @@ async function main() {
     await click('#navMaintenance');
     if (fixture.maintenance) {
       await waitFor(() => has('#maintenanceRepoTitle', '示例代码仓库'), 'actual registered repository in the knowledge-base frame');
+      assert.equal(await has('#heading', '自动维护'), true, 'the tab is named for what it does');
+      // 0.2.3 登记文件里的工具列在页面上，可以编辑和删除；仓库卡片可以修改。
+      // The tools from the 0.2.3 registration file are listed for editing and removal; the repository card can be edited.
+      await waitFor(() => has('.maintenance-tool', '示例代码规则'), 'tools imported from the 0.2.3 file are listed');
+      assert.equal(await workflow('doc.querySelectorAll(".maintenance-tool").length'), 6, 'every imported tool is listed');
+      assert.equal(await workflow('Boolean(doc.querySelector("[data-maintenance-repo-edit]"))'), true);
       await click('[data-maintenance-new]');
-      await waitFor(() => has('#maintenanceDialogTitle', '新建维护任务'), 'maintenance creation dialog');
+      await waitFor(() => has('#maintenanceDialogTitle', '新建维护计划'), 'maintenance creation dialog');
       await field('maintenanceForm', 'title', '每日格式整理');
       await field('maintenanceForm', 'memberId', member.memberId);
       await field('maintenanceForm', 'toolId', 'format');
@@ -146,7 +168,8 @@ async function main() {
       await shot('maintenance-run-detail.png');
       await click('#maintenanceRunDetail [data-close]');
     } else {
-      await waitFor(() => has('#maintenance', '登记维护仓库'), 'unconfigured maintenance shows actual registration state');
+      await waitFor(() => has('#maintenance', '登记仓库'), 'unconfigured maintenance offers registration on the page');
+      assert.equal(await has('#maintenance', 'maintenance.json'), false, 'no registry file is shown to the user');
       assert.equal(await workflow('doc.querySelector("[data-maintenance-new]") === null'), true);
     }
     await browser.setViewport(390, 840);

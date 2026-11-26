@@ -248,5 +248,130 @@ function workflowInstalled() {
     }
   }
 
+  // 8) Page-maintained maintenance registry and member models (module 0.3.0+):
+  // the shell is the only source of the repository path and of the runtime
+  // token, and a member's model is verified against the Workbench before the
+  // module stores it. Branched on the module's declared capability — a module
+  // that predates the registry prints a skip line, and a skip is never a pass.
+  {
+    const fs = require('node:fs');
+    const os = require('node:os');
+    const { spawnSync } = require('node:child_process');
+    const source = process.env.KB_WORKFLOW_TEST_SOURCE
+      ? path.resolve(process.env.KB_WORKFLOW_TEST_SOURCE)
+      : require.resolve('@sanqianx/ai-coding-workflow/src/server', { paths: [path.resolve(__dirname, '..')] });
+    const createServer = require(source).createWorkflowServer;
+    const moduleToken = 'registry-module-token';
+    const upstream = createServer({ dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'wf-registry-')), runtimeToken: moduleToken, maintenanceTiming: { pollMs: 100 } });
+    const bound = await upstream.listen(0);
+    const base = 'http://127.0.0.1:' + bound.port;
+    const health = await (await fetch(base + '/api/health')).json();
+    if (!health.capabilities.maintenanceRegistry) {
+      await upstream.close();
+      console.log('workflow-module-wiring-test: registry-forward section SKIPPED (the module predates the page-maintained registry)');
+    } else {
+      const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-registry-repo-'));
+      const git = args => { const r = spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8' }); if (r.status !== 0) throw new Error(r.stderr); };
+      git(['init', '-q', '-b', 'main']); git(['config', 'user.email', 't@t']); git(['config', 'user.name', 't']);
+      fs.writeFileSync(path.join(repo, 'a.js'), 'export const a = 1;' + String.fromCharCode(10));
+      git(['add', '.']); git(['commit', '-qm', 'i']);
+      // A stand-in Workbench: only the profile list the shell reads to verify a model.
+      const profiles = [
+        { id: 'profile-ok', name: '可用档案', enabled: true, credentialConfigured: true, models: { default: 'model-ok' } },
+        { id: 'profile-disabled', name: '已停用', enabled: false, credentialConfigured: true, models: { default: 'model-disabled' } },
+        { id: 'profile-no-key', name: '缺凭据', enabled: true, credentialConfigured: false, models: { default: 'model-no-key' } },
+      ];
+      const isProfileList = req => req.method === 'GET' && req.url.startsWith('/api/claude-workbench/v1/profiles');
+      const workbench = http.createServer((req, res) => {
+        res.writeHead(isProfileList(req) ? 200 : 404, { 'Content-Type': 'application/json' });
+        res.end(isProfileList(req) ? JSON.stringify(profiles) : '{}');
+      });
+      await new Promise(resolve => workbench.listen(0, '127.0.0.1', resolve));
+      const options = {
+        workflowUrl: base, runtimeToken: moduleToken,
+        workflowProjectResolver: input => (input.projectId === 'proj-reg' ? { projectId: 'proj-reg', repoPath: repo } : null),
+      };
+      // Two shells over the same module: one reaches the Workbench, one does not.
+      // Each answers a refused forward the way the product handler does.
+      const bridges = [
+        new ModuleBridge({ ...options, terminalUrl: `http://127.0.0.1:${workbench.address().port}` }),
+        new ModuleBridge({ ...options, terminalUrl: 'http://127.0.0.1:1' }),
+      ];
+      const { DomainError, serializeErrorEnvelope } = require('../src/common/contracts');
+      const shells = bridges.map(bridge => {
+        const server = http.createServer((req, res) => Promise.resolve(bridge.proxyWorkflow(req, res, req.url.split('?')[0], '')).catch(error => {
+          res.writeHead(error instanceof DomainError ? error.status : 500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(serializeErrorEnvelope(error)));
+        }));
+        server.listen(0, '127.0.0.1');
+        return server;
+      });
+      await Promise.all(shells.map(server => new Promise(resolve => server.once('listening', resolve))));
+      const call = async (shell, route, body, headers = {}, method = 'POST') => {
+        const response = await fetch(`http://127.0.0.1:${shell.address().port}/api/workflow/${route}`, {
+          method: body ? method : 'GET', headers: { 'Content-Type': 'application/json', ...headers },
+          body: body ? JSON.stringify(body) : undefined,
+        });
+        return { status: response.status, body: await response.json().catch(() => ({})) };
+      };
+      const [liveShell, blindShell] = shells;
+      // A browser's own token header must never become module trust.
+      const clientToken = { 'X-KB-Runtime-Token': 'client-token-must-not-forward' };
+      const json = value => JSON.stringify(value);
+      try {
+        // Repository registration: the path comes only from the shell's resolution.
+        const unknown = await call(liveShell, 'maintenance/repos', { requestId: 'repo-unknown', projectId: 'proj-unknown', repoPath: 'C:\\Windows' }, clientToken);
+        assert.equal(unknown.status, 404, 'an unregistered project is refused before the module is asked');
+        assert.equal((await call(liveShell, 'maintenance')).body.configured, false);
+        const registered = await call(liveShell, 'maintenance/repos', { requestId: 'repo-ok', projectId: 'proj-reg', repoPath: 'C:\\Windows', branch: 'main', remote: '', allowPush: false }, clientToken);
+        assert.equal(registered.status, 201, json(registered.body));
+        const status = (await call(liveShell, 'maintenance')).body;
+        assert.equal(status.configured, true);
+        assert.equal(status.repoPath, fs.realpathSync(repo), 'the page-supplied path is replaced by the shell resolution');
+        const direct = await fetch(base + '/api/workflow/v1/maintenance/repos', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', ...clientToken },
+          body: json({ requestId: 'direct', projectId: 'proj-reg', repoPath: repo, branch: 'main', remote: '', allowPush: false }),
+        });
+        assert.equal(direct.status, 403, 'the module itself trusts only the token the shell holds');
+        const updated = await call(liveShell, 'maintenance/repos/update', { requestId: 'repo-update', branch: 'main', remote: 'origin', allowPush: true, repoPath: 'C:\\Windows' }, clientToken);
+        assert.equal(updated.status, 200, json(updated.body));
+        const after = (await call(liveShell, 'maintenance')).body;
+        assert.deepEqual([after.allowPush, after.remote, after.repoPath], [true, 'origin', fs.realpathSync(repo)], 'an update cannot move the repository');
+        const malformed = await fetch(`http://127.0.0.1:${liveShell.address().port}/api/workflow/maintenance/repos`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{not json' });
+        assert.equal(malformed.status, 400);
+
+        // Member models: the shell verifies the profile and injects its model; the page's own model and driver never count.
+        const drafts = await call(liveShell, 'team', { requestId: 'seed', name: '登记团队', members: [{ name: '草稿成员', role: 'reviewer', profileId: 'profile-ok', model: 'page-lie' }] });
+        assert.equal(drafts.status, 201, json(drafts.body));
+        assert.deepEqual([drafts.body.members[0].profileId, drafts.body.members[0].model], [null, null], 'only the member routes carry a verified model');
+        const created = await call(liveShell, 'members', { requestId: 'member-ok', name: '模型成员', role: 'reviewer', profileId: 'profile-ok', model: 'page-lie', driverId: 'page-driver' }, clientToken);
+        assert.equal(created.status, 201, json(created.body));
+        assert.deepEqual([created.body.member.profileId, created.body.member.model, created.body.member.driverId], ['profile-ok', 'model-ok', null]);
+        const memberId = created.body.member.memberId;
+        const patchMember = (shell, body) => call(shell, 'members/' + memberId, body, {}, 'PATCH');
+        for (const profileId of ['profile-disabled', 'profile-no-key', 'profile-missing']) {
+          const refused = await patchMember(liveShell, { requestId: 'refuse-' + profileId, profileId });
+          assert.equal(refused.status, 400, `${profileId} must be refused: ${json(refused.body)}`);
+        }
+        const blind = await patchMember(blindShell, { requestId: 'workbench-down', profileId: 'profile-ok' });
+        assert.equal(blind.status, 503, 'an unreachable Workbench is reported, never treated as a valid model');
+        assert.equal(blind.body.error.code, 'MODULE_UNREACHABLE');
+        const current = (await call(liveShell, 'members/' + memberId)).body.member;
+        assert.deepEqual([current.profileId, current.model], ['profile-ok', 'model-ok'], 'refusals leave the stored reference untouched');
+        const cleared = await patchMember(liveShell, { requestId: 'member-clear', profileId: null });
+        assert.equal(cleared.status, 200, json(cleared.body));
+        assert.deepEqual([cleared.body.member.profileId, cleared.body.member.model], [null, null], 'choosing no model clears the reference');
+        const unnamed = await call(liveShell, 'members', { requestId: 'member-unnamed', name: '未选模型', role: 'developer', model: 'page-lie' });
+        assert.equal(unnamed.status, 201, json(unnamed.body));
+        assert.equal(unnamed.body.member.model, null, 'a model the page names on its own is never stored');
+      } finally {
+        await Promise.all(shells.map(async server => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }));
+        workbench.closeAllConnections(); await new Promise(resolve => workbench.close(resolve));
+        await upstream.close();
+      }
+      console.log('workflow-module-wiring-test: registry forward and member model verification PASS');
+    }
+  }
+
   console.log('workflow-module-wiring-test PASS');
 })().catch(error => { console.error(error); process.exitCode = 1; });

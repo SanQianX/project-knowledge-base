@@ -67,6 +67,8 @@ function spawnServer({ root, port, host = '127.0.0.1', dataDir, extraEnv = {}, t
       KB_VECTORHUB_URL: 'http://127.0.0.1:0',
       KB_EVENTBRIDGE_URL: 'http://127.0.0.1:0',
       KB_KNOWLEDGE_ENGINE_URL: 'http://127.0.0.1:0',
+      // The workflow module is pinned too: its default port can be a live instance.
+      KB_WORKFLOW_URL: 'http://127.0.0.1:0',
       AI_CODING_EVENT_BRIDGE_HOME: bridgeHome,
       ...extraEnv,
     },

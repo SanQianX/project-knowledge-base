@@ -1,9 +1,11 @@
 'use strict';
 
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
+const { execFileSync } = require('node:child_process');
 const { Module } = require('node:module');
 const { prepareMaintenanceFixture } = require('./single-repo-maintenance-fixture');
 
@@ -13,6 +15,16 @@ const offline = 'http://127.0.0.1:0';
 const projects = [
   { id: 'project-ai-team-ui-1', name: '示例代码仓库' },
   { id: 'project-ai-team-ui-2', name: '示例文档仓库' },
+];
+
+// A stand-in Workbench: only the profile list the shell reads to verify a
+// member's model. Same public shape as the real profile store (a flag for the
+// credential, never the credential itself), plus the unusable cases.
+const PROFILES = [
+  { id: 'profile-code', name: '代码档案', enabled: true, credentialConfigured: true, models: { default: 'model-code' } },
+  { id: 'profile-docs', name: '文档档案', enabled: true, credentialConfigured: true, models: { default: 'model-docs' } },
+  { id: 'profile-disabled', name: '已停用档案', enabled: false, credentialConfigured: true, models: { default: 'model-disabled' } },
+  { id: 'profile-no-key', name: '缺凭据档案', enabled: true, credentialConfigured: false, models: { default: 'model-no-key' } },
 ];
 
 function json(res, response, status = 200) {
@@ -121,7 +133,7 @@ function fixtureRequestAllowed(method, pathname, maintenance) {
   if (pathname.startsWith('/api/integrations')) return false;
   if (method === 'GET' || method === 'HEAD') return true;
   if (method === 'POST') {
-    if (maintenance && /^\/api\/workflow\/maintenance\/(jobs|runs|control)$/.test(pathname)) return true;
+    if (maintenance && /^\/api\/workflow\/maintenance\/(jobs|jobs\/delete|runs|control|tools|tools\/delete|repos|repos\/update)$/.test(pathname)) return true;
     return ['/api/workflow/team', '/api/workflow/members', '/api/workflow/workflow-tasks'].includes(pathname);
   }
   if (method === 'PATCH') return /^\/api\/workflow\/members\/[^/]+$/.test(pathname);
@@ -129,7 +141,26 @@ function fixtureRequestAllowed(method, pathname, maintenance) {
   return false;
 }
 
-async function createAiTeamUiFixture({ dataDir, workflowRoot, designFile, emptyTeam = false, maintenance = false, maintenanceTiming }) {
+// A fresh instance has no maintenance.json. The first project is made a real
+// Git repository so the page can register it; the synthetic tool is the one
+// the maintenance fixture already uses.
+function preparePageRegistration(sandbox) {
+  const repo = path.join(sandbox, 'repos', projects[0].id);
+  fs.mkdirSync(repo, { recursive: true });
+  const git = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8', windowsHide: true, stdio: 'ignore', timeout: 30_000 });
+  git('init', '-q', '-b', 'main');
+  git('config', '--local', 'user.name', 'Synthetic Page Registration QA');
+  git('config', '--local', 'user.email', 'page-registration-qa@example.invalid');
+  git('config', '--local', 'core.autocrlf', 'false');
+  fs.writeFileSync(path.join(repo, 'README.md'), '# Page registration fixture\n');
+  git('add', '.');
+  git('commit', '-qm', 'fixture baseline');
+  const tool = path.join(sandbox, 'install', 'tool.js');
+  fs.copyFileSync(path.join(__dirname, 'single-repo-maintenance-tool.js'), tool);
+  return { repo, tool, argv: mode => [process.execPath, tool, mode] };
+}
+
+async function createAiTeamUiFixture({ dataDir, workflowRoot, designFile, emptyTeam = false, maintenance = false, pageRegistration = false, maintenanceTiming }) {
   // A fresh, explicitly named directory cannot alias an existing installation.
   const sandbox = path.resolve(dataDir);
   fs.mkdirSync(sandbox);
@@ -142,12 +173,15 @@ async function createAiTeamUiFixture({ dataDir, workflowRoot, designFile, emptyT
   const workflowData = path.join(sandbox, 'workflow-data');
   fs.mkdirSync(workflowData);
   prepareIsolatedEnvironment(sandbox, { engine: offline, workflow: offline });
+  const registration = pageRegistration ? preparePageRegistration(sandbox) : null;
   const maintenanceFixture = maintenance && prepareMaintenanceFixture({ sandbox, coreInstall, workflowData, projectId: projects[0].id });
   if (maintenanceFixture) maintenanceFixture.journalId = await maintenanceFixture.registerProject();
   const bridgeUrl = maintenanceFixture ? await listen(maintenanceFixture.server) : offline;
   const { createWorkflowServer } = require(path.join(workflowInstall, 'src', 'server'));
+  // The shell's trusted forwards carry this token; the module must know the same one.
+  const runtimeToken = crypto.randomBytes(16).toString('hex');
   const workflowOptions = {
-    dataDir: workflowData, bridgeUrl, maintenanceTiming,
+    dataDir: workflowData, bridgeUrl, maintenanceTiming, runtimeToken,
     projectRoots: maintenanceFixture ? { [projects[0].id]: maintenanceFixture.repo } : undefined,
   };
   let workflow = createWorkflowServer(workflowOptions);
@@ -156,25 +190,30 @@ async function createAiTeamUiFixture({ dataDir, workflowRoot, designFile, emptyT
       json(res, { ok: true, groups: [{ id: 'group-code', name: '代码规范' }, { id: 'group-docs', name: '文档约定' }], total: 2 });
     } else json(res, { ok: false, error: 'FIXTURE_ROUTE' }, 404);
   });
+  const workbench = http.createServer((req, res) => {
+    if (req.method === 'GET' && req.url.startsWith('/api/claude-workbench/v1/profiles')) json(res, PROFILES);
+    else json(res, { ok: false, error: 'FIXTURE_ROUTE' }, 404);
+  });
   const shell = http.createServer();
   const close = () => Promise.allSettled([
-    stop(shell), stop(memoryDirectory), workflow.close(), ...(maintenanceFixture ? [stop(maintenanceFixture.server)] : []),
+    stop(shell), stop(memoryDirectory), stop(workbench), workflow.close(), ...(maintenanceFixture ? [stop(maintenanceFixture.server)] : []),
   ]);
   try {
-    const [wf, engine] = await Promise.all([workflow.listen(0, host), listen(memoryDirectory)]);
+    const [wf, engine, workbenchUrl] = await Promise.all([workflow.listen(0, host), listen(memoryDirectory), listen(workbench)]);
     const workflowUrl = 'http://' + host + ':' + wf.port;
     Object.assign(process.env, {
-      KB_KNOWLEDGE_ENGINE_URL: engine, KB_WORKFLOW_URL: workflowUrl,
+      KB_KNOWLEDGE_ENGINE_URL: engine, KB_WORKFLOW_URL: workflowUrl, KB_TERMINAL_URL: workbenchUrl,
       KB_EVENTBRIDGE_URL: bridgeUrl, KB_EVENT_BRIDGE_URL: bridgeUrl,
     });
     const { createRuntime, initializeRuntime, createRequestHandler } = require(path.join(coreInstall, 'src', 'server', 'server-app'));
     const runtime = createRuntime({ rootDir: coreInstall, dataDir: process.env.KB_DATA_DIR, analysisOwner: 'legacy' });
+    runtime.moduleBridge.runtimeToken = runtimeToken;
     await initializeRuntime(runtime);
     const address = await listen(shell);
     const handler = createRequestHandler(runtime, { host, port: shell.address().port });
     shell.on('request', (req, res) => {
       const pathname = new URL(req.url, address).pathname;
-      if (!fixtureRequestAllowed(req.method, pathname, maintenance)) {
+      if (!fixtureRequestAllowed(req.method, pathname, maintenance || Boolean(registration))) {
         json(res, { ok: false, error: 'FIXTURE_READ_ONLY', message: '此操作超出隔离 AI 团队预览范围。' }, 403);
         return;
       }
@@ -198,8 +237,8 @@ async function createAiTeamUiFixture({ dataDir, workflowRoot, designFile, emptyT
       if (maintenanceFixture) await workflow.consumer.drain({ notifyUrl: workflowUrl + '/api/internal/bridge-notify' });
     }
     return {
-      address, call, projects, browserProfile: path.join(sandbox, 'browser-profile'), ...seeded,
-      maintenance: maintenanceFixture, workflowUrl, restartWorkflow, close,
+      address, call, projects, PROFILES, browserProfile: path.join(sandbox, 'browser-profile'), ...seeded,
+      maintenance: maintenanceFixture, registration, workflowUrl, workflowData, restartWorkflow, close,
     };
   } catch (error) {
     await close();
@@ -214,12 +253,15 @@ function argument(name) {
 
 function cliOptions({ test = false, defaultMaintenance = false } = {}) {
   const dataDir = argument('data') || (test ? path.join(fs.mkdtempSync(path.join(process.env.PK_TEST_TEMP_ROOT || os.tmpdir(), 'pk-ai-team-')), 'data') : '');
-  const workflowRoot = argument('workflow-root') || (test ? path.dirname(require.resolve('@sanqianx/ai-coding-workflow/package.json')) : '');
+  // A candidate module checkout (its src/server.js) can stand in for the pinned package.
+  const candidate = process.env.KB_WORKFLOW_TEST_SOURCE ? path.resolve(process.env.KB_WORKFLOW_TEST_SOURCE, '..', '..') : '';
+  const workflowRoot = argument('workflow-root') || candidate || (test ? path.dirname(require.resolve('@sanqianx/ai-coding-workflow/package.json')) : '');
   if (!dataDir || !workflowRoot) throw new Error('Supply --data <new test directory> and --workflow-root <Workflow checkout>.');
   return {
     dataDir, workflowRoot, designFile: argument('design') || undefined,
     emptyTeam: process.argv.includes('--empty-team'),
     maintenance: process.argv.includes('--maintenance') || (defaultMaintenance && !process.argv.includes('--without-maintenance')),
+    pageRegistration: process.argv.includes('--page-registration'),
   };
 }
 

@@ -146,6 +146,19 @@ function enforceSecurity(req, security) {
   }
 }
 
+// "Origin equals Host" (above) lets a page that controls both names through.
+// Writes under /api/workflow/* can now register local commands that run
+// automatically, so they are held to a stricter rule: on a loopback bind the
+// Host must name a loopback address, and a browser's Sec-Fetch-Site, when
+// sent, must say same-origin or none. Non-browser clients send no
+// Sec-Fetch-Site and are judged by Host alone.
+function workflowWriteAllowed(req, security) {
+  const host = String(req.headers.host || '').toLowerCase();
+  if (security.loopbackBind && !/^(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/.test(host)) return false;
+  const site = req.headers['sec-fetch-site'];
+  return site === undefined || site === 'same-origin' || site === 'none';
+}
+
 function send(res, status, body, contentType = '') {
   if (res.writableEnded) return;
   const isBuffer = Buffer.isBuffer(body);
@@ -922,42 +935,50 @@ function createRequestHandler(runtime, options = {}) {
       const url = new URL(req.url, `http://${req.headers.host || `${host}:${port}`}`);
       const method = req.method || 'GET';
       const pathname = url.pathname;
+      if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && pathname.startsWith('/api/workflow/') && !workflowWriteAllowed(req, security)) {
+        throw new DomainError('ORIGIN_FORBIDDEN', 'Workflow writes are allowed only for the same-origin page on a loopback host.', { status: 403 });
+      }
       if (method === 'GET' && pathname === '/api/registry/events') {
         return streamSse(res, write => runtime.registryEvents.subscribe(write));
       }
 
       const moduleUi = pathname.match(/^\/modules\/(terminal|vectorhub|eventbridge|engine)\/(.*)$/);
-      if (moduleUi && method === 'GET') return runtime.moduleBridge.proxyModuleUi(req, res, moduleUi[1], moduleUi[2], url.search);
+      if (moduleUi && method === 'GET') return await runtime.moduleBridge.proxyModuleUi(req, res, moduleUi[1], moduleUi[2], url.search);
       if (pathname.startsWith('/api/engine/') || pathname === '/api/engine') {
         if (['/api/engine/runtime-config', '/api/engine/runtime-auth', '/api/engine/scopes', '/api/engine/control', '/api/engine/migrate'].includes(pathname)) throw new DomainError('FORBIDDEN', 'Runtime configuration is not exposed to browsers.', { status: 403 });
-        return runtime.moduleBridge.proxyEngine(req, res, pathname, url.search);
+        return await runtime.moduleBridge.proxyEngine(req, res, pathname, url.search);
       }
 
       // ===== module bridge：壳 ↔ 模块（同源代理 + 聚合 + 登记/移除） =====
+      // 代理调用一律 `return await`：它们会异步抛错（例如受信转发拒绝了一个请求）。
+      // 不 await 时错误绕过下面的 catch，变成未处理的拒绝，进程会被终止。
+      // Every proxy call is `return await`ed: proxies reject asynchronously (a trusted
+      // forward refusing a request, for example). Without the await the rejection bypasses
+      // the catch below, becomes unhandled, and the process is terminated.
       if (pathname.startsWith('/api/terminal/') || pathname === '/api/terminal') {
         if (pathname.startsWith('/api/terminal/internal/')) throw new DomainError('FORBIDDEN', 'Internal module endpoints are not exposed to browsers.', { status: 403 });
-        return runtime.moduleBridge.proxyTerminal(req, res, pathname, url.search);
+        return await runtime.moduleBridge.proxyTerminal(req, res, pathname, url.search);
       }
       if (pathname.startsWith('/api/vectorhub/') || pathname === '/api/vectorhub') {
         if (pathname.startsWith('/api/vectorhub/internal/')) throw new DomainError('FORBIDDEN', 'Internal module endpoints are not exposed to browsers.', { status: 403 });
-        return runtime.moduleBridge.proxyVectorHub(req, res, pathname, url.search);
+        return await runtime.moduleBridge.proxyVectorHub(req, res, pathname, url.search);
       }
       if (pathname.startsWith('/api/eventbridge/') || pathname === '/api/eventbridge') {
         if (pathname.startsWith('/api/eventbridge/internal/')) throw new DomainError('FORBIDDEN', 'Internal module endpoints are not exposed to browsers.', { status: 403 });
-        return runtime.moduleBridge.proxyEventBridge(req, res, pathname, url.search);
+        return await runtime.moduleBridge.proxyEventBridge(req, res, pathname, url.search);
       }
       // Fifth module (optional): team/workflow business API. The module's
       // own base is /api/workflow/v1; the shell rewrites /api/workflow/<rest>
       // to it. Internal (trusted-service) subroutes stay server-side only.
       if (pathname.startsWith('/api/workflow/') || pathname === '/api/workflow') {
         if (pathname.startsWith('/api/workflow/internal/')) throw new DomainError('FORBIDDEN', 'Internal module endpoints are not exposed to browsers.', { status: 403 });
-        return runtime.moduleBridge.proxyWorkflow(req, res, pathname, url.search);
+        return await runtime.moduleBridge.proxyWorkflow(req, res, pathname, url.search);
       }
       // AI team page proxy: /workflow-ui/<asset> -> workflow module /<asset>.
       // GET-only, encoded-segment and api/internal segments rejected inside
       // proxyModuleUi; the module serves its own index.html at the root.
       const workflowUi = pathname.match(/^\/workflow-ui\/?(.*)$/);
-      if (workflowUi && method === 'GET') return runtime.moduleBridge.proxyModuleUi(req, res, 'workflow', workflowUi[1], url.search);
+      if (workflowUi && method === 'GET') return await runtime.moduleBridge.proxyModuleUi(req, res, 'workflow', workflowUi[1], url.search);
       if (method === 'GET' && pathname === '/api/modules/health') {
         return send(res, 200, { ...await runtime.moduleBridge.modulesHealth(), ownership: runtime.ownership });
       }
@@ -1288,14 +1309,14 @@ function createRequestHandler(runtime, options = {}) {
       }
 
       if (method === 'POST' && (pathname === '/api/knowledge/search' || pathname === '/api/knowledge/ask')) {
-        if (runtime.analysisOwner !== 'legacy') return runtime.moduleBridge.proxyEngine(req, res, pathname.replace('/api/knowledge/', '/api/engine/'), url.search);
+        if (runtime.analysisOwner !== 'legacy') return await runtime.moduleBridge.proxyEngine(req, res, pathname.replace('/api/knowledge/', '/api/engine/'), url.search);
         const body = await readJsonBody(req);
         const input = { projectId: body.projectId, projectSlug: body.projectSlug, repoPath: body.repoPath, query: body.query, limit: body.limit };
         const result = pathname.endsWith('/ask') ? await runtime.knowledgeRuntime.ask(input) : await runtime.knowledgeRuntime.search(input);
         return send(res, 200, result);
       }
       if (method === 'GET' && pathname === '/api/knowledge/entry') {
-        if (runtime.analysisOwner !== 'legacy') return runtime.moduleBridge.proxyEngine(req, res, '/api/engine/get', url.search);
+        if (runtime.analysisOwner !== 'legacy') return await runtime.moduleBridge.proxyEngine(req, res, '/api/engine/get', url.search);
         const result = await runtime.knowledgeRuntime.get({
           projectId: url.searchParams.get('projectId') || '',
           projectSlug: url.searchParams.get('projectSlug') || '',
@@ -1305,7 +1326,7 @@ function createRequestHandler(runtime, options = {}) {
         return send(res, 200, result);
       }
       if (method === 'GET' && pathname === '/api/knowledge/history') {
-        if (runtime.analysisOwner !== 'legacy') return runtime.moduleBridge.proxyEngine(req, res, '/api/engine/history', url.search);
+        if (runtime.analysisOwner !== 'legacy') return await runtime.moduleBridge.proxyEngine(req, res, '/api/engine/history', url.search);
         const result = await runtime.knowledgeRuntime.history({
           projectId: url.searchParams.get('projectId') || '',
           projectSlug: url.searchParams.get('projectSlug') || '',
@@ -1315,7 +1336,7 @@ function createRequestHandler(runtime, options = {}) {
         return send(res, 200, result);
       }
       if (method === 'GET' && pathname === '/api/knowledge/maintenance') {
-        if (runtime.analysisOwner !== 'legacy') return runtime.moduleBridge.proxyEngine(req, res, '/api/engine/health', url.search);
+        if (runtime.analysisOwner !== 'legacy') return await runtime.moduleBridge.proxyEngine(req, res, '/api/engine/health', url.search);
         const projects = runtime.registryStore.listIds().map(projectId => ({ projectId, index: runtime.projectStore.readState(projectId).index }));
         return send(res, 200, { ok: true, schema: 'index-maintenance/v2', indexPath: runtime.layout.getIndexPath(), projects, active: runtime.indexService.pending.size > 0 });
       }
@@ -1372,7 +1393,7 @@ function createRequestHandler(runtime, options = {}) {
       // Bridge consumer wake-up (I-16): the notification body carries no
       // conversation truth — the durable journal is drained regardless.
       if (method === 'POST' && pathname === '/api/bridge/notify') {
-        if (runtime.analysisOwner !== 'legacy') return runtime.moduleBridge.proxyEngine(req, res, '/api/engine/bridge/notify', url.search);
+        if (runtime.analysisOwner !== 'legacy') return await runtime.moduleBridge.proxyEngine(req, res, '/api/engine/bridge/notify', url.search);
         if (runtime.bridgeConsumerService) {
           runtime.bridgeConsumerService.handleNotification().catch(() => {
             // Drain failures are logged by the service; wake-up stays 204.
@@ -1741,6 +1762,7 @@ module.exports = {
   installProcessHandlers,
   mergeAiProfiles,
   requestOriginAllowed,
+  workflowWriteAllowed,
   isLoopback,
   isProjectBusy,
   taskForProject,

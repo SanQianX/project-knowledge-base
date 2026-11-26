@@ -293,7 +293,96 @@ class ModuleBridge {
     if (req.method === 'POST' && /^\/api\/workflow\/workflow-tasks\/?$/.test(pathname)) {
       return this._proxyWorkflowTeamCreateTrusted(req, res, pathname, search);
     }
-    return this.proxy(req, res, this._workflowApi(pathname) + (search || ''));
+    // Page-maintained maintenance registry: the repository path never comes
+    // from the browser. The shell resolves it from the registered project and
+    // attaches its runtime token; the module accepts a registration only with it.
+    if (req.method === 'POST' && /^\/api\/workflow\/maintenance\/repos(?:\/update)?\/?$/.test(pathname)) {
+      return this._proxyWorkflowMaintenanceRepoTrusted(req, res, pathname, search);
+    }
+    // A member's model names a Workbench profile. The shell verifies the
+    // profile (enabled, credentials configured), injects its default model and
+    // attaches the token; the module trusts a model reference only with it.
+    if ((req.method === 'POST' && /^\/api\/workflow\/members\/?$/.test(pathname)) ||
+        (req.method === 'PATCH' && /^\/api\/workflow\/members\/[^/]+\/?$/.test(pathname))) {
+      return this._proxyWorkflowMemberTrusted(req, res, pathname, search);
+    }
+    // The shell has vetted the Origin before this point; the module's
+    // maintenance routes check it too, so it is forwarded rather than dropped.
+    const origin = String(req.headers.origin || '');
+    return this.proxy(req, res, this._workflowApi(pathname) + (search || ''), { extraHeaders: origin ? { Origin: origin } : {} });
+  }
+
+  // The JSON body of a request whose payload the shell rewrites before a trusted forward.
+  // Anything that is not an object (a bare null, a number) is treated as an empty body.
+  async _readForwardedBody(req, message) {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    let body = {};
+    try { body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}; }
+    catch { throw new DomainError('INVALID_ARGUMENT', message, { status: 400 }); }
+    return body && typeof body === 'object' && !Array.isArray(body) ? body : {};
+  }
+
+  async _proxyWorkflowMaintenanceRepoTrusted(req, res, pathname, search) {
+    const body = await this._readForwardedBody(req, '登记请求必须是合法 JSON。');
+    const forward = { ...body };
+    // Only the update of a registered repository needs no project: its path cannot change.
+    if (!/\/update\/?$/.test(pathname)) {
+      const projectId = typeof body.projectId === 'string' ? body.projectId : '';
+      let project = null;
+      try { project = projectId && this.workflowProjectResolver ? this.workflowProjectResolver({ projectId }) : null; }
+      catch (error) { if (!(error instanceof DomainError)) throw error; }
+      if (!project || typeof project.repoPath !== 'string' || !path.isAbsolute(project.repoPath)) {
+        throw new DomainError('PROJECT_NOT_FOUND', '找不到这个项目可用的仓库目录。请刷新页面后重新选择；项目的仓库路径在「项目」页面确认。', { status: 404 });
+      }
+      // The path is the shell's own resolution; whatever the page sent for it is replaced.
+      forward.projectId = project.projectId;
+      forward.repoPath = project.repoPath;
+    }
+    return this.proxy(req, res, this._workflowApi(pathname) + (search || ''), {
+      bodyOverride: Buffer.from(JSON.stringify(forward), 'utf8'),
+      extraHeaders: this.runtimeToken ? { 'X-KB-Runtime-Token': this.runtimeToken } : {},
+    });
+  }
+
+  // The Workbench profile a member selected, when it is enabled with configured credentials.
+  // `unavailable` means the Workbench could not be asked at all — a different failure from "not usable".
+  async _usableProfile(profileId) {
+    let response;
+    try { response = await this._fetch(`${this.terminalUrl}/api/claude-workbench/v1/profiles`); }
+    catch { return { unavailable: true }; }
+    if (!response.ok) return { unavailable: true };
+    const payload = await response.json().catch(() => null);
+    const list = Array.isArray(payload) ? payload : payload?.profiles;
+    const profile = Array.isArray(list) ? list.find(item => item && item.id === profileId) : null;
+    return { unavailable: false, profile: profile && profile.enabled && profile.credentialConfigured ? profile : null };
+  }
+
+  async _proxyWorkflowMemberTrusted(req, res, pathname, search) {
+    const body = await this._readForwardedBody(req, '成员请求必须是合法 JSON。');
+    // The browser names a profile; the model name and the driver are never its decision.
+    const forward = { ...body };
+    delete forward.model;
+    delete forward.driverId;
+    let trusted = false;
+    if (body.profileId === null || body.profileId === '') {
+      forward.profileId = null;
+      forward.model = null;
+      trusted = true;
+    } else if (body.profileId !== undefined) {
+      if (typeof body.profileId !== 'string') throw new DomainError('INVALID_ARGUMENT', '模型选择无效，请重新选择。', { status: 400 });
+      const { unavailable, profile } = await this._usableProfile(body.profileId);
+      if (unavailable) throw new DomainError('MODULE_UNREACHABLE', '暂时无法核对所选模型：工作台服务不可达，请恢复后重试。', { status: 503, retryable: true });
+      if (!profile) throw new DomainError('INVALID_ARGUMENT', '所选模型不可用：它已停用、凭据未配置或已被删除，请重新选择。', { status: 400 });
+      forward.profileId = profile.id;
+      forward.model = profile.models?.default || null;
+      trusted = true;
+    }
+    // A request that names no model is proxied as before, without the token.
+    return this.proxy(req, res, this._workflowApi(pathname) + (search || ''), {
+      bodyOverride: Buffer.from(JSON.stringify(forward), 'utf8'),
+      extraHeaders: trusted && this.runtimeToken ? { 'X-KB-Runtime-Token': this.runtimeToken } : {},
+    });
   }
 
   async _proxyWorkflowTeamCreateTrusted(req, res, pathname, search) {

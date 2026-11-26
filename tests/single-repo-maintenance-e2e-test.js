@@ -25,7 +25,7 @@ async function main() {
     maintenanceTiming: { pollMs: 150, bridgePollMs: 250, clock: () => fakeTime || new Date() },
   });
   try {
-    const { repo, remote, baseline, configPath, projectId, journalId, bridge, git, gitAsync, appendBoundary } = fixture.maintenance;
+    const { repo, remote, baseline, projectId, journalId, bridge, git, gitAsync, appendBoundary } = fixture.maintenance;
     const status = () => fixture.call('maintenance');
     const post = (route, body) => fixture.call('maintenance/' + route, { method: 'POST', body });
     const detail = runId => fixture.call('maintenance/runs/' + runId).then(value => value.run);
@@ -46,6 +46,15 @@ async function main() {
     assert.equal(available.workspace, null);
     assert.equal(available.timeZone, 'Asia/Shanghai');
     assert.ok(available.tools.every(tool => !tool.phases && !tool.command));
+    // 0.2.3 的登记文件在启动时导入模块存储一次；页面编辑工具用的完整定义经知识库代理读取。
+    // The 0.2.3 registration file is imported into the module store once at startup; the full definitions
+    // the page edits with are read through the shell's proxy.
+    const stored = JSON.parse(fs.readFileSync(path.join(fixture.workflowData, 'workflow', 'state.json'), 'utf8'));
+    assert.equal(stored.maintenanceRegistry.importedFrom, 'maintenance.json');
+    assert.equal(stored.maintenanceRegistry.tools.length, 6);
+    const definitions = await fixture.call('maintenance/tools');
+    assert.deepEqual(definitions.tools.map(tool => tool.id), ['review', 'format', 'docs', 'reject', 'timeout', 'probe']);
+    assert.ok(definitions.tools.every(tool => Array.isArray(tool.phases.check || tool.phases.apply)), 'full definitions carry their commands');
     const consumers = await bridge.listConsumers();
     assert.deepEqual(consumers.find(item => item.name === 'workflow:default').meta.journals, ['global', journalId]);
     const direct = fixture.workflowUrl + '/api/workflow/v1/maintenance';
@@ -176,9 +185,11 @@ async function main() {
     await control(false, { clearHold: true, holdRunId: interrupted.runId });
     assert.equal((await waitRun(queuedAfterTimeout.runId)).delivery, 'no-changes');
     const pushProbe = await save({ title: '本机授权变更', toolId: 'probe', trigger: { kind: 'manual' }, delivery: 'push' });
-    const registry = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    fs.writeFileSync(configPath, JSON.stringify({ ...registry, allowPush: false }));
-    await fixture.restartWorkflow();
+    // 推送授权在页面上修改，经知识库受信转发，立即生效：不改文件，也不重启。
+    // Push permission is changed on the page through the shell's trusted forward and applies at once: no file edit, no restart.
+    await post('repos/update', { requestId: 'revoke-push', branch: 'main', remote: 'origin', allowPush: false });
+    assert.equal((await status()).allowPush, false);
+    await assert.rejects(post('repos/update', { requestId: 'push-without-remote', branch: 'main', remote: '', allowPush: true }), /400/);
     const candidate = await waitRun((await runNow(pushProbe)).runId);
     assert.equal(candidate.delivery, 'candidate');
     assert.equal(git(repo, 'show', candidate.commitSha + ':push-permission.txt'), 'This candidate should stay local');
@@ -188,7 +199,8 @@ async function main() {
     console.log(JSON.stringify({
       passed: ['real managed Git hook and Bridge', 'commit repair and bounded retry', 'busy and dirty guards',
         'persistent trigger dedupe', 'worktree reuse', 'schedule and serial remote baselines', 'true fast-forward push',
-        'unpushed source stays local', 'push permission revocation', 'timeout hold and resume', 'JSON, origin and job permissions'],
+        'unpushed source stays local', 'push permission revoked from the page', 'timeout hold and resume', 'JSON, origin and job permissions',
+        '0.2.3 registration file imported once into the module store'],
       workspace, reviewCommit: first.commitSha, remoteTip: documented.commitSha,
     }));
   } finally {

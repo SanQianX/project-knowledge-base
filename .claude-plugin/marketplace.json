@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "project-knowledge",
-      "version": "5.3.2",
+      "version": "5.4.0",
       "source": "./plugins/project-knowledge",
       "description": "Search durable project decisions and implementation history through MCP."
     }
