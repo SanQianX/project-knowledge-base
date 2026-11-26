@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>自动维护（多仓库）· 操作预览</title>
+  <!-- 样式直接用工作流模块真实的 app.css，保证看起来就是产品页面；下面只是这个预览新增的几条 -->
+  <link rel="stylesheet" href="app.css">
+  <style>
+    body{background:var(--canvas)}
+    .preview-guide{padding:16px 20px 15px}
+    .preview-guide h2{font-size:1.05rem}
+    .preview-steps{margin:10px 0 0;padding-left:22px;display:grid;gap:7px;font-size:.92rem;color:var(--dim)}
+    .preview-steps b{color:var(--text);font-weight:650}
+    .preview-guide .actions{margin-top:12px}
+    #previewNotice{margin:0}
+    .repo-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:12px 20px;border-top:1px solid var(--line)}
+    .repo-row:first-child{border-top:0}
+    .repo-main{min-width:0;overflow-wrap:anywhere}
+    .repo-main strong{font-size:.95rem}
+    .repo-main p{margin-top:3px;color:var(--dim);font-size:.84rem}
+    .plan-targets{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px;align-items:center}
+    .check-group .row{gap:9px;padding:6px 0}
+    .check-group small{color:var(--muted);font-size:.8rem;font-weight:400}
+    .check-group .row input:disabled+span{color:var(--muted)}
+    .pick{float:right;margin-top:2px;font-size:.84rem;font-weight:620;color:var(--accent);padding:2px 4px;border-radius:4px}
+    .card-head .count{margin-right:12px}
+    #repoDialog,#planDialog{width:min(660px,calc(100% - 28px))}
+    #repoDialog input[type="time"],#planDialog input[type="time"]{display:block;margin-top:5px;padding:8px 10px;max-width:100%;border:1px solid var(--line);border-radius:7px;background:var(--soft)}
+    #planDialog .field small{display:block;margin-top:5px;font-size:.8rem}
+    @media(max-width:720px){.repo-row{grid-template-columns:minmax(0,1fr)}.repo-row>.badge{justify-self:start}.repo-row>.maintenance-row-actions{justify-content:flex-start}}
+  </style>
+</head>
+<body data-embed="0">
+<header id="brandBar"><div class="shell top">
+  <div class="brand"><span class="logo" aria-hidden="true"><i></i><i></i><i></i><i></i></span>AI 团队 <small>项目知识库</small></div>
+  <div class="team-identity"><span class="team-mark" aria-hidden="true"></span><span>维护团队</span></div>
+  <nav class="nav" aria-label="AI 团队"><button type="button" data-other-tab>团队任务</button><button type="button" aria-current="page">自动维护</button><button type="button" data-other-tab>团队设置</button></nav>
+  <span class="service"><span class="dot ok" aria-hidden="true"></span><span>服务正常</span></span>
+</div></header>
+<main class="shell">
+  <div class="page-head"><div><h1>自动维护</h1><p>按计划自动检查和维护这些仓库。</p></div><span class="badge warn">操作预览 · 示例数据</span></div>
+  <div class="maintenance" id="maintenance"></div>
+</main>
+<dialog id="repoDialog" aria-labelledby="repoDialogTitle"><form id="repoForm" class="settings-form maintenance-form"></form></dialog>
+<dialog id="planDialog" aria-labelledby="planDialogTitle"><form id="planForm" class="settings-form maintenance-form"></form></dialog>
+<div id="toast" class="toast" role="status" hidden></div>
+<script>
+'use strict';
+// 操作预览：多仓库自动维护。数据都是示例，按钮可以点，但不会真的运行任何工具。
+// Interaction preview of multi-repository automatic maintenance: every datum is a sample; the buttons work, nothing really runs.
+(function () {
+  const params = new URLSearchParams(location.search);
+  const embed = params.get('embed') === '1';
+  document.body.dataset.embed = embed ? '1' : '0';
+  const $ = id => document.getElementById(id);
+  const esc = v => String(v ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+
+  // 主题跟随知识库外壳，和真实页面是同一套消息 / follow the shell's theme with the same messages the real page uses
+  const paletteKeys = { page: 'canvas', surface: 'surface', surface2: 'soft', line: 'line', text: 'text', muted: 'dim', accent: 'accent', 'accent-soft': 'accent-soft', good: 'green', bad: 'red', 'bad-soft': 'red-bg' };
+  if (embed && window.parent !== window) {
+    window.parent.postMessage({ type: 'kb:ready' }, location.origin);
+    window.addEventListener('message', event => {
+      if (event.source !== window.parent || event.origin !== location.origin) return;
+      const message = event.data;
+      if (message?.type !== 'kb:theme' || !['light', 'dark'].includes(message.theme)) return;
+      const root = document.documentElement;
+      root.dataset.theme = message.theme;
+      for (const [parentKey, localKey] of Object.entries(paletteKeys)) {
+        const value = message.palette?.[parentKey];
+        if (typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)) root.style.setProperty('--' + localKey, value);
+        else root.style.removeProperty('--' + localKey);
+      }
+    });
+  }
+
+  // ---------- 示例数据 / sample data ----------
+  // mounted：这个项目在「项目」页挂载了团队 / the team is mounted on this project
+  const projects = [
+    { id: 'orders', name: '订单服务', mounted: true, branch: 'main' },
+    { id: 'payment', name: '支付网关', mounted: true, branch: 'main' },
+    { id: 'docs', name: '接口文档', mounted: true, branch: 'docs' },
+    { id: 'ops', name: '运维脚本', mounted: false, branch: 'main' },
+    { id: 'data', name: '数据平台', mounted: true, branch: 'release' },
+  ];
+  const state = {
+    repos: [
+      { id: 'orders', branch: 'main', remote: 'origin', allowPush: false, busy: false },
+      { id: 'payment', branch: 'main', remote: 'origin', allowPush: true, busy: false },
+      { id: 'docs', branch: 'docs', remote: null, allowPush: false, busy: true },
+    ],
+    members: [{ id: 'agent', name: '维护 Agent', role: '开发' }, { id: 'reviewer', name: '独立 Reviewer', role: '独立审查' }],
+    tools: [
+      { id: 'eslint', name: 'ESLint 检查', kind: 'review', detail: '只检查 · 参数里有 {repo}', program: 'C:\\Program Files\\nodejs\\node.exe' },
+      { id: 'format', name: '格式整理', kind: 'apply', detail: '可修改文件 · 超时 300 秒', program: 'C:\\Program Files\\nodejs\\node.exe' },
+      { id: 'apidocs', name: '接口文档检查', kind: 'review', detail: '只检查 · 超时 120 秒', program: 'C:\\Program Files\\nodejs\\node.exe' },
+    ],
+    jobs: [
+      { id: 'j1', title: '提交后 ESLint 检查', memberId: 'reviewer', toolId: 'eslint', targets: ['orders', 'payment'], trigger: 'commit', delivery: 'candidate', enabled: true },
+      { id: 'j2', title: '每天整理格式', memberId: 'agent', toolId: 'format', targets: ['orders', 'payment', 'docs'], trigger: 'daily', at: '09:00', delivery: 'push', enabled: true },
+      { id: 'j3', title: '接口文档同步', memberId: 'agent', toolId: 'apidocs', targets: ['docs'], trigger: 'manual', delivery: 'candidate', enabled: true },
+    ],
+    runs: [
+      { repo: 'orders', job: '提交后 ESLint 检查', trigger: '提交 · a1b2c3d4', status: 'succeeded', delivery: '无改动', at: '11/26 20:41' },
+      { repo: 'payment', job: '每天整理格式', trigger: '每天 09:00', status: 'succeeded', delivery: '已推送', at: '11/26 09:00' },
+      { repo: 'orders', job: '每天整理格式', trigger: '每天 09:00', status: 'succeeded', delivery: '已推送', at: '11/26 09:00' },
+    ],
+  };
+
+  const project = id => projects.find(item => item.id === id);
+  const repo = id => state.repos.find(item => item.id === id);
+  const member = id => state.members.find(item => item.id === id);
+  const tool = id => state.tools.find(item => item.id === id);
+  const badge = (label, tone) => '<span class="badge ' + (tone || '') + '">' + esc(label) + '</span>';
+  const option = (value, label, current) => `<option value="${esc(value)}"${value === current ? ' selected' : ''}>${esc(label)}</option>`;
+  const checkbox = (name, value, label, checked, note, disabled) => `<label class="row"><input type="checkbox" name="${name}" value="${esc(value)}"${checked ? ' checked' : ''}${disabled ? ' disabled' : ''}><span>${esc(label)}</span>${note ? `<small>${esc(note)}</small>` : ''}</label>`;
+  const triggerName = job => job.trigger === 'daily' ? '每天 ' + job.at : job.trigger === 'commit' ? '目标分支提交后' : '手动';
+  const queueOf = id => state.runs.filter(run => run.repo === id && ['queued', 'running'].includes(run.status)).length;
+  const runLabels = { queued: ['已排队', 'work'], running: ['执行中', 'work'], succeeded: ['已完成', 'good'] };
+  let noticeText = '';
+  let toastTimer = null;
+
+  function toast(message) { const el = $('toast'); el.textContent = message; el.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 2600); }
+  function notice(message) { noticeText = message; render(); }
+
+  function guideSection() {
+    return `<section class="card preview-guide">
+      <div class="card-head"><h2>怎么让一个成员管多个仓库</h2><span class="small">三步，都在这个页面上完成</span></div>
+      <ol class="preview-steps">
+        <li><b>登记仓库</b>：点下面「仓库」右边的「登记仓库」，一次可以勾选多个项目。挂载了团队的项目会标出来。</li>
+        <li><b>新建计划</b>：选负责成员和工具，在「目标仓库」里勾选要绑定的仓库。挂载了团队但还没登记的项目也可以直接勾，保存时自动登记。</li>
+        <li><b>运行</b>：到了触发条件，每个目标仓库各运行一次。「提交后触发」只运行提交了的那个仓库。</li>
+      </ol>
+      <div class="actions"><button type="button" class="btn" data-simulate-commit>模拟：在「订单服务」提交一次</button>
+        <span class="small">看「提交后触发」只影响这一个仓库</span></div>
+    </section>`;
+  }
+
+  function reposSection() {
+    const rows = state.repos.map(item => {
+      const queued = queueOf(item.id);
+      const status = item.busy ? badge('开发占用', 'block') : queued ? badge(queued + ' 项排队', 'work') : badge('空闲', 'good');
+      return `<div class="repo-row"><div class="repo-main"><strong>${esc(project(item.id).name)}</strong>
+        <p>${esc(item.branch)}${item.remote ? ' · ' + esc(item.remote) : ''} · ${item.allowPush ? '允许推送' : '不推送'}</p></div>${status}
+        <div class="maintenance-row-actions">
+          <button type="button" class="btn" data-repo-edit="${item.id}">修改</button>
+          <button type="button" class="btn" data-repo-busy="${item.id}">${item.busy ? '释放开发占用' : '标记开发占用'}</button>
+          <button type="button" class="btn" data-repo-delete="${item.id}">删除</button></div></div>`;
+    }).join('');
+    return `<section class="card maintenance-section" aria-labelledby="reposTitle">
+      <div class="card-head"><h2 id="reposTitle">仓库<span class="count">${state.repos.length} 个</span></h2>
+        <button type="button" class="btn primary" data-repo-new>登记仓库</button></div>
+      ${rows || '<p class="maintenance-placeholder">还没有登记仓库。点「登记仓库」，一次可以选多个项目。</p>'}
+    </section>`;
+  }
+
+  function toolsSection() {
+    const rows = state.tools.map(item => `<div class="maintenance-tool"><div class="maintenance-tool-main"><strong>${esc(item.name)}</strong>
+      <p>${esc(item.detail)}</p><code>${esc(item.program)}</code></div>
+      <div class="maintenance-row-actions"><button type="button" class="btn" data-toast="预览里不修改工具">编辑</button><button type="button" class="btn" data-toast="预览里不删除工具">删除</button></div></div>`).join('');
+    return `<section class="card maintenance-section" aria-labelledby="toolsTitle">
+      <div class="card-head"><h2 id="toolsTitle">维护工具<span class="count">${state.tools.length} 个</span></h2>
+        <button type="button" class="btn primary" data-toast="工具登记和现在一样；参数里可以用 {repo}、{workspace}、{branch}">登记工具</button></div>
+      ${rows}<p class="maintenance-placeholder">工具登记一次，所有仓库都能用。参数里的 {repo} 在运行时替换成该仓库的路径，所以同一个工具可以用于多个仓库。</p>
+    </section>`;
+  }
+
+  function plansSection() {
+    const rows = state.jobs.map(job => {
+      const names = job.targets.map(id => project(id).name);
+      const chips = names.slice(0, 3).map(name => badge(name)).join('') + (names.length > 3 ? badge('等 ' + names.length + ' 个') : '');
+      return `<div class="maintenance-job">
+        <div class="maintenance-job-main"><strong>${esc(job.title)}</strong><p>${esc(member(job.memberId).name)} · ${esc(tool(job.toolId).name)}</p>
+          <div class="plan-targets">${badge('目标仓库', 'warn')}${chips}</div></div>
+        <div class="maintenance-job-trigger"><span>${esc(triggerName(job))}</span><small>${job.delivery === 'push' ? '条件满足时推送' : '保留候选提交'}</small></div>
+        ${badge(job.enabled ? '已启用' : '已停用', job.enabled ? 'good' : '')}
+        <div class="maintenance-row-actions">
+          <button type="button" class="btn" data-job-edit="${job.id}">编辑</button>
+          <button type="button" class="btn" data-job-run="${job.id}">运行一次</button>
+          <button type="button" class="btn" data-job-delete="${job.id}">删除</button></div></div>`;
+    }).join('');
+    return `<section class="card maintenance-section" aria-labelledby="plansTitle">
+      <div class="card-head"><h2 id="plansTitle">维护计划<span class="count">${state.jobs.length} 份</span></h2>
+        <button type="button" class="btn primary" data-job-new${state.repos.length ? '' : ' disabled'}>新建计划</button></div>
+      ${rows || '<p class="maintenance-placeholder">还没有维护计划。点「新建计划」，选成员、工具，再勾选要绑定的仓库。</p>'}
+    </section>`;
+  }
+
+  function runsSection() {
+    const rows = state.runs.map(run => {
+      const [label, tone] = runLabels[run.status];
+      const result = run.status === 'queued' && run.waiting ? '等待开发结束' : run.delivery;
+      return `<div class="maintenance-run"><div class="maintenance-job-main"><strong>${esc(project(run.repo)?.name || run.repo)} · ${esc(run.job)}</strong>
+        <p>${esc(run.at)} · ${esc(run.trigger)}</p></div>
+        <div class="maintenance-run-result">${badge(label, tone)}<small>${esc(result)}</small></div>
+        <button type="button" class="btn" data-toast="预览里不展示运行详情">详情</button></div>`;
+    }).join('');
+    return `<section class="card maintenance-section" aria-labelledby="runsTitle">
+      <div class="card-head"><h2 id="runsTitle">最近运行</h2></div>
+      ${rows || '<p class="maintenance-placeholder">尚无运行记录。</p>'}
+    </section>`;
+  }
+
+  function render() {
+    $('maintenance').innerHTML = guideSection()
+      + (noticeText ? `<div class="maintenance-notice" id="previewNotice" role="alert">${esc(noticeText)} <button type="button" class="link" data-notice-clear>知道了</button></div>` : '')
+      + reposSection() + plansSection() + toolsSection() + runsSection();
+  }
+
+  // ---------- 登记仓库：一次可以勾选多个项目 ----------
+  function openRepoDialog(editing) {
+    const form = $('repoForm');
+    const current = editing ? repo(editing) : null;
+    form.innerHTML = `<div class="card-head"><h2 id="repoDialogTitle">${current ? '修改仓库设置' : '登记仓库'}</h2><button type="button" class="btn" data-close>关闭</button></div>
+      ${current ? '' : `<fieldset class="check-group"><legend>项目</legend><button type="button" class="pick" data-pick-unregistered>勾选所有还没登记的项目</button>
+        ${projects.map(item => checkbox('projects', item.id, item.name, Boolean(repo(item.id)), repo(item.id) ? '已登记' : item.mounted ? '团队已挂载' : '未挂载团队', Boolean(repo(item.id)))).join('')}</fieldset>
+        <p class="small" style="margin-top:8px">分支、远端和推送设置对所有勾选的项目生效。仓库路径由知识库按项目解析，不用填。</p>`}
+      <div class="field-grid">
+        <label class="field">目标分支<input type="text" name="branch" maxlength="160" placeholder="留空使用仓库当前分支" value="${esc(current?.branch || '')}"></label>
+        <label class="field">远端名称（可选）<input type="text" name="remote" maxlength="64" placeholder="例如 origin" value="${esc(current?.remote || '')}"></label>
+      </div>
+      <label class="toggle"><input type="checkbox" name="allowPush"${current?.allowPush ? ' checked' : ''} value="1">允许自动推送（需要远端名称）</label>
+      <p class="project-feedback" data-error role="alert" hidden></p>
+      <div class="actions"><button type="submit" class="btn primary">${current ? '保存' : '登记仓库'}</button></div>`;
+    form.querySelector('[data-close]').onclick = () => $('repoDialog').close();
+    if (!current) form.querySelector('[data-pick-unregistered]').onclick = () => {
+      const inputs = [...form.querySelectorAll('input[name="projects"]:not(:disabled)')];
+      const on = inputs.some(input => !input.checked);
+      inputs.forEach(input => { input.checked = on; });
+    };
+    form.onsubmit = event => {
+      event.preventDefault();
+      const values = new FormData(form);
+      const remote = String(values.get('remote') || '').trim();
+      const allowPush = values.has('allowPush');
+      const error = form.querySelector('[data-error]');
+      if (allowPush && !remote) { error.hidden = false; error.textContent = '开启自动推送需要先填写远端名称。'; return; }
+      if (current) {
+        Object.assign(current, { branch: String(values.get('branch')).trim() || current.branch, remote: remote || null, allowPush });
+        toast('仓库设置已保存');
+      } else {
+        const chosen = values.getAll('projects');
+        if (!chosen.length) { error.hidden = false; error.textContent = '请至少选择一个项目。'; return; }
+        for (const id of chosen) {
+          state.repos.push({ id, branch: String(values.get('branch')).trim() || project(id).branch, remote: remote || null, allowPush, busy: false });
+        }
+        toast('已登记 ' + chosen.length + ' 个仓库');
+      }
+      $('repoDialog').close();
+      render();
+    };
+    $('repoDialog').showModal();
+  }
+
+  // ---------- 维护计划：目标仓库可以勾选多个 ----------
+  function openPlanDialog(job) {
+    const form = $('planForm');
+    const registered = state.repos.map(item => item.id);
+    const unregistered = projects.filter(item => item.mounted && !repo(item.id)).map(item => item.id);
+    const targets = job ? job.targets : registered;
+    form.innerHTML = `<div class="card-head"><h2 id="planDialogTitle">${job ? '编辑维护计划' : '新建计划'}</h2><button type="button" class="btn" data-close>关闭</button></div>
+      <label class="field">计划名称<input type="text" name="title" maxlength="120" required value="${esc(job?.title || '')}"></label>
+      <div class="field-grid">
+        <label class="field">负责成员<select name="memberId">${state.members.map(item => option(item.id, item.name, job?.memberId || state.members[0].id)).join('')}</select></label>
+        <label class="field">工具<select name="toolId">${state.tools.map(item => option(item.id, item.name, job?.toolId || state.tools[0].id)).join('')}</select></label>
+      </div>
+      <fieldset class="check-group"><legend>目标仓库</legend><button type="button" class="pick" data-pick-all>全选</button>
+        ${registered.map(id => checkbox('targets', id, project(id).name, targets.includes(id), (repo(id).branch || '') + ' · 已登记' + (repo(id).allowPush ? ' · 允许推送' : ''))).join('')}
+        ${unregistered.map(id => checkbox('targets', id, project(id).name, targets.includes(id), '团队已挂载 · 保存时自动登记')).join('')}</fieldset>
+      <div class="field-grid">
+        <label class="field">触发方式<select name="trigger">${[['manual', '手动'], ['commit', '目标分支提交后'], ['daily', '每天']].map(([id, label]) => option(id, label, job?.trigger || 'manual')).join('')}</select></label>
+        <label class="field" id="planTimeField">北京时间<input type="time" name="at" value="${esc(job?.at || '09:00')}"></label>
+      </div>
+      <label class="field">交付方式<select name="delivery">${option('candidate', '保留候选提交', job?.delivery || 'candidate')}${option('push', '条件满足时推送', job?.delivery || 'candidate')}</select>
+        <small id="deliveryHint"></small></label>
+      <label class="toggle"><input type="checkbox" name="enabled" value="1"${job ? (job.enabled ? ' checked' : '') : ' checked'}>启用计划</label>
+      <p class="project-feedback" data-error role="alert" hidden></p>
+      <div class="actions"><button type="submit" class="btn primary">保存计划</button></div>`;
+    const updateTime = () => {
+      const daily = form.elements.trigger.value === 'daily';
+      $('planTimeField').hidden = !daily;
+      form.elements.at.required = daily;
+    };
+    // 推送要所有目标仓库都开了授权；保存时自动登记的仓库默认不推送
+    const updateDelivery = () => {
+      const chosen = [...form.querySelectorAll('input[name="targets"]:checked')].map(input => input.value);
+      const blocked = chosen.filter(id => !repo(id)?.allowPush);
+      form.elements.delivery.options[1].disabled = blocked.length > 0;
+      if (blocked.length && form.elements.delivery.value === 'push') form.elements.delivery.value = 'candidate';
+      $('deliveryHint').textContent = !chosen.length ? '' : blocked.length
+        ? '「推送」需要所有目标仓库都开启「允许自动推送」，这些还没开：' + blocked.map(id => project(id).name).join('、')
+        : '所有目标仓库都可以推送。';
+    };
+    form.elements.trigger.onchange = () => updateTime();
+    form.addEventListener('change', event => { if (event.target.name === 'targets') updateDelivery(); });
+    updateTime();
+    updateDelivery();
+    form.querySelector('[data-close]').onclick = () => $('planDialog').close();
+    form.querySelector('[data-pick-all]').onclick = () => {
+      const all = [...form.querySelectorAll('input[name="targets"]')];
+      const on = !all.length || all.some(input => !input.checked);
+      all.forEach(input => { input.checked = on; });
+      updateDelivery();
+    };
+    form.onsubmit = event => {
+      event.preventDefault();
+      const values = new FormData(form);
+      const error = form.querySelector('[data-error]');
+      const chosen = values.getAll('targets');
+      if (!chosen.length) { error.hidden = false; error.textContent = '请至少选择一个目标仓库。'; return; }
+      const automatic = chosen.filter(id => !repo(id));
+      for (const id of automatic) state.repos.push({ id, branch: project(id).branch, remote: null, allowPush: false, busy: false });
+      const saved = {
+        id: job?.id || 'job-' + Date.now().toString(36), title: String(values.get('title')).trim(),
+        memberId: values.get('memberId'), toolId: values.get('toolId'), targets: chosen,
+        trigger: values.get('trigger'), at: values.get('at') || null, delivery: values.get('delivery'), enabled: values.has('enabled'),
+      };
+      if (!saved.title) { error.hidden = false; error.textContent = '请输入计划名称。'; return; }
+      if (job) Object.assign(job, saved);
+      else state.jobs.push(saved);
+      toast('维护计划已保存，绑定 ' + chosen.length + ' 个仓库' + (automatic.length ? '（自动登记了 ' + automatic.length + ' 个）' : ''));
+      $('planDialog').close();
+      render();
+    };
+    $('planDialog').showModal();
+  }
+
+  // ---------- 运行：每个目标仓库各一次 ----------
+  function enqueue(repoId, job, trigger) {
+    const target = repo(repoId);
+    const run = { repo: repoId, job: job.title, trigger, status: 'queued', waiting: target.busy, delivery: '', at: '刚刚' };
+    state.runs.unshift(run);
+    if (target.busy) return;
+    setTimeout(() => { run.status = 'running'; render(); }, 700);
+    setTimeout(() => {
+      run.status = 'succeeded';
+      run.delivery = tool(job.toolId).kind === 'apply' ? '已保留候选提交' : '无改动';
+      render();
+    }, 1700);
+  }
+
+  // 排了运行就滚到运行记录，用户不用自己找 / scroll to the run list when runs were queued
+  function showRuns() { document.getElementById('runsTitle')?.scrollIntoView({ block: 'start' }); }
+
+  // ---------- 点击 ----------
+  document.addEventListener('click', async event => {
+    const button = event.target.closest('button');
+    if (!button) return;
+    const dataset = button.dataset;
+    if (button.hasAttribute('data-other-tab')) return toast('预览只包含「自动维护」页');
+    if (button.hasAttribute('data-notice-clear')) { noticeText = ''; return render(); }
+    if (dataset.toast) return toast(dataset.toast);
+    if (button.hasAttribute('data-repo-new')) return openRepoDialog();
+    if (dataset.repoEdit) return openRepoDialog(dataset.repoEdit);
+    if (dataset.repoBusy) {
+      const target = repo(dataset.repoBusy);
+      target.busy = !target.busy;
+      toast(target.busy ? '已标记开发占用：这个仓库的计划只接收触发，不执行' : '已释放开发占用，排队的任务会继续');
+      return render();
+    }
+    if (dataset.repoDelete) {
+      const id = dataset.repoDelete;
+      const used = state.jobs.filter(job => job.targets.includes(id));
+      if (state.runs.some(run => run.repo === id && ['queued', 'running'].includes(run.status))) {
+        return notice('「' + project(id).name + '」还有排队或运行中的任务，等它们结束再删除。');
+      }
+      if (used.length) {
+        return notice('仍有 ' + used.length + ' 份维护计划使用「' + project(id).name + '」：' + used.map(job => '「' + job.title + '」').join('、') + '。请先在这些计划里去掉它，再删除。');
+      }
+      if (!window.confirm('删除仓库「' + project(id).name + '」？它的运行记录会归档，不再显示。')) return;
+      state.repos = state.repos.filter(item => item.id !== id);
+      toast('仓库已删除');
+      return render();
+    }
+    if (button.hasAttribute('data-job-new')) return openPlanDialog();
+    if (dataset.jobEdit) return openPlanDialog(state.jobs.find(job => job.id === dataset.jobEdit));
+    if (dataset.jobRun) {
+      const job = state.jobs.find(item => item.id === dataset.jobRun);
+      for (const id of job.targets) enqueue(id, job, '手动');
+      toast('已在 ' + job.targets.length + ' 个仓库各排一次「' + job.title + '」');
+      render();
+      return showRuns();
+    }
+    if (dataset.jobDelete) {
+      const job = state.jobs.find(item => item.id === dataset.jobDelete);
+      if (!window.confirm('删除维护计划「' + job.title + '」？运行记录会保留。')) return;
+      state.jobs = state.jobs.filter(item => item !== job);
+      toast('维护计划已删除');
+      return render();
+    }
+    if (button.hasAttribute('data-simulate-commit')) {
+      const commitSha = Math.random().toString(16).slice(2, 10);
+      const firing = state.jobs.filter(job => job.enabled && job.trigger === 'commit' && job.targets.includes('orders'));
+      for (const job of firing) enqueue('orders', job, '提交 · ' + commitSha);
+      render();
+      if (firing.length) showRuns();
+      return toast(firing.length
+        ? '订单服务提交后，' + firing.length + ' 份计划只在这个仓库排了运行；支付网关没有提交，不运行'
+        : '没有绑定「订单服务」的提交后计划');
+    }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

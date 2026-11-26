@@ -15,6 +15,9 @@ const offline = 'http://127.0.0.1:0';
 const projects = [
   { id: 'project-ai-team-ui-1', name: '示例代码仓库' },
   { id: 'project-ai-team-ui-2', name: '示例文档仓库' },
+  // 不是 Git 仓库的项目：登记时被拒绝，页面要说明是哪一个、为什么
+  // A project that is no Git repository: its registration is refused, and the page must say which one and why
+  { id: 'project-ai-team-ui-3', name: '示例笔记目录' },
 ];
 
 // A stand-in Workbench: only the profile list the shell reads to verify a
@@ -136,7 +139,7 @@ function fixtureRequestAllowed(method, pathname, maintenance) {
   if (pathname.startsWith('/api/integrations')) return false;
   if (method === 'GET' || method === 'HEAD') return true;
   if (method === 'POST') {
-    if (maintenance && /^\/api\/workflow\/maintenance\/(jobs|jobs\/delete|runs|control|tools|tools\/delete|repos|repos\/update)$/.test(pathname)) return true;
+    if (maintenance && /^\/api\/workflow\/maintenance\/(jobs|jobs\/delete|runs|control|tools|tools\/delete|repos|repos\/update|repos\/delete)$/.test(pathname)) return true;
     return ['/api/workflow/team', '/api/workflow/members', '/api/workflow/workflow-tasks'].includes(pathname);
   }
   if (method === 'PATCH') return /^\/api\/workflow\/members\/[^/]+$/.test(pathname);
@@ -144,23 +147,26 @@ function fixtureRequestAllowed(method, pathname, maintenance) {
   return false;
 }
 
-// A fresh instance has no maintenance.json. The first project is made a real
-// Git repository so the page can register it; the synthetic tool is the one
-// the maintenance fixture already uses.
+// A fresh instance has no maintenance registration. The first two projects are made real Git repositories so the
+// page can register both of them; the third stays a plain directory. The synthetic tool is the one the maintenance
+// fixture already uses.
 function preparePageRegistration(sandbox) {
-  const repo = path.join(sandbox, 'repos', projects[0].id);
-  fs.mkdirSync(repo, { recursive: true });
-  const git = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8', windowsHide: true, stdio: 'ignore', timeout: 30_000 });
-  git('init', '-q', '-b', 'main');
-  git('config', '--local', 'user.name', 'Synthetic Page Registration QA');
-  git('config', '--local', 'user.email', 'page-registration-qa@example.invalid');
-  git('config', '--local', 'core.autocrlf', 'false');
-  fs.writeFileSync(path.join(repo, 'README.md'), '# Page registration fixture\n');
-  git('add', '.');
-  git('commit', '-qm', 'fixture baseline');
+  const repos = projects.slice(0, 2).map((project, index) => {
+    const repo = path.join(sandbox, 'repos', project.id);
+    fs.mkdirSync(repo, { recursive: true });
+    const git = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8', windowsHide: true, stdio: 'ignore', timeout: 30_000 });
+    git('init', '-q', '-b', 'main');
+    git('config', '--local', 'user.name', 'Synthetic Page Registration QA');
+    git('config', '--local', 'user.email', 'page-registration-qa@example.invalid');
+    git('config', '--local', 'core.autocrlf', 'false');
+    fs.writeFileSync(path.join(repo, 'README.md'), `# Page registration fixture ${index + 1}\n`);
+    git('add', '.');
+    git('commit', '-qm', 'fixture baseline');
+    return repo;
+  });
   const tool = path.join(sandbox, 'install', 'tool.js');
   fs.copyFileSync(path.join(__dirname, 'single-repo-maintenance-tool.js'), tool);
-  return { repo, tool, argv: mode => [process.execPath, tool, mode] };
+  return { repo: repos[0], secondRepo: repos[1], tool, argv: mode => [process.execPath, tool, mode] };
 }
 
 async function createAiTeamUiFixture({ dataDir, workflowRoot, designFile, emptyTeam = false, maintenance = false, pageRegistration = false, maintenanceTiming }) {
@@ -177,7 +183,7 @@ async function createAiTeamUiFixture({ dataDir, workflowRoot, designFile, emptyT
   fs.mkdirSync(workflowData);
   prepareIsolatedEnvironment(sandbox, { engine: offline, workflow: offline });
   const registration = pageRegistration ? preparePageRegistration(sandbox) : null;
-  const maintenanceFixture = maintenance && prepareMaintenanceFixture({ sandbox, coreInstall, workflowData, projectId: projects[0].id });
+  const maintenanceFixture = maintenance && prepareMaintenanceFixture({ sandbox, coreInstall, workflowData, projectId: projects[0].id, secondProjectId: projects[1].id });
   if (maintenanceFixture) maintenanceFixture.journalId = await maintenanceFixture.registerProject();
   const bridgeUrl = maintenanceFixture ? await listen(maintenanceFixture.server) : offline;
   const { createWorkflowServer } = require(path.join(workflowInstall, 'src', 'server'));
@@ -231,17 +237,21 @@ async function createAiTeamUiFixture({ dataDir, workflowRoot, designFile, emptyT
     const seeded = await seedSyntheticState(runtime, sandbox, call, emptyTeam);
     if (maintenanceFixture) {
       maintenanceFixture.installHook(process.env.KB_DATA_DIR, shell.address().port);
+      await drainBridge();
+    }
+    // 把事件桥接里的事件读进来，和钩子通知到达时模块做的一样 / read the Bridge's events in, as the module does when a hook wakes it
+    async function drainBridge() {
       await workflow.consumer.drain({ notifyUrl: workflowUrl + '/api/internal/bridge-notify' });
     }
     async function restartWorkflow() {
       await workflow.close();
       workflow = createWorkflowServer(workflowOptions);
       await workflow.listen(wf.port, host);
-      if (maintenanceFixture) await workflow.consumer.drain({ notifyUrl: workflowUrl + '/api/internal/bridge-notify' });
+      if (maintenanceFixture) await drainBridge();
     }
     return {
       address, call, projects, PROFILES, browserProfile: path.join(sandbox, 'browser-profile'), ...seeded,
-      maintenance: maintenanceFixture, registration, workflowUrl, workflowData, restartWorkflow, close,
+      maintenance: maintenanceFixture, registration, workflowUrl, workflowData, restartWorkflow, drainBridge, close,
     };
   } catch (error) {
     await close();

@@ -248,11 +248,12 @@ function workflowInstalled() {
     }
   }
 
-  // 8) Page-maintained maintenance registry and member models (module 0.3.0+):
-  // the shell is the only source of the repository path and of the runtime
-  // token, and a member's model is verified against the Workbench before the
-  // module stores it. Branched on the module's declared capability — a module
-  // that predates the registry prints a skip line, and a skip is never a pass.
+  // 8) Page-maintained maintenance registry and member models (module 0.3.0+,
+  // several repositories since 0.4.0): the shell is the only source of the
+  // repository path and of the runtime token, and a member's model is verified
+  // against the Workbench before the module stores it. Branched on the module's
+  // declared capability — a module that predates the registry prints a skip
+  // line, and a skip is never a pass.
   {
     const fs = require('node:fs');
     const os = require('node:os');
@@ -270,11 +271,19 @@ function workflowInstalled() {
       await upstream.close();
       console.log('workflow-module-wiring-test: registry-forward section SKIPPED (the module predates the page-maintained registry)');
     } else {
-      const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-registry-repo-'));
-      const git = args => { const r = spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8' }); if (r.status !== 0) throw new Error(r.stderr); };
-      git(['init', '-q', '-b', 'main']); git(['config', 'user.email', 't@t']); git(['config', 'user.name', 't']);
-      fs.writeFileSync(path.join(repo, 'a.js'), 'export const a = 1;' + String.fromCharCode(10));
-      git(['add', '.']); git(['commit', '-qm', 'i']);
+      // 仓库按多个登记（模块 0.4.0 起）：固定的模块版本必须支持，不支持就直接失败，不悄悄跳过
+      // repositories are registered as many (module 0.4.0+): the pinned module must support it — fail loudly, never skip quietly
+      assert.ok(health.capabilities.multiRepoMaintenance, 'the pinned workflow module must support several repositories');
+      const makeRepo = name => {
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), name));
+        const git = args => { const r = spawnSync('git', ['-C', directory, ...args], { encoding: 'utf8' }); if (r.status !== 0) throw new Error(r.stderr); };
+        git(['init', '-q', '-b', 'main']); git(['config', 'user.email', 't@t']); git(['config', 'user.name', 't']);
+        fs.writeFileSync(path.join(directory, 'a.js'), 'export const a = 1;' + String.fromCharCode(10));
+        git(['add', '.']); git(['commit', '-qm', 'i']);
+        return directory;
+      };
+      const repo = makeRepo('wf-registry-repo-');
+      const secondRepo = makeRepo('wf-registry-repo-second-');
       // A stand-in Workbench: only the profile list the shell reads to verify a model.
       const profiles = [
         { id: 'profile-ok', name: '可用档案', enabled: true, credentialConfigured: true, models: { default: 'model-ok', list: [{ id: 'model-ok' }, { id: 'model-ok-pro' }] } },
@@ -287,9 +296,10 @@ function workflowInstalled() {
         res.end(isProfileList(req) ? JSON.stringify(profiles) : '{}');
       });
       await new Promise(resolve => workbench.listen(0, '127.0.0.1', resolve));
+      const directories = { 'proj-reg': repo, 'proj-reg-2': secondRepo };
       const options = {
         workflowUrl: base, runtimeToken: moduleToken,
-        workflowProjectResolver: input => (input.projectId === 'proj-reg' ? { projectId: 'proj-reg', repoPath: repo } : null),
+        workflowProjectResolver: input => (directories[input.projectId] ? { projectId: input.projectId, repoPath: directories[input.projectId] } : null),
       };
       // Two shells over the same module: one reaches the Workbench, one does not.
       // Each answers a refused forward the way the product handler does.
@@ -325,20 +335,32 @@ function workflowInstalled() {
         assert.equal((await call(liveShell, 'maintenance')).body.configured, false);
         const registered = await call(liveShell, 'maintenance/repos', { requestId: 'repo-ok', projectId: 'proj-reg', repoPath: 'C:\\Windows', branch: 'main', remote: '', allowPush: false }, clientToken);
         assert.equal(registered.status, 201, json(registered.body));
+        const repoId = registered.body.repo && registered.body.repo.repoId;
         const status = (await call(liveShell, 'maintenance')).body;
         assert.equal(status.configured, true);
-        assert.equal(status.repoPath, fs.realpathSync(repo), 'the page-supplied path is replaced by the shell resolution');
+        assert.equal(status.repos[0].repoPath, fs.realpathSync(repo), 'the page-supplied path is replaced by the shell resolution');
         const direct = await fetch(base + '/api/workflow/v1/maintenance/repos', {
           method: 'POST', headers: { 'Content-Type': 'application/json', ...clientToken },
           body: json({ requestId: 'direct', projectId: 'proj-reg', repoPath: repo, branch: 'main', remote: '', allowPush: false }),
         });
         assert.equal(direct.status, 403, 'the module itself trusts only the token the shell holds');
-        const updated = await call(liveShell, 'maintenance/repos/update', { requestId: 'repo-update', branch: 'main', remote: 'origin', allowPush: true, repoPath: 'C:\\Windows' }, clientToken);
+        const updated = await call(liveShell, 'maintenance/repos/update', { requestId: 'repo-update', repoId, branch: 'main', remote: 'origin', allowPush: true, repoPath: 'C:\\Windows' }, clientToken);
         assert.equal(updated.status, 200, json(updated.body));
         const after = (await call(liveShell, 'maintenance')).body;
-        assert.deepEqual([after.allowPush, after.remote, after.repoPath], [true, 'origin', fs.realpathSync(repo)], 'an update cannot move the repository');
+        assert.deepEqual([after.repos[0].allowPush, after.repos[0].remote, after.repos[0].repoPath], [true, 'origin', fs.realpathSync(repo)], 'an update cannot move the repository');
         const malformed = await fetch(`http://127.0.0.1:${liveShell.address().port}/api/workflow/maintenance/repos`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{not json' });
         assert.equal(malformed.status, 400);
+        // Several repositories: a second project registers through the same trusted forward and is listed next to the first.
+        const second = await call(liveShell, 'maintenance/repos', { requestId: 'repo-second', projectId: 'proj-reg-2', repoPath: 'C:\\Windows', branch: '', remote: '', allowPush: false }, clientToken);
+        assert.equal(second.status, 201, json(second.body));
+        const listed = (await call(liveShell, 'maintenance')).body.repos;
+        assert.deepEqual(listed.map(item => [item.projectId, item.repoPath]), [['proj-reg', fs.realpathSync(repo)], ['proj-reg-2', fs.realpathSync(secondRepo)]]);
+        assert.notEqual(second.body.repo.repoId, repoId);
+        // 删除不需要路径，所以不经受信转发；页面上自带的令牌头不会因此变成模块的信任
+        // removal needs no path, so it is not trusted-forwarded; the token header a page sends never becomes module trust
+        const removed = await call(liveShell, 'maintenance/repos/delete', { requestId: 'repo-delete', repoId: second.body.repo.repoId }, clientToken);
+        assert.equal(removed.status, 200, json(removed.body));
+        assert.deepEqual((await call(liveShell, 'maintenance')).body.repos.map(item => item.repoId), [repoId]);
 
         // Member models: the shell verifies the profile and one of its listed models; the page's own driver never counts.
         const drafts = await call(liveShell, 'team', { requestId: 'seed', name: '登记团队', members: [{ name: '草稿成员', role: 'reviewer', profileId: 'profile-ok', model: 'page-lie' }] });

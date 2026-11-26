@@ -19,10 +19,10 @@ async function gitAsync(repo, ...args) {
   return stdout.trim();
 }
 
-function prepareMaintenanceFixture({ sandbox, coreInstall, workflowData, projectId }) {
-  const repo = path.join(sandbox, 'repos', projectId);
-  const remote = path.join(sandbox, 'isolated upstream.git');
-  const emptyHooks = path.join(sandbox, 'empty-hooks');
+// 一个带独立远端的仓库。推送基线时钩子目录指向空目录，所以这次推送不产生提交事件。
+// A repository with its own remote. The baseline push goes out with the hooks directory pointing at an empty
+// folder, so that push produces no commit event.
+function makeRepository({ repo, remote, emptyHooks, readme }) {
   for (const directory of [repo, remote, emptyHooks]) fs.mkdirSync(directory, { recursive: true });
   git(remote, 'init', '-q', '--bare', '-b', 'main');
   git(repo, 'init', '-q', '-b', 'main');
@@ -31,13 +31,32 @@ function prepareMaintenanceFixture({ sandbox, coreInstall, workflowData, project
   git(repo, 'config', '--local', 'user.email', 'maintenance-qa@example.invalid');
   git(repo, 'config', '--local', 'core.autocrlf', 'false');
   fs.writeFileSync(path.join(repo, 'policy.txt'), 'PASS\n');
-  fs.writeFileSync(path.join(repo, 'README.md'), '# Isolated maintenance fixture\n');
+  fs.writeFileSync(path.join(repo, 'README.md'), readme);
   git(repo, 'add', '.');
   git(repo, 'commit', '-qm', 'fixture baseline');
   const baseline = git(repo, 'rev-parse', 'HEAD');
   git(repo, 'remote', 'add', 'origin', remote);
   git(repo, 'push', '-u', 'origin', 'main');
   git(repo, 'config', '--local', 'core.hooksPath', '.git/hooks');
+  return baseline;
+}
+
+function prepareMaintenanceFixture({ sandbox, coreInstall, workflowData, projectId, secondProjectId }) {
+  const repo = path.join(sandbox, 'repos', projectId);
+  const baseline = makeRepository({
+    repo, remote: path.join(sandbox, 'isolated upstream.git'), emptyHooks: path.join(sandbox, 'empty-hooks'),
+    readme: '# Isolated maintenance fixture\n',
+  });
+  // 第二个仓库：测试进行中再登记，用来核对提交只触发提交所在的那个仓库
+  // The second repository: registered while the test runs, to check that a commit triggers only the repository it was made in
+  const second = { projectId: secondProjectId, repo: secondProjectId ? path.join(sandbox, 'repos', secondProjectId) : null };
+  if (secondProjectId) {
+    second.remote = path.join(sandbox, 'isolated upstream-second.git');
+    second.baseline = makeRepository({
+      repo: second.repo, remote: second.remote, emptyHooks: path.join(sandbox, 'empty-hooks-second'),
+      readme: '# Isolated maintenance fixture (second repository)\n',
+    });
+  }
 
   const tool = path.join(sandbox, 'install', 'tool.js');
   fs.copyFileSync(path.join(__dirname, 'single-repo-maintenance-tool.js'), tool);
@@ -67,28 +86,57 @@ function prepareMaintenanceFixture({ sandbox, coreInstall, workflowData, project
   const bridge = createBridge({ homeDir: bridgeHome });
   const server = http.createServer(createConsoleServer({ home: bridgeHome }));
 
-  function installHook(dataDir, port) {
+  function installHookFor(dataDir, port, id, repoPath) {
     const { installHook } = require(path.join(coreInstall, 'src', 'automation', 'hook-manager'));
     const { writeEndpoint } = require(path.join(coreInstall, 'src', 'common', 'runtime-endpoint'));
     writeEndpoint(dataDir, { host, port, pid: process.pid });
     return installHook({
-      projectId, repoPath: repo, dataDir, bridgeHomeDir: bridgeHome, bridgeModulePath: bridgeModule,
+      projectId: id, repoPath, dataDir, bridgeHomeDir: bridgeHome, bridgeModulePath: bridgeModule,
       triggerScriptPath: path.join(coreInstall, 'src', 'scripts', 'hook-trigger.js'),
     });
   }
+  // 追加一条提交事件。默认是第一个仓库的当前提交；可以指定别的项目和提交，用来核对事件不会触发到别的仓库
+  // Append one commit event: by default the first repository's current commit. Another project or commit may be
+  // named, to check that an event never triggers the wrong repository.
   async function appendBoundary(overrides = {}) {
     const { repoIdentity } = await resolveRepoContext(repo);
     return bridge.appendCommitBoundary({
       projectId, repoIdentity, commitSha: git(repo, 'rev-parse', 'HEAD'), branch: 'main', ...overrides,
     });
   }
-  async function registerProject() {
-    const project = await projectRegistry.addProject({ home: bridgeHome, path: repo, store: path.join(sandbox, 'bridge project store') });
-    const old = await appendBoundary();
+  // 在事件桥接里登记一个项目：它的日志以一段已压缩的前缀开始，和用了很久的日志一样。
+  // 一个日志存储位置只能属于一个项目，所以第一个项目用夹具自己的位置，第二个用桥接的默认位置。
+  // Register a project with the Bridge: its journal starts with a compacted prefix, like a journal that has been in
+  // use for a while. A journal store belongs to one project, so the first uses the fixture's own location and the
+  // second the Bridge's default one.
+  async function register(target, id) {
+    const project = await projectRegistry.addProject({ home: bridgeHome, path: target, ...(target === repo ? { store: path.join(sandbox, 'bridge project store') } : {}) });
+    const { repoIdentity } = await resolveRepoContext(target);
+    const old = await bridge.appendCommitBoundary({ projectId: id, repoIdentity, commitSha: git(target, 'rev-parse', 'HEAD'), branch: 'main' });
     await new Journal(projectJournalDir(project)).trimThrough(old.sequence);
     return project.id;
   }
-  return { repo, remote, baseline, configPath, projectId, server, bridge, installHook, appendBoundary, registerProject, git, gitAsync };
+  async function appendSecondBoundary(overrides = {}) {
+    const { repoIdentity } = await resolveRepoContext(second.repo);
+    return bridge.appendCommitBoundary({
+      projectId: second.projectId, repoIdentity, commitSha: git(second.repo, 'rev-parse', 'HEAD'), branch: 'main', ...overrides,
+    });
+  }
+  const first = {
+    repo, remote: path.join(sandbox, 'isolated upstream.git'), baseline, configPath, projectId, server, bridge, git, gitAsync,
+    installHook: (dataDir, port) => installHookFor(dataDir, port, projectId, repo),
+    appendBoundary,
+    registerProject: () => register(repo, projectId),
+  };
+  Object.assign(first, secondProjectId ? {
+    second: {
+      ...second, git, gitAsync,
+      registerProject: async () => { second.journalId = await register(second.repo, second.projectId); return second.journalId; },
+      installHook: (dataDir, port) => installHookFor(dataDir, port, second.projectId, second.repo),
+      appendBoundary: appendSecondBoundary,
+    },
+  } : {});
+  return first;
 }
 
 module.exports = { prepareMaintenanceFixture };

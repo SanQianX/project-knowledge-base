@@ -51,6 +51,16 @@ switch (mode) {
   case 'record':
     fs.writeFileSync('push-permission.txt', 'This candidate should stay local\n');
     break;
+  case 'where':
+    // 参数里的占位符在运行时替换：{repo}、{workspace}、{branch} 分别是这个仓库的路径、维护工作目录和目标分支，
+    // 所以同一个工具可以用于多个仓库 / placeholders in the arguments are replaced at run time: {repo}, {workspace}
+    // and {branch} become this repository's path, its maintenance worktree and the target branch
+    assert.equal(input.phase, 'apply');
+    assert.equal(process.argv[3], input.repoPath);
+    assert.equal(process.argv[4], input.workspace);
+    assert.equal(process.argv[5], input.branch);
+    console.log(JSON.stringify({ repo: input.repoPath, branch: input.branch }));
+    break;
   default:
     throw new Error('Unknown fixture tool action.');
 }

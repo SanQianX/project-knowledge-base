@@ -31,13 +31,25 @@ async function main() {
     );
     const shot = filename => browser.screenshot(path.join(options.dataDir, filename));
 
+    // 等不到的时候把页面当时的样子带出来：是页面坏了还是标记写错了，一眼能分清。
+    // On a miss, bring back what the frame showed: a broken page and a wrong marker are told apart at once.
+    const settle = async (read, label) => {
+      try { return await waitFor(read, label); }
+      catch (error) {
+        const shown = await workflow('JSON.stringify({ heading: doc.getElementById("heading")?.textContent, settings: doc.getElementById("settings")?.innerHTML.slice(0, 300) })').catch(() => null);
+        error.message += '\n--- frame at the miss ---\n' + shown + '\n--- console ---\n' + JSON.stringify(browser.consoleErrors.map(item => item.text).slice(-4));
+        throw error;
+      }
+    };
     await browser.setViewport(1440, 940);
     await page('document.querySelector(\'nav [data-view="team"]\').click()');
     if (options.emptyTeam) {
       assert.equal((await fixture.call('team')).status, 'empty');
-      await waitFor(() => has('#heading', '团队任务'), 'AI team frame in a newly installed knowledge base');
+      // 标题是页面里写死的，说明不了脚本已经跑起来；等任务列表真的渲染出来再操作
+      // The heading is static markup and says nothing about the script; wait for the task list to be really rendered before acting
+      await settle(() => has('#taskList', '没有匹配的任务'), 'AI team frame in a newly installed knowledge base');
       await click('#navSettings');
-      await waitFor(() => has('#teamForm', '创建团队'), 'first-team creation form');
+      await settle(() => has('#teamForm', '创建团队'), 'first-team creation form');
       await shot('create-team.png');
       await field('teamForm', 'name', '首次建队验收');
       await click('#teamForm button[type="submit"]');
@@ -127,15 +139,19 @@ async function main() {
 
     await click('#navMaintenance');
     if (fixture.maintenance) {
-      await waitFor(() => has('#maintenanceRepoTitle', '示例代码仓库'), 'actual registered repository in the knowledge-base frame');
+      await waitFor(() => has('[data-repo-title]', '示例代码仓库'), 'actual registered repository in the knowledge-base frame');
       assert.equal(await has('#heading', '自动维护'), true, 'the tab is named for what it does');
-      // 0.2.3 登记文件里的工具列在页面上，可以编辑和删除；仓库卡片可以修改。
-      // The tools from the 0.2.3 registration file are listed for editing and removal; the repository card can be edited.
+      // 0.2.3 登记文件里的工具列在页面上，可以编辑和删除；仓库可以修改设置。占用、运行这些操作都针对一个仓库。
+      // The tools from the 0.2.3 registration file are listed for editing and removal; a repository's settings can be edited.
+      // Occupancy and runs each address one repository.
       await waitFor(() => has('.maintenance-tool', '示例代码规则'), 'tools imported from the 0.2.3 file are listed');
       assert.equal(await workflow('doc.querySelectorAll(".maintenance-tool").length'), 6, 'every imported tool is listed');
       assert.equal(await workflow('Boolean(doc.querySelector("[data-maintenance-repo-edit]"))'), true);
+      const registeredRepoId = (await fixture.call('maintenance')).repos[0].repoId;
+      assert.equal(await workflow('doc.querySelector("[data-maintenance-busy]").dataset.maintenanceBusy'), registeredRepoId,
+        'the occupancy button addresses its repository');
       await click('[data-maintenance-new]');
-      await waitFor(() => has('#maintenanceDialogTitle', '新建维护计划'), 'maintenance creation dialog');
+      await waitFor(() => has('#maintenanceDialogTitle', '新建计划'), 'maintenance creation dialog');
       await field('maintenanceForm', 'title', '每日格式整理');
       await field('maintenanceForm', 'memberId', member.memberId);
       await field('maintenanceForm', 'toolId', 'format');
@@ -146,12 +162,14 @@ async function main() {
       await workflow('doc.getElementById("maintenanceForm").elements.enabled.checked = true');
       await shot('maintenance-task-form.png');
       await click('#maintenanceForm button[type="submit"]');
-      await waitFor(() => has('.maintenance-job', '验证维护成员'), 'saved member is visible on the scheduled task');
+      await waitFor(() => has('.maintenance-job', '验证维护成员'), 'saved member is visible on the scheduled plan');
       assert.equal(await has('.maintenance-job', '每天 09:00'), true);
+      assert.equal(await has('.maintenance-job', '示例代码仓库'), true, 'the plan shows the repository it is bound to');
       const job = (await fixture.call('maintenance')).jobs[0];
       assert.equal(job.memberId, member.memberId);
       assert.deepEqual(job.trigger, { kind: 'daily', at: '09:00' });
       assert.equal(job.delivery, 'candidate');
+      assert.deepEqual(job.repoIds, [registeredRepoId], 'a plan saved without a choice covers the registered repositories');
 
       await click('[data-maintenance-busy]');
       await waitFor(() => has('[data-maintenance-busy]', '释放开发占用'), 'developer occupancy is persisted');
@@ -170,7 +188,7 @@ async function main() {
     } else {
       await waitFor(() => has('#maintenance', '登记仓库'), 'unconfigured maintenance offers registration on the page');
       assert.equal(await has('#maintenance', 'maintenance.json'), false, 'no registry file is shown to the user');
-      assert.equal(await workflow('doc.querySelector("[data-maintenance-new]") === null'), true);
+      assert.equal(await workflow('doc.querySelector("[data-maintenance-new]").disabled'), true, 'no plan can be created before a repository is registered');
     }
     await browser.setViewport(390, 840);
     await waitFor(() => workflow('doc.documentElement.scrollWidth <= doc.defaultView.innerWidth'), 'narrow maintenance layout');
