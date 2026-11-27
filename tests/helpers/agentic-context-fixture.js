@@ -59,7 +59,7 @@ async function setup({ createEngineServer, vectorUrl, configure, dataDir, runtim
     const { group } = await request('/api/memory-groups', { brainId: 'brain-default', name: 'Fixture conventions' });
     await request(`/api/memory-groups/${group.id}/project-bindings`, { addProjectIds: [projectId] });
     await request(`/api/memory-groups/${group.id}/members`, { addMemoryIds: members });
-    const fixture = { root, repo, projectId, knowledge, endpoint, request, close, engine, members };
+    const fixture = { root, repo, projectId, knowledge, endpoint, request, close, engine, members, groupId: group.id, offlineUrl: unavailable };
     await configure?.(fixture);
     return fixture;
   } catch (error) {

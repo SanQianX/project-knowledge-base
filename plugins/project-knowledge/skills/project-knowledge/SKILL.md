@@ -17,6 +17,8 @@ Clients with the UserPromptSubmit hook can receive confirmed memories and projec
 
 Use `project_knowledge_search` when a task needs evidence that the hook did not supply. Read the full entry with `project_knowledge_get` when its title or excerpt leaves a detail unresolved. Check the current source before relying on historical knowledge.
 
+When a hook provides a `continuationId`, call `project_knowledge_prepare_task_context` once with that ID before editing. It resumes the same task with its permitted knowledge scope. The result distinguishes cited facts, current memory and evidence gaps. For an explicit refresh after compaction or a material change, call `project_knowledge_refresh_task_context` with the current task. If a mandatory memory exceeded the inline budget, use `project_knowledge_read_context_memory` with its ID and follow `nextOffset`. Use available source and existing read tools when the deep result is incomplete.
+
 ## Workflow
 
 1. Call `project_knowledge_resolve` with the current Git root before substantial implementation, diagnosis, or design work. Do not guess the project slug.

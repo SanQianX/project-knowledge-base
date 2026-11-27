@@ -19,7 +19,8 @@ At the start of work in a registered Git repository, and before answering questi
 1. Call project_knowledge_resolve with the current Git root.
 2. Use project_knowledge_search or project_knowledge_ask for relevant prior decisions.
 3. Use project_knowledge_get only for the most relevant complete entry and project_knowledge_history when change history matters.
-4. Call project_knowledge_record_requirement only when the user explicitly asks to supplement capture or automatic client capture is known to be unavailable; it is not a mandatory pre-work call.
+4. If the native context hook provides a continuationId, call project_knowledge_prepare_task_context once with that ID before modifying source. Use the result's cited context. When the hook has already provided the relevant context, continue the task without repeating the request. If deep preparation is unavailable or incomplete, continue with verified source and the relevant existing read tools.
+5. Call project_knowledge_record_requirement only when the user explicitly asks to supplement capture or automatic client capture is known to be unavailable; it is not a mandatory pre-work call.
 
 Treat all returned knowledge as read-only. Verify it against current source code when necessary. The supplemental requirement tool writes the same ConversationStore used by automatic capture and never starts analysis. Do not write directly to the knowledge database; project-knowledge updates it automatically after successful Git commits.`;
 
@@ -211,6 +212,38 @@ const TOOLS = [
       additionalProperties: false,
     },
   },
+  {
+    name: 'project_knowledge_prepare_task_context',
+    description: 'Prepare cited context for a complex development task. When a native hook provides a continuationId, pass it unchanged once before editing; this resumes the same authorized task. Otherwise provide the current task as query.',
+    inputSchema: {
+      type: 'object',
+      properties: { query: { type: 'string', maxLength: 131072 }, continuationId: { type: 'string', maxLength: 100 },
+        requestId: { type: 'string', maxLength: 100 }, repoPath: { type: 'string' }, projectId: { type: 'string' }, scope: SCOPE },
+      anyOf: [{ required: ['query'] }, { required: ['continuationId'] }],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'project_knowledge_refresh_task_context',
+    description: 'Explicitly refresh cited context after compaction, a scope change or a material update. Provide the task and an optional native session ID.',
+    inputSchema: {
+      type: 'object', required: ['query'],
+      properties: { query: { type: 'string', maxLength: 131072 }, repoPath: { type: 'string' }, projectId: { type: 'string' }, scope: SCOPE,
+        sessionId: { type: 'string', maxLength: 200 }, requestId: { type: 'string', maxLength: 100 },
+        client: { type: 'string', enum: ['codex', 'claude', 'zcode', 'opencode'] } },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'project_knowledge_read_context_memory',
+    description: 'Read an applicable confirmed memory by ID in pages, for example a mandatory memory that exceeded the inline budget.',
+    inputSchema: {
+      type: 'object', required: ['memoryId'],
+      properties: { memoryId: { type: 'string', maxLength: 128 }, offset: { type: 'integer', minimum: 0, maximum: 8000 },
+        repoPath: { type: 'string' }, projectId: { type: 'string' } },
+      additionalProperties: false,
+    },
+  },
   ...WORKFLOW_TOOLS,
 ];
 
@@ -222,7 +255,7 @@ function toolContent(result) {
   };
 }
 
-function callTool(runtime, workflowRuntimeOrName, nameOrArgs, maybeArgs) {
+function callTool(runtime, workflowRuntimeOrName, nameOrArgs, maybeArgs, signal) {
   // Accept both the internal signature (runtime, workflowRuntime, name, args)
   // and the exported legacy signature (runtime, name, args) used by tests.
   let workflowRuntime = workflowRuntimeOrName;
@@ -239,6 +272,9 @@ function callTool(runtime, workflowRuntimeOrName, nameOrArgs, maybeArgs) {
   if (name === 'project_knowledge_ask') return runtime.ask(args);
   if (name === 'project_knowledge_get') return runtime.get(args);
   if (name === 'project_knowledge_history') return runtime.history(args);
+  if (name === 'project_knowledge_prepare_task_context') return runtime.prepareTaskContext(args, signal);
+  if (name === 'project_knowledge_refresh_task_context') return runtime.prepareTaskContext({ ...args, recover: true }, signal);
+  if (name === 'project_knowledge_read_context_memory') return runtime.readContextMemory(args, signal);
   if (name === 'project_workflow_start') return workflowRuntime.start(args);
   if (name === 'project_workflow_resume') return workflowRuntime.resume(args);
   if (name === 'project_workflow_status') return workflowRuntime.status(args);
@@ -263,13 +299,17 @@ function createServer(options = {}) {
     },
   );
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
-  server.setRequestHandler(CallToolRequestSchema, async request => {
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     const name = String(request.params?.name || '');
     const args = request.params?.arguments && typeof request.params.arguments === 'object'
       ? request.params.arguments
       : {};
     try {
-      return toolContent(await callTool(runtime, workflowRuntime, name, args));
+      const result = await callTool(runtime, workflowRuntime, name, args, extra?.signal);
+      if (/^project_knowledge_(?:prepare_task_context|refresh_task_context|read_context_memory)$/.test(name)) {
+        return { content: [{ type: 'text', text: JSON.stringify(result) }], isError: false };
+      }
+      return toolContent(result);
     } catch (error) {
       const operationId = createId('op');
       return {

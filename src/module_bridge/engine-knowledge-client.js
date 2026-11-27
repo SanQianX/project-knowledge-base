@@ -11,9 +11,11 @@ class EngineKnowledgeClient {
     this.timeoutMs = timeoutMs;
   }
 
-  async json(url, options = {}) {
+  async json(url, options = {}, timeoutMs = this.timeoutMs) {
     let response;
-    try { response = await this.fetch(url, { ...options, redirect: 'error', signal: AbortSignal.timeout(this.timeoutMs) }); }
+    const timeout = AbortSignal.timeout(timeoutMs);
+    const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+    try { response = await this.fetch(url, { ...options, redirect: 'error', signal }); }
     catch { throw new DomainError('ENGINE_UNAVAILABLE', '知识引擎连接失败或超时，请在系统状态中检查服务。', { status: 503 }); }
     let payload;
     try {
@@ -70,6 +72,26 @@ class EngineKnowledgeClient {
     const result = await this.json(new URL(`${target.prefix}/${action}`, target.url), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const valid = action === 'get' ? Array.isArray(result.chunks) : Array.isArray(result.results);
     if (result.ok !== true || !valid || (action === 'ask' && (typeof result.answer !== 'string' || !Array.isArray(result.citations)))) throw new DomainError('ENGINE_INVALID_RESPONSE', '知识引擎返回了无效读取结果。', { status: 502 });
+    return result;
+  }
+
+  async context(action, input, project, signal) {
+    const target = await this.target(project);
+    const body = { projectId: project.projectId };
+    const fields = action === 'memory' ? ['memoryId', 'offset'] : ['query', 'scope', 'continuationId', 'requestId', 'client', 'sessionId', 'recover'];
+    for (const key of fields) if (input[key] !== undefined) body[key] = input[key];
+    const path = action === 'memory' ? 'context/memory' : 'context/agentic';
+    const result = await this.json(new URL(`${target.prefix}/${path}`, target.url), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal,
+    }, action === 'memory' ? this.timeoutMs : 66000);
+    if (action !== 'memory') {
+      if (result.schemaVersion !== 1 || typeof result.prompt !== 'string' || !Array.isArray(result.facts) || !Array.isArray(result.memories) || !Array.isArray(result.references)) {
+        throw new DomainError('ENGINE_INVALID_RESPONSE', '知识引擎返回了无效任务上下文。', { status: 502 });
+      }
+      const { receiptId, ...delivery } = result.delivery || {};
+      const { prompt, facts, memories, ...pack } = result;
+      return { ...pack, delivery, context: prompt };
+    }
     return result;
   }
 }

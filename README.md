@@ -177,7 +177,10 @@ project-knowledge-kb search --project <projectId> --query "refresh token policy"
 project-knowledge-kb ask --project <projectId> --query "what was decided about login?"
 project-knowledge-kb get --project <projectId> --entry modules/auth.md --json
 project-knowledge-kb history --project <projectId> --json
+project-knowledge-kb context --project <projectId> --query "implement the current export contract" --json
 ```
+
+兼容引擎提供「快速检索 / 智能检索」模式。系统配置中可启用智能上下文、选择已有 Workbench Profile 的独立模型，以及设置 2–60 秒的深度检索时限。智能模式按当前任务选择长期记忆。强制约束可在长期记忆编辑器设置，请求空间不足时可以按 ID 分段读取。候选验收、客户端支持和隔离测试命令见 [执行台账](docs/agentic-context-execution.md)。
 
 Queries never create or rewrite configuration. If the internal index is
 unavailable, search falls back to current Markdown. Project, domain and brain

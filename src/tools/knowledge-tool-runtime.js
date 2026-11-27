@@ -285,6 +285,17 @@ class KnowledgeToolRuntime {
     return this.retrievalService.search({ ...input, project });
   }
 
+  async prepareTaskContext(input = {}, signal) {
+    if (!input.continuationId && (typeof input.query !== 'string' || !input.query.trim())) {
+      throw new DomainError('INVALID_ARGUMENT', '请提供当前任务或一次性续查标识。');
+    }
+    return this.engineClient.context('agentic', input, this.resolveProject(input), signal);
+  }
+
+  async readContextMemory(input = {}, signal) {
+    return this.engineClient.context('memory', input, this.resolveProject(input), signal);
+  }
+
   async ask(input = {}) {
     const project = this.resolveProject(input);
     if (this.projectStore.readState(project.projectId).modules?.engine) return this.engineClient.request('ask', input, project);

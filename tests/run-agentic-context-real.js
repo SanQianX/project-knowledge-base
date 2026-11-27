@@ -14,7 +14,7 @@ async function closeServer(server) {
   await new Promise(resolve => server.close(resolve));
 }
 
-async function startRuntime(key) {
+async function startRuntime(key, { deferFirstContext = false } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-real-context-'));
   const token = crypto.randomBytes(24).toString('hex');
   const model = process.env.PKB_CONTEXT_TEST_MODEL || 'glm-4.7';
@@ -30,8 +30,9 @@ async function startRuntime(key) {
   // resolver with an in-memory credential source to keep the key off disk.
   const { credentialRef } = profiles._profiles().profiles.find(profile => profile.id === profileId);
   profiles._credentials = () => ({ credentials: { [credentialRef]: key } });
-  const handle = createHttpHandler({ profiles }, { runtimeToken: token });
+  const handle = createHttpHandler({ profiles, listProfiles: () => profiles.list() }, { runtimeToken: token });
   const trace = [];
+  let deferred = false;
   const workbench = http.createServer(async (req, res) => {
     if (req.url === '/v1/embeddings' && req.method === 'POST') {
       try {
@@ -45,11 +46,23 @@ async function startRuntime(key) {
       } catch { res.writeHead(502).end(); }
       return;
     }
+    if (req.method !== 'POST' || req.url !== '/api/claude-workbench/v1/internal/maintenance-agent') {
+      if (!(await handle(req, res))) res.writeHead(404).end();
+      return;
+    }
     let payload = '';
     for await (const piece of req) payload += piece;
-    const input = JSON.parse(payload);
-    const prompt = JSON.parse(input.prompt);
-    const matched = corpus.cases.find(item => item.queries.includes(prompt.task.query) || item.topic === prompt.task.query);
+    let prompt;
+    try { prompt = JSON.parse(JSON.parse(payload).prompt); } catch { /* Non-context Workbench traffic is not an evaluation row. */ }
+    if (prompt?.task && deferFirstContext && !deferred) {
+      deferred = true;
+      await new Promise(resolve => {
+        const timer = setTimeout(resolve, 12000);
+        res.once('close', () => { clearTimeout(timer); resolve(); });
+      });
+      if (res.destroyed) return;
+    }
+    const matched = prompt?.task?.query && corpus.cases.find(item => item.queries.includes(prompt.task.query) || item.topic === prompt.task.query);
     if (matched) {
       const earlier = prompt.exchanges.slice(0, -1);
       const current = prompt.exchanges.at(-1);
@@ -63,6 +76,7 @@ async function startRuntime(key) {
     await handle(request, res);
   });
   const workbenchUrl = await listen(workbench);
+  profiles.setEmbeddingConfig({ provider: 'openai', endpoint: workbenchUrl, model: 'embedding-3', profileId });
   const packageDir = path.dirname(require.resolve('@sanqianx/vector-hub/package.json'));
   const { HubManager } = require(path.join(packageDir, 'dist/cjs/server/manager.js'));
   const { createServer } = require(path.join(packageDir, 'dist/cjs/server/server.js'));

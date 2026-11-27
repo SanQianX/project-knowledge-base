@@ -1201,7 +1201,7 @@
           .map(model => `<option value="${esc(JSON.stringify([p.id, model]))}">${esc(p.name)} · ${esc(model)}</option>`)).join('');
       if (context.profileId && context.model) $('agenticContextModel').value = JSON.stringify([context.profileId, context.model]);
       $('agenticContextStatus').textContent = context.enabled && !capabilities?.enabled ? '等待兼容的知识引擎。'
-        : capabilities?.modelConfigured && capabilities.enabled ? '已连接检索模型。' : '';
+        : capabilities?.modelConfigured && capabilities.enabled ? '已配置检索模型。' : '';
       $('maintenanceModel').innerHTML = '<option value="">尚未选择后台默认模型</option>' + list.filter(p => p.enabled && p.credentialConfigured).map(p => `<option value="${esc(p.id)}">${esc(p.name)} · ${esc(p.models.default)}</option>`).join('');
       $('maintenanceModel').value = saved.profileId || '';
       $('configurationStatus').textContent = saved.profileId ? '此默认模型仅用于后台维护。' : '先配置供应商，再选择后台默认模型。';
@@ -1218,7 +1218,7 @@
     const result = await api('/api/settings', { method: 'PATCH', body: { agenticContext } });
     const runtime = result.configuration.agenticContext;
     $('agenticContextStatus').textContent = runtime?.pending ? '已保存，等待兼容的知识引擎。'
-      : runtime?.enabled && runtime.modelConfigured ? '已保存，已连接检索模型。' : '已保存。';
+      : runtime?.enabled && runtime.modelConfigured ? '已保存检索模型。' : '已保存。';
   }
   async function openEmbedding() {
     const [profiles, embedding] = await Promise.all([api('/api/terminal/profiles'), api('/api/terminal/embedding-config')]);
