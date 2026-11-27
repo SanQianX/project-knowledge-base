@@ -1,7 +1,7 @@
 'use strict';
 // NAV-005 — 项目快速切换。
 //
-// 迁移说明（五页简化 UI）：
+// 测试入口：
 // - 项目切换入口：旧首页 `[data-select-project]` 行已删除，改为顶栏
 //   #projectSelect（设值 + change 事件，走产品自身 on('projectSelect',
 //   'change') → selectProject 同一路径）；「当前项目」仍查
@@ -9,14 +9,9 @@
 // - 运行记录表面：旧首页运行列表移到活动记录页 #activityUpdates
 //   （「项目名 · 短SHA」），「当前项目显示自己的运行/迟到的旧项目答案
 //   不得覆盖当前项目」断言全部改查 #activityUpdates。
-// - 工作台帧的打开：work 导航已移除，改为 #openSystem 系统抽屉 →
-//   #configureProviders（initializeFrame('terminal')，隐藏 #workFrame 仍
-//   为 Workbench 服务挂载点），kb:ready 后 frameContext 照旧投递
-//   kb:select-project。
-// - 帧映射断言：五页 shell 对 terminal 帧投递的 project 载荷改为当前
-//   项目的 productId 本身（旧版投递 modules.terminal.projectId 模块侧
-//   登记 id）；「模块拿到的一定是当前项目、绝不出现从未当选的项目」
-//   的业务断言按新映射等价保持（requestId 的 epoch:terminal 格式不变）。
+// - 系统抽屉的 #configureProviders 打开「开始工作」，初始化 #workFrame。
+//   收到 kb:select-project 后，回到「活动记录」验证项目切换。
+// - Workbench 帧收到当前项目的 productId，requestId 格式为 epoch:terminal。
 //
 // Switching projects quickly must show one project at a time, a late answer
 // must not paint another project over the current one, and the project that
@@ -109,7 +104,7 @@ const FETCH_HOOK = `(() => {
 /** The reads of the given project the page really made. */
 const projectReads = (harness, projectId, skip = 0) => harness.run(`(window.__fetches || []).filter(entry => entry.url.includes('/api/engine/snapshot') && entry.url.includes(${JSON.stringify(`projectId=${projectId}`)})).slice(${skip})`);
 
-/** The run-record surface of the five-page shell: the activity updates list. */
+/** The run-record surface is the activity updates list. */
 const activityText = harness => harness.run("document.getElementById('activityUpdates').textContent");
 
 /** Open a navigation view; retry to survive the known commit-gap click race. */
@@ -123,8 +118,7 @@ async function openView(harness, view) {
 }
 
 /**
- * Switch the current project through the top-bar selector — the five-page
- * shell's project switcher. The change event drives the shell's own
+ * Switch the current project through the top-bar selector. The change event drives the shell's own
  * on('projectSelect', 'change') listener, i.e. the same selectProject path a
  * real user's selection takes.
  */
@@ -162,11 +156,10 @@ async function main() {
 
     const currentProject = () => harness.run("document.getElementById('projectSelect').value");
 
-    // The workbench service mount is opened once so the project mapping the
-    // shell really posts is observable. The five-page shell keeps the
-    // workbench frame hidden; provider management is its remaining entry.
+    // Open provider management to initialize the Workbench frame and record its project mapping.
     await harness.nativeClick('#openSystem');
     await harness.nativeClick('#configureProviders');
+    await harness.waitFor(() => harness.run("location.hash === '#work'"), 'provider management opens Start Work');
     await harness.waitFor(
       async () => {
         const messages = await harness.frameMessages('workFrame');
@@ -175,6 +168,7 @@ async function main() {
       'the terminal frame receives kb:select-project',
       20000,
     );
+    await openView(harness, 'activity');
 
     assert.equal(await currentProject(), projectA.projectId, 'the first project is the current one');
 
@@ -267,7 +261,7 @@ async function main() {
 
     // NAV-005 expected 3: the project that reaches the embedded module is the
     // current one, and the mapping is the one the product registered. The
-    // five-page shell maps the workbench service mount to the current product
+    // shell maps the workbench service mount to the current product
     // project id directly (frameContext posts project = projectId).
     const mappings = (await harness.frameMessages('workFrame')).filter(message => message.type === 'kb:select-project');
     const last = mappings[mappings.length - 1];
