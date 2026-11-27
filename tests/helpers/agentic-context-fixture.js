@@ -13,7 +13,7 @@ async function listen(server) {
   return `http://127.0.0.1:${server.address().port}`;
 }
 
-async function setup({ createEngineServer, vectorUrl, configure, dataDir, engineOptions = {} }) {
+async function setup({ createEngineServer, vectorUrl, configure, dataDir, runtimeToken, engineOptions = {} }) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-agentic-context-'));
   const repo = path.join(root, 'repo');
   const knowledge = path.join(root, 'knowledge');
@@ -30,7 +30,7 @@ async function setup({ createEngineServer, vectorUrl, configure, dataDir, engine
   }
   const offline = http.createServer((req, res) => res.writeHead(503).end());
   const unavailable = await listen(offline);
-  const token = require('node:crypto').randomBytes(24).toString('hex');
+  const token = runtimeToken || require('node:crypto').randomBytes(24).toString('hex');
   const engine = createEngineServer({ ...engineOptions, dataDir: dataDir || path.join(root, 'engine'), consume: false, runtimeToken: token, vectorUrl: vectorUrl || unavailable, bridgeUrl: unavailable });
   const close = async () => {
     await engine.close();

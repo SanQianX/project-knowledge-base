@@ -38,6 +38,7 @@ const { once } = require('events');
 const { DomainError } = require('../common/contracts');
 
 const PROXY_TIMEOUT_MS = 10000;
+const DEEP_CONTEXT_PROXY_TIMEOUT_MS = 65000;
 // Native client startup includes knowledge retrieval and a local server/CLI
 // handshake. It has a bounded setup budget, separate from ordinary reads/SSE.
 const AGENT_START_TIMEOUT_MS = 90000;
@@ -211,7 +212,9 @@ class ModuleBridge {
     const pathname = targetUrl.pathname;
     const isAgentStart = req.method === 'POST' && /^\/api\/claude-workbench\/v1\/sessions(?:\/[^/]+\/input)?\/?$/.test(pathname);
     const isIndex = req.method === 'POST' && pathname === '/api/sync' && targetUrl.origin === new URL(this.vectorHubUrl).origin;
-    const timeoutMs = isPicker ? PICKER_TIMEOUT_MS : isAgentStart ? AGENT_START_TIMEOUT_MS : isIndex ? INDEX_TIMEOUT_MS : PROXY_TIMEOUT_MS;
+    const isDeepContext = req.method === 'POST' && pathname === '/api/context/agentic' && targetUrl.origin === new URL(this.engineUrl).origin;
+    const timeoutMs = isPicker ? PICKER_TIMEOUT_MS : isAgentStart ? AGENT_START_TIMEOUT_MS : isIndex ? INDEX_TIMEOUT_MS
+      : isDeepContext ? DEEP_CONTEXT_PROXY_TIMEOUT_MS : PROXY_TIMEOUT_MS;
     const startedAt = Date.now();
     let upstream;
     const controller = new AbortController();
@@ -363,6 +366,14 @@ class ModuleBridge {
     const list = Array.isArray(payload) ? payload : payload?.profiles;
     const profile = Array.isArray(list) ? list.find(item => item && item.id === profileId) : null;
     return { unavailable: false, profile: profile && profile.enabled && profile.credentialConfigured ? profile : null };
+  }
+
+  async validateContextProfile({ profileId, model }) {
+    const { unavailable, profile } = await this._usableProfile(profileId);
+    if (unavailable) throw new DomainError('TERMINAL_UNAVAILABLE', '暂时无法核对工作台模型。', { status: 503 });
+    if (!profile || !model || this._profileModel(profile, model) !== model) {
+      throw new DomainError('INVALID_ARGUMENT', '智能上下文所选模型不可用。');
+    }
   }
 
   // The model a member may use under a profile: one the profile lists, or its default when nothing was
@@ -687,6 +698,13 @@ class ModuleBridge {
       status.model = response.ok && !!profile;
     } catch { /* Status projection only: never log resolved profiles or raw errors. */ }
     try {
+      const saved = this.settingsStore?.read()?.agenticContext;
+      if (saved) {
+        const applied = await applyConfiguration('agenticContext', `${this.engineUrl}/api/runtime-context-config`, saved);
+        status.agenticContext = applied.ok ? applied.data : { enabled: false, pending: true };
+      }
+    } catch { status.agenticContext = { enabled: false, pending: true }; }
+    try {
       let settings = null;
       try {
         const resolved = await this._fetch(`${this.terminalUrl}/api/claude-workbench/v1/internal/embedding-config`, { method: 'POST', headers, body: '{}' });
@@ -1010,7 +1028,7 @@ class ModuleBridge {
       }
     }
     const engineEntry = resolveModuleEntry('knowledge-engine');
-    if (process.env.KB_KNOWLEDGE_ENGINE_COMMAND || engineEntry) specs.push({ name: 'knowledge-engine', command: process.env.KB_KNOWLEDGE_ENGINE_COMMAND || `node ${JSON.stringify(engineEntry)} serve --port ${urlPort(this.engineUrl, 5790)} --host ${urlHost(this.engineUrl)}`, url: this.engineUrl, env: { KNOWLEDGE_ENGINE_DATA: path.join(this.dataDir || require('../common/data-dir').getDataDir(), 'knowledge-engine'), KB_ENGINE_MANAGED: '1', KNOWLEDGE_ENGINE_CONSUME: '0', KB_ENGINE_RUNTIME_TOKEN: this.runtimeToken, KB_EVENT_BRIDGE_URL: this.eventBridgeUrl, KB_VECTOR_HUB_URL: this.vectorHubUrl, NODE_PATH: path.resolve(__dirname, '..', '..', 'node_modules') } });
+    if (process.env.KB_KNOWLEDGE_ENGINE_COMMAND || engineEntry) specs.push({ name: 'knowledge-engine', command: process.env.KB_KNOWLEDGE_ENGINE_COMMAND || `node ${JSON.stringify(engineEntry)} serve --port ${urlPort(this.engineUrl, 5790)} --host ${urlHost(this.engineUrl)}`, url: this.engineUrl, env: { KNOWLEDGE_ENGINE_DATA: path.join(this.dataDir || require('../common/data-dir').getDataDir(), 'knowledge-engine'), KB_ENGINE_MANAGED: '1', KNOWLEDGE_ENGINE_CONSUME: '0', KB_ENGINE_RUNTIME_TOKEN: this.runtimeToken, KB_WORKBENCH_URL: this.terminalUrl, KB_EVENT_BRIDGE_URL: this.eventBridgeUrl, KB_VECTOR_HUB_URL: this.vectorHubUrl, NODE_PATH: path.resolve(__dirname, '..', '..', 'node_modules') } });
     // Optional fifth module (workflow). Absent entry => warn and expect an
     // external service, exactly like an unpinned optional runtime: the four
     // pinned modules and the shell keep working.

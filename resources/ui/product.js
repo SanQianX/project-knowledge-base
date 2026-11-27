@@ -26,7 +26,7 @@
     candidates: { items: [], total: 0, cursors: [null], page: 0, projectFilter: null, loading: false, epoch: 0 },
     projects: [], projectsPage: { q: '', domain: '', items: [], total: 0, cursors: [null], page: 0, loading: false, epoch: 0, detail: null },
     detailGroups: { detail: null, epoch: 0 },
-    search: { q: '', draft: '', projectId: '', scope: 'brain', type: 'all', done: false, results: [], page: 0, loading: false, epoch: 0 },
+    search: { q: '', draft: '', projectId: '', scope: 'brain', type: 'all', mode: 'fast', pack: null, done: false, results: [], page: 0, loading: false, epoch: 0 },
     activityFilter: 'all', activityTab: 'updates', activityProject: null, activityBefore: null, activityPage: null, runDetails: new Map(),
     pendingOpenRun: '',
     teamSummary: { data: null, error: null, loading: false, epoch: 0 },
@@ -671,12 +671,29 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   // ============ 检索：真实引擎 API ============
+  function renderSearchPack(pack, type) {
+    const status = { ready: '已找到相关背景', partial: '证据不完整', degraded: '已降级', no_reliable_match: '没有可靠匹配' }[pack.packStatus] || '已返回';
+    const heading = pack.mode === 'agentic' ? '智能检索' : '确定性检索';
+    const items = [...(type === 'knowledge' ? [] : pack.memories), ...(type === 'memory' ? [] : pack.facts)];
+    const rows = items.map(item => {
+      const source = item.memoryId ? [item.policy === 'always' ? '强制约束' : '适用记忆', item.memoryId]
+        : [item.spaceId, item.entryId, item.commitSha];
+      return `<article class="result-row"><div><b>${esc(item.title)}</b><p>${esc(item.text)}</p><small>${esc(source.filter(Boolean).join(' / '))}</small></div></article>`;
+    }).join('');
+    const gaps = (pack.knowledgeGaps || []).map(gap => `<li>${esc(gap.message)}</li>`).join('');
+    const conflicts = pack.conflictingEvidence?.length ? '<p>部分资料与当前要求可能冲突，请核对来源。</p>' : '';
+    const omitted = pack.omittedMemoryIds?.length ? `<p>${esc(pack.omittedMemoryIds.join(', '))}</p>` : '';
+    return `<p class="muted">${heading} · ${status} · ${pack.budget?.rounds || 0} 轮 · ${(pack.durationMs / 1000).toFixed(1)} 秒${pack.status === 'file-fallback' ? ' · 文件检索' : ''}</p>
+      <p>${esc(pack.userIntent)}</p>${rows}${gaps ? `<ul>${gaps}</ul>` : ''}${conflicts}${omitted}`;
+  }
   function renderSearch() {
     const search = state.search;
     const projectOptions = [`<option value="">全部项目</option>`, ...state.projects.map(p => `<option value="${esc(p.projectId)}" ${search.projectId === p.projectId ? 'selected' : ''}>${esc(p.name)}</option>`)].join('');
     const typeOptions = [['all', '知识与记忆'], ['knowledge', '项目知识'], ['memory', '长期记忆']].map(([id, name]) => `<option value="${id}" ${search.type === id ? 'selected' : ''}>${name}</option>`).join('');
     let resultsHtml = '<div class="empty small-empty">输入关键词，查找已保存的项目知识和长期记忆。</div>';
-    if (search.done) {
+    if (search.done && search.pack) {
+      resultsHtml = renderSearchPack(search.pack, search.type);
+    } else if (search.done) {
       const filtered = search.results.filter(r => search.type === 'all' || (search.type === 'memory') === Boolean(r.memoryId));
       const pageRows = filtered.slice(search.page * 8, (search.page + 1) * 8).map((r, i) => `<article class="result-row"><button class="reference" data-action="search-detail" data-index="${search.page * 8 + i}"><b>${esc(r.title)}</b><small>${esc(clamp2(r.snippet || r.chunk_text || '').slice(0, 180))}</small></button><small>${r.memoryId ? '长期记忆' : `${esc(projectName(r.scope_project_id || r.projectId))}${r.commitSha ? ` · commit ${esc(r.commitSha.slice(0, 8))}` : ''}`}</small></article>`).join('');
       resultsHtml = `<p class="muted" style="margin:12px 0">${search.results.length} 条结果${filtered.length !== search.results.length ? `（当前筛选 ${filtered.length} 条）` : ''}</p>${pageRows || '<div class="empty small-empty">没有找到匹配内容，试试其他关键词。</div>'}${pagerUi('search', search.page, filtered.length, 8)}`;
@@ -687,6 +704,7 @@
         <button class="primary" type="submit">搜索</button></div>
         <div class="actions">
           <select name="project" aria-label="检索项目">${projectOptions}</select>
+          <select name="mode" aria-label="检索模式"><option value="fast">快速检索</option><option value="deep" ${search.mode === 'deep' ? 'selected' : ''}>智能检索</option></select>
           <select name="type" aria-label="检索类型">${typeOptions}</select>
           <select name="scope" aria-label="检索范围">${[['brain', '整个智脑'], ['domain', '所属领域'], ['project', '当前项目']].map(([id, name]) => `<option value="${id}" ${search.scope === id ? 'selected' : ''}>${name}</option>`).join('')}</select>
         </div></form>
@@ -704,6 +722,8 @@
     search.projectId = String(formData.get('project') || '');
     search.type = String(formData.get('type') || 'all');
     search.scope = String(formData.get('scope') || 'brain');
+    search.mode = formData.get('mode') === 'deep' ? 'deep' : 'fast';
+    search.pack = null;
     search.page = 0;
     if (!search.q) { toast('请输入检索关键词。'); return; }
     const epoch = ++search.epoch;
@@ -713,9 +733,13 @@
       const body = { query: search.q, scope: search.scope, limit: 30 };
       if (search.projectId) body.projectId = search.projectId;
       else if (state.projectId && search.scope !== 'brain') body.projectId = state.projectId;
-      const result = await api('/api/engine/search', { method: 'POST', body, timeoutMs: 15000 });
+      const deep = search.mode === 'deep';
+      if (deep && !body.projectId) body.projectId = state.projectId;
+      if (deep && !body.projectId) throw new Error('智能检索需要选择项目。');
+      const result = await api(deep ? '/api/engine/context/agentic' : '/api/engine/search', { method: 'POST', body, timeoutMs: deep ? 66000 : 15000 });
       if (epoch !== search.epoch) return;
       search.results = result.results || [];
+      if (deep) search.pack = result;
       search.done = true;
     } catch (error) {
       if (epoch !== search.epoch) return;
@@ -1164,8 +1188,20 @@
   }
   async function loadMaintenance() {
     try {
-      const [profiles, saved] = await Promise.all([api('/api/terminal/profiles'), api('/api/terminal/maintenance-default')]);
+      const [profiles, saved, settings, capabilities] = await Promise.all([
+        api('/api/terminal/profiles'), api('/api/terminal/maintenance-default'), api('/api/settings'),
+        api('/api/engine/context/capabilities').catch(() => null),
+      ]);
       const list = Array.isArray(profiles) ? profiles : profiles.profiles || [];
+      const context = settings.settings.agenticContext || {};
+      $('agenticContextEnabled').checked = context.enabled === true;
+      $('agenticContextTimeout').value = (context.deepTimeoutMs || 60000) / 1000;
+      $('agenticContextModel').innerHTML = '<option value="">仅确定性检索</option>' + list.filter(p => p.enabled && p.credentialConfigured)
+        .flatMap(p => (p.models.list?.length ? p.models.list.map(model => model.id) : [p.models.default]).filter(Boolean)
+          .map(model => `<option value="${esc(JSON.stringify([p.id, model]))}">${esc(p.name)} · ${esc(model)}</option>`)).join('');
+      if (context.profileId && context.model) $('agenticContextModel').value = JSON.stringify([context.profileId, context.model]);
+      $('agenticContextStatus').textContent = context.enabled && !capabilities?.enabled ? '等待兼容的知识引擎。'
+        : capabilities?.modelConfigured && capabilities.enabled ? '已连接检索模型。' : '';
       $('maintenanceModel').innerHTML = '<option value="">尚未选择后台默认模型</option>' + list.filter(p => p.enabled && p.credentialConfigured).map(p => `<option value="${esc(p.id)}">${esc(p.name)} · ${esc(p.models.default)}</option>`).join('');
       $('maintenanceModel').value = saved.profileId || '';
       $('configurationStatus').textContent = saved.profileId ? '此默认模型仅用于后台维护。' : '先配置供应商，再选择后台默认模型。';
@@ -1174,6 +1210,15 @@
       const capture = (await api('/api/terminal/health')).conversationCapture;
       $('captureStatus').textContent = !capture ? '工作台对话接线尚未启用。' : capture.error ? `工作台对话待恢复 · ${capture.pending} 条事件保留在本机，请检查接线。` : capture.pending ? `工作台对话正在同步 · ${capture.pending} 条待写入。` : capture.enabled ? '工作台对话自动保存到开发会话记录。' : '工作台对话捕获已关闭。';
     } catch { $('maintenanceModel').innerHTML = '<option value="">工作台暂时不可用</option>'; $('configurationStatus').textContent = '无法读取模型配置，请恢复工作台服务。'; }
+  }
+  async function saveAgenticContext() {
+    const [profileId, model] = JSON.parse($('agenticContextModel').value || '[null,null]');
+    const agenticContext = { enabled: $('agenticContextEnabled').checked, profileId, model,
+      deepTimeoutMs: Number($('agenticContextTimeout').value) * 1000 };
+    const result = await api('/api/settings', { method: 'PATCH', body: { agenticContext } });
+    const runtime = result.configuration.agenticContext;
+    $('agenticContextStatus').textContent = runtime?.pending ? '已保存，等待兼容的知识引擎。'
+      : runtime?.enabled && runtime.modelConfigured ? '已保存，已连接检索模型。' : '已保存。';
   }
   async function openEmbedding() {
     const [profiles, embedding] = await Promise.all([api('/api/terminal/profiles'), api('/api/terminal/embedding-config')]);
@@ -1262,12 +1307,17 @@
     return state.memory.items.find(m => m.id === id) || state.candidates.items.find(m => m.id === id) || state.detailGroups.detail?.effective.items.find(m => m.id === id);
   }
   async function memoryEditor(memory = null) {
-    const groups = memory ? state.groups.items : await loadGroups();
+    const [groups, capabilities] = await Promise.all([
+      memory ? state.groups.items : loadGroups(), api('/api/engine/context/capabilities').catch(() => null),
+    ]);
     const groupOptions = ['<option value="">暂不加入组合</option>', ...groups.map(g => `<option value="${esc(g.id)}" ${memory?.groups?.[0]?.id === g.id ? 'selected' : ''}>${esc(g.name)}</option>`)].join('');
+    const policyOptions = [['auto', '按任务筛选'], ['always', '强制约束'], ['on-demand', '按需读取']]
+      .map(([id, name]) => `<option value="${id}" ${(memory?.injectionPolicy || 'auto') === id ? 'selected' : ''}>${name}</option>`).join('');
     appDialogOpen(memory ? '编辑记忆' : '添加记忆', `
       <form id="memoryForm">
         <label>标题<input name="title" maxlength="120" required value="${esc(memory?.title || '')}" placeholder="例如：开发时保护日常服务"></label>
         <label>内容<textarea name="text" required rows="8" placeholder="这是一条完整记忆，可以包含多个段落和列表。">${esc(memory?.text || '')}</textarea></label>
+        ${capabilities ? `<label>智能模式注入策略<select name="injectionPolicy">${policyOptions}</select></label>` : ''}
         ${memory ? '' : `<label>加入组合<select name="groupId">${groupOptions}</select></label>`}
         <p class="muted">记忆通过组合生效。各组合共享同一条正文。</p>
       </form>`, [
@@ -1279,13 +1329,15 @@
       event.preventDefault();
       const title = form.elements.title.value.trim();
       const text = form.elements.text.value.trim();
+      const injectionPolicy = form.elements.injectionPolicy?.value;
+      const body = { title, text, ...(injectionPolicy ? { injectionPolicy } : {}) };
       if (!title || !text) return appDialogError('请填写标题和记忆内容。');
       try {
         if (memory) {
-          await api(`/api/engine/memories/${encodeURIComponent(memory.id)}`, { method: 'PATCH', body: { title, text } });
+          await api(`/api/engine/memories/${encodeURIComponent(memory.id)}`, { method: 'PATCH', body });
         } else {
           const groupId = form.elements.groupId.value;
-          await api('/api/engine/memories', { method: 'POST', body: { title, text, brainId: state.brain.id, ...(groupId ? { groupId } : {}) } });
+          await api('/api/engine/memories', { method: 'POST', body: { ...body, brainId: state.brain.id, ...(groupId ? { groupId } : {}) } });
         }
         appDialogClose();
         toast(memory ? '记忆已保存，多行内容保持在同一条记忆中。' : '记忆已保存。');
@@ -1861,6 +1913,7 @@
   on('workProviders', 'click', openWorkbenchProviders);
   on('configureProviders', 'click', openWorkbenchProviders);
   on('saveMaintenance', 'click', async () => { await api('/api/terminal/maintenance-default', { method: 'PUT', body: { profileId: $('maintenanceModel').value || null } }); const result = await api('/api/modules/configure', { method: 'POST', body: {} }); $('configurationStatus').textContent = result.configuration.model ? '后台默认模型已保存并同步；被阻塞的维护任务会自动继续。' : '配置已保存，后台运行配置尚未同步，请检查模块连接。'; await loadOverview(true); });
+  on('saveAgenticContext', 'click', saveAgenticContext);
   on('openEmbedding', 'click', openEmbedding);
   on('embeddingProfile', 'change', () => { $('embeddingSecretLabel').hidden = !!$('embeddingProfile').value; });
   on('embeddingProvider', 'change', () => { $('embeddingModel').value = $('embeddingProvider').value === 'minimax' ? 'embo-01' : 'text-embedding-3-small'; });

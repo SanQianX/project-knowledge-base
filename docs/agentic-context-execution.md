@@ -32,3 +32,12 @@
 冻结 `tests/fixtures/agentic-context-corpus.json`（SHA-256 `097d266294488e3360e60b987d6a2bd4ad6e44762416bb28e59e61c4c91c219c`）。32 项合成开发检索请求、8 个独立开发结果断言，包含 UI、故障、迁移、发布、跨模块和中英文。知识先于会话创建，使用语料清单中给出的手册与别名记录作为必要事实，现行约定是适用记忆。第 1 个问法用于调试，另外 24 个问法固定用于盲测。本轮暂无经授权的历史知识快照，合成结果只能说明所测行为。B 组调试集事实 8/16、相关记忆 8/8、无关记忆 56/64、累计 18,998 UTF-8 字节。盲测对应结果为 24/48、24/24、168/192 与 57,285 字节。每个样本均为独立首次请求。后续对照沿用相同源码、提示、验证和开发模型，分析时单列真实向量与受控词法。全套主仓回归在同一基线上另行保留日志。
 
 预注册沿用计划 Q01–Q10、Q13。Q11 门槛为关键知识覆盖或首次编码通过率比 B 提升至少 10 个百分点，且无重大退步。Q12 总输入与输出 Token 警戒线为 B 的 1.2 倍，Hook 10 秒内返回，显式深度 60 秒上限，记录总体和各任务耗时与供应商 usage，估计用量单列。默认智能模式须等待真实门禁。
+
+## M1 · Context Agent、任务记忆与检索页面
+
+- Engine `94df910b161a9619326c518bf8513fa9cc98c08a` 接入单 Agent、只读白名单、真实工具回合、任务记忆选择和来源复验。工作台模型边界提交 `91df0d91aa2c0857564e4634c5cdfc4e37b83711`，复用现有 Profile 内部调用，增加 Context Agent 的输出上限和供应商 usage。宿主只负责配置、代理和显示，当前发布锁未变。
+- `node --test test/agentic-context.test.js test/context.test.js test/memory-visibility.test.js test/memory-migration.test.js` 退出 0，28 PASS。恶意工具名和额外作用域参数被拒，伪造或撤销的 ID 从输出剔除。覆盖真实检索与协议桩、引用版本复验、候选记忆权限、超预算续读、取消、零轮停机和格式错误降级。工作台 `node --test tests/unit/maintenance-agent.test.js` 退出 0，2 PASS。宿主的 Session Index 和记忆组合 UI 回归退出 0。
+- `node tests/run-agentic-context-real.js smoke` 退出 0。真实 Z.AI GLM-4.7、Embedding-3、Vector Hub 和工作台受信接口均参与。第 1 轮只返回引出别名的目录证据，第 2 轮返回该别名的权威值。候选准备 5,007 ms，3 次模型调用，供应商报告 2,736 输入和 178 输出 Token，输出 745 UTF-8 字节。B 组为 751 ms、2,317 字节，可靠事实从 1/2 到 2/2。
+- `node tests/run-agentic-context-real.js debug` 退出 0。真实 Hybrid Search 基线 B 8/16 必要事实、8/8 相关记忆、56/64 无关记忆。候选 16/16、8/8、0/8，模型调用 25 次，单任务 4,354–7,949 ms。单例及 8 组原始计数见 `logs/m1-real-smoke.json` 与 `logs/m1-real-debug.json`。保持独立盲测集未运行。既有 MiniMax Gold Gate 仍 BLOCKED。
+
+复现真实检索时，以隔离安装的锁定依赖运行脚本，将 `PKB_CONTEXT_ENGINE_SOURCE` 和 `PKB_CONTEXT_WORKBENCH_SOURCE` 指向对应源码根，使用测试进程的 `ZAI_API_KEY`。Vector Hub 的 OpenAI 兼容客户端固定追加 `/v1/embeddings`，测试夹具中的 loopback 适配器只把该请求转发到 Z.AI 公布的真实 Embedding API。应用仍使用原有 Vector Hub 接口。

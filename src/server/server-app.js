@@ -9,7 +9,7 @@ const runtimeControl = require('../common/runtime-control');
 const hookManager = require('../automation/hook-manager');
 const claudeCliRunner = require('../integrations/claude-cli-runner');
 const { StorageLayout } = require('./storage-layout');
-const { SettingsStore, defaultAppearance } = require('../projects/settings-store');
+const { SettingsStore, defaultAppearance, validateAgenticContext } = require('../projects/settings-store');
 const { ProjectRegistryStore } = require('../projects/project-registry-store');
 const { ProjectStore } = require('../projects/project-store');
 const { ProjectLifecycleService } = require('../projects/project-lifecycle-service');
@@ -945,7 +945,7 @@ function createRequestHandler(runtime, options = {}) {
       const moduleUi = pathname.match(/^\/modules\/(terminal|vectorhub|eventbridge|engine)\/(.*)$/);
       if (moduleUi && method === 'GET') return await runtime.moduleBridge.proxyModuleUi(req, res, moduleUi[1], moduleUi[2], url.search);
       if (pathname.startsWith('/api/engine/') || pathname === '/api/engine') {
-        if (['/api/engine/runtime-config', '/api/engine/runtime-auth', '/api/engine/scopes', '/api/engine/control', '/api/engine/migrate'].includes(pathname)) throw new DomainError('FORBIDDEN', 'Runtime configuration is not exposed to browsers.', { status: 403 });
+        if (['/api/engine/runtime-config', '/api/engine/runtime-context-config', '/api/engine/runtime-auth', '/api/engine/scopes', '/api/engine/control', '/api/engine/migrate'].includes(pathname)) throw new DomainError('FORBIDDEN', 'Runtime configuration is not exposed to browsers.', { status: 403 });
         return await runtime.moduleBridge.proxyEngine(req, res, pathname, url.search);
       }
 
@@ -1061,8 +1061,13 @@ function createRequestHandler(runtime, options = {}) {
         const body = await readJsonBody(req);
         const patch = {};
         if (body.knowledge) patch.knowledge = { rootPath: String(body.knowledge.rootPath || '') };
+        if (body.agenticContext !== undefined) {
+          const context = validateAgenticContext(body.agenticContext);
+          if (context.enabled && context.profileId) await runtime.moduleBridge.validateContextProfile(context);
+          patch.agenticContext = context;
+        }
         if (body.logging) throw new DomainError('IMMUTABLE_FIELD', 'Logging storage and capture policy are not user settings.', { status: 409 });
-        if (!Object.keys(patch).length) throw new DomainError('INVALID_ARGUMENT', 'Only the knowledge root is mutable on this route.');
+        if (!Object.keys(patch).length) throw new DomainError('INVALID_ARGUMENT', '请提供可保存的知识库配置。');
         const settings = await runtime.settingsStore.updatePatch(patch);
         const configuration = await runtime.moduleBridge.syncEngineConfiguration();
         return send(res, 200, { ok: true, settings: { ...settings, ai: publicAiProfilesConfig(settings.ai) }, configuration });

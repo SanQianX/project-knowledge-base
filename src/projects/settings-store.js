@@ -30,6 +30,20 @@ function defaultAppearance() {
   return { preset: 'pure', overrides: { light: {}, dark: {} } };
 }
 
+function validateAgenticContext(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+    || Object.keys(value).some(key => !['enabled', 'profileId', 'model', 'deepTimeoutMs'].includes(key))) {
+    throw new DomainError('INVALID_ARGUMENT', '智能上下文配置无效。');
+  }
+  const { enabled = false, profileId = null, model = null, deepTimeoutMs = 60000 } = value;
+  if (typeof enabled !== 'boolean' || (profileId !== null && (typeof profileId !== 'string' || !/^[\w.-]{1,128}$/.test(profileId)))
+    || (model !== null && (typeof model !== 'string' || !model.trim() || model.length > 128))
+    || !Number.isInteger(deepTimeoutMs) || deepTimeoutMs < 2000 || deepTimeoutMs > 60000) {
+    throw new DomainError('INVALID_ARGUMENT', '智能上下文配置无效。');
+  }
+  return { enabled, profileId, model, deepTimeoutMs };
+}
+
 function validateAppearance(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new DomainError('INVALID_ARGUMENT', '皮肤配置无效。', { status: 400 });
   const allowed = new Set(['preset', 'overrides']);
@@ -87,6 +101,7 @@ function validateSettings(settings) {
   }
   settings.appearance = settings.appearance || defaultAppearance();
   settings.appearance = validateAppearance(settings.appearance);
+  if (settings.agenticContext !== undefined) settings.agenticContext = validateAgenticContext(settings.agenticContext);
   return settings;
 }
 
@@ -192,4 +207,4 @@ class SettingsStore {
   }
 }
 
-module.exports = { SettingsStore, defaultSettings, defaultAppearance, validateAppearance, validateSettings, mergeObjects };
+module.exports = { SettingsStore, defaultSettings, defaultAppearance, validateAppearance, validateAgenticContext, validateSettings, mergeObjects };
