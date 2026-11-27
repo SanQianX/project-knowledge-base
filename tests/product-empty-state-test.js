@@ -6,8 +6,7 @@
 //   导入第一个项目」。新首页该态依赖 /api/engine/overview 成功，因此本
 //   测试实例接入真实 vendored 知识引擎（无项目、零数据），失败注入仍只
 //   针对 /api/projects/projection 的首次读取（HTTP 503）。
-// - work 空态已删除：改为断言导航恰好五页不含 work、#view-work 永远
-//   hidden、#workFrame 服务挂载仍在、'#work' hash 回落 home。
+// - 空知识库仍可打开「开始工作」和模型供应商管理。
 // - 检索页空态：#searchEmpty 已删除，检索页空态是 #searchContent 的
 //   「输入关键词…」引导文案。
 // - 记忆页空态：记忆库列表为空时显示「没有匹配的记忆。」（引擎可用、
@@ -137,22 +136,17 @@ async function main() {
     // hidden service mount.
     assert.deepEqual(
       await run("[...document.querySelectorAll('nav [data-view]')].map(button => button.dataset.view)"),
-      ['home', 'team', 'memory', 'projects', 'search', 'activity'],
-      'the navigation offers exactly the six fixed pages (AI 团队 added 2026-11)',
+      ['home', 'work', 'team', 'memory', 'projects', 'search', 'activity'],
+      'the empty library offers the primary navigation',
     );
-    assert.equal(await run("document.querySelector('[data-view=\"work\"]') === null"), true, 'the work navigation button is removed');
-    assert.equal(await run("document.getElementById('view-work') !== null"), true, 'the work section survives in the DOM');
-    assert.equal(await run("document.getElementById('view-work').hidden"), true, 'the work section stays hidden');
-    assert.equal(await run("document.getElementById('workFrame') !== null"), true, 'the workbench service mount (workFrame) survives');
-    assert.equal(await run("document.getElementById('workEmpty') === null"), true, 'the retired work empty state is really gone');
+    assert.equal(await run("document.getElementById('view-work').getClientRects().length"), 0, 'the inactive work view is hidden');
     await run("location.hash = '#work'");
     await waitFor(
-      async () => (await run("document.getElementById('view-home').classList.contains('active')"))
-        && (await run("location.hash")) === '#home',
-      'the #work hash falls back to home',
+      () => run("location.hash === '#work' && document.getElementById('workProviders').getClientRects().length > 0"),
+      'Start Work offers provider management with no project',
       10000,
     );
-    assert.equal(await run("document.getElementById('view-work').hidden"), true, 'the fallback never reveals the work section');
+    assert.match(await run("document.getElementById('workFrame').getAttribute('src')"), /\/modules\/terminal\/agent-terminal\//);
     await browser.screenshot(path.join(evidenceDir, 'empty-state-nav-contract.png'));
 
     // NAV-003 expected 1 (search): the search page shows its real empty

@@ -1,27 +1,8 @@
 'use strict';
-// NAV-001 — 五页导航。
+// NAV-001 — 主导航。
 //
-// The shell owns the five-page navigation: exactly one active navigation
-// entry, exactly one visible page, and a title/hash pair that matches the
-// active view — both after a click and after the same page is restored from
-// its hash. The retired `work` page must fall back to home from its hash
-// while its hidden service mount stays in the DOM. Moving around must not
-// write anything into the product.
-//
-// 迁移说明（五页简化 UI，见 patches/ui-test-mapping-spec.md）：
-// - 导航从六页改为五页：home/memory/projects/search/activity；`work` 导航
-//   按钮已删除，`nav [data-view]` 数量 6 → 5。
-// - `#view-work` section 仍在 DOM（Workbench 隐藏服务挂载点，`#workFrame`
-//   保留），`.view` 总数仍为 6，但 work 永远 hidden、永无 active。
-// - 页面标题映射：home「智脑首页」→「首页」、projects「领域与项目」→「项目」；
-//   其余不变（memory 长期记忆 / search 知识检索 / activity 活动记录）。
-// - `#work` 回落：hash `#work` 经 setView 未知视图回落 home 并改写为
-//   `#home`；载入时（boot）同样回落。原 work 页的点击/重载断言由
-//   「#work hash 回落 + work 挂载点保持 hidden」取代。
-// - 新首页空项目态依赖 /api/engine/overview 成功，因此测试实例接入真实
-//   vendored 知识引擎（独立空数据目录、vector/bridge 指向死端口），经
-//   createUpstreamProxy 改写 per-instance runtime token（与已迁移的
-//   product-empty-state-test 相同模式）。
+// Each click and restored hash selects one navigation entry and one page
+// with matching titles. Navigation must not write product data.
 //
 // The regression drives the real product UI in a real browser against an
 // isolated instance (own port, own data dir, own knowledge dir, own Bridge
@@ -51,9 +32,11 @@ const freePort = require('./helpers/free-port');
 const ROOT = require("./paths").ROOT;
 const ENGINE_ENTRY = path.join(path.dirname(require.resolve('@sanqianx/ai-coding-knowledge-engine/package.json', { paths: [ROOT] })), 'src', 'server.js');
 
-const VIEWS = ['home', 'memory', 'projects', 'search', 'activity'];
+const VIEWS = ['home', 'work', 'team', 'memory', 'projects', 'search', 'activity'];
 const TITLES = {
   home: '首页',
+  work: '开始工作',
+  team: 'AI 团队',
   memory: '长期记忆',
   projects: '项目',
   search: '知识检索',
@@ -66,7 +49,7 @@ async function main() {
   fs.mkdirSync(evidenceDir, { recursive: true });
   const port = await freePort();
   const base = `http://127.0.0.1:${port}`;
-  // The five-page home renders its empty-project state only after the engine
+  // The home page renders its empty-project state only after the engine
   // overview answered, so this instance runs the real vendored engine with
   // its own empty data directory (and dead vector/bridge endpoints, so it
   // can never reach a real desktop hub). The engine sits behind the shared
@@ -114,9 +97,9 @@ async function main() {
     const run = expression => browser.evaluate(expression);
 
     await waitFor(() => run("document.getElementById('homeContent').textContent.includes('第一个项目')"), 'the real empty home', 20000);
-    assert.equal(await run("document.querySelectorAll('nav [data-view]').length"), 6, 'the shell exposes six navigation entries (AI 团队 added 2026-11)');
-    assert.equal(await run("document.querySelector('[data-view=\"work\"]')"), null, 'the retired work page no longer has a navigation entry');
-    assert.equal(await run("document.querySelectorAll('.view').length"), 7, 'six pages plus the hidden work service mount');
+    assert.deepEqual(await run("[...document.querySelectorAll('nav [data-view]')].map(button => button.dataset.view)"), VIEWS);
+    assert.equal(await run("document.querySelectorAll('.view').length"), VIEWS.length);
+    assert.equal(await run("document.getElementById('workFrame').hasAttribute('src')"), false, 'Workbench loads on first entry to Start Work');
 
     const readShell = () => run(`(() => ({
       marker: window.__navMarker === undefined ? null : String(window.__navMarker),
@@ -127,9 +110,7 @@ async function main() {
       href: location.href,
       navCount: document.querySelectorAll('[data-view]').length,
       documentTitle: document.title,
-      workHidden: document.getElementById('view-work').hidden,
-      workActive: document.getElementById('view-work').classList.contains('active'),
-      workFrameKept: Boolean(document.getElementById('workFrame')),
+      workVisible: document.getElementById('view-work').getClientRects().length > 0,
     }))()`);
 
     const assertShell = (shell, view, phase) => {
@@ -138,9 +119,7 @@ async function main() {
       assert.deepEqual(shell.activeView, [`view-${view}`], `${where}: only view-${view} is the visible page`);
       assert.equal(shell.title, TITLES[view], `${where}: the page title matches ${view}`);
       assert.equal(shell.hash, `#${view}`, `${where}: the hash matches ${view}`);
-      assert.equal(shell.workHidden, true, `${where}: the hidden work service mount never becomes a page`);
-      assert.equal(shell.workActive, false, `${where}: view-work is never the active page`);
-      assert.equal(shell.workFrameKept, true, `${where}: the workbench service mount iframe survives without a work page`);
+      assert.equal(shell.workVisible, view === 'work', `${where}: Workbench is visible on Start Work`);
     };
 
     // NAV-001 expected 1 + 2: one active entry, and title/hash/selection in
@@ -172,17 +151,14 @@ async function main() {
       await browser.screenshot(path.join(evidenceDir, `nav-reload-${view}.png`));
     }
 
-    // The retired work page must fall back to home, both from a live hash
-    // change and when the document boots with the stale #work hash, while its
-    // service mount stays hidden in the DOM.
-    await run("location.hash = '#work'");
-    await waitFor(() => run("location.hash === '#home' && document.querySelector('[data-view].active')?.dataset.view === 'home'"), 'the #work hash to fall back to home');
-    assertShell(await readShell(), 'home', 'work hash falls back');
-    await run("history.replaceState(null, '', '#work'); window.__navMarker = 'nav-work-boot'");
+    await run("location.hash = '#unknown-view'");
+    await waitFor(() => run("location.hash === '#home' && document.querySelector('[data-view].active')?.dataset.view === 'home'"), 'an unknown hash falls back to home');
+    assertShell(await readShell(), 'home', 'unknown hash falls back');
+    await run("history.replaceState(null, '', '#unknown-view'); window.__navMarker = 'nav-unknown-boot'");
     await browser.send('Page.reload');
-    await waitFor(async () => bootedInto('home')(await readShell()), 'a reloaded #work page to boot into home', 20000);
-    assertShell(await readShell(), 'home', 'work hash reload falls back');
-    await browser.screenshot(path.join(evidenceDir, 'nav-work-fallback.png'));
+    await waitFor(async () => bootedInto('home')(await readShell()), 'an unknown hash reload falls back to home', 20000);
+    assertShell(await readShell(), 'home', 'unknown hash reload falls back');
+    await browser.screenshot(path.join(evidenceDir, 'nav-unknown-fallback.png'));
 
     // NAV-001 expected 3: moving around writes nothing.
     const writes = capture.find(entry => entry.url.includes('/api/') && !['GET', 'HEAD', 'OPTIONS'].includes(entry.method));
@@ -200,7 +176,7 @@ async function main() {
     if (fs.existsSync(projectDirs)) assert.deepEqual(fs.readdirSync(projectDirs), [], 'no project metadata directory is created');
     assert.equal(browser.exceptions.length, 0, `no uncaught product JavaScript exceptions: ${JSON.stringify(browser.exceptions)}`);
 
-    console.log(`product-navigation-test PASS (${VIEWS.length} pages, click + hash reload, #work falls back to home, one active entry, no business write)`);
+    console.log(`product-navigation-test PASS (${VIEWS.length} pages including Start Work, click and hash reload, unknown hash fallback, no business write)`);
   } finally {
     await browser?.close();
     await server.cleanup();

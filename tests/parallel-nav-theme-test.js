@@ -1,17 +1,8 @@
 'use strict';
 // NAV-002 — 主题同步。
 //
-// 迁移说明（五页简化 UI）：
-// - nav [data-view] 契约：只有 home/memory/projects/search/activity 五页，
-//   work 导航按钮已移除；断言导航恰好五项且不含 work。
-// - '#work' 与未知 hash 经 titles 检查回落 home（history.replaceState 归位
-//   '#home'，#view-home active、标题「首页」）。
-// - work 不再是导航页：#view-work 仍在 DOM 且永远 hidden，内部 #workFrame
-//   保留为 Workbench 服务挂载点。终端帧的打开路径从「点击 work 导航」改为
-//   「#openSystem 系统抽屉 → #configureProviders」（initializeFrame('terminal')）。
-// - vectorHub/vectorFrame 已删除（检索页改为服务端检索），帧列表只剩
-//   terminal(workFrame) 与 eventBridge(bridgeFrame)。
-// - 首页不再罗列项目：导入后的项目出现改为断言顶栏 #projectSelect 选项。
+// 开始工作页加载 Workbench，系统抽屉的供应商管理也打开这个页面。
+// 未知 hash 回到首页。检索由服务端处理，活动页嵌入事件模块。
 //
 // The shell owns the product theme: switching it must persist, every embedded
 // module that is already ready must be told about the new theme, and the
@@ -35,12 +26,9 @@ const { startHarness, makeRepo } = require('./helpers/parallel-nav-shell');
 
 const EVIDENCE = process.env.PK_TEST_EVIDENCE_DIR ? path.resolve(process.env.PK_TEST_EVIDENCE_DIR) : null;
 
-// The workbench frame survives only as a hidden service mount (opened from the
-// system drawer), and the event bridge still lives on the activity page. The
-// vector hub frame was removed with the work navigation page.
 const FRAMES = [
   { key: 'eventBridge', id: 'bridgeFrame', view: 'activity' },
-  { key: 'terminal', id: 'workFrame' },
+  { key: 'terminal', id: 'workFrame', view: 'work' },
 ];
 
 async function main() {
@@ -62,31 +50,17 @@ async function main() {
       20000,
     );
 
-    // NAV-002 navigation contract (six-page UI, AI 团队 added 2026-11):
-    // exactly the six fixed pages, no work button, and the workbench survives
-    // as a hidden service mount.
     assert.deepEqual(
       await harness.run("[...document.querySelectorAll('nav [data-view]')].map(button => button.dataset.view)"),
-      ['home', 'team', 'memory', 'projects', 'search', 'activity'],
-      'the navigation offers exactly the six fixed pages',
+      ['home', 'work', 'team', 'memory', 'projects', 'search', 'activity'],
     );
-    assert.equal(await harness.run("document.querySelector('[data-view=\"work\"]') === null"), true, 'the work navigation button is removed');
-    assert.equal(await harness.run("document.getElementById('view-work') !== null"), true, 'the work section survives in the DOM');
-    assert.equal(await harness.run("document.getElementById('view-work').hidden"), true, 'the work section stays hidden');
-    assert.equal(await harness.run("document.getElementById('workFrame') !== null"), true, 'the workbench service mount (workFrame) survives');
-    // Unknown hashes fall back to home through the same titles guard the
-    // product uses; the workbench page itself is no longer reachable.
-    for (const hash of ['#work', '#anything']) {
-      await harness.run(`location.hash = ${JSON.stringify(hash)}`);
-      await harness.waitFor(
-        async () => (await harness.run("document.getElementById('view-home').classList.contains('active')"))
-          && (await harness.run("document.getElementById('pageTitle').textContent")) === '首页'
-          && (await harness.run("location.hash")) === '#home',
-        `the ${hash} hash falls back to home`,
-        10000,
-      );
-      assert.equal(await harness.run("document.getElementById('view-work').hidden"), true, `the ${hash} fallback never reveals the work section`);
-    }
+    await harness.run("location.hash = '#anything'");
+    await harness.waitFor(
+      () => harness.run("location.hash === '#home' && document.getElementById('view-home').classList.contains('active')"),
+      'an unknown hash falls back to home',
+      10000,
+    );
+    assert.equal(await harness.run("document.getElementById('view-work').getClientRects().length"), 0);
 
     const shellTheme = () => harness.run("document.documentElement.dataset.theme");
     const storedTheme = () => harness.run("localStorage.getItem('kb.theme')");
@@ -102,9 +76,7 @@ async function main() {
     // NAV-002 expected 2: a ready frame receives kb:theme.
     // The embedded modules are readied one after another; each frame has to
     // be ready (the shell only talks to a frame that announced itself). The
-    // event bridge still opens from the activity navigation; the workbench
-    // frame now opens from the system drawer's provider management, which is
-    // the only remaining reason the hidden mount exists.
+    // event bridge opens from Activity and the provider shortcut opens Workbench.
     for (const frame of FRAMES) {
       if (frame.key === 'eventBridge') {
         await harness.run(`document.querySelector('[data-view="${frame.view}"]').click()`);
@@ -112,6 +84,8 @@ async function main() {
       } else {
         await harness.nativeClick('#openSystem');
         await harness.nativeClick('#configureProviders');
+        assert.equal(await harness.run("location.hash"), '#work');
+        assert.equal(await harness.run("document.getElementById('workProviders').getClientRects().length > 0"), true);
       }
       await harness.waitFor(
         async () => {
@@ -167,7 +141,7 @@ async function main() {
 
     assert.equal(harness.browser.exceptions.length, 0, `no uncaught product JavaScript exceptions: ${JSON.stringify(harness.browser.exceptions)}`);
 
-    console.log('parallel-nav-theme-test PASS (five-page nav contract, #work falls back to home, hidden workFrame mount, theme persisted, ready frames receive kb:theme, no module task rebuilt)');
+    console.log('parallel-nav-theme-test PASS (Start Work navigation, visible provider shortcut, theme persists and reaches ready frames)');
   } finally {
     await harness.cleanup();
   }

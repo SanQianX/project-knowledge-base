@@ -293,11 +293,9 @@ class ModuleBridge {
     if (req.method === 'POST' && /^\/api\/workflow\/workflow-tasks\/?$/.test(pathname)) {
       return this._proxyWorkflowTeamCreateTrusted(req, res, pathname, search);
     }
-    // Page-maintained maintenance registry: the repository path never comes
-    // from the browser. The shell resolves it from the registered project and
-    // attaches its runtime token; the module accepts a registration only with it.
-    if (req.method === 'POST' && /^\/api\/workflow\/maintenance\/repos(?:\/update)?\/?$/.test(pathname)) {
-      return this._proxyWorkflowMaintenanceRepoTrusted(req, res, pathname, search);
+    // Resolve both paths through the registered project before forwarding a registration or run.
+    if (req.method === 'POST' && /^\/api\/workflow\/maintenance\/(?:repos(?:\/update)?|runs)\/?$/.test(pathname)) {
+      return this._proxyWorkflowMaintenanceTrusted(req, res, pathname, search);
     }
     // A member's model names a Workbench profile and one of the models it lists. The shell verifies
     // both (enabled, credentials configured, model listed), and attaches the token; the module
@@ -323,12 +321,15 @@ class ModuleBridge {
     return body && typeof body === 'object' && !Array.isArray(body) ? body : {};
   }
 
-  async _proxyWorkflowMaintenanceRepoTrusted(req, res, pathname, search) {
-    const body = await this._readForwardedBody(req, '登记请求必须是合法 JSON。');
+  async _proxyWorkflowMaintenanceTrusted(req, res, pathname, search) {
+    const body = await this._readForwardedBody(req, '维护请求必须是合法 JSON。');
     const forward = { ...body };
-    // Only the update of a registered repository needs no project: its path cannot change.
-    if (!/\/update\/?$/.test(pathname)) {
-      const projectId = typeof body.projectId === 'string' ? body.projectId : '';
+    delete forward.knowledgePath;
+    const registering = /\/repos\/?$/.test(pathname);
+    const running = /\/runs\/?$/.test(pathname);
+    const projectId = typeof body.projectId === 'string' ? body.projectId : '';
+    // New clients send the project ID on save and run so existing registrations receive the location, too.
+    if (registering || projectId) {
       let project = null;
       try { project = projectId && this.workflowProjectResolver ? this.workflowProjectResolver({ projectId }) : null; }
       catch (error) { if (!(error instanceof DomainError)) throw error; }
@@ -338,10 +339,16 @@ class ModuleBridge {
       // The path is the shell's own resolution; whatever the page sent for it is replaced.
       forward.projectId = project.projectId;
       forward.repoPath = project.repoPath;
+      const config = this.projectStore?.readConfig?.(project.projectId);
+      forward.knowledgePath = !config?.teamBinding && typeof project.knowledgePath === 'string' && path.isAbsolute(project.knowledgePath)
+        ? project.knowledgePath : null;
     }
+    const extraHeaders = {};
+    if (this.runtimeToken && (!running || projectId)) extraHeaders['X-KB-Runtime-Token'] = this.runtimeToken;
+    if (req.headers.origin) extraHeaders.Origin = String(req.headers.origin);
     return this.proxy(req, res, this._workflowApi(pathname) + (search || ''), {
       bodyOverride: Buffer.from(JSON.stringify(forward), 'utf8'),
-      extraHeaders: this.runtimeToken ? { 'X-KB-Runtime-Token': this.runtimeToken } : {},
+      extraHeaders,
     });
   }
 
@@ -1013,7 +1020,7 @@ class ModuleBridge {
         name: 'workflow',
         command: process.env.KB_WORKFLOW_COMMAND || `node ${JSON.stringify(workflowEntry)} serve --port ${urlPort(this.workflowUrl, 5810)} --host ${urlHost(this.workflowUrl)} --data ${JSON.stringify(this.dataDir || require('../common/data-dir').getDataDir())}`,
         url: this.workflowUrl,
-        env: { KB_WORKFLOW_MANAGED: '1', KB_WORKFLOW_RUNTIME_TOKEN: this.runtimeToken, KB_EVENT_BRIDGE_URL: this.eventBridgeUrl },
+        env: { KB_WORKFLOW_MANAGED: '1', KB_WORKFLOW_RUNTIME_TOKEN: this.runtimeToken, KB_EVENT_BRIDGE_URL: this.eventBridgeUrl, KB_WORKBENCH_URL: this.terminalUrl },
       });
     } else {
       this.logger.warn('modules.supervisor', '@sanqianx/ai-coding-workflow runtime not installed; team features report "not installed".', {});

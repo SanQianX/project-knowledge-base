@@ -80,6 +80,7 @@ async function main() {
     // Unregistered: the page offers the registration form, not a file path. Several projects may be chosen; the list comes from the knowledge base.
     await click('#navMaintenance');
     await waitFor(() => exists('#maintenanceRepoForm'), 'registration form');
+    const sharedBranchField = await exists('#maintenanceRepoForm input[name="branch"]');
     assert.equal(await has('#heading', '自动维护'), true);
     assert.equal(await has('#maintenance', 'maintenance.json'), false, 'the registry file is no longer something the user edits');
     assert.equal(await workflow('doc.querySelector("[data-maintenance-new]").disabled'), true, 'no plan can be created before registration');
@@ -101,6 +102,10 @@ async function main() {
     const firstRepo = registered.repos[0];
     assert.equal(firstRepo.projectId, first.id);
     assert.equal(firstRepo.branch, 'main', 'a blank branch means the repository current branch');
+    if (firstRepo.followCurrentBranch) {
+      assert.equal(sharedBranchField, false, 'bulk registration needs no common branch');
+      assert.equal(await has('[aria-labelledby="maintenanceReposTitle"]', '跟随当前分支'), true);
+    }
     assert.equal(firstRepo.repoPath, firstPath, 'the path is the one the shell resolved for the project');
     assert.deepEqual(registered.tools, []);
     const afterRegistration = stored();
@@ -140,7 +145,7 @@ async function main() {
     assert.deepEqual(await optionsOf('#memberForm select[name="model"]'), ['不指定', '代码模型（model-code）', '代码模型专业版（model-code-pro）', 'model-code-air', 'model-docs'],
       'every model of every usable profile is offered, and nothing else');
     assert.deepEqual(await workflow('[...doc.querySelectorAll(\'#memberForm select[name="model"] optgroup\')].map(group => group.label)'), ['代码档案', '文档档案']);
-    assert.equal(await has('#memberForm', '保存的只是引用'), true, 'the dialog says the reference is stored, not launched');
+    assert.equal(await has('#memberForm', '直接运行工具可以留空。由 Review Agent 执行的维护计划需要选模型。'), true);
     await field('memberForm', 'name', '页面登记成员');
     await field('memberForm', 'instructions', '按维护计划检查仓库。');
     await field('memberForm', 'model', 'model-code-pro');
@@ -173,6 +178,15 @@ async function main() {
       'registered repositories are checked, the mounted project is offered for registration on save');
     await field('maintenanceForm', 'title', '手动格式整理');
     await field('maintenanceForm', 'memberId', member.memberId);
+    for (const mode of ['agent', 'tool']) {
+      await field('maintenanceForm', 'executionMode', mode);
+      await workflow('doc.getElementById("maintenanceForm").elements.executionMode.dispatchEvent(new Event("change", { bubbles: true }))');
+      assert.equal(await workflow('doc.querySelector("[data-agent-options]").hidden'), mode === 'tool');
+      if (mode === 'agent') {
+        assert.equal(await has('[data-agent-model]', '本次使用成员的模型'), true);
+        assert.equal(await workflow('doc.getElementById("maintenanceForm").elements.delivery.options[1].disabled'), true);
+      }
+    }
     await field('maintenanceForm', 'toolId', tool.id);
     await workflow('doc.getElementById("maintenanceForm").elements.enabled.checked = true');
     await click('#maintenanceForm button[type="submit"]');
@@ -190,8 +204,37 @@ async function main() {
     await click('[data-maintenance-detail]');
     await waitFor(() => has('#maintenanceRunDetail', 'format completed'), 'run detail shows the real tool output');
     assert.equal(await has('#maintenanceRunDetail', first.name), true, 'the detail names the repository the run belonged to');
+    if (firstRepo.followCurrentBranch) {
+      assert.equal(finished.branch, 'main');
+      assert.equal(await has('#maintenanceRunDetail', '本次分支'), true);
+    }
     await shot('page-registration-run.png');
     await click('#maintenanceRunDetail [data-close]');
+
+    if (firstRepo.workspaceTarget) {
+      const knowledge = path.join(path.resolve(options.dataDir), 'knowledge', first.id);
+      const worktree = path.join(knowledge, '.ai-team', 'worktrees', firstRepo.repoId);
+      assert.equal((await status()).repos[0].workspace, worktree);
+      assert.equal(fs.existsSync(path.join(worktree, '.git')), true);
+      await click('[data-maintenance-repo-edit="' + firstRepo.repoId + '"]');
+      await field('maintenanceRepoEditForm', 'remote', 'missing-local-remote');
+      await click('#maintenanceRepoEditForm button[type="submit"]');
+      await waitFor(() => has('[aria-labelledby="maintenanceReposTitle"]', 'missing-local-remote'), 'the synthetic remote to be saved');
+      await click('[data-maintenance-run]');
+      const failed = await until(async () => (await status()).runs.find(run => run.runId !== finished.runId), terminal, 'the fetch failure');
+      assert.equal(failed.reason, 'git-fetch-failed');
+      await waitFor(() => exists('[data-maintenance-detail="' + failed.runId + '"]'), 'the failed run in the history');
+      await click('[data-maintenance-detail="' + failed.runId + '"]');
+      await waitFor(() => has('#maintenanceRunDetail', '读取基线提交'), 'the failed stage in run details');
+      assert.equal(await has('#maintenanceRunDetail', 'git fetch'), true);
+      assert.equal(await has('#maintenanceRunDetail', 'Git 仓库或远端地址不可用'), true);
+      assert.equal(await has('#maintenanceRunDetail', '尚未开始'), true);
+      await click('#maintenanceRunDetail [data-close]');
+      await click('[data-maintenance-repo-edit="' + firstRepo.repoId + '"]');
+      await field('maintenanceRepoEditForm', 'remote', '');
+      await click('#maintenanceRepoEditForm button[type="submit"]');
+      await waitFor(async () => !(await exists('#maintenanceRepoDialog[open]')) && (await status()).repos[0].remote === null, 'the local baseline setting to be restored');
+    }
 
     // 删除先确认，再执行。
     // Removal asks for confirmation first.
@@ -308,6 +351,15 @@ async function main() {
       error => /400/.test(error.message) && /Git 仓库/.test(error.message), 'a project directory that is not a Git root is refused');
     await post('repos', { requestId: 're-register', projectId: first.id, repoPath: 'C:\\Windows', branch: 'main', remote: '', allowPush: false });
     assert.equal((await status()).repos[0].repoPath, firstPath, 'a path supplied by the caller is ignored');
+    if (firstRepo.followCurrentBranch) {
+      // A previous fixed setting can be changed to follow the checkout by clearing its field.
+      await waitFor(() => has('.repo-row .repo-main > p', 'main'), 'the fixed branch in the repository row');
+      await click('[data-maintenance-repo-edit="' + firstRepo.repoId + '"]');
+      await field('maintenanceRepoEditForm', 'branch', '');
+      await click('#maintenanceRepoEditForm button[type="submit"]');
+      await waitFor(async () => !(await exists('#maintenanceRepoDialog[open]')) && (await status()).repos[0].followCurrentBranch,
+        'the existing repository to follow its current branch');
+    }
     await assert.rejects(post('repos/update', { requestId: 'update-without-repository', branch: 'main', remote: '', allowPush: false }),
       /400/, 'an update names its repository');
     await assert.rejects(post('repos/update', { requestId: 'push-without-remote', repoId: firstRepo.repoId, branch: 'main', remote: '', allowPush: true }), /400/, 'pushing needs a remote name');

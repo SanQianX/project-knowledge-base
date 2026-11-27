@@ -11,6 +11,7 @@
     <div id="brainLabel" class="brain-label">我的智脑</div>
     <nav aria-label="主要导航">
       <button data-view="home"><svg viewBox="0 0 24 24"><path d="m3 11 9-7 9 7M5 10v10h14V10"/></svg>首页<span class="count" id="homeCount" hidden></span></button>
+      <button data-view="work"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m7 9 3 3-3 3m6 0h4"/></svg>开始工作</button>
       <button data-view="team"><svg viewBox="0 0 24 24"><circle cx="9" cy="9" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="10" r="2.5"/><path d="M14.5 19a4.5 4.5 0 0 1 7 0"/></svg>AI 团队</button>
       <button data-view="memory"><svg viewBox="0 0 24 24"><path d="M6 4h12v16H6zM9 8h6M9 12h6"/></svg>长期记忆<span class="count" id="memoryCount" hidden></span></button>
       <button data-view="projects"><svg viewBox="0 0 24 24"><path d="M4 7h6l2 2h8v11H4z"/></svg>项目</button>
@@ -28,10 +29,10 @@
            （不加 hidden 属性：全局样式表有 [hidden]{display:none!important}，
            会压过 .module-view.active；默认隐藏由 .view{display:none} 承担。） -->
       <section class="view module-view" id="view-team"><div class="frame-container"><iframe id="workflowFrame" title="AI 团队" referrerpolicy="same-origin"></iframe></div></section>
-      <!-- The workbench frame survives as a hidden service mount: provider
-           management and maintenance-model config still postMessage into it
-           from the system drawer, but it is no longer a navigation page. -->
-      <section class="view module-view" id="view-work" hidden><div class="work-layout" id="workLayout" hidden><div class="frame-container"><iframe id="workFrame" title="Agent 工作台" referrerpolicy="same-origin"></iframe></div></div></section>
+      <section class="view module-view" id="view-work">
+        <div class="module-toolbar"><button id="workProviders" type="button">模型供应商管理</button></div>
+        <div class="frame-container" id="workLayout"><iframe id="workFrame" title="Agent 工作台" referrerpolicy="same-origin"></iframe></div>
+      </section>
       <section class="view" id="view-search"><div id="searchContent"></div></section>
       <section class="view" id="view-memory"><div id="memoryContent"></div></section>
       <section class="view" id="view-projects"><div class="section-heading"><div><h2>项目</h2><p>把记忆组合应用到项目；项目知识仍保存在原来的目录。</p></div><div class="actions"><button id="createDomain">管理领域</button><button class="primary" data-action="import">导入项目</button></div></div><div id="projectsContent"></div></section>

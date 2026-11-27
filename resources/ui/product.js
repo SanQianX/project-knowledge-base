@@ -3,15 +3,13 @@
   const $ = id => document.getElementById(id);
   const ProgressSource = window.KnowledgeLive?.EventSource || EventSource;
   const all = selector => [...document.querySelectorAll(selector)];
-  const titles = { home: '首页', team: 'AI 团队', memory: '长期记忆', projects: '项目', search: '知识检索', activity: '活动记录' };
+  const titles = { home: '首页', work: '开始工作', team: 'AI 团队', memory: '长期记忆', projects: '项目', search: '知识检索', activity: '活动记录' };
   const modules = { terminal: 'Agent 工作台', vectorHub: '知识索引', eventBridge: '开发事件', engine: '知识引擎' };
   // The workflow module is optional until its public release is pinned: an
   // absent package is "未安装" (informational), never a service failure of
   // the four pinned runtimes, so it renders separately from `modules`.
-  // The workbench frame stays as a hidden service mount for provider/model
-  // configuration from the system drawer; it is no longer a navigation page.
   const frames = {
-    terminal: { id: 'workFrame', url: '/modules/terminal/agent-terminal/?embed=1&apiBase=/api/terminal&transport=live', view: '', ready: false },
+    terminal: { id: 'workFrame', url: '/modules/terminal/agent-terminal/?embed=1&apiBase=/api/terminal&transport=live', view: 'work', ready: false },
     eventBridge: { id: 'bridgeFrame', url: '/modules/eventbridge/?embed=1&apiBase=/api/eventbridge', view: 'activity', ready: false },
     engine: { id: 'engineFrame', url: '/modules/engine/?embed=1&apiBase=/api/engine', ready: false },
     workflow: { id: 'workflowFrame', url: '/workflow-ui/?embed=1&apiBase=/api/workflow', view: 'team', ready: false },
@@ -54,8 +52,8 @@
     return '';
   };
   const label = run => run.state === 'queued' && run.phase === 'waiting-previous' ? '等待前一条提交恢复'
-    : ['failed', 'index-pending'].includes(run.state) ? `${({ failed: '维护失败', 'index-pending': '索引待修复' })[run.state]} · ${recoveryLabel(run)}`
-    : ({ queued: '排队', running: '维护中', succeeded: '已更新 · 可检索', cancelled: '已取消' })[run.state] || run.state;
+    : ['failed', 'index-pending'].includes(run.state) ? `${({ failed: '知识维护失败', 'index-pending': '知识索引待修复' })[run.state]} · ${recoveryLabel(run)}`
+    : ({ queued: '排队', running: '知识维护中', succeeded: '知识已更新 · 可检索', cancelled: '已取消' })[run.state] || run.state;
   const badge = (text, status = '') => `<span class="status ${esc(status)}">${esc(text)}</span>`;
   let toastTimer, refreshTimer, preflightTimer, logStream, logEpoch = 0, referenceEpoch = 0, snapshotEpoch = 0, registryEpoch = 0, registryPromise = null, resumeImport = false, unbindProjectId = '', unbinding = false;
   let captureEpoch = 0, captureBusy = false;
@@ -97,7 +95,11 @@
     post(key, message);
   }
   function initializeFrame(key) { const frame = frames[key]; if (!frame.initialized) { $(frame.id).src = frame.url; frame.initialized = true; } }
-  function frameVisible(key) { return key === 'engine' ? $('engineDialog').open : key === 'eventBridge' && state.view === 'activity' && state.activityTab === 'sessions'; }
+  function frameVisible(key) {
+    if (key === 'engine') return $('engineDialog').open;
+    if (key === 'eventBridge') return state.view === 'activity' && state.activityTab === 'sessions';
+    return key === 'terminal' && state.view === frames.terminal.view;
+  }
   function frameContext(key) {
     const project = activeProject();
     const frame = frames[key];
@@ -235,6 +237,7 @@
     all('[data-view]').forEach(button => button.classList.toggle('active', button.dataset.view === view));
     all('.view').forEach(section => section.classList.toggle('active', section.id === `view-${view}`));
     $('pageTitle').textContent = titles[view];
+    if (view === 'work') initializeFrame('terminal');
     if (view === 'activity' && state.activityTab === 'sessions' && activeProject()) initializeFrame('eventBridge');
     if (view === 'team') {
       initializeFrame('workflow');
@@ -758,7 +761,7 @@
     $('activityUpdates').hidden = state.activityTab !== 'updates'; $('activitySessions').hidden = state.activityTab !== 'sessions';
     if (state.activityTab === 'sessions') return;
     const filters = [['all', '全部'], ['recovering', '自动恢复'], ['needs', '需处理'], ['completed', '已完成'], ['changes', '操作记录']];
-    const filterBar = `<div class="segmented" style="margin-bottom:16px">${filters.map(([id, name]) => `<button data-activity-filter="${id}" class="${state.activityFilter === id ? 'active' : ''}">${name}</button>`).join('')}</div>`;
+    const filterBar = `<div class="section-heading" style="margin-bottom:16px;flex-wrap:wrap"><div class="segmented">${filters.map(([id, name]) => `<button data-activity-filter="${id}" class="${state.activityFilter === id ? 'active' : ''}">${name}</button>`).join('')}</div><button data-go="team">查看团队代码检查</button></div>`;
     let body;
     if (state.activityFilter === 'changes') {
       const events = state.snapshot.events || [];
@@ -1846,14 +1849,17 @@
     }
   });
   on('repairWiring', 'click', repair);
-  on('configureProviders', 'click', () => {
+  function openWorkbenchProviders() {
     closeSystem();
-    // Provider management lives in the workbench service; the hidden frame
-    // hosts it without a "work" navigation page.
-    initializeFrame('terminal');
-    if (frames.terminal.ready) post('terminal', { type: 'kb:open-settings' }); else frames.terminal.openSettings = true;
-    toast('正在打开模型供应商管理…');
-  });
+    setView('work');
+    if (frames.terminal.ready) post('terminal', { type: 'kb:open-settings' });
+    else {
+      frames.terminal.openSettings = true;
+      toast('正在打开模型供应商管理…');
+    }
+  }
+  on('workProviders', 'click', openWorkbenchProviders);
+  on('configureProviders', 'click', openWorkbenchProviders);
   on('saveMaintenance', 'click', async () => { await api('/api/terminal/maintenance-default', { method: 'PUT', body: { profileId: $('maintenanceModel').value || null } }); const result = await api('/api/modules/configure', { method: 'POST', body: {} }); $('configurationStatus').textContent = result.configuration.model ? '后台默认模型已保存并同步；被阻塞的维护任务会自动继续。' : '配置已保存，后台运行配置尚未同步，请检查模块连接。'; await loadOverview(true); });
   on('openEmbedding', 'click', openEmbedding);
   on('embeddingProfile', 'change', () => { $('embeddingSecretLabel').hidden = !!$('embeddingProfile').value; });

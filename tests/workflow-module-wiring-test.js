@@ -21,9 +21,41 @@ function workflowInstalled() {
 
 (async () => {
   // 1) URL rewrite contract.
-  const bridge = new ModuleBridge({ workflowUrl: 'http://127.0.0.1:5810' });
-  assert.equal(bridge._workflowApi('/api/workflow/team'), 'http://127.0.0.1:5810/api/workflow/v1/team');
-  assert.equal(bridge._workflowApi('/api/workflow'), 'http://127.0.0.1:5810/api/workflow/v1/');
+  const offline = 'http://127.0.0.1:0';
+  const bridge = new ModuleBridge({ workflowUrl: offline, terminalUrl: offline, vectorHubUrl: offline, eventBridgeUrl: offline, engineUrl: offline });
+  assert.equal(bridge._workflowApi('/api/workflow/team'), offline + '/api/workflow/v1/team');
+  assert.equal(bridge._workflowApi('/api/workflow'), offline + '/api/workflow/v1/');
+
+  // Only the registered project's local knowledge path can authorize a new worktree location.
+  {
+    const path = require('node:path');
+    const repoPath = path.resolve('synthetic-repo');
+    const knowledgePath = path.resolve('synthetic-knowledge');
+    const forged = path.resolve('browser-supplied-directory');
+    const trusted = new ModuleBridge({
+      workflowUrl: 'http://127.0.0.1:1', runtimeToken: 'trusted-shell-token',
+      workflowProjectResolver: ({ projectId }) => ({ projectId, repoPath, knowledgePath }),
+      projectStore: { readConfig: projectId => ({ teamBinding: projectId === 'team-knowledge' ? {} : null }) },
+    });
+    trusted.proxy = (_req, _res, _target, options) => ({
+      body: JSON.parse(options.bodyOverride), headers: options.extraHeaders,
+    });
+    const forward = (route, body) => trusted.proxyWorkflow(Object.assign(Readable.from([Buffer.from(JSON.stringify(body))]), {
+      method: 'POST', headers: { origin: 'http://localhost:12345', 'x-kb-runtime-token': 'browser-token' },
+    }), null, '/api/workflow/maintenance/' + route, '');
+    for (const route of ['repos', 'repos/update', 'runs']) {
+      const resolved = await forward(route, { projectId: 'local-knowledge', repoPath: forged, knowledgePath: forged });
+      assert.equal(resolved.body.knowledgePath, knowledgePath);
+      assert.equal(resolved.body.repoPath, repoPath);
+      assert.equal(resolved.headers['X-KB-Runtime-Token'], 'trusted-shell-token');
+      assert.equal(resolved.headers.Origin, 'http://localhost:12345');
+    }
+    const team = await forward('runs', { projectId: 'team-knowledge', knowledgePath: forged });
+    assert.equal(team.body.knowledgePath, null);
+    const legacy = await forward('runs', { repoId: 'existing', knowledgePath: forged });
+    assert.equal(Object.hasOwn(legacy.body, 'knowledgePath'), false);
+    assert.equal(Object.hasOwn(legacy.headers, 'X-KB-Runtime-Token'), false);
+  }
 
   // 2) Identity classification against a REAL workflow-shaped health body and
   //    a foreign listener.

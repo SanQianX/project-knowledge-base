@@ -1,8 +1,7 @@
 // 打包 UI 冒烟：npm pack → 安装 tarball → 打包产物启动服务并驱动真实浏览器。
 //
 // 迁移说明（五页简化 UI，见 patches/ui-test-mapping-spec.md）：
-// - 导航从六页改为五页：nav [data-view] 数量 6 → 5（work 导航按钮已移除，
-//   #view-work 仅作为隐藏服务挂载保留在 DOM）。
+// - 打包 UI 保留「开始工作」入口和模型供应商管理。
 // - 新首页空项目态（「从第一个项目开始 / 导入第一个项目」）依赖
 //   /api/engine/overview 成功，因此本测试为打包实例接入真实 vendored 知识
 //   引擎（独立空数据目录，经 createUpstreamProxy 改写 runtime token；
@@ -109,8 +108,9 @@ function buildAndInstallPackage() {
     }, 'packaged UI bootstrap', 20000);
 
     assert.strictEqual(await browser.evaluate("document.getElementById('projectSelect').disabled"), true);
-    assert.strictEqual(await browser.evaluate("document.querySelectorAll('nav [data-view]').length"), 6, 'six fixed pages (AI 团队 added 2026-11)');
-    assert.strictEqual(await browser.evaluate("document.querySelector('[data-view=\"work\"]')"), null, 'the packed UI ships no work navigation entry');
+    assert.strictEqual(await browser.evaluate("document.querySelectorAll('nav [data-view]').length"), 7, 'the seven primary pages are packaged');
+    await browser.evaluate("document.querySelector('[data-view=\"work\"]').click()");
+    await waitFor(() => browser.evaluate("location.hash === '#work' && document.getElementById('workProviders').getClientRects().length > 0"), 'packaged Start Work page');
     assert.strictEqual(browser.exceptions.length, 0, `packaged UI runtime exceptions: ${JSON.stringify(browser.exceptions)}`);
     console.log('packaged-ui-smoke-test PASS');
   } finally {
