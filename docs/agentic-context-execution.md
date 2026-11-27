@@ -41,3 +41,10 @@
 - `node tests/run-agentic-context-real.js debug` 退出 0。真实 Hybrid Search 基线 B 8/16 必要事实、8/8 相关记忆、56/64 无关记忆。候选 16/16、8/8、0/8，模型调用 25 次，单任务 4,354–7,949 ms。单例及 8 组原始计数见 `logs/m1-real-smoke.json` 与 `logs/m1-real-debug.json`。保持独立盲测集未运行。既有 MiniMax Gold Gate 仍 BLOCKED。
 
 复现真实检索时，以隔离安装的锁定依赖运行脚本，将 `PKB_CONTEXT_ENGINE_SOURCE` 和 `PKB_CONTEXT_WORKBENCH_SOURCE` 指向对应源码根，使用测试进程的 `ZAI_API_KEY`。Vector Hub 的 OpenAI 兼容客户端固定追加 `/v1/embeddings`，测试夹具中的 loopback 适配器只把该请求转发到 Z.AI 公布的真实 Embedding API。应用仍使用原有 Vector Hub 接口。
+
+## M2 · 任务路由、跨轮增量与投递回执
+
+- Engine `1e2a816022d0bcb6b9f5314b430f693fe7568974` 复用 `EngineContext` 会话映射、串行队列和 TTL。智能路径按项目、范围、客户端、会话和成员绑定隔离，短追问可继承主题。请求 ID 重试、已确认版本、未知的短期输出和有理由的恢复分别处理。重复片段按授权文档、哈希和区间裁剪。提交准备状态仅保留版本、源定位和有界任务线索，需要重放时复验并重建正文。
+- Hook 发送 Adaptive 标志，旧引擎及关闭状态沿用 Session Index。标准输出回调之后尝试登记 `emitted`，回执中没有模型接收或使用证明。受信 Workbench 的 `acknowledged` 表示开发输入已被 driver 接受。新任务的 Deep 续查票据绑定当前任务及原范围，可显式恢复。原生自动压缩恢复待客户端验证。
+- `node --test test/agentic-context.test.js test/agent-members.test.js test/workflow-validation.test.js` 退出 0，14 PASS。覆盖重复请求、无信任回执、撤销、跨项目隔离、恢复、取消、一次续查及真实 Workflow 验证接口。已确认首次发送后的 30 个静默轮新增正文 0 字节、额外模型调用 0。
+- 引擎 `npm test` 并行默认值首次有 1 项既有 Git 冻结证据测试未在 250 ms 窗口内观察到重叠；两个项目均生成成功。相同断言在 `node --test --test-concurrency=2 test/*.test.js` 通过，291 PASS、3 跳过、0 FAIL。宿主 `automatic-context-test.js`、`native-context-integrations-test.js` 和旧 Session Index 回归均退出 0。
