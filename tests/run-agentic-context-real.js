@@ -14,7 +14,7 @@ async function closeServer(server) {
   await new Promise(resolve => server.close(resolve));
 }
 
-async function startRuntime(key, { deferFirstContext = false } = {}) {
+async function startRuntime(key, { deferFirstContext = false, fixtureCorpus = corpus } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-real-context-'));
   const token = crypto.randomBytes(24).toString('hex');
   const model = process.env.PKB_CONTEXT_TEST_MODEL || 'glm-4.7';
@@ -62,7 +62,7 @@ async function startRuntime(key, { deferFirstContext = false } = {}) {
       });
       if (res.destroyed) return;
     }
-    const matched = prompt?.task?.query && corpus.cases.find(item => item.queries.includes(prompt.task.query) || item.topic === prompt.task.query);
+    const matched = prompt?.task?.query && fixtureCorpus.cases.find(item => item.queries.includes(prompt.task.query) || item.topic === prompt.task.query);
     if (matched) {
       const earlier = prompt.exchanges.slice(0, -1);
       const current = prompt.exchanges.at(-1);
@@ -101,18 +101,19 @@ async function main() {
   if (!key) throw new Error('BLOCKED: isolated Z.AI model and embedding credentials are unavailable (ZAI_API_KEY).');
   const source = process.env.PKB_CONTEXT_ENGINE_SOURCE;
   const createEngineServer = source ? require(path.join(source, 'src/server')).createEngineServer : require('@sanqianx/ai-coding-knowledge-engine').createEngineServer;
-  const runtime = await startRuntime(key);
+  const lane = process.argv[2] || 'smoke';
+  const fixtureCorpus = lane === 'postfix' ? require('./fixtures/agentic-context-postfix-corpus.json') : corpus;
+  const runtime = await startRuntime(key, { fixtureCorpus });
   let fixture;
   try {
-    fixture = await setup({ createEngineServer, vectorUrl: runtime.vectorUrl, runtimeToken: runtime.token,
+    fixture = await setup({ createEngineServer, vectorUrl: runtime.vectorUrl, runtimeToken: runtime.token, fixtureCorpus,
       engineOptions: { workbenchUrl: runtime.workbenchUrl } });
     await runtime.manager.import(fixture.knowledge, fixture.projectId, false);
     await fixture.request('/api/runtime-context-config', { enabled: true, profileId: runtime.profileId, model: runtime.model });
     const rows = [];
-    const lane = process.argv[2] || 'smoke';
-    const cases = lane === 'smoke' ? [corpus.cases[0]] : corpus.cases;
+    const cases = lane === 'smoke' ? [fixtureCorpus.cases[0]] : fixtureCorpus.cases;
     for (const item of cases) {
-      const indices = lane === 'blind' ? [1, 2, 3] : [0];
+      const indices = ['blind', 'postfix'].includes(lane) ? [1, 2, 3] : [0];
       for (const index of indices) {
         const base = { projectId: fixture.projectId, query: item.queries[index], scope: 'project', client: 'codex' };
         const stable = await fixture.request('/api/context', { ...base, sessionId: `stable-${item.id}-${index}` });

@@ -13,7 +13,7 @@ async function listen(server) {
   return `http://127.0.0.1:${server.address().port}`;
 }
 
-async function setup({ createEngineServer, vectorUrl, configure, dataDir, runtimeToken, engineOptions = {} }) {
+async function setup({ createEngineServer, vectorUrl, configure, dataDir, runtimeToken, engineOptions = {}, fixtureCorpus = corpus }) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-agentic-context-'));
   const repo = path.join(root, 'repo');
   const knowledge = path.join(root, 'knowledge');
@@ -24,7 +24,7 @@ async function setup({ createEngineServer, vectorUrl, configure, dataDir, runtim
   fs.writeFileSync(path.join(repo, 'route.js'), 'module.exports = () => null;\n');
   git(['add', 'route.js']);
   git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@local.invalid', 'commit', '-m', 'Initial source']);
-  for (const item of corpus.cases) {
+  for (const item of fixtureCorpus.cases) {
     fs.writeFileSync(path.join(knowledge, 'modules', `${item.id}.md`), `# ${item.topic}\n\nThe active ${item.topic} decision is maintained under the handoff identifier ${item.alias}. Look up that identifier for the approved value.\n`);
     fs.writeFileSync(path.join(knowledge, 'modules', `${item.alias.toLowerCase()}.md`), `# ${item.alias}\n\nThe approved value for ${item.alias} is \"${item.value}\". This is authoritative for the current handoff.\n`);
   }
@@ -52,7 +52,7 @@ async function setup({ createEngineServer, vectorUrl, configure, dataDir, runtim
     await request('/api/projects', { projectId, repoPath: repo, knowledgePath: knowledge, vectorProjectId: projectId });
     await request('/api/scopes', { scopes: [{ id: 'brain-default', kind: 'brain', brainId: 'brain-default', name: 'Fixture', knowledgePath: path.join(root, 'brain') }] });
     const members = [];
-    for (const item of corpus.cases) {
+    for (const item of fixtureCorpus.cases) {
       const { memory } = await request('/api/memories', { brainId: 'brain-default', title: item.topic, text: item.memory });
       members.push(memory.id);
     }

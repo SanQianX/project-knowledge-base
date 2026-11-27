@@ -12,15 +12,16 @@ const { spawn, execFileSync } = require('node:child_process');
 const { createRequire } = require('node:module');
 const { corpus, setup, listen } = require('./helpers/agentic-context-fixture');
 const { startRuntime } = require('./run-agentic-context-real');
-const { createRuntime, startServer } = require('../src/server/server-app');
-const { ModuleBridge } = require('../src/module_bridge/module-bridge');
 const freePort = require('./helpers/free-port');
-const hostRoot = path.resolve(__dirname, '..');
+const hostRoot = process.env.PKB_CONTEXT_CANDIDATE_ROOT || path.resolve(__dirname, '..');
+const hostRequire = createRequire(path.join(hostRoot, 'package.json'));
+const { createRuntime, startServer } = hostRequire('./src/server/server-app');
+const { ModuleBridge } = hostRequire('./src/module_bridge/module-bridge');
 const wbRoot = process.env.PKB_CONTEXT_WORKBENCH_SOURCE || path.dirname(require.resolve('claude-ai-workbench/package.json'));
 const wbRequire = createRequire(path.join(wbRoot, 'package.json'));
 const createEngineServer = process.env.PKB_CONTEXT_ENGINE_SOURCE
   ? require(path.join(process.env.PKB_CONTEXT_ENGINE_SOURCE, 'src/server')).createEngineServer
-  : require('@sanqianx/ai-coding-knowledge-engine').createEngineServer;
+  : hostRequire('@sanqianx/ai-coding-knowledge-engine').createEngineServer;
 
 const closeServer = server => { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); };
 const promptFor = item => item.queries[1] + '\nImplement this in route.js only. Export a CommonJS function returning the required value. Preserve its public signature.';
@@ -130,9 +131,11 @@ async function claude(item, group, caseInfo, host, runtime, key) {
   const executable = process.env.PKB_CONTEXT_CLAUDE_EXECUTABLE;
   const config = fs.mkdtempSync(path.join(host.host.runtime.dataPath, 'claude-'));
   const sessionId = crypto.randomUUID();
-  const plugin = path.join(hostRoot, 'plugins/project-knowledge');
+  const baselineRoot = group === 'B' && process.env.PKB_CONTEXT_BASELINE_HOST_SOURCE;
+  const plugin = path.join(baselineRoot || hostRoot, 'plugins/project-knowledge');
   const mcpConfig = group === 'A' ? {} : { 'project-knowledge': { command: process.execPath,
-    args: [path.join(plugin, 'scripts/mcp-launcher.cjs')], env: { KB_PLUGIN_VERSION: require('../package.json').version } } };
+    args: [baselineRoot ? path.join(baselineRoot, 'bin/project-knowledge-mcp.js') : path.join(plugin, 'scripts/mcp-launcher.cjs')],
+    env: { KB_PLUGIN_VERSION: require('../package.json').version } } };
   const mcp = path.join(config, 'mcp.json');
   fs.writeFileSync(mcp, JSON.stringify({ mcpServers: mcpConfig }));
   const allowed = ['Read', 'Edit', 'Write', ...(group === 'A' ? [] :
@@ -254,6 +257,48 @@ async function codex(item, caseInfo, host) {
   } finally { await bridge.close(); }
 }
 
+async function browserSmoke(item, caseInfo, host) {
+  const { launchCdpBrowser, waitFor } = require('./helpers/cdp-browser');
+  const base = `http://127.0.0.1:${host.host.port}`;
+  const profileDir = fs.mkdtempSync(path.join(host.dataDir, 'chrome-'));
+  const browser = await launchCdpBrowser({ profileDir, url: base, chrome: process.env.PKB_CONTEXT_CHROME_EXECUTABLE });
+  try {
+    await waitFor(() => browser.evaluate("document.querySelector('#openSystem') !== null"), 'host UI loaded');
+    await browser.evaluate("document.querySelector('#openSystem').click()");
+    await waitFor(() => browser.evaluate("document.querySelector('#agenticContextModel option[value]:not([value=''])') !== null"), 'saved profile offered');
+    await browser.evaluate(`(() => {
+      document.querySelector('#agenticContextEnabled').checked = true;
+      const select = document.querySelector('#agenticContextModel');
+      select.value = select.options[1].value;
+      document.querySelector('#saveAgenticContext').click();
+      return true;
+    })()`);
+    await waitFor(async () => {
+      const response = await fetch(base + '/api/engine/context/capabilities');
+      const state = await response.json();
+      return state.enabled && state.modelConfigured;
+    }, 'smart setting persisted and delivered');
+    await browser.evaluate("document.querySelector('[data-view=search]').click()");
+    await waitFor(() => browser.evaluate("document.querySelector('#searchForm select[name=project]')?.options.length > 1"), 'search form and project loaded');
+    const search = mode => browser.evaluate(`(() => {
+      const form = document.querySelector('#searchForm');
+      form.elements.project.value = ${JSON.stringify(caseInfo.projectId)};
+      form.elements.scope.value = 'project';
+      form.elements.mode.value = ${JSON.stringify(mode)};
+      form.elements.query.value = ${JSON.stringify(item.queries[0])};
+      form.requestSubmit();
+      return true;
+    })()`);
+    await search('fast');
+    await waitFor(() => browser.evaluate("document.querySelector('#searchContent article.result-row') !== null"), 'fast result rendered');
+    await search('deep');
+    await waitFor(() => browser.evaluate(`document.querySelector('#searchContent')?.textContent.includes(${JSON.stringify(item.value)})`), 'smart result shows the sourced value', 67000);
+    const body = await browser.evaluate("document.querySelector('#searchContent').textContent");
+    assert.ok(body.includes('智能检索') && body.includes(item.memory) && body.includes(item.alias.toLowerCase() + '.md'));
+    return { browser: 'Chromium', fast: true, agentic: true, source: true, relevantMemory: true, configuredViaUi: true };
+  } finally { await browser.close(); }
+}
+
 function logsAt(root) {
   const output = [];
   function add(dir) {
@@ -284,7 +329,13 @@ async function main() {
     fixture = await setup({ createEngineServer, vectorUrl: runtime.vectorUrl, runtimeToken: runtime.token,
       engineOptions: { workbenchUrl: runtime.workbenchUrl } });
     host = await startHost(fixture, runtime);
-    await runtime.manager.import(fixture.knowledge, fixture.projectId, false);
+    if (mode !== 'browser') await runtime.manager.import(fixture.knowledge, fixture.projectId, false);
+    if (mode === 'browser') {
+      const item = corpus.cases[0];
+      const native = await registerCase(fixture, host, 'UI', item, true);
+      console.log(JSON.stringify(await browserSmoke(item, native, host)));
+      return;
+    }
     if (mode === 'workbench' || mode === 'codex') {
       await fixture.request('/api/runtime-context-config', { enabled: true, profileId: runtime.profileId, model: runtime.model });
       const item = corpus.cases[0];
@@ -307,7 +358,7 @@ async function main() {
     }
     const rows = [];
     const single = ['smoke', 'mcp'].includes(mode);
-    const groups = single ? ['C'] : mode === 'compare-vector' ? ['B', 'C'] : ['A', 'B', 'C'];
+    const groups = single ? ['C'] : mode === 'baseline-client' ? ['B'] : mode === 'compare-vector' ? ['B', 'C'] : ['A', 'B', 'C'];
     const cases = single ? [corpus.cases[0]] : corpus.cases;
     for (const group of groups) {
       await fixture.request('/api/runtime-context-config', { enabled: group === 'C', profileId: runtime.profileId, model: runtime.model });
