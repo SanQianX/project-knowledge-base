@@ -15,6 +15,21 @@ async function closeServer(server) {
   await new Promise(resolve => server.close(resolve));
 }
 
+// A fixed vector from the character bigrams of a text: texts that share words
+// score higher than unrelated ones. It stands in for an embedding provider
+// that rate-limits the test key and verifies the pipeline, never a model.
+function simulatedEmbedding(text, size = 256) {
+  const vector = new Array(size).fill(0);
+  const source = String(text).toLowerCase();
+  for (let index = 0; index < source.length - 1; index++) {
+    let hash = 2166136261;
+    for (const char of source.slice(index, index + 2)) { hash ^= char.codePointAt(0); hash = Math.imul(hash, 16777619) >>> 0; }
+    vector[hash % size] += 1;
+  }
+  const norm = Math.hypot(...vector) || 1;
+  return vector.map(value => value / norm);
+}
+
 async function startRuntime(key, { deferFirstContext = false, fixtureCorpus = corpus } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pk-real-context-'));
   const token = crypto.randomBytes(24).toString('hex');
@@ -36,9 +51,18 @@ async function startRuntime(key, { deferFirstContext = false, fixtureCorpus = co
   let deferred = false;
   const workbench = http.createServer(async (req, res) => {
     if (req.url === '/v1/embeddings' && req.method === 'POST') {
+      const parts = [];
+      for await (const piece of req) parts.push(piece);
+      if (process.env.PKB_CONTEXT_EMBEDDING === 'simulated') {
+        let request;
+        try { request = JSON.parse(Buffer.concat(parts).toString('utf8')); } catch { res.writeHead(400).end(); return; }
+        const texts = (Array.isArray(request.input) ? request.input : [request.input]).map(text => String(typeof text === 'string' ? text : text?.text));
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ object: 'list', model: request.model, usage: { prompt_tokens: 0, total_tokens: 0 },
+          data: texts.map((text, index) => ({ object: 'embedding', index, embedding: simulatedEmbedding(text) })) }));
+        return;
+      }
       try {
-        const parts = [];
-        for await (const piece of req) parts.push(piece);
         const upstream = await fetch('https://api.z.ai/api/paas/v4/embeddings', { method: 'POST', redirect: 'error',
           headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
           body: Buffer.concat(parts), signal: AbortSignal.timeout(35000) });
@@ -64,7 +88,10 @@ async function startRuntime(key, { deferFirstContext = false, fixtureCorpus = co
       if (res.destroyed) return;
     }
     const matched = prompt?.task?.query && fixtureCorpus.cases.find(item => item.queries.includes(prompt.task.query) || item.topic === prompt.task.query);
-    if (matched) {
+    // A search-page answer sends other shapes (keyword plan, leads view,
+    // synthesis) that carry no exchanges; its rounds are asserted by the
+    // browser run itself.
+    if (matched && Array.isArray(prompt.exchanges)) {
       const earlier = prompt.exchanges.slice(0, -1);
       const current = prompt.exchanges.at(-1);
       trace.push({ case: matched.id, round: prompt.exchanges.length,

@@ -349,7 +349,7 @@ function writeDetectionKnowledge(knowledge) {
   }
 }
 
-async function browserSmoke(item, caseInfo, host) {
+async function browserSmoke(item, caseInfo, host, vector) {
   const { launchCdpBrowser, waitFor } = require('./helpers/cdp-browser');
   const base = `http://127.0.0.1:${host.host.port}`;
   const profileDir = fs.mkdtempSync(path.join(host.dataDir, 'chrome-'));
@@ -375,16 +375,23 @@ async function browserSmoke(item, caseInfo, host) {
     await chooseModel(true);
     await browser.evaluate("document.querySelector('[data-view=search]').click()");
     await waitFor(() => browser.evaluate("document.querySelector('#searchForm select[name=project]')?.options.length > 1"), 'search form and project loaded');
-    const search = (mode, query = item.queries[0], type = 'all') => browser.evaluate(`(() => {
-      const form = document.querySelector('#searchForm');
-      form.elements.project.value = ${JSON.stringify(caseInfo.projectId)};
-      form.elements.scope.value = 'project';
-      form.elements.mode.value = ${JSON.stringify(mode)};
-      form.elements.type.value = ${JSON.stringify(type)};
-      form.elements.query.value = ${JSON.stringify(query)};
-      form.requestSubmit();
-      return true;
-    })()`);
+    // A submitted search renders its loading state before it awaits anything.
+    // Waiting for that state keeps a finished page from reading as the result
+    // of the search that was just requested.
+    const search = async (mode, query = item.queries[0], type = 'all') => {
+      await browser.evaluate(`(() => {
+        const form = document.querySelector('#searchForm');
+        form.elements.project.value = ${JSON.stringify(caseInfo.projectId)};
+        form.elements.scope.value = 'project';
+        form.elements.mode.value = ${JSON.stringify(mode)};
+        form.elements.type.value = ${JSON.stringify(type)};
+        form.elements.query.value = ${JSON.stringify(query)};
+        form.requestSubmit();
+        return true;
+      })()`);
+      if (mode === 'deep') await waitFor(() => browser.evaluate("!!document.querySelector('#searchContent .small-empty')?.textContent.includes('正在检索')"),
+        'search started: ' + query.slice(0, 40), 10000);
+    };
     await search('fast');
     await waitFor(() => browser.evaluate("document.querySelector('#searchContent article.result-row') !== null"), 'fast result rendered');
     await search('deep');
@@ -403,8 +410,22 @@ async function browserSmoke(item, caseInfo, host) {
       sources: [...document.querySelectorAll('.search-sources .reference')].map(button => ({
         index: button.dataset.index, text: button.textContent,
       })),
+      trace: [...document.querySelectorAll('.search-trace li')].map(li => ({
+        queries: [...li.querySelectorAll('.search-query:not(.is-question)')].map(span => span.textContent),
+        note: li.querySelector('small')?.textContent || '',
+      })),
+      head: document.querySelector('#searchContent').innerText.slice(0, 300),
       status: document.querySelector('#searchContent').innerText.slice(-1500),
     }))()`);
+    // The plan step must split the question: besides the question itself, the
+    // first round searches at least two distinct keywords.
+    const firstRound = answer.trace[0];
+    assert.ok(firstRound && new Set(firstRound.queries).size >= 2, 'no keyword plan on the page:\n' + answer.status);
+    assert.match(answer.head, /向量\+词法|仅词法|文件检索/, 'recall backend is not named:\n' + answer.head);
+    if (vector) assert.match(answer.head, /向量\+词法/, 'vector recall did not take part:\n' + answer.head);
+    // A document is listed once, however many parts of it were read.
+    const listed = answer.sources.map(source => source.text);
+    assert.equal(new Set(listed).size, listed.length, 'a source is listed twice:\n' + answer.status);
     for (const source of detectionSources) {
       const link = answer.sources.find(candidate => candidate.text.includes('modules/' + source.file));
       assert.ok(link && answer.points.some(point => point.text.includes(source.parameter)
@@ -432,7 +453,13 @@ async function browserSmoke(item, caseInfo, host) {
       document.querySelector('#referenceMeta').textContent.includes('modules/') &&
       document.querySelector('#referenceContent').textContent.startsWith('# ')`), 'fallback reference opens the original');
     return { browser: 'Chromium', fast: true, agentic: true, citedAlgorithms: detectionSources.length, fallbackReference: true,
-      relevantMemory: true, configuredViaUi: true };
+      relevantMemory: true, configuredViaUi: true, vector, trace: answer.trace,
+      statusLine: (answer.head.match(/[^\n]*检索 · [^\n]*/) || [''])[0].trim() };
+  } catch (error) {
+    // A step that did nothing is explained by what the page itself reported.
+    const pageErrors = [...browser.exceptions.map(entry => entry.exceptionDetails?.exception?.description),
+      ...browser.consoleErrors.map(entry => entry.text)].filter(Boolean).slice(0, 6);
+    throw new Error(pageErrors.length ? `${error.message}\npage errors:\n${pageErrors.join('\n')}` : error.message, { cause: error });
   } finally { await browser.close(); }
 }
 
@@ -480,12 +507,19 @@ async function main() {
       const item = corpus.cases[0];
       writeDetectionKnowledge(fixture.knowledge);
       const native = await registerCase(fixture, host, 'UI', item, true);
-      const acceptance = await browserSmoke(item, native, host);
+      // Opt-in (PKB_CONTEXT_BROWSER_VECTOR=1): index what the page's project
+      // actually reads. The engine verifies every vector row against its own
+      // knowledge directory, so an index of the fixture directory is rejected.
+      if (process.env.PKB_CONTEXT_BROWSER_VECTOR === '1') {
+        await runtime.manager.import(path.join(fixture.root, 'dev-knowledge', native.projectId), fixture.projectId, false);
+      }
+      const acceptance = await browserSmoke(item, native, host, process.env.PKB_CONTEXT_BROWSER_VECTOR === '1');
       const runs = logsAt(path.join(fixture.root, 'engine')).filter(event => event.projectId === native.projectId
         && event.event === 'knowledge.context.agentic_prepared');
       const parameterAnswer = runs.at(-2)?.context;
       assert.ok(parameterAnswer?.mode === 'agentic' && parameterAnswer.budget.usage.calls > 0);
-      console.log(JSON.stringify({ ...acceptance, model: runtime.model, answerRounds: parameterAnswer.budget.rounds,
+      console.log(JSON.stringify({ ...acceptance, model: runtime.model,
+        embedding: !acceptance.vector ? null : process.env.PKB_CONTEXT_EMBEDDING === 'simulated' ? 'simulated' : 'real', answerRounds: parameterAnswer.budget.rounds,
         sourceReads: parameterAnswer.budget.reads, modelCalls: parameterAnswer.budget.usage.calls,
         modelInputTokens: parameterAnswer.budget.usage.input, answerMs: parameterAnswer.durationMs }));
       return;

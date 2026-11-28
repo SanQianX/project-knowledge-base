@@ -56,6 +56,15 @@ html[data-skin=steel][data-theme=dark]{--page:#171a1f;--surface:#20252d;--surfac
 .search-answer li>span{white-space:pre-line}
 .search-citation{display:inline-flex;margin-inline-start:6px;padding:0 4px;border:0;background:transparent;color:var(--accent);text-decoration:underline}
 .search-sources .reference b{color:var(--accent)}
+.search-trace{margin:16px 0;padding:12px 14px;border:1px solid var(--line);border-radius:8px}
+.search-trace h2{font-size:14px;margin-bottom:8px}
+.search-trace ol{display:grid;gap:10px;margin:0;padding:0;list-style:none}
+.search-trace li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:2px 10px;align-items:baseline;font-size:13px}
+.search-trace li>div{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0}
+.search-trace li>small{color:var(--muted);white-space:nowrap}
+.search-query{max-width:100%;overflow-wrap:anywhere;padding:1px 8px;border:1px solid var(--line);border-radius:999px;background:var(--surface2)}
+.search-query.is-question{border-style:dashed;color:var(--muted)}
+.search-reads{color:var(--muted)}
 .checkbox{display:flex;align-items:center;gap:8px;margin:8px 0;color:var(--text);font-size:13px}
 .checkbox input{width:16px;height:16px;margin:0;flex:none}
 #appDialog{width:640px}

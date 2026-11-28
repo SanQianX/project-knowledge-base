@@ -678,6 +678,9 @@
   function renderSearchPack(pack, type) {
     const status = { ready: '已找到相关背景', partial: '证据不完整', degraded: '已降级', no_reliable_match: '没有可靠匹配' }[pack.packStatus] || '已返回';
     const heading = pack.mode === 'agentic' ? '智能检索' : '确定性检索';
+    // Which recall took part. A file fallback means the vector service could
+    // not be used for this scope at all.
+    const backend = pack.status === 'file-fallback' ? '文件检索' : pack.backend === 'hybrid+markdown-truth' ? '向量+词法' : pack.backend ? '仅词法' : '';
     const reasons = {
       'model-unavailable': '检索模型不可用。可在「系统状态 → 智能上下文」检查模型配置。',
       'model-rate-limited': '检索模型请求受限。',
@@ -711,8 +714,17 @@
     const gaps = (pack.knowledgeGaps || []).map(gap => `<li>${esc(gap.message)}</li>`).join('');
     const conflicts = pack.conflictingEvidence?.length ? '<p>部分资料与当前要求可能冲突，请核对来源。</p>' : '';
     const omitted = pack.omittedMemoryIds?.length ? `<p>${esc(pack.omittedMemoryIds.join(', '))}</p>` : '';
-    return `<p class="muted">${heading} · ${status} · ${pack.budget?.rounds || 0} 轮 · ${(pack.durationMs / 1000).toFixed(1)} 秒${pack.status === 'file-fallback' ? ' · 文件检索' : ''}</p>
-      ${reason ? `<p class="muted">${esc(reason)}</p>` : ''}${type === 'memory' ? '' : answer}
+    // The first query of the first round is the question itself; what follows
+    // is what the plan step split it into.
+    const rounds = (pack.searchTrace?.rounds || []).filter(round => round && Array.isArray(round.queries));
+    const trace = type === 'memory' || !rounds.length ? '' : `<section class="search-trace" aria-label="检索过程"><h2>检索过程</h2><ol>${rounds.map((round, index) => {
+      const keywords = round.queries.slice(index ? 0 : 1).map(query => `<span class="search-query">${esc(query)}</span>`).join('');
+      const reads = Number.isFinite(round.reads) && round.reads ? `<span class="search-reads">读取 ${round.reads} 段</span>` : '';
+      const found = `${index ? '新增' : '命中'} ${Number.isFinite(round.newDocuments) ? round.newDocuments : 0} 篇`;
+      return `<li><b>第 ${index + 1} 轮</b><div>${index ? '' : '<span class="search-query is-question">原问题</span>'}${keywords}${reads}</div><small>${found}</small></li>`;
+    }).join('')}</ol></section>`;
+    return `<p class="muted">${heading} · ${status} · ${pack.budget?.rounds || 0} 轮 · ${(pack.durationMs / 1000).toFixed(1)} 秒${backend ? ` · ${backend}` : ''}</p>
+      ${reason ? `<p class="muted">${esc(reason)}</p>` : ''}${type === 'memory' ? '' : trace}${answer}
       ${type !== 'memory' && sourceRows ? `<section class="search-sources" aria-label="知识来源"><h2>知识来源</h2>${sourceRows}</section>` : ''}
       ${type !== 'knowledge' && memories ? `<section class="search-sources" aria-label="相关记忆"><h2>相关记忆</h2>${memories}</section>` : ''}
       ${gaps ? `<ul>${gaps}</ul>` : ''}${conflicts}${omitted}`;

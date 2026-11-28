@@ -3,9 +3,9 @@
   "productFiles": {
     "resources/ui/index.html": "d5b37c258fd6497a7b256c7779e3d83270ca0c39dfaa9456f91563097bea3537",
     "resources/ui/knowledge-panel.html": "dfd85f15759472252d797853263e9da0054b251c56bb9ccdc8a75e6301334ca8",
-    "resources/ui/product.js": "ccf218f6fe72869301dfe89d1b1772f1b0ed1fe7539ecf6546a20e65d11ba35d",
+    "resources/ui/product.js": "114d1a1d1859d11a2adb1474d8d75048b317f0844b4c389d408249b64b589afa",
     "resources/ui/live-client.js": "0d81fa894c629bb839e1931fc3c5ebad4d831aae8232d6ce8c0f542e9e3559e8",
-    "resources/ui/product.css": "2d6c365632f771a307a81c2f30c55e07c0d1c67b3aeac8270dc9e61417e5aead",
+    "resources/ui/product.css": "141afe2a8e7897beabcec311cb5defca974bfd7b0b19a782bfe2da82f94c024d",
     "resources/ui/favicon.svg": "c48be946b224112ebb0238b44263f7a61bda31e531afa895c2e9801c0ff24f32",
     "plugins/project-knowledge/hooks/claude.json": "d61510327e3e1facbb4c645228e9f50cad05a88b33d80c4c22e5ba9f8b9f5359",
     "plugins/project-knowledge/hooks/codex.json": "216e03c07295606ef6ebb2c4f669ad0d790b5e7c4f3f34600488033db75e4239",
