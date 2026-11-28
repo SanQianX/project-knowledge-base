@@ -13,7 +13,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { createAiTeamUiFixture, cliOptions, versionAtLeast } = require('./helpers/ai-team-ui-fixture');
+const { createAiTeamUiFixture, cliOptions } = require('./helpers/ai-team-ui-fixture');
 const { launchCdpBrowser, waitFor } = require('./helpers/cdp-browser');
 const { findChrome } = require('./helpers/find-chrome');
 
@@ -142,15 +142,12 @@ async function main() {
     await click('#addMember');
     await waitFor(() => has('#memberForm', '代码规范'), 'member editor');
     assert.equal(await workflow('Boolean(doc.querySelector(\'#memberForm input[name="model"]\'))'), false, 'the model is not a free-text field');
-    // Workflow 0.4.4 起，成员弹窗把「不指定」排在最后，新成员默认选第一个可用的模型。固定版本升上去以后，这段按版本的兼容可以删掉。
-    // From Workflow 0.4.4 the member dialog lists "none" last and a new member starts on the first usable model. Once the pin is raised, this version switch can go.
-    const modernMembers = versionAtLeast(options.workflowVersion, '0.4.4');
-    const modelOptions = ['代码模型（model-code）', '代码模型专业版（model-code-pro）', 'model-code-air', 'model-docs'];
-    assert.deepEqual(await optionsOf('#memberForm select[name="model"]'), modernMembers ? [...modelOptions, '不指定'] : ['不指定', ...modelOptions],
+    // 「不指定」排在最后，新成员默认选第一个可用的模型 / "none" comes last, and a new member starts on the first usable model
+    assert.deepEqual(await optionsOf('#memberForm select[name="model"]'), ['代码模型（model-code）', '代码模型专业版（model-code-pro）', 'model-code-air', 'model-docs', '不指定'],
       'every model of every usable profile is offered, and nothing else');
     assert.deepEqual(await workflow('[...doc.querySelectorAll(\'#memberForm select[name="model"] optgroup\')].map(group => group.label)'), ['代码档案', '文档档案']);
-    if (modernMembers) assert.equal(await workflow('doc.querySelector(\'#memberForm select[name="model"]\').value'), 'model-code', 'a new member starts on the first usable model');
-    assert.equal(await has('#memberForm', modernMembers ? '维护计划和需要模型的团队任务用这个模型运行，不选的话这些运行不了。' : '直接运行工具可以留空。由 Review Agent 执行的维护计划需要选模型。'), true);
+    assert.equal(await workflow('doc.querySelector(\'#memberForm select[name="model"]\').value'), 'model-code', 'a new member starts on the first usable model');
+    assert.equal(await has('#memberForm', '维护计划和需要模型的团队任务用这个模型运行，不选的话这些运行不了。'), true);
     await field('memberForm', 'name', '页面登记成员');
     await field('memberForm', 'instructions', '按维护计划检查仓库。');
     await field('memberForm', 'model', 'model-code-pro');

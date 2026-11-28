@@ -281,22 +281,12 @@ function cliOptions({ test = false, defaultMaintenance = false } = {}) {
   const workflowRoot = argument('workflow-root') || candidate || (test ? path.dirname(require.resolve('@sanqianx/ai-coding-workflow/package.json')) : '');
   if (!dataDir || !workflowRoot) throw new Error('Supply --data <new test directory> and --workflow-root <Workflow checkout>.');
   return {
-    dataDir, workflowRoot, workflowVersion: require(path.join(workflowRoot, 'package.json')).version,
-    designFile: argument('design') || undefined,
+    dataDir, workflowRoot, designFile: argument('design') || undefined,
     emptyTeam: process.argv.includes('--empty-team'),
     maintenance: process.argv.includes('--maintenance') || (defaultMaintenance && !process.argv.includes('--without-maintenance')),
     pageRegistration: process.argv.includes('--page-registration'),
     managed: process.argv.includes('--managed'),
   };
-}
-
-// 比较两个 x.y.z 版本：a 不早于 b 时为真。测试用它兼容「新行为已在候选源码里、固定版本还没升上去」的过渡期。
-// Compare two x.y.z versions: true when a is not older than b. Tests use it while a newer behaviour is in a candidate checkout but the pinned version lags.
-function versionAtLeast(a, b) {
-  const left = String(a).split('.').map(Number);
-  const right = String(b).split('.').map(Number);
-  for (let index = 0; index < 3; index += 1) if (left[index] !== right[index]) return left[index] > right[index];
-  return true;
 }
 
 if (require.main === module) {
@@ -308,4 +298,4 @@ if (require.main === module) {
   }).catch(error => { console.error(error.stack); process.exitCode = 1; });
 }
 
-module.exports = { createAiTeamUiFixture, cliOptions, versionAtLeast };
+module.exports = { createAiTeamUiFixture, cliOptions };

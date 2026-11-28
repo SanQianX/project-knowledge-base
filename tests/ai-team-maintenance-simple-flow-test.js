@@ -12,18 +12,12 @@
 
 const assert = require('node:assert/strict');
 const path = require('node:path');
-const { createAiTeamUiFixture, cliOptions, versionAtLeast } = require('./helpers/ai-team-ui-fixture');
+const { createAiTeamUiFixture, cliOptions } = require('./helpers/ai-team-ui-fixture');
 const { launchCdpBrowser, waitFor } = require('./helpers/cdp-browser');
 const { findChrome } = require('./helpers/find-chrome');
 
 async function main() {
   const options = cliOptions({ test: true });
-  // 这条路径是 Workflow 0.4.4 加的。固定版本还没升上去时明确跳过，不当作通过；固定版本升上去以后，这段判断可以删掉。
-  // This path arrived in Workflow 0.4.4. While the pinned version lags it is skipped explicitly, never counted as a pass; once the pin is raised this check can go.
-  if (!versionAtLeast(options.workflowVersion, '0.4.4')) {
-    console.log('ai-team-maintenance-simple-flow-test SKIPPED(Workflow ' + options.workflowVersion + ' has no managed plan editor): pin 0.4.4 or set KB_WORKFLOW_TEST_SOURCE');
-    return;
-  }
   // 默认提示词以被测的 Workflow 为准 / the default prompt is whatever the Workflow under test defines
   const { DEFAULT_AGENT_PROMPT } = require(path.join(options.workflowRoot, 'src', 'maintenance-config'));
   // Chrome 的已知目录发现依赖原始环境：夹具把 HOME 指向沙箱，所以先保存浏览器环境。

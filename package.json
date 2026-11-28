@@ -93,7 +93,7 @@
     "@modelcontextprotocol/sdk": "1.29.0",
     "@sanqianx/ai-coding-event-bridge-console": "0.7.5-rc.2",
     "@sanqianx/ai-coding-knowledge-engine": "0.4.4",
-    "@sanqianx/ai-coding-workflow": "0.4.3",
+    "@sanqianx/ai-coding-workflow": "0.4.4",
     "@sanqianx/vector-hub": "1.0.8-rc.10",
     "buffer": "^6.0.3",
     "cheerio": "^1.2.0",

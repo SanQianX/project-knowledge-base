@@ -329,12 +329,12 @@
     "workflow": {
       "name": "@sanqianx/ai-coding-workflow",
       "installName": "@sanqianx/ai-coding-workflow",
-      "version": "0.4.3",
+      "version": "0.4.4",
       "files": {
         "LICENSE": "c1b9df1275e769f3dbab000d1e457a2d4b0f28eb5da6c77e48dc37eeba202ed7",
-        "README.md": "5af23873bc9c3cfff46fdd06e1d873be571ec73400e1ee2ee9be016cb1a7ea05",
-        "docs/contract.md": "eb5d1a17e2364efd226435331867898fb702ba951ab57c73faf02334439af635",
-        "package.json": "83ec75a44284b7db2d7230def77773c71d7ce81462f9e2806749b1513f95dcbc",
+        "README.md": "c49bc129526db656766e96e1b4135e74ca625b572e435c527f67d2464e298d89",
+        "docs/contract.md": "caa70aea76054cbbc6473fdddbf8949f6dc851a5a40669ee8e2d4963107ec9d8",
+        "package.json": "f18b1bce536ca52b2eaf38833182a996f72effaa5d6ab389d4b882677af81d40",
         "src/bin.js": "1feb264c5f2df3302846d604a3a58c51d991d3736ee46c31d658e50978946618",
         "src/checks.js": "adffca98f9717a23bc6a611ecc387b15626b187a2e37a65cb658ac917cf3b1bb",
         "src/consumer.js": "0f25dcda53d25f82a8c83e637cb3de64e9e5b5014a74531383c8244c094d5500",
@@ -342,20 +342,20 @@
         "src/domain.js": "2edd3170002a592fc17f09456074b3c3c7d48dcd608efb64e9e76b314cd9a361",
         "src/errors.js": "1868330aa021b3dba5e92061dbb41e15a94f4cb0746f870c49aac4bf6119d708",
         "src/identity.js": "50d0c03a1b6a68cb0ad00f5293106d08f0aec51148edd98f52e177b3dc34c85a",
-        "src/maintenance-config.js": "c9b84adc283c12930a93f3fb659f727b77f5def9f9ab5562f1eaab03ee4917c6",
-        "src/maintenance-runner.js": "f820d6e7e2e8a49f73c6d095482bbdc87a235e6ccda199d0ed1d7fadba3c1551",
-        "src/maintenance.js": "3e5e7cb545b4ebee40cc6d0aaaa4fb3cc37f5b7e24b8f1e6d5a98038ae06fea8",
+        "src/maintenance-config.js": "a094a7c3868f5f390a6117311bfe4686e4878b521c94674be3b3cc9df9171f33",
+        "src/maintenance-runner.js": "dc94aa019c0780aa8c1b4e5bf8495a4161ecf4a1c05558c4aa1d7f2fba6f4eaf",
+        "src/maintenance.js": "cb39afd69659a6ba1569a909a4a44a62e3740f47a90997ff202afff5bf6cfc7c",
         "src/review-native.js": "47ca1ba2c424116bcdce66526d1bafb90f560b945f8b4fd58a6732e252aa7a7f",
         "src/server.js": "d44290d12f10df4c6f2e54797c9ad4325ca12d717c2686348bbd58e95b37bf5c",
         "src/snapshots.js": "e4d3dca2d9193a536f9c24fb9f572aff58eb1031f2caac71ba8531d4b47db7b0",
         "src/store.js": "c7000e7c96c3cbd3f4c433807b838279cd0cd2f61af9dae52afc80c9e7e93a1b",
         "src/tasks.js": "95a043d7c9a25cb266a9ec7f21b8502dc96e13b441b0e4c884c4f91996f558ed",
-        "ui/app.css": "10127c92053f5770c11b58fc606e4c6bdd9961b62ce52848ce198a95b6e6f10b",
-        "ui/app.js": "bce5e27eca055597541f70395333493b3161767ab3262af6369b5743ef21d3bd",
+        "ui/app.css": "69e43b35e6c4b546f078baf63ce44abfe9d0fbfab83caa0fe78e3b55d5e0f1d6",
+        "ui/app.js": "613a50d19e8319f0c678035f98873195601978d26b829c6fa197491054a56327",
         "ui/index.html": "0eefc46d87ab44a4d62ca970021b8c2e7b42b536ebc5e0c76948aa2ee173aaff",
         "src/maintenance-registry.js": "d40facfbc8a85a68323924187a2bd4bbaa6084b8ba69c5e0f073c135facaf4fc",
         "src/maintenance-agent-files.js": "35ccb1f4fdab6dae2bffb90ea5e24e0a921ef856f250506a440be6d9fe1739c0",
-        "src/maintenance-agent.js": "1f712e4b53e3a261e214b478e622d3f99858bf06bedd613a8cdfac0c44454b09"
+        "src/maintenance-agent.js": "7c58cedda9bdbcdfdd029b03d80668e50cabf5d1c9cb714836a262be9d575898"
       }
     }
   }
