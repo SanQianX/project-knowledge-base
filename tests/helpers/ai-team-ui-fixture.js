@@ -169,7 +169,7 @@ function preparePageRegistration(sandbox) {
   return { repo: repos[0], secondRepo: repos[1], tool, argv: mode => [process.execPath, tool, mode] };
 }
 
-async function createAiTeamUiFixture({ dataDir, workflowRoot, designFile, emptyTeam = false, maintenance = false, pageRegistration = false, maintenanceTiming }) {
+async function createAiTeamUiFixture({ dataDir, workflowRoot, designFile, emptyTeam = false, maintenance = false, pageRegistration = false, maintenanceTiming, managed = false }) {
   // A fresh, explicitly named directory cannot alias an existing installation.
   const sandbox = path.resolve(dataDir);
   fs.mkdirSync(sandbox);
@@ -189,11 +189,13 @@ async function createAiTeamUiFixture({ dataDir, workflowRoot, designFile, emptyT
   const { createWorkflowServer } = require(path.join(workflowInstall, 'src', 'server'));
   // The shell's trusted forwards carry this token; the module must know the same one.
   const runtimeToken = crypto.randomBytes(16).toString('hex');
+  // 知识库平时以托管模式启动模块（所有计划由 Agent 执行）；这里默认不开，需要时用 managed 打开。
+  // The knowledge base starts the module in managed mode (every plan runs as an Agent); this fixture opts in with managed.
   const workflowOptions = {
-    dataDir: workflowData, bridgeUrl, maintenanceTiming, runtimeToken,
+    dataDir: workflowData, bridgeUrl, maintenanceTiming, runtimeToken, managed,
     projectRoots: maintenanceFixture ? { [projects[0].id]: maintenanceFixture.repo } : undefined,
   };
-  let workflow = createWorkflowServer(workflowOptions);
+  let workflow = null;
   const memoryDirectory = http.createServer((req, res) => {
     if (req.method === 'GET' && req.url.startsWith('/api/memory-groups?')) {
       json(res, { ok: true, groups: [{ id: 'group-code', name: '代码规范' }, { id: 'group-docs', name: '文档约定' }], total: 2 });
@@ -205,10 +207,16 @@ async function createAiTeamUiFixture({ dataDir, workflowRoot, designFile, emptyT
   });
   const shell = http.createServer();
   const close = () => Promise.allSettled([
-    stop(shell), stop(memoryDirectory), stop(workbench), workflow.close(), ...(maintenanceFixture ? [stop(maintenanceFixture.server)] : []),
+    stop(shell), stop(memoryDirectory), stop(workbench), ...(workflow ? [workflow.close()] : []),
+    ...(maintenanceFixture ? [stop(maintenanceFixture.server)] : []),
   ]);
   try {
-    const [wf, engine, workbenchUrl] = await Promise.all([workflow.listen(0, host), listen(memoryDirectory), listen(workbench)]);
+    const [engine, workbenchUrl] = await Promise.all([listen(memoryDirectory), listen(workbench)]);
+    // 托管模式下，模块要知道工作台地址才会把带模型的计划标成可运行。
+    // In managed mode the module needs the Workbench URL before it reports a plan with a model as runnable.
+    if (managed) workflowOptions.workbenchUrl = workbenchUrl;
+    workflow = createWorkflowServer(workflowOptions);
+    const wf = await workflow.listen(0, host);
     const workflowUrl = 'http://' + host + ':' + wf.port;
     Object.assign(process.env, {
       KB_KNOWLEDGE_ENGINE_URL: engine, KB_WORKFLOW_URL: workflowUrl, KB_TERMINAL_URL: workbenchUrl,
@@ -243,9 +251,11 @@ async function createAiTeamUiFixture({ dataDir, workflowRoot, designFile, emptyT
     async function drainBridge() {
       await workflow.consumer.drain({ notifyUrl: workflowUrl + '/api/internal/bridge-notify' });
     }
-    async function restartWorkflow() {
+    // 重启模块，可以顺便切换托管模式：先在非托管模式下留下旧式的直接工具计划，再切回托管模式。
+    // Restart the module, optionally switching managed mode: leave an old direct-tool plan unmanaged, then return to managed.
+    async function restartWorkflow(overrides = {}) {
       await workflow.close();
-      workflow = createWorkflowServer(workflowOptions);
+      workflow = createWorkflowServer({ ...workflowOptions, ...overrides });
       await workflow.listen(wf.port, host);
       if (maintenanceFixture) await drainBridge();
     }
@@ -271,11 +281,22 @@ function cliOptions({ test = false, defaultMaintenance = false } = {}) {
   const workflowRoot = argument('workflow-root') || candidate || (test ? path.dirname(require.resolve('@sanqianx/ai-coding-workflow/package.json')) : '');
   if (!dataDir || !workflowRoot) throw new Error('Supply --data <new test directory> and --workflow-root <Workflow checkout>.');
   return {
-    dataDir, workflowRoot, designFile: argument('design') || undefined,
+    dataDir, workflowRoot, workflowVersion: require(path.join(workflowRoot, 'package.json')).version,
+    designFile: argument('design') || undefined,
     emptyTeam: process.argv.includes('--empty-team'),
     maintenance: process.argv.includes('--maintenance') || (defaultMaintenance && !process.argv.includes('--without-maintenance')),
     pageRegistration: process.argv.includes('--page-registration'),
+    managed: process.argv.includes('--managed'),
   };
+}
+
+// 比较两个 x.y.z 版本：a 不早于 b 时为真。测试用它兼容「新行为已在候选源码里、固定版本还没升上去」的过渡期。
+// Compare two x.y.z versions: true when a is not older than b. Tests use it while a newer behaviour is in a candidate checkout but the pinned version lags.
+function versionAtLeast(a, b) {
+  const left = String(a).split('.').map(Number);
+  const right = String(b).split('.').map(Number);
+  for (let index = 0; index < 3; index += 1) if (left[index] !== right[index]) return left[index] > right[index];
+  return true;
 }
 
 if (require.main === module) {
@@ -287,4 +308,4 @@ if (require.main === module) {
   }).catch(error => { console.error(error.stack); process.exitCode = 1; });
 }
 
-module.exports = { createAiTeamUiFixture, cliOptions };
+module.exports = { createAiTeamUiFixture, cliOptions, versionAtLeast };
