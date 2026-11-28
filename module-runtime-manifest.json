@@ -11,9 +11,9 @@
     "plugins/project-knowledge/hooks/codex.json": "216e03c07295606ef6ebb2c4f669ad0d790b5e7c4f3f34600488033db75e4239",
     "plugins/project-knowledge/scripts/context-hook.cjs": "289cf8c0f9e3baea3789f53f6878c8248f630ed64453119f18ccb64919e1b22b",
     "plugins/project-knowledge/scripts/mcp-launcher.cjs": "c9235eaf722ad011ce42d7a8416a77bef8e2a65e174f27b3d183f4b8f811f293",
-    "plugins/project-knowledge/.claude-plugin/plugin.json": "7462a6d08f79801f4435d80a474c2a05b5f5eba8e9b4d86f6e93d1ea0ca12e5a",
-    "plugins/project-knowledge/.codex-plugin/plugin.json": "8125d27988f0806befaa8b6e4e09c26f50ca9abaaa9a263d5f2526b6a20c4b54",
-    "plugins/project-knowledge/.mcp.json": "ce7a8c01e830d8da97653466b4e10a431204a76ba68ecd7ec378bf1c2701bf5c",
+    "plugins/project-knowledge/.claude-plugin/plugin.json": "092bbffaccb0ab3f0fb22b7ab5802b4be4120915c7069b8100cc69546db9f6db",
+    "plugins/project-knowledge/.codex-plugin/plugin.json": "1e0de905c564dae5ccbe7325c3af48c3e070b4d472ab65395831b28f89d48652",
+    "plugins/project-knowledge/.mcp.json": "9812f13ed6b2008247a11167b332c0684a6967d9670a553ad82d85fbcaaf7be7",
     "resources/ui/version-info.js": "01a82217b031de54b80d6c7974da9c70888c4c90a046bd4248a808f7989ddce7",
     "resources/ui/version-info.css": "209fad8e42b661f72d2aba3280e1ca47768b5cefb776fe5459538d34fbad120f"
   },
@@ -268,11 +268,11 @@
     "engine": {
       "name": "@sanqianx/ai-coding-knowledge-engine",
       "installName": "@sanqianx/ai-coding-knowledge-engine",
-      "version": "0.4.6",
+      "version": "0.4.7",
       "files": {
         "LICENSE": "c1b9df1275e769f3dbab000d1e457a2d4b0f28eb5da6c77e48dc37eeba202ed7",
-        "README.md": "d9e33a0c205f802dc8cf9f666d596af1ff42dec08fce3ed7d1bf50bc3a0280e9",
-        "package.json": "b8d7233b3bcf848ae19326427039b6bea3169b76f7b7b7c702e1c7358f6acef1",
+        "README.md": "f6bdc7b20aec77582cdbd8cebd9b2a71e13e5b004a7449c870c193f4ae78c169",
+        "package.json": "ee1baf61c49c6f7a9ef2da106f1d2b60647704e3177b5aabf2ae18b479dd1d74",
         "src/agent-members.js": "4da00e8d68258b332d899070f1996ce465dacafffb1eaf0658d579984f263e2e",
         "src/analysis-contract.js": "633edde34ef0ac1b4473d1afd1b583052bd218d3e8771cf1b9852bcee0ae4db8",
         "src/analysis-failures.js": "eb1e5a476b1e3e3c87dfd9955707c85151707799883595bcb5e9cc3e26a991c4",
@@ -318,12 +318,12 @@
         "ui/app.js": "e9ecb0125d5f2a8bb30a58c4d278fe0737ee2540ecfb065f97f453495cfc792d",
         "ui/index.html": "ce3565cfefd4838b11d37a91a906ef26ca5a1834844fe3f7c897b56851a3c418",
         "src/agentic-context/adaptive-turns.js": "6a4b90a9a0ea68aef1398c1e55c9d1cba9309b5ffeaba6ff38b44977f779dfdc",
-        "src/agentic-context/context-agent.js": "cdaf99d8dab2444ff44fc2f3f35e053c8f42ea9fd1de36a683e2d9db6f437b83",
-        "src/agentic-context/model.js": "36065fe2ee4a512f825a9ccd61fb78c8de63a771a10239e55a587f2af21e9935",
+        "src/agentic-context/context-agent.js": "4bdb58526e4ebb0a4a392357b308120eb45f75b2a824c10a1c0b7dd82839a038",
+        "src/agentic-context/model.js": "5f8bc7fe6874cfe2fb00998d1fe6aab6d4e72d7a2184297110be964c1c9553f9",
         "src/agentic-context/pack.js": "8e6706621671066f9d03455da35e12e7197c35f5ed75273510f4c5f5576b2ef4",
         "src/agentic-context/retrieval-tools.js": "9f39339716990a069e1e947a5f34c6580039c2bc81370559813137d9ed8f83ac",
         "src/runtime/abort-signal.js": "3074fe9a4fffccceb2f98ce84d47d5ba83fcbfb3a931b1a3c28a8fa8a3c70ac6",
-        "src/agentic-context/answer.js": "2e18ff1308c890290d7464129494345cb0d4c581333252eac8327998b8e031ab"
+        "src/agentic-context/answer.js": "ab24716dea0f797db2f59e0c1d1d30f4940ebfe8fec03596b498e4fab7b91967"
       }
     },
     "workflow": {
