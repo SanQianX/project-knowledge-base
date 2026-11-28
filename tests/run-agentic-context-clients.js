@@ -377,7 +377,9 @@ async function browserSmoke(item, caseInfo, host, vector) {
     await waitFor(() => browser.evaluate("document.querySelector('#searchForm select[name=project]')?.options.length > 1"), 'search form and project loaded');
     // A submitted search renders its loading state before it awaits anything.
     // Waiting for that state keeps a finished page from reading as the result
-    // of the search that was just requested.
+    // of the search that was just requested. A search can also be over before
+    // the next look at the page: a smart search without a model answers at
+    // once. The page therefore records that the state was rendered.
     const search = async (mode, query = item.queries[0], type = 'all') => {
       await browser.evaluate(`(() => {
         const form = document.querySelector('#searchForm');
@@ -386,10 +388,19 @@ async function browserSmoke(item, caseInfo, host, vector) {
         form.elements.mode.value = ${JSON.stringify(mode)};
         form.elements.type.value = ${JSON.stringify(type)};
         form.elements.query.value = ${JSON.stringify(query)};
+        if (${JSON.stringify(mode)} === 'deep') {
+          window.__searchRendered = false;
+          const watch = new MutationObserver(() => {
+            if (!document.querySelector('#searchContent .small-empty')?.textContent.includes('正在检索')) return;
+            window.__searchRendered = true;
+            watch.disconnect();
+          });
+          watch.observe(document.getElementById('searchContent'), { childList: true, subtree: true, characterData: true });
+        }
         form.requestSubmit();
         return true;
       })()`);
-      if (mode === 'deep') await waitFor(() => browser.evaluate("!!document.querySelector('#searchContent .small-empty')?.textContent.includes('正在检索')"),
+      if (mode === 'deep') await waitFor(() => browser.evaluate('window.__searchRendered === true'),
         'search started: ' + query.slice(0, 40), 10000);
     };
     await search('fast');
