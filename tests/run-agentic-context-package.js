@@ -15,9 +15,16 @@ async function main() {
   const { verifyProductRuntime } = candidateRequire('./src/scripts/verify-product-runtime');
   const verified = verifyProductRuntime(installed);
   const version = candidateRequire('./package.json').version;
-  const baseline = require('@sanqianx/ai-coding-knowledge-engine');
-  const candidate = candidateRequire('@sanqianx/ai-coding-knowledge-engine');
-  assert.ok(candidateRequire.resolve('@sanqianx/ai-coding-knowledge-engine').includes('node_modules'));
+  const baselineRoot = process.env.PKB_CONTEXT_BASELINE_HOST_SOURCE || path.resolve(__dirname, '..');
+  const baselineRequire = createRequire(path.join(baselineRoot, 'package.json'));
+  const engineModule = '@sanqianx/ai-coding-knowledge-engine';
+  const baselineVersion = baselineRequire(`${engineModule}/package.json`).version;
+  assert.equal(baselineVersion, baselineRequire('./package-lock.json').packages[`node_modules/${engineModule}`]?.version,
+    'the baseline installation must match its lockfile');
+  assert.notEqual(fs.realpathSync(baselineRequire.resolve(engineModule)), fs.realpathSync(candidateRequire.resolve(engineModule)),
+    'the old and candidate engines must come from separate installations');
+  const baseline = baselineRequire(engineModule);
+  const candidate = candidateRequire(engineModule);
   const fixture = await setup({ createEngineServer: baseline.createEngineServer });
   const item = corpus.cases[0];
   const input = { projectId: fixture.projectId, query: item.queries[0], client: 'codex', scope: 'project', sessionId: 'before' };
@@ -54,7 +61,7 @@ async function main() {
     assert.equal(pack.delivery.status, 'prepared');
     assert.deepEqual(pack.memories.map(memory => memory.text), [item.memory]);
     console.log(JSON.stringify({ hostVersion: version, modules: Object.fromEntries(Object.entries(verified).map(([key, value]) => [key, value.version])),
-      upgrades: { schema: stable.schemaVersion, memories: stable.memories.length, groups: stable.memoryGroups.length,
+      upgrades: { baselineVersion, schema: stable.schemaVersion, memories: stable.memories.length, groups: stable.memoryGroups.length,
         existingContextUnchanged: true, optInWorks: true }, installed: true }));
   } finally {
     await next.close();

@@ -17,7 +17,7 @@ const hostRoot = process.env.PKB_CONTEXT_CANDIDATE_ROOT || path.resolve(__dirnam
 const hostRequire = createRequire(path.join(hostRoot, 'package.json'));
 const { createRuntime, startServer } = hostRequire('./src/server/server-app');
 const { ModuleBridge } = hostRequire('./src/module_bridge/module-bridge');
-const wbRoot = process.env.PKB_CONTEXT_WORKBENCH_SOURCE || path.dirname(require.resolve('claude-ai-workbench/package.json'));
+const wbRoot = process.env.PKB_CONTEXT_WORKBENCH_SOURCE || path.dirname(hostRequire.resolve('claude-ai-workbench/package.json'));
 const wbRequire = createRequire(path.join(wbRoot, 'package.json'));
 const createEngineServer = process.env.PKB_CONTEXT_ENGINE_SOURCE
   ? require(path.join(process.env.PKB_CONTEXT_ENGINE_SOURCE, 'src/server')).createEngineServer
@@ -202,19 +202,89 @@ async function workbench(item, caseInfo, fixture, runtime, key) {
   }
 }
 
-async function codex(item, caseInfo, host) {
+async function zcode(item, caseInfo, fixture, host, runtime, key) {
+  const executable = process.env.PKB_CONTEXT_ZCODE_EXECUTABLE;
+  if (!executable || !path.isAbsolute(executable) || !fs.existsSync(executable)) {
+    return { client: 'zcode', status: 'blocked', reason: 'provide the bundled native zcode.cjs executable' };
+  }
+  const home = path.join(fixture.root, 'zcode-home');
+  const { IntegrationManager } = hostRequire('./src/integrations/integration-installer');
+  const integration = new IntegrationManager({ rootDir: hostRoot, homeDir: home, bridgeHomeDir: path.join(home, 'events') });
+  assert.equal(integration.installZCode().installed, true);
+  const { createAppServerBridge } = wbRequire('./packages/server/lib/bridges/app-server-bridge');
+  const { createZCodeProfileRuntime } = wbRequire('./packages/server/lib/drivers/zcode-profile-runtime');
+  const { providerRuntimeEnvironment } = wbRequire('./packages/server/lib/drivers/zcode-driver');
+  const trace = await provider(key, item);
+  const started = Date.now();
+  const events = [];
+  const file = path.join(caseInfo.repo, 'route.js');
+  let profile, bridge, sessionId;
+  try {
+    profile = await createZCodeProfileRuntime({ model: { providerId: 'isolated-zai', modelId: runtime.model },
+      provider: { kind: 'anthropic', baseURL: trace.url, apiKey: { value: 'isolated-loopback' } } });
+    const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => /^(path|pathext|systemroot|windir|comspec|systemdrive|os)$/i.test(name)));
+    Object.assign(env, providerRuntimeEnvironment(executable, { env, homedir: home }), {
+      USERPROFILE: home, HOME: home, APPDATA: home, LOCALAPPDATA: home, XDG_CONFIG_HOME: home, XDG_DATA_HOME: home,
+      TEMP: home, TMP: home, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.join(home, 'gitconfig'),
+      ZCODE_DATA_BASE_DIR: home, ZCODE_PERSONAL_PROVIDER_CONFIG_FILE: profile.file,
+      KB_DATA_DIR: host.dataDir, AI_CODING_EVENT_BRIDGE_CAPTURE: '0', AI_CODING_EVENT_BRIDGE_HOME: path.join(home, 'events'),
+    });
+    bridge = createAppServerBridge({ command: process.execPath, args: [executable, 'app-server', '--stdio'], cwd: caseInfo.repo,
+      spawn: (command, args, options) => spawn(command, args, { ...options, env }),
+      maxRestarts: 0, idleTimeoutMs: 0, requestTimeoutMs: 30000, label: 'isolated-zcode-context',
+      onEvent: event => { if (event.method === 'session/event') events.push(event.params); },
+      onServerRequest: (method, params) => {
+        if (method === 'session/requestRuntimePreferences') return { nativeSearchEnhancementsEnabled: false,
+          memoryEnabled: false, askUserQuestionAutoResolutionEnabled: false, modelContextBudgetStrategy: 'preflight-v1' };
+        if (method === 'interaction/requestPermission') {
+          const target = params.input?.file_path || params.input?.path;
+          const allowed = typeof target === 'string' && path.resolve(caseInfo.repo, target) === file;
+          return (params.options || []).find(option => option.kind === (allowed ? 'allow_once' : 'deny'))?.response;
+        }
+        throw new Error(`Unsupported isolated ZCode interaction: ${method}`);
+      } });
+    await bridge.start();
+    await bridge.request('runtime/capabilities', {});
+    const { session } = await bridge.request('session/create', { workspace: { workspacePath: caseInfo.repo, workspaceKey: caseInfo.repo },
+      mode: 'edit', titleGenerationEnabled: false });
+    sessionId = session.sessionId;
+    await bridge.request('session/subscribe', { sessionId, deliveryKind: 'desktop-continuous' });
+    const sent = await bridge.request('session/send', { sessionId, content: promptFor(item), modelSelection: profile.selection });
+    assert.equal(sent.accepted, true);
+    const deadline = Date.now() + 105000;
+    let terminal;
+    while (Date.now() < deadline) {
+      terminal = events.find(event => ['turn.completed', 'turn.failed'].includes(event.type));
+      if (terminal) break;
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+    const hook = logsAt(host.dataDir).find(event => event.projectId === caseInfo.projectId && event.event === 'agent.context.output');
+    return { client: 'zcode', status: terminal?.type || 'timeout', result: terminal?.payload?.resultType,
+      accepted: accepted(caseInfo.repo, item), requests: trace.requests, durationMs: Date.now() - started,
+      hook: hook ? { requestId: hook.operationId, packId: hook.context.packId, taskContextId: hook.context.taskContextId } : null };
+  } finally {
+    if (sessionId) await bridge.request('session/stop', { sessionId }).catch(() => {});
+    await bridge?.close();
+    await profile?.close();
+    await trace.close();
+  }
+}
+
+async function codex(item, caseInfo, fixture, host) {
   const executable = process.env.PKB_CONTEXT_CODEX_EXECUTABLE;
   const config = process.env.CODEX_HOME;
   if (!executable || !config) return { client: 'codex', status: 'blocked', reason: 'isolated Codex executable or home not provided' };
-  const relative = path.relative(os.homedir(), config);
-  assert.ok(relative && !relative.startsWith('..') && !path.isAbsolute(relative) && fs.existsSync(config), 'provide an isolated CODEX_HOME under the isolated user home');
+  assert.ok(path.isAbsolute(config) && fs.existsSync(config), 'provide an existing absolute CODEX_HOME');
+  const tempRelative = path.relative(fs.realpathSync(os.tmpdir()), fs.realpathSync(config));
+  assert.ok(tempRelative && !tempRelative.startsWith('..') && !path.isAbsolute(tempRelative), 'CODEX_HOME must be inside the isolated test temporary directory');
   const { createAppServerBridge } = wbRequire('./packages/server/lib/bridges/app-server-bridge');
   const { resolveCliInvocation } = wbRequire('./packages/server/lib/drivers/cli-json-runner');
   const pluginRoot = path.join(hostRoot, 'plugins/project-knowledge');
+  const hookScript = path.join(pluginRoot, 'scripts/context-hook.cjs').replaceAll('\\', '/');
   const hookPath = path.join(config, 'hooks.json');
   if (!fs.existsSync(hookPath)) {
     const template = JSON.parse(fs.readFileSync(path.join(pluginRoot, 'hooks/codex.json'), 'utf8'));
-    template.hooks.UserPromptSubmit[0].hooks[0].command = `"${process.execPath.replaceAll('\\', '/')}" "${path.join(pluginRoot, 'scripts/context-hook.cjs').replaceAll('\\', '/')}" --client codex`;
+    template.hooks.UserPromptSubmit[0].hooks[0].command = `"${process.execPath.replaceAll('\\', '/')}" "${hookScript}" --client codex`;
     fs.writeFileSync(hookPath, JSON.stringify(template, null, 2), { flag: 'wx' });
   }
   const settings = { 'mcp_servers.project-knowledge.command': process.execPath,
@@ -234,7 +304,8 @@ async function codex(item, caseInfo, host) {
       bridge.request('hooks/list', { cwds: [caseInfo.repo] }),
       bridge.request('account/read', { refreshToken: false }).catch(() => null),
     ]);
-    const hooks = (snapshot.data || []).flatMap(scope => scope.hooks || []).filter(hook => hook.eventName === 'userPromptSubmit' && hook.command?.includes('context-hook.cjs'));
+    const hooks = (snapshot.data || []).flatMap(scope => scope.hooks || [])
+      .filter(hook => hook.eventName === 'userPromptSubmit' && hook.command?.replaceAll('\\', '/').includes(hookScript));
     const trustStatus = hooks[0]?.trustStatus || 'not-listed';
     const metadata = { client: 'codex', hooks: hooks.length, trustStatus, authenticated: !!account?.account };
     if (hooks.length !== 1 || hooks[0].enabled !== true || !['trusted', 'managed'].includes(trustStatus)) {
@@ -251,9 +322,12 @@ async function codex(item, caseInfo, host) {
       await new Promise(resolve => setTimeout(resolve, 250));
     }
     const hook = logsAt(host.dataDir).filter(event => event.projectId === caseInfo.projectId && event.event === 'agent.context.output').at(-1);
+    const deep = logsAt(path.join(fixture.root, 'engine')).find(event => event.projectId === caseInfo.projectId
+      && event.event === 'knowledge.context.agentic_prepared' && event.context.taskContextId === hook?.context.taskContextId
+      && event.context.mode === 'agentic' && event.context.factCount > 0);
     const used = accepted(caseInfo.repo, item);
     return { ...metadata, status: completed?.params.turn.status || 'timeout', accepted: used, hook: hook ? { requestId: hook.operationId,
-      packId: hook.context.packId, taskContextId: hook.context.taskContextId } : null };
+      packId: hook.context.packId, taskContextId: hook.context.taskContextId } : null, deepPackId: deep?.context.delivery?.packId };
   } finally { await bridge.close(); }
 }
 
@@ -265,7 +339,7 @@ async function browserSmoke(item, caseInfo, host) {
   try {
     await waitFor(() => browser.evaluate("document.querySelector('#openSystem') !== null"), 'host UI loaded');
     await browser.evaluate("document.querySelector('#openSystem').click()");
-    await waitFor(() => browser.evaluate("document.querySelector('#agenticContextModel option[value]:not([value=''])') !== null"), 'saved profile offered');
+    await waitFor(() => browser.evaluate("document.querySelector('#agenticContextModel')?.options.length > 1"), 'saved profile offered');
     await browser.evaluate(`(() => {
       document.querySelector('#agenticContextEnabled').checked = true;
       const select = document.querySelector('#agenticContextModel');
@@ -316,35 +390,53 @@ function logsAt(root) {
 }
 
 async function main() {
+  const mode = process.argv[2] || 'smoke';
+  const comparison = ['compare', 'baseline-client', 'compare-vector'].includes(mode);
+  if (!comparison && !['smoke', 'mcp', 'workbench', 'codex', 'zcode', 'browser'].includes(mode)) {
+    throw new Error(`Unknown native-client test mode: ${mode}`);
+  }
+  if (comparison && !process.env.PKB_CONTEXT_BASELINE_HOST_SOURCE) {
+    throw new Error('Set PKB_CONTEXT_BASELINE_HOST_SOURCE to the isolated M0 host for group B.');
+  }
   const key = process.env.ZAI_API_KEY;
   if (!key) throw new Error('BLOCKED: ZAI_API_KEY is required for the isolated native-client comparison.');
-  if (!process.env.PKB_CONTEXT_CLAUDE_EXECUTABLE) throw new Error('BLOCKED: set PKB_CONTEXT_CLAUDE_EXECUTABLE to the actual Claude Code executable.');
+  if (!['browser', 'codex', 'zcode'].includes(mode) && !process.env.PKB_CONTEXT_CLAUDE_EXECUTABLE) {
+    throw new Error('BLOCKED: set PKB_CONTEXT_CLAUDE_EXECUTABLE to the actual Claude Code executable.');
+  }
   delete process.env.ZAI_API_KEY;
   Object.assign(process.env, { KB_MODULES_AUTOSTART: '0', KB_MODULES_REGISTER: '0', AI_CODING_EVENT_BRIDGE_CAPTURE: '0' });
   for (const name of ['KB_KNOWLEDGE_CONTEXT', 'KB_KNOWLEDGE_ENGINE_URL', 'KB_SITE_AUTH_TOKEN', 'KB_ALLOWED_ORIGINS', 'AI_CODING_EVENT_BRIDGE_HOME']) delete process.env[name];
-  const mode = process.argv[2] || 'smoke';
   const runtime = await startRuntime(key, { deferFirstContext: mode === 'mcp' });
   let fixture, host;
   try {
     fixture = await setup({ createEngineServer, vectorUrl: runtime.vectorUrl, runtimeToken: runtime.token,
       engineOptions: { workbenchUrl: runtime.workbenchUrl } });
     host = await startHost(fixture, runtime);
-    if (mode !== 'browser') await runtime.manager.import(fixture.knowledge, fixture.projectId, false);
+    if (mode !== 'browser' && process.env.PKB_CONTEXT_FILE_FALLBACK !== '1') await runtime.manager.import(fixture.knowledge, fixture.projectId, false);
     if (mode === 'browser') {
       const item = corpus.cases[0];
       const native = await registerCase(fixture, host, 'UI', item, true);
       console.log(JSON.stringify(await browserSmoke(item, native, host)));
       return;
     }
-    if (mode === 'workbench' || mode === 'codex') {
+    if (['workbench', 'codex', 'zcode'].includes(mode)) {
       await fixture.request('/api/runtime-context-config', { enabled: true, profileId: runtime.profileId, model: runtime.model });
       const item = corpus.cases[0];
-      const native = await registerCase(fixture, host, mode === 'codex' ? 'CX' : 'WB', item, true);
+      const native = await registerCase(fixture, host, mode, item, true);
       if (mode === 'codex') {
-        const row = await codex(item, native, host);
+        const row = await codex(item, native, fixture, host);
         console.log(JSON.stringify({ mode, rows: [row] }, null, 2));
         if (row.status === 'blocked') { process.exitCode = 2; return; }
-        assert.ok(row.status === 'completed' && row.accepted && row.hook?.packId && row.hook.taskContextId);
+        assert.ok(row.status === 'completed' && row.accepted && row.hook?.packId && row.hook.taskContextId && row.deepPackId);
+        return;
+      }
+      if (mode === 'zcode') {
+        const row = await zcode(item, native, fixture, host, runtime, key);
+        console.log(JSON.stringify({ mode, rows: [row] }, null, 2));
+        if (row.status === 'blocked') { process.exitCode = 2; return; }
+        assert.ok(row.status === 'turn.completed' && row.result === 'success' && row.accepted && row.hook?.packId && row.hook.taskContextId);
+        const first = row.requests.find(request => request.seesOriginal && request.providerStatus === 200);
+        assert.ok(first?.containsTaskMemory && first.exactFactOccurrences === 1);
         return;
       }
       const row = await workbench(item, native, fixture, runtime, key);

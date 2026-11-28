@@ -8,6 +8,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { createRequire } = require('node:module');
 const { corpus, evaluate, listen, setup } = require('./helpers/agentic-context-fixture');
+const runtimeRequire = createRequire(path.join(process.env.PKB_CONTEXT_CANDIDATE_ROOT || path.resolve(__dirname, '..'), 'package.json'));
 
 async function closeServer(server) {
   server.closeAllConnections();
@@ -19,7 +20,7 @@ async function startRuntime(key, { deferFirstContext = false, fixtureCorpus = co
   const token = crypto.randomBytes(24).toString('hex');
   const model = process.env.PKB_CONTEXT_TEST_MODEL || 'glm-4.7';
   const profileId = 'test-context-profile';
-  const workbenchRoot = process.env.PKB_CONTEXT_WORKBENCH_SOURCE || path.dirname(require.resolve('claude-ai-workbench/package.json'));
+  const workbenchRoot = process.env.PKB_CONTEXT_WORKBENCH_SOURCE || path.dirname(runtimeRequire.resolve('claude-ai-workbench/package.json'));
   const workbenchRequire = createRequire(path.join(workbenchRoot, 'package.json'));
   const { ProfileStore } = workbenchRequire('./packages/server/lib/profile-store');
   const { createHttpHandler } = workbenchRequire('./packages/server/lib/http-handler');
@@ -77,7 +78,7 @@ async function startRuntime(key, { deferFirstContext = false, fixtureCorpus = co
   });
   const workbenchUrl = await listen(workbench);
   profiles.setEmbeddingConfig({ provider: 'openai', endpoint: workbenchUrl, model: 'embedding-3', profileId });
-  const packageDir = path.dirname(require.resolve('@sanqianx/vector-hub/package.json'));
+  const packageDir = path.dirname(runtimeRequire.resolve('@sanqianx/vector-hub/package.json'));
   const { HubManager } = require(path.join(packageDir, 'dist/cjs/server/manager.js'));
   const { createServer } = require(path.join(packageDir, 'dist/cjs/server/server.js'));
   let manager, vector;
@@ -100,20 +101,21 @@ async function main() {
   const key = process.env.ZAI_API_KEY;
   if (!key) throw new Error('BLOCKED: isolated Z.AI model and embedding credentials are unavailable (ZAI_API_KEY).');
   const source = process.env.PKB_CONTEXT_ENGINE_SOURCE;
-  const createEngineServer = source ? require(path.join(source, 'src/server')).createEngineServer : require('@sanqianx/ai-coding-knowledge-engine').createEngineServer;
+  const createEngineServer = source ? require(path.join(source, 'src/server')).createEngineServer : runtimeRequire('@sanqianx/ai-coding-knowledge-engine').createEngineServer;
   const lane = process.argv[2] || 'smoke';
-  const fixtureCorpus = lane === 'postfix' ? require('./fixtures/agentic-context-postfix-corpus.json') : corpus;
+  const postfix = lane === 'postfix' || lane === 'postfix-file';
+  const fixtureCorpus = postfix ? require('./fixtures/agentic-context-postfix-corpus.json') : corpus;
   const runtime = await startRuntime(key, { fixtureCorpus });
   let fixture;
   try {
     fixture = await setup({ createEngineServer, vectorUrl: runtime.vectorUrl, runtimeToken: runtime.token, fixtureCorpus,
       engineOptions: { workbenchUrl: runtime.workbenchUrl } });
-    await runtime.manager.import(fixture.knowledge, fixture.projectId, false);
+    if (lane !== 'postfix-file') await runtime.manager.import(fixture.knowledge, fixture.projectId, false);
     await fixture.request('/api/runtime-context-config', { enabled: true, profileId: runtime.profileId, model: runtime.model });
     const rows = [];
     const cases = lane === 'smoke' ? [fixtureCorpus.cases[0]] : fixtureCorpus.cases;
     for (const item of cases) {
-      const indices = ['blind', 'postfix'].includes(lane) ? [1, 2, 3] : [0];
+      const indices = lane === 'blind' || postfix ? [1, 2, 3] : [0];
       for (const index of indices) {
         const base = { projectId: fixture.projectId, query: item.queries[index], scope: 'project', client: 'codex' };
         const stable = await fixture.request('/api/context', { ...base, sessionId: `stable-${item.id}-${index}` });
@@ -122,7 +124,7 @@ async function main() {
           mode: candidate.mode, status: candidate.packStatus, degraded: candidate.degraded, budget: candidate.budget });
       }
     }
-    console.log(JSON.stringify({ lane, model: runtime.model, embedding: 'embedding-3', rows, trace: runtime.trace }, null, 2));
+    console.log(JSON.stringify({ lane, model: runtime.model, embedding: lane === 'postfix-file' ? null : 'embedding-3', rows, trace: runtime.trace }, null, 2));
     if (lane === 'smoke') {
       assert.equal(rows[0].mode, 'agentic');
       assert.equal(rows[0].candidate.facts, 2);

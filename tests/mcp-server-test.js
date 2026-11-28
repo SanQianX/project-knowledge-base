@@ -107,8 +107,23 @@ async function createMcpClient() {
   const client = await createMcpClient();
   try {
     const listed = await client.request('tools/list');
-    assert.strictEqual(listed.result.tools.length, 12, 'six knowledge tools + six workflow tools');
-    assert(listed.result.tools.some(tool => tool.name === 'project_knowledge_record_requirement'));
+    assert.deepStrictEqual(listed.result.tools.map(tool => tool.name).sort(), [
+      'project_knowledge_ask',
+      'project_knowledge_get',
+      'project_knowledge_history',
+      'project_knowledge_prepare_task_context',
+      'project_knowledge_read_context_memory',
+      'project_knowledge_record_requirement',
+      'project_knowledge_refresh_task_context',
+      'project_knowledge_resolve',
+      'project_knowledge_search',
+      'project_workflow_checkpoint',
+      'project_workflow_request_review',
+      'project_workflow_resume',
+      'project_workflow_review_result',
+      'project_workflow_start',
+      'project_workflow_status',
+    ]);
 
     let response = await client.request('tools/call', { name: 'project_knowledge_resolve', arguments: { repoPath: repo } });
     assert.strictEqual(response.result.structuredContent.projectId, 'project-demo');
