@@ -23,9 +23,10 @@ async function addMemoryViaUi(harness, text, groupId) {
 
   const post = harness.network.find(entry => entry.method === 'POST' && entry.url.includes('/api/engine/memories')).at(-1);
   assert.equal(post.status, 200);
-  assert.deepEqual(post.body, { title: text, text, brainId: 'brain-default', groupId });
+  assert.deepEqual(post.body, { title: text, text, injectionPolicy: 'auto', brainId: 'brain-default', groupId });
   const { memory } = await harness.network.body(post);
   assert.equal(memory.status, 'confirmed');
+  assert.equal(memory.injectionPolicy, 'auto');
   assert.deepEqual(memory.groups.map(item => item.id), [groupId]);
   return memory;
 }

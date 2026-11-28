@@ -168,7 +168,8 @@ async function scenarioOriginExclusion(lane, evidence, commands) {
     });
     assert.equal(injected.status, 400, `evidence injection must be refused (status ${injected.status})`);
     assert.equal(injected.body?.error, 'INVALID_ARGUMENT', `unexpected error code ${injected.body?.error}`);
-    assert.match(String(injected.body?.message || ''), /只支持填写标题、记忆内容、所属智脑和组合/, 'the refusal states the C01 rule explicitly');
+    const afterRejection = (await callJson(engineUrl, '/api/memories')).body.memories;
+    assert.deepEqual(afterRejection, memories, 'rejected evidence leaves the memory store unchanged');
 
     // A manual memory (explicit user confirmation) still stores no evidence.
     const brainScope = await callJson(engineUrl, '/api/scopes', {
