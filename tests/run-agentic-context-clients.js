@@ -331,6 +331,24 @@ async function codex(item, caseInfo, fixture, host) {
   } finally { await bridge.close(); }
 }
 
+const detectionQuestion = '当前项目有哪些检测算法？请列出各算法的关键参数和默认值。';
+const detectionSources = [
+  { file: 'arc-detect.md', title: '圆弧检测算法参数', parameter: 'arcPeakThreshold', value: 47, unit: '灰度级' },
+  { file: 'stripe-detect.md', title: '条纹检测算法参数', parameter: 'stripeWindowWidth', value: 29, unit: '像素' },
+];
+
+function writeDetectionKnowledge(knowledge) {
+  const modules = path.join(knowledge, 'modules');
+  const catalog = detectionSources.map(source => `- [${source.title}](${source.file})`).join('\n');
+  fs.writeFileSync(path.join(modules, 'detection-catalog.md'), `# 当前检测算法参数目录\n\n当前项目启用的检测算法及参数定义如下。\n${catalog}\n`);
+  for (const source of detectionSources) {
+    fs.writeFileSync(path.join(modules, source.file),
+      `# ${path.basename(source.file, '.md')}\n\n下表为实现中的缺省值，配方可以覆盖。\n\n` +
+      `| 字段 | 缺省 | 单位 |\n| --- | --- | --- |\n| \`${source.parameter}\` | ${source.value} | ${source.unit} |\n\n` +
+      `## 原文校验\n\n打开当前知识文件时可核对：fixture-original-${source.file}\n`);
+  }
+}
+
 async function browserSmoke(item, caseInfo, host) {
   const { launchCdpBrowser, waitFor } = require('./helpers/cdp-browser');
   const base = `http://127.0.0.1:${host.host.port}`;
@@ -340,36 +358,81 @@ async function browserSmoke(item, caseInfo, host) {
     await waitFor(() => browser.evaluate("document.querySelector('#openSystem') !== null"), 'host UI loaded');
     await browser.evaluate("document.querySelector('#openSystem').click()");
     await waitFor(() => browser.evaluate("document.querySelector('#agenticContextModel')?.options.length > 1"), 'saved profile offered');
-    await browser.evaluate(`(() => {
-      document.querySelector('#agenticContextEnabled').checked = true;
-      const select = document.querySelector('#agenticContextModel');
-      select.value = select.options[1].value;
-      document.querySelector('#saveAgenticContext').click();
-      return true;
-    })()`);
-    await waitFor(async () => {
-      const response = await fetch(base + '/api/engine/context/capabilities');
-      const state = await response.json();
-      return state.enabled && state.modelConfigured;
-    }, 'smart setting persisted and delivered');
+    const chooseModel = async modelConfigured => {
+      await browser.evaluate(`(() => {
+        document.querySelector('#agenticContextEnabled').checked = true;
+        const select = document.querySelector('#agenticContextModel');
+        select.value = select.options[${modelConfigured ? 1 : 0}].value;
+        document.querySelector('#saveAgenticContext').click();
+      })()`);
+      await waitFor(async () => {
+        const response = await fetch(base + '/api/engine/context/capabilities');
+        const state = await response.json();
+        return state.enabled && state.modelConfigured === modelConfigured;
+      }, 'smart setting persisted and delivered');
+      await browser.evaluate("document.querySelector('#closeSystem').click()");
+    };
+    await chooseModel(true);
     await browser.evaluate("document.querySelector('[data-view=search]').click()");
     await waitFor(() => browser.evaluate("document.querySelector('#searchForm select[name=project]')?.options.length > 1"), 'search form and project loaded');
-    const search = mode => browser.evaluate(`(() => {
+    const search = (mode, query = item.queries[0], type = 'all') => browser.evaluate(`(() => {
       const form = document.querySelector('#searchForm');
       form.elements.project.value = ${JSON.stringify(caseInfo.projectId)};
       form.elements.scope.value = 'project';
       form.elements.mode.value = ${JSON.stringify(mode)};
-      form.elements.query.value = ${JSON.stringify(item.queries[0])};
+      form.elements.type.value = ${JSON.stringify(type)};
+      form.elements.query.value = ${JSON.stringify(query)};
       form.requestSubmit();
       return true;
     })()`);
     await search('fast');
     await waitFor(() => browser.evaluate("document.querySelector('#searchContent article.result-row') !== null"), 'fast result rendered');
     await search('deep');
-    await waitFor(() => browser.evaluate(`document.querySelector('#searchContent')?.textContent.includes(${JSON.stringify(item.value)})`), 'smart result shows the sourced value', 67000);
+    const deepFinished = () => browser.evaluate("!document.querySelector('#searchContent .small-empty')?.textContent.includes('正在检索')");
+    await waitFor(deepFinished, 'smart result finished', 67000);
     const body = await browser.evaluate("document.querySelector('#searchContent').textContent");
-    assert.ok(body.includes('智能检索') && body.includes(item.memory) && body.includes(item.alias.toLowerCase() + '.md'));
-    return { browser: 'Chromium', fast: true, agentic: true, source: true, relevantMemory: true, configuredViaUi: true };
+    assert.ok(body.includes('智能检索') && body.includes(item.value) && body.includes(item.memory) && body.includes(item.alias.toLowerCase() + '.md'), body);
+
+    await search('deep', detectionQuestion, 'knowledge');
+    await waitFor(deepFinished, 'parameter question finished', 67000);
+    const answer = await browser.evaluate(`(() => ({
+      points: [...document.querySelectorAll('.search-answer li')].map(li => ({
+        text: li.querySelector('span').textContent,
+        sources: [...li.querySelectorAll('button.search-citation')].map(button => button.dataset.index),
+      })),
+      sources: [...document.querySelectorAll('.search-sources .reference')].map(button => ({
+        index: button.dataset.index, text: button.textContent,
+      })),
+      status: document.querySelector('#searchContent').innerText.slice(-1500),
+    }))()`);
+    for (const source of detectionSources) {
+      const link = answer.sources.find(candidate => candidate.text.includes('modules/' + source.file));
+      assert.ok(link && answer.points.some(point => point.text.includes(source.parameter)
+        && point.text.includes(String(source.value)) && point.sources.includes(link.index)), answer.status);
+      await browser.evaluate(`document.querySelector('.search-citation[data-index="${link.index}"]').click()`);
+      await waitFor(() => browser.evaluate(`document.querySelector('#referenceDialog').open &&
+        document.querySelector('#referenceMeta').textContent.includes(${JSON.stringify('modules/' + source.file)}) &&
+        document.querySelector('#referenceContent').textContent.includes(${JSON.stringify('fixture-original-' + source.file)})`),
+        'inline citation opens ' + source.file);
+      await browser.evaluate("document.querySelector('[data-close=referenceDialog]').click()");
+    }
+
+    await browser.evaluate("document.querySelector('#openSystem').click()");
+    await chooseModel(false);
+    await search('deep', detectionQuestion, 'knowledge');
+    await waitFor(deepFinished, 'deterministic fallback finished', 67000);
+    assert.ok(await browser.evaluate(`(() => {
+      const content = document.querySelector('#searchContent');
+      return content.innerText.includes('检索模型不可用') && !content.querySelector('.search-answer') &&
+        !!content.querySelector('.search-sources button.reference') &&
+        ${JSON.stringify(detectionSources.map(source => source.parameter))}.every(parameter => !content.innerText.includes(parameter));
+    })()`), 'fallback must explain the missing model and keep sources available even when it missed the parameter documents');
+    await browser.evaluate("document.querySelector('.search-sources button.reference').click()");
+    await waitFor(() => browser.evaluate(`document.querySelector('#referenceDialog').open &&
+      document.querySelector('#referenceMeta').textContent.includes('modules/') &&
+      document.querySelector('#referenceContent').textContent.startsWith('# ')`), 'fallback reference opens the original');
+    return { browser: 'Chromium', fast: true, agentic: true, citedAlgorithms: detectionSources.length, fallbackReference: true,
+      relevantMemory: true, configuredViaUi: true };
   } finally { await browser.close(); }
 }
 
@@ -415,8 +478,16 @@ async function main() {
     if (mode !== 'browser' && process.env.PKB_CONTEXT_FILE_FALLBACK !== '1') await runtime.manager.import(fixture.knowledge, fixture.projectId, false);
     if (mode === 'browser') {
       const item = corpus.cases[0];
+      writeDetectionKnowledge(fixture.knowledge);
       const native = await registerCase(fixture, host, 'UI', item, true);
-      console.log(JSON.stringify(await browserSmoke(item, native, host)));
+      const acceptance = await browserSmoke(item, native, host);
+      const runs = logsAt(path.join(fixture.root, 'engine')).filter(event => event.projectId === native.projectId
+        && event.event === 'knowledge.context.agentic_prepared');
+      const parameterAnswer = runs.at(-2)?.context;
+      assert.ok(parameterAnswer?.mode === 'agentic' && parameterAnswer.budget.usage.calls > 0);
+      console.log(JSON.stringify({ ...acceptance, model: runtime.model, answerRounds: parameterAnswer.budget.rounds,
+        sourceReads: parameterAnswer.budget.reads, modelCalls: parameterAnswer.budget.usage.calls,
+        modelInputTokens: parameterAnswer.budget.usage.input, answerMs: parameterAnswer.durationMs }));
       return;
     }
     if (['workbench', 'codex', 'zcode'].includes(mode)) {

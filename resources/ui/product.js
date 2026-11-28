@@ -671,20 +671,51 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   // ============ 检索：真实引擎 API ============
+  const searchTitle = item => String(item.title || item.entryId || '来源').replace(/^\s*\*\*(.*?)\*\*\s*$/, '$1');
+  function searchSourceButton(kind, index, text, className, label) {
+    return `<button type="button" class="${className}" data-action="search-pack-source" data-kind="${kind}" data-index="${index}"${label ? ` aria-label="${esc(label)}"` : ''}>${text}</button>`;
+  }
   function renderSearchPack(pack, type) {
     const status = { ready: '已找到相关背景', partial: '证据不完整', degraded: '已降级', no_reliable_match: '没有可靠匹配' }[pack.packStatus] || '已返回';
     const heading = pack.mode === 'agentic' ? '智能检索' : '确定性检索';
-    const items = [...(type === 'knowledge' ? [] : pack.memories), ...(type === 'memory' ? [] : pack.facts)];
-    const rows = items.map(item => {
-      const source = item.memoryId ? [item.policy === 'always' ? '强制约束' : '适用记忆', item.memoryId]
-        : [item.spaceId, item.entryId, item.commitSha];
-      return `<article class="result-row"><div><b>${esc(item.title)}</b><p>${esc(item.text)}</p><small>${esc(source.filter(Boolean).join(' / '))}</small></div></article>`;
+    const reasons = {
+      'model-unavailable': '检索模型不可用。可在「系统状态 → 智能上下文」检查模型配置。',
+      'model-rate-limited': '检索模型请求受限。',
+      'model-busy': '检索模型正在处理其他请求。',
+      'model-failed': '检索模型请求失败。',
+      'invalid-model-output': '检索模型未返回可核对的答案格式。',
+      deadline: '检索达到设定时限。',
+      'input-budget': '检索达到上下文预算，可能还有相关资料。',
+      'tool-budget': '检索达到读取预算，可能还有相关资料。',
+      'search-unavailable': '当前无法读取知识文件。',
+    };
+    const facts = pack.facts || [];
+    const numbers = new Map(facts.map((fact, index) => [fact.id, index]));
+    const points = (pack.answer?.points || []).filter(point => point.evidenceIds?.length && point.evidenceIds.every(id => numbers.has(id)));
+    const reason = reasons[pack.degraded];
+    const answer = points.length ? `<section class="search-answer" aria-label="检索回答"><h2>回答</h2><ul>${points.map(point => {
+      const sources = point.evidenceIds.map(id => {
+        const index = numbers.get(id);
+        return searchSourceButton('fact', index, `[${index + 1}]`, 'search-citation', `查看来源 ${index + 1} ${searchTitle(facts[index])}`);
+      }).join('');
+      return `<li><span>${esc(point.text)}</span>${sources}</li>`;
+    }).join('')}</ul>${pack.answer.partial ? '<p class="muted">这些结论来自已核实的资料，可能还有遗漏。</p>' : ''}</section>`
+      : facts.length ? '<p class="muted">本次仅展示核对过的来源，点击标题可查看原文。</p>' : '';
+    const sourceRows = facts.map((fact, index) => {
+      const source = [fact.spaceId?.startsWith('project:') ? projectName(fact.projectId) : fact.spaceId?.startsWith('domain:') ? '领域知识' : '共享知识', fact.entryId,
+        fact.commitSha ? `提交 ${fact.commitSha.slice(0, 8)}` : ''].filter(Boolean).join(' / ');
+      return `<article class="result-row">${searchSourceButton('fact', index, `<b>[${index + 1}] ${esc(searchTitle(fact))}</b><small>${esc(source)}</small>${points.length ? '' : `<p>${esc(clamp2(fact.text))}</p>`}`, 'reference')}</article>`;
     }).join('');
+    const memories = (pack.memories || []).map((item, index) => `<article class="result-row">${searchSourceButton('memory', index,
+      `<b>${esc(searchTitle(item))}</b><small>${esc(clamp2(item.text))}</small>`, 'reference')}<small>${item.policy === 'always' ? '强制约束' : '适用记忆'}</small></article>`).join('');
     const gaps = (pack.knowledgeGaps || []).map(gap => `<li>${esc(gap.message)}</li>`).join('');
     const conflicts = pack.conflictingEvidence?.length ? '<p>部分资料与当前要求可能冲突，请核对来源。</p>' : '';
     const omitted = pack.omittedMemoryIds?.length ? `<p>${esc(pack.omittedMemoryIds.join(', '))}</p>` : '';
     return `<p class="muted">${heading} · ${status} · ${pack.budget?.rounds || 0} 轮 · ${(pack.durationMs / 1000).toFixed(1)} 秒${pack.status === 'file-fallback' ? ' · 文件检索' : ''}</p>
-      <p>${esc(pack.userIntent)}</p>${rows}${gaps ? `<ul>${gaps}</ul>` : ''}${conflicts}${omitted}`;
+      ${reason ? `<p class="muted">${esc(reason)}</p>` : ''}${type === 'memory' ? '' : answer}
+      ${type !== 'memory' && sourceRows ? `<section class="search-sources" aria-label="知识来源"><h2>知识来源</h2>${sourceRows}</section>` : ''}
+      ${type !== 'knowledge' && memories ? `<section class="search-sources" aria-label="相关记忆"><h2>相关记忆</h2>${memories}</section>` : ''}
+      ${gaps ? `<ul>${gaps}</ul>` : ''}${conflicts}${omitted}`;
   }
   function renderSearch() {
     const search = state.search;
@@ -694,8 +725,8 @@
     if (search.done && search.pack) {
       resultsHtml = renderSearchPack(search.pack, search.type);
     } else if (search.done) {
-      const filtered = search.results.filter(r => search.type === 'all' || (search.type === 'memory') === Boolean(r.memoryId));
-      const pageRows = filtered.slice(search.page * 8, (search.page + 1) * 8).map((r, i) => `<article class="result-row"><button class="reference" data-action="search-detail" data-index="${search.page * 8 + i}"><b>${esc(r.title)}</b><small>${esc(clamp2(r.snippet || r.chunk_text || '').slice(0, 180))}</small></button><small>${r.memoryId ? '长期记忆' : `${esc(projectName(r.scope_project_id || r.projectId))}${r.commitSha ? ` · commit ${esc(r.commitSha.slice(0, 8))}` : ''}`}</small></article>`).join('');
+      const filtered = search.results.map((row, index) => ({ row, index })).filter(({ row }) => search.type === 'all' || (search.type === 'memory') === Boolean(row.memoryId));
+      const pageRows = filtered.slice(search.page * 8, (search.page + 1) * 8).map(({ row: r, index }) => `<article class="result-row"><button class="reference" data-action="search-detail" data-index="${index}"><b>${esc(r.title)}</b><small>${esc(clamp2(r.snippet || r.chunk_text || '').slice(0, 180))}</small></button><small>${r.memoryId ? '长期记忆' : `${esc(projectName(r.scope_project_id || r.projectId))}${r.commitSha ? ` · commit ${esc(r.commitSha.slice(0, 8))}` : ''}`}</small></article>`).join('');
       resultsHtml = `<p class="muted" style="margin:12px 0">${search.results.length} 条结果${filtered.length !== search.results.length ? `（当前筛选 ${filtered.length} 条）` : ''}</p>${pageRows || '<div class="empty small-empty">没有找到匹配内容，试试其他关键词。</div>'}${pagerUi('search', search.page, filtered.length, 8)}`;
     }
     $('searchContent').innerHTML = `
@@ -736,6 +767,7 @@
       const deep = search.mode === 'deep';
       if (deep && !body.projectId) body.projectId = state.projectId;
       if (deep && !body.projectId) throw new Error('智能检索需要选择项目。');
+      if (deep && search.type !== 'memory') body.answer = true;
       const result = await api(deep ? '/api/engine/context/agentic' : '/api/engine/search', { method: 'POST', body, timeoutMs: deep ? 66000 : 15000 });
       if (epoch !== search.epoch) return;
       search.results = result.results || [];
@@ -875,11 +907,19 @@
     const id = state.projectId;
     const epoch = ++referenceEpoch;
     $('referenceTitle').textContent = reference.title || reference.entryId;
-    $('referenceMeta').textContent = `${projectName(reference.projectId)} / ${reference.entryId}${reference.commitSha ? ` · commit ${reference.commitSha}` : ''}`;
+    $('referenceMeta').textContent = reference.meta || [projectName(reference.projectId), reference.entryId, reference.commitSha ? `commit ${reference.commitSha}` : ''].filter(Boolean).join(' / ');
     $('referenceContent').textContent = reference.text || '读取知识文件…'; $('referenceDialog').showModal();
     if (reference.entryId && reference.readFile !== false) {
-      const result = await api('/api/engine/get', { method: 'POST', body: { projectId: state.projects.some(p => p.projectId === reference.projectId) ? reference.projectId : id, spaceId: reference.spaceId, entryId: reference.entryId } });
-      if (epoch === referenceEpoch && id === state.projectId && $('referenceDialog').open) $('referenceContent').textContent = result.chunks.map(c => c.chunk_text).join('\n');
+      const projectId = reference.requestProjectId || (state.projects.some(p => p.projectId === reference.projectId) ? reference.projectId : id);
+      const body = { projectId, spaceId: reference.spaceId, entryId: reference.entryId,
+        ...(reference.documentHash ? { contextRead: true, documentHash: reference.documentHash } : {}) };
+      const current = () => epoch === referenceEpoch && id === state.projectId && $('referenceDialog').open;
+      try {
+        const result = await api('/api/engine/get', { method: 'POST', body });
+        if (current()) $('referenceContent').textContent = result.chunks.map(c => c.chunk_text).join('\n');
+      } catch (error) {
+        if (current()) $('referenceContent').textContent = error.message;
+      }
     }
   }
   async function refreshSnapshot() {
@@ -1738,6 +1778,18 @@
       if (button.dataset.action === 'edit-project') { const p = state.projectsPage.items.find(x => x.projectId === button.dataset.id); if (p) { await openProjectDetail(p.projectId); selectProject(p.projectId); await openSystem(); } }
       if (button.dataset.action === 'add-existing') { const group = groupById(state.memory.folder); if (group) await addExistingDialog(group); else toast('请先在左侧选择一个组合。'); }
       if (button.dataset.action === 'search-detail') { const row = state.search.results[Number(button.dataset.index)]; if (row) await openReference({ projectId: row.scope_project_id || row.projectId, spaceId: row.space_id, entryId: row.entry_id, commitSha: row.commitSha, title: row.title, text: row.snippet || row.chunk_text }); }
+      if (button.dataset.action === 'search-pack-source') {
+        const pack = state.search.pack;
+        const index = Number(button.dataset.index);
+        if (button.dataset.kind === 'memory') {
+          const item = pack?.memories?.[index];
+          if (item) await openReference({ ...item, title: searchTitle(item), readFile: false, meta: '相关记忆' });
+        } else {
+          const fact = pack?.facts?.[index];
+          if (fact) await openReference({ ...fact, title: searchTitle(fact),
+            requestProjectId: fact.spaceId?.startsWith('project:') ? fact.projectId : pack.projectId });
+        }
+      }
     };
     execute().catch(error => toast(error.message));
   });

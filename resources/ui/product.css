@@ -50,6 +50,12 @@ html[data-skin=steel][data-theme=dark]{--page:#171a1f;--surface:#20252d;--surfac
 .result-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start;border-bottom:1px solid var(--line);padding:12px 0}
 .result-row .reference{border:0;padding:0}
 .result-row>small{color:var(--muted);max-width:240px;text-align:right}
+.search-answer,.search-sources{margin:16px 0}
+.search-answer h2,.search-sources h2{font-size:16px;margin-bottom:8px}
+.search-answer ul{display:grid;gap:8px;margin:0;padding-inline-start:1.4rem}
+.search-answer li>span{white-space:pre-line}
+.search-citation{display:inline-flex;margin-inline-start:6px;padding:0 4px;border:0;background:transparent;color:var(--accent);text-decoration:underline}
+.search-sources .reference b{color:var(--accent)}
 .checkbox{display:flex;align-items:center;gap:8px;margin:8px 0;color:var(--text);font-size:13px}
 .checkbox input{width:16px;height:16px;margin:0;flex:none}
 #appDialog{width:640px}
