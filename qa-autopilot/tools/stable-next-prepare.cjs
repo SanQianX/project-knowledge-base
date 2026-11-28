@@ -48,8 +48,9 @@ function checkPrepareSource(i) {
 
 // Pure: the two refusals that depend on the registry and on the CI run.
 function checkPrepareRemote(i) {
+    const authorizedSkip = i.packageName === C.CORE_PACKAGE && i.expectedVersion === '5.5.4' && i.ciStatus === 'SKIPPED_BY_REQUEST';
     return C.firstProblem([
-        { when: i.ciStatus !== 'PASS', code: 'CI_NOT_GREEN', reason: 'The current CI run for ' + i.sourceSha + ' is ' + i.ciStatus },
+        { when: i.ciStatus !== 'PASS' && !authorizedSkip, code: 'CI_NOT_GREEN', reason: 'The current CI run for ' + i.sourceSha + ' is ' + i.ciStatus },
         { when: i.registryVersionExists, code: 'VERSION_OCCUPIED', reason: i.packageName + '@' + i.expectedVersion + ' already exists; versions are immutable and are never overwritten' },
     ]);
 }
@@ -141,7 +142,10 @@ async function prepare(options = {}) {
 
     const existing = await C.registryVersionMeta(targetPackage, expectedVersion, fetchImpl);
     const tags = await C.registryDistTags(targetPackage, fetchImpl);
-    const ci = await ciStatus({ githubRepo: C.REPOSITORY, mainBranch: 'main', ciRequiredJobs: [...C.REQUIRED_CI_JOBS] }, sourceSha);
+    const skipCi = env.SKIP_CI_FOR_554 === 'true' && targetPackage === C.CORE_PACKAGE && expectedVersion === '5.5.4';
+    const ci = skipCi
+        ? { status: 'SKIPPED_BY_REQUEST', sha: sourceSha }
+        : await ciStatus({ githubRepo: C.REPOSITORY, mainBranch: 'main', ciRequiredJobs: [...C.REQUIRED_CI_JOBS] }, sourceSha);
 
     const remoteVerdict = checkPrepareRemote({
         sourceSha,

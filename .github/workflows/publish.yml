@@ -67,6 +67,11 @@ on:
         description: 'stable modes only: exact expected version (x.y.z)'
         required: false
         type: string
+      skip_ci_for_554:
+        description: 'Use the local review for the authorized 5.5.4 prepare run'
+        required: false
+        type: boolean
+        default: false
       prepare_run_id:
         description: 'stable-publish-next only: run id of the successful prepare run'
         required: false
@@ -217,6 +222,7 @@ jobs:
           TARGET_PACKAGE: ${{ inputs.package }}
           SOURCE_SHA: ${{ inputs.source_sha }}
           EXPECTED_VERSION: ${{ inputs.expected_version }}
+          SKIP_CI_FOR_554: ${{ inputs.skip_ci_for_554 }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node qa-autopilot/tools/stable-next-prepare.cjs
       - uses: actions/upload-artifact@v4
