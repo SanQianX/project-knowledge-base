@@ -1,9 +1,9 @@
 {
   "schema": "project-knowledge/module-content/v1",
   "productFiles": {
-    "resources/ui/index.html": "d5b37c258fd6497a7b256c7779e3d83270ca0c39dfaa9456f91563097bea3537",
+    "resources/ui/index.html": "34ef64addaa129a1207e3cc3ada6ee707f70d7a48b0b6da104f2c66dc5852cf6",
     "resources/ui/knowledge-panel.html": "dfd85f15759472252d797853263e9da0054b251c56bb9ccdc8a75e6301334ca8",
-    "resources/ui/product.js": "471ee8725b2c7d7c40931d8ff90bfa5d9460a25752986fd12ec1016d6767bd5c",
+    "resources/ui/product.js": "dacc2a699bf601e8fee8bbfb6ff39ee7c9af76f2f95e59448c838543defeeff1",
     "resources/ui/live-client.js": "0d81fa894c629bb839e1931fc3c5ebad4d831aae8232d6ce8c0f542e9e3559e8",
     "resources/ui/product.css": "141afe2a8e7897beabcec311cb5defca974bfd7b0b19a782bfe2da82f94c024d",
     "resources/ui/favicon.svg": "c48be946b224112ebb0238b44263f7a61bda31e531afa895c2e9801c0ff24f32",

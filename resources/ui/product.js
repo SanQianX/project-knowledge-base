@@ -781,7 +781,7 @@
       if (deep && !body.projectId) body.projectId = state.projectId;
       if (deep && !body.projectId) throw new Error('智能检索需要选择项目。');
       if (deep && search.type !== 'memory') body.answer = true;
-      const result = await api(deep ? '/api/engine/context/agentic' : '/api/engine/search', { method: 'POST', body, timeoutMs: deep ? 66000 : 15000 });
+      const result = await api(deep ? '/api/engine/context/agentic' : '/api/engine/search', { method: 'POST', body, timeoutMs: deep ? 126000 : 15000 });
       if (epoch !== search.epoch) return;
       search.results = result.results || [];
       if (deep) search.pack = result;

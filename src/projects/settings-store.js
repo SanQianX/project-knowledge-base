@@ -35,10 +35,12 @@ function validateAgenticContext(value) {
     || Object.keys(value).some(key => !['enabled', 'profileId', 'model', 'deepTimeoutMs'].includes(key))) {
     throw new DomainError('INVALID_ARGUMENT', '智能上下文配置无效。');
   }
+  // A model that thinks before it answers spends several seconds on each of the
+  // calls a smart search makes, so the limit may be set to twice the default.
   const { enabled = false, profileId = null, model = null, deepTimeoutMs = 60000 } = value;
   if (typeof enabled !== 'boolean' || (profileId !== null && (typeof profileId !== 'string' || !/^[\w.-]{1,128}$/.test(profileId)))
     || (model !== null && (typeof model !== 'string' || !model.trim() || model.length > 128))
-    || !Number.isInteger(deepTimeoutMs) || deepTimeoutMs < 2000 || deepTimeoutMs > 60000) {
+    || !Number.isInteger(deepTimeoutMs) || deepTimeoutMs < 2000 || deepTimeoutMs > 120000) {
     throw new DomainError('INVALID_ARGUMENT', '智能上下文配置无效。');
   }
   return { enabled, profileId, model, deepTimeoutMs };

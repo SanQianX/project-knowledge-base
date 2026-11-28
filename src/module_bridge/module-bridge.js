@@ -38,7 +38,8 @@ const { once } = require('events');
 const { DomainError } = require('../common/contracts');
 
 const PROXY_TIMEOUT_MS = 10000;
-const DEEP_CONTEXT_PROXY_TIMEOUT_MS = 65000;
+// A smart search may run up to the two minutes the deep time limit allows.
+const DEEP_CONTEXT_PROXY_TIMEOUT_MS = 125000;
 // Native client startup includes knowledge retrieval and a local server/CLI
 // handshake. It has a bounded setup budget, separate from ordinary reads/SSE.
 const AGENT_START_TIMEOUT_MS = 90000;
