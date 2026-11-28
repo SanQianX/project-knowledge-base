@@ -687,6 +687,7 @@
       'model-busy': '检索模型正在处理其他请求。',
       'model-failed': '检索模型请求失败。',
       'invalid-model-output': '检索模型未返回可核对的答案格式。',
+      'model-output-limit': '检索模型的回复被输出上限截断。可在「系统状态 → 智能上下文」换一个模型。',
       deadline: '检索达到设定时限。',
       'input-budget': '检索达到上下文预算，可能还有相关资料。',
       'tool-budget': '检索达到读取预算，可能还有相关资料。',
